@@ -1003,12 +1003,15 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
       data[0]
     ]);
 
-    const rowRound = firstNonEmpty([
-      r.round,
-      payload.round,
-      payload.currentRound,
-      extra['라운드']
-    ]);
+const rowRound = firstNonEmpty([
+  r.round,
+  payload.round,
+  payload.currentRound,
+  extra['라운드'],
+  targetRound,
+  comp && comp.current_round,
+  '예선'
+]);
 
     const participantName = firstNonEmpty([
       r.participant_name,
@@ -1084,11 +1087,16 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
 
   const converted = (allRows.results || []).map(convertScoreRow);
 
-  const rows = converted.filter(item => {
-    const sameUnit = safeStr(item.unit) === targetUnit;
-    const sameRound = !targetRound || safeStr(item.round) === targetRound;
-    return sameUnit && sameRound;
-  });
+const rows = converted.filter(item => {
+  const sameUnit = safeStr(item.unit) === targetUnit;
+  const itemRound = safeStr(item.round);
+  const sameRound =
+    !targetRound ||
+    !itemRound ||
+    itemRound === targetRound;
+
+  return sameUnit && sameRound;
+});
 
   [
     '참가자번호',
