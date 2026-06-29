@@ -1,12 +1,12 @@
 const COMPETITION_CODES = ['KBC', 'KTCC', 'MOC', 'MOB', 'KCR', 'IKRC', 'KCAC'];
 const COMPETITION_NAMES = {
   KBC: 'Korea Barista Championship',
-  KTCC: 'Korea Team Coffee Championship',
-  MOC: 'Master of Coffee',
+  KTCC: 'Korea Team Cupping Championship',
+  MOC: 'Master of Cupping',
   MOB: 'Master of Brewing',
   KCR: 'Korea Coffee Roasting',
-  IKRC: 'International Korea Roasting Championship',
-  KCAC: 'Korea Cup Tasters Art Championship'
+  IKRC: 'IKAWA Korea Roasting Championship',
+  KCAC: 'Korea Coffee Art Championship'
 };
 
 export async function onRequestPost(context) {
