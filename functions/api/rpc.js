@@ -370,21 +370,170 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
 
 function inferScorePayload(payload) {
   const p = payload || {};
-  const code = safeStr(p.competitionCode || p.code || p.compCode || p.competition || '').toUpperCase();
+  const rows = Array.isArray(p.rows) ? p.rows : [];
+  const firstRow = rows[0] || {};
+  const extra = firstRow.extraFields || p.extraFields || {};
+  const data = Array.isArray(firstRow.data) ? firstRow.data : (Array.isArray(p.data) ? p.data : []);
+
+  function firstNonEmpty(list) {
+    for (const v of list) {
+      const s = safeStr(v);
+      if (s) return s;
+    }
+    return '';
+  }
+
+  function toNumber(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(String(v).replace(/[^0-9.\-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function numberFromKeys(obj, keys) {
+    if (!obj || typeof obj !== 'object') return null;
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) {
+        const n = toNumber(obj[k]);
+        if (n !== null) return n;
+      }
+    }
+    return null;
+  }
+
+  const code = safeStr(
+    p.competitionCode || p.code || p.compCode || p.competition || ''
+  ).toUpperCase();
+
   const round = safeStr(p.round || p.currentRound || p.roundName || '');
-  const judgeName = safeStr(p.judgeName || (p.judge && p.judge.name) || p.name || '');
-  const role = safeStr(p.role || (p.judge && p.judge.role) || '');
-  const team = safeStr(p.team || p.teamGroup || (p.judge && p.judge.teamGroup) || '');
+
+  const judgeName = firstNonEmpty([
+    p.judgeName,
+    p.name,
+    p.judge && p.judge.name
+  ]);
+
+  const role = firstNonEmpty([
+    p.judgeRole,
+    p.role,
+    p.judge && p.judge.role
+  ]);
+
+  const team = firstNonEmpty([
+    p.team,
+    p.teamGroup,
+    p.judge && p.judge.teamGroup
+  ]);
+
   const mode = safeStr(p.mode || p.evalMode || '');
-  const unit = safeStr(p.unit || p.cupNo || p.cupNumber || p.participantNo || p.participantNumber || p.teamNo || p.targetNo || p.number || '') || JSON.stringify(p).match(/"(?:cupNo|participantNo|teamNo)"\s*:\s*"?([^",}]+)/)?.[1] || '';
-  const participantName = safeStr(p.participantName || p.playerName || p.teamName || '');
-  let total = p.totalScore ?? p.total ?? p.finalScore ?? null;
-  if (total == null) {
+
+  const unit = firstNonEmpty([
+    p.unit,
+    p.cupNo,
+    p.cupNumber,
+    p.participantNo,
+    p.participantNumber,
+    p.teamNo,
+    p.targetNo,
+    p.number,
+    extra['참가자번호'],
+    extra['Cup No'],
+    extra['컵번호'],
+    extra['팀번호'],
+    data[0]
+  ]);
+
+  const participantName = firstNonEmpty([
+    p.participantName,
+    p.playerName,
+    p.teamName,
+    extra['선수명'],
+    extra['참가자명'],
+    extra['팀명']
+  ]);
+
+  let total = toNumber(
+    p.totalScore ?? p.total ?? p.finalScore ?? p.subtotalScore ?? p.subtotal
+  );
+
+  if (total === null) {
+    total = numberFromKeys(extra, [
+      '총점',
+      '최종점수',
+      'Total',
+      'Total Score',
+      'total',
+      'totalScore',
+      'finalScore',
+      'subtotalScore',
+      'subtotal'
+    ]);
+  }
+
+  if (total === null && rows.length) {
     const nums = [];
-    JSON.stringify(p).replace(/"(?:score|totalScore|finalScore|subtotal)"\s*:\s*([0-9]+(?:\.[0-9]+)?)/g, (_, n) => { nums.push(Number(n)); return _; });
+    rows.forEach(function(row) {
+      if (row && row.extraFields) {
+        const n = numberFromKeys(row.extraFields, [
+          '총점',
+          '최종점수',
+          'Total',
+          'Total Score',
+          'total',
+          'totalScore',
+          'finalScore',
+          'subtotalScore',
+          'subtotal'
+        ]);
+        if (n !== null) nums.push(n);
+      }
+    });
     if (nums.length) total = Math.max(...nums);
   }
-  return { code, round, judgeName, role, team, mode, unit: safeStr(unit), participantName, total: total == null ? null : Number(total), disqualified: !!p.disqualified || !!p.dq, dqReason: safeStr(p.disqualificationReason || p.dqReason || '') };
+
+  if (total === null) {
+    const nums = [];
+    JSON.stringify(p).replace(
+      /"(?:총점|최종점수|Total|Total Score|totalScore|finalScore|subtotalScore|subtotal|score)"\s*:\s*"?(-?[0-9]+(?:\.[0-9]+)?)/gi,
+      function(_, n) {
+        nums.push(Number(n));
+        return _;
+      }
+    );
+    if (nums.length) total = Math.max(...nums);
+  }
+
+  const dqValue = firstNonEmpty([
+    p.disqualified,
+    p.dq,
+    extra['실격여부']
+  ]);
+
+  const disqualified =
+    dqValue === true ||
+    dqValue === 'true' ||
+    dqValue === 'Y' ||
+    dqValue === 'y' ||
+    dqValue === '1';
+
+  const dqReason = firstNonEmpty([
+    p.disqualificationReason,
+    p.dqReason,
+    extra['실격사유']
+  ]);
+
+  return {
+    code,
+    round,
+    judgeName,
+    role,
+    team,
+    mode,
+    unit,
+    participantName,
+    total,
+    disqualified,
+    dqReason
+  };
 }
 async function submitScores(env, payload, signature) {
   const x = inferScorePayload(payload);
