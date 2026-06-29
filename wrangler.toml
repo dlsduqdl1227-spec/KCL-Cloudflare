@@ -6,8 +6,8 @@ pages_build_output_dir = "public"
 # wrangler d1 create kcl-v2-db
 [[d1_databases]]
 binding = "DB"
-database_name = "kcl-v2-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_name = "kcl-cloudflare"
+database_id = "503c0f26-389c-480c-b109-d5e53de8fc71"
 
 [vars]
 # 최초 관리자 계정. 배포 전 Cloudflare Pages Variables and secrets에서 값 교체 권장.
