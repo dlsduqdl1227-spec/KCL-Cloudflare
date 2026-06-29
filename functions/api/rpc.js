@@ -547,6 +547,7 @@ async function submitScores(env, payload, signature) {
 async function getReviewList(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
   const actor = await getActor(env, actorArg);
+
   if (!hasAccess(actor, code)) {
     return { success: false, message: '검수 조회 권한이 없습니다.' };
   }
@@ -555,119 +556,164 @@ async function getReviewList(env, competitionCode, actorArg) {
     'SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC'
   ).bind(code).all();
 
+  const baseHeaders = [
+    '제출시간',
+    '대회코드',
+    '라운드',
+    '심사위원명',
+    '팀',
+    '역할',
+    '모드'
+  ];
+
+  const extraHeaderOrder = [];
+  const extraHeaderSet = new Set();
+
+  function addHeader(h) {
+    h = safeStr(h);
+    if (!h) return;
+    if (baseHeaders.includes(h)) return;
+    if (extraHeaderSet.has(h)) return;
+    extraHeaderSet.add(h);
+    extraHeaderOrder.push(h);
+  }
+
+  function firstNonEmpty(list) {
+    for (const v of list) {
+      const s = safeStr(v);
+      if (s) return s;
+    }
+    return '';
+  }
+
   const list = (rows.results || []).map(r => {
     const payload = parseJson(r.payload_json, {});
     const payloadRows = Array.isArray(payload.rows) ? payload.rows : [];
     const firstRow = payloadRows[0] || {};
-    const extra = firstRow.extraFields || payload.extraFields || {};
-
-    const unit = safeStr(
-      r.unit ||
-      extra['참가자번호'] ||
-      extra['컵번호'] ||
-      extra['Cup No'] ||
-      extra['팀번호'] ||
-      firstRow.unit ||
-      firstRow.cupNo ||
-      firstRow.participantNo ||
-      ''
+    const extra = Object.assign(
+      {},
+      firstRow.extraFields || {},
+      payload.extraFields || {}
     );
 
-    const participantName = safeStr(
-      r.participant_name ||
-      extra['선수명'] ||
-      extra['참가자명'] ||
-      extra['팀명'] ||
-      payload.participantName ||
-      payload.playerName ||
-      payload.teamName ||
-      ''
-    );
+    Object.keys(extra).forEach(addHeader);
 
-    const totalScore =
-      r.total_score === null || r.total_score === undefined
-        ? ''
-        : Number(r.total_score);
-
-    const item = Object.assign({}, extra);
+    const item = {};
 
     item.rowIndex = r.id;
 
-    item['제출시간'] = r.submitted_at;
-    item['대회코드'] = r.competition_code;
-    item['라운드'] = r.round || '';
-    item['심사위원명'] = r.judge_name || '';
-    item['팀'] = r.team || '';
-    item['역할'] = r.role || '';
-    item['모드'] = r.mode || '';
+    item['제출시간'] = r.submitted_at || '';
+    item['대회코드'] = r.competition_code || code;
+    item['라운드'] = r.round || payload.round || payload.currentRound || '';
+    item['심사위원명'] = r.judge_name || payload.judgeName || '';
+    item['팀'] = r.team || payload.team || payload.teamGroup || '';
+    item['역할'] = r.role || payload.judgeRole || payload.role || '';
+    item['모드'] = r.mode || payload.mode || '';
 
-    item['참가자번호'] = unit;
-    item['컵번호'] = unit;
-    item['샘플번호'] = unit;
-    item['팀번호'] = unit;
+    Object.keys(extra).forEach(k => {
+      item[k] = extra[k];
+    });
 
-    item['선수명'] = participantName;
-    item['참가자명'] = participantName;
-    item['팀명'] = participantName;
+    const data = Array.isArray(firstRow.data) ? firstRow.data : [];
+
+    const unit = firstNonEmpty([
+      r.unit,
+      item['참가자번호'],
+      item['참가자 번호'],
+      item['선수번호'],
+      item['선수 번호'],
+      item['컵번호'],
+      item['Cup No'],
+      item['샘플번호'],
+      item['팀번호'],
+      item['팀 번호'],
+      payload.unit,
+      payload.cupNo,
+      payload.participantNo,
+      payload.teamNo,
+      data[0]
+    ]);
+
+    const participantName = firstNonEmpty([
+      r.participant_name,
+      item['선수명'],
+      item['참가자명'],
+      item['이름'],
+      item['팀명'],
+      payload.participantName,
+      payload.playerName,
+      payload.teamName
+    ]);
+
+    if (!item['참가자번호']) item['참가자번호'] = unit;
+    if (!item['컵번호']) item['컵번호'] = unit;
+    if (!item['샘플번호']) item['샘플번호'] = unit;
+    if (!item['팀번호']) item['팀번호'] = unit;
+
+    if (!item['선수명']) item['선수명'] = participantName;
+    if (!item['참가자명']) item['참가자명'] = participantName;
+    if (!item['팀명'] && code === 'KTCC') item['팀명'] = participantName;
+
+    const totalScore =
+      r.total_score === null || r.total_score === undefined
+        ? firstNonEmpty([item['총점'], item['최종점수'], item['Total'], item['Total Score']])
+        : Number(r.total_score);
 
     item['총점'] = totalScore;
     item['최종점수'] = totalScore;
 
-    item['실격여부'] = r.disqualified ? 'Y' : '';
-    item['실격사유'] = r.disqualification_reason || '';
-    item['검수상태'] = r.review_status || '미검수';
+    item['실격여부'] = r.disqualified ? 'Y' : (item['실격여부'] || '');
+    item['실격사유'] = r.disqualification_reason || item['실격사유'] || '';
+    item['검수상태'] = r.review_status || item['검수상태'] || '미검수';
 
-    item.status = r.review_status || '미검수';
-    item.payload = payload;
-    item.values = Object.values(item);
+    item.status = item['검수상태'];
 
-    item.submittedAt = r.submitted_at;
-    item.timestamp = r.submitted_at;
-    item.competitionCode = r.competition_code;
-    item.round = r.round || '';
-    item.judgeName = r.judge_name || '';
-    item.team = r.team || '';
-    item.role = r.role || '';
-    item.mode = r.mode || '';
+    item.submittedAt = item['제출시간'];
+    item.timestamp = item['제출시간'];
+    item.competitionCode = item['대회코드'];
+    item.round = item['라운드'];
+    item.judgeName = item['심사위원명'];
+    item.team = item['팀'];
+    item.role = item['역할'];
+    item.mode = item['모드'];
     item.unit = unit;
     item.participantName = participantName;
     item.totalScore = totalScore;
     item.disqualified = !!r.disqualified;
-    item.disqualificationReason = r.disqualification_reason || '';
-
-    item._col0 = r.submitted_at;
-    item._col1 = r.competition_code;
-    item._col2 = r.round || '';
-    item._col3 = r.judge_name || '';
-    item._col4 = r.team || '';
-    item._col5 = r.role || '';
-    item._col6 = r.mode || '';
-    item._col7 = unit;
-    item._col8 = participantName;
-    item._col9 = totalScore;
-    item._col26 = participantName;
+    item.disqualificationReason = item['실격사유'];
+    item.payload = payload;
 
     return item;
+  });
+
+  [
+    '참가자번호',
+    '선수명',
+    '컵번호',
+    '샘플번호',
+    '팀번호',
+    '팀명',
+    '총점',
+    '최종점수',
+    '실격여부',
+    '실격사유',
+    '검수상태'
+  ].forEach(addHeader);
+
+  const headers = baseHeaders.concat(extraHeaderOrder);
+
+  list.forEach(item => {
+    item.values = headers.map((h, idx) => {
+      const v = item[h] === undefined || item[h] === null ? '' : item[h];
+      item['_col' + idx] = v;
+      return v;
+    });
   });
 
   return {
     success: true,
     list,
-    headers: [
-      '제출시간',
-      '대회코드',
-      '라운드',
-      '심사위원명',
-      '팀',
-      '역할',
-      '모드',
-      '참가자번호',
-      '선수명',
-      '총점',
-      '실격여부',
-      '실격사유',
-      '검수상태'
-    ]
+    headers
   };
 }
 async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus) {
