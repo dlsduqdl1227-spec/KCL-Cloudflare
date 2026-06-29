@@ -1,5 +1,5 @@
 // KCL Cloudflare API shim
-// 기존 Apps Script 프론트엔드의 google.script.run 호출을 Cloudflare Functions fetch 호출로 변환합니다.
+// 기존 프론트엔드의 google.script.run 형태 호출을 Cloudflare Functions fetch 호출로 변환합니다.
 (function () {
   if (typeof window === 'undefined') return;
 
