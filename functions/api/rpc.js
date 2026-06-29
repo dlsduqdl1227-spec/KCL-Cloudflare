@@ -717,6 +717,154 @@ async function getReviewList(env, competitionCode, actorArg) {
     headers
   };
 }
+async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatus, roleText, actorArg) {
+  const code = safeStr(competitionCode).toUpperCase();
+  const actor = await getActor(env, actorArg);
+
+  if (!hasAccess(actor, code)) {
+    return { success: false, message: '검수 수정 권한이 없습니다.' };
+  }
+
+  const id = Number(rowIndex);
+  if (!id) {
+    return { success: false, message: '수정할 행 번호가 없습니다.' };
+  }
+
+  const current = await env.DB.prepare(
+    'SELECT * FROM scores WHERE id=? AND competition_code=?'
+  ).bind(id, code).first();
+
+  if (!current) {
+    return { success: false, message: '수정할 데이터를 찾지 못했습니다.' };
+  }
+
+  const reviewRes = await getReviewList(env, code, actorArg);
+  if (!reviewRes || !reviewRes.success) {
+    return { success: false, message: (reviewRes && reviewRes.message) || '검수 데이터를 불러오지 못했습니다.' };
+  }
+
+  const headers = reviewRes.headers || [];
+  const item = (reviewRes.list || []).find(x => Number(x.rowIndex) === id) || {};
+  const updateObj = updates || {};
+
+  const payload = parseJson(current.payload_json, {});
+  if (!Array.isArray(payload.rows)) payload.rows = [{}];
+  if (!payload.rows.length) payload.rows.push({});
+  if (!payload.rows[0].extraFields || typeof payload.rows[0].extraFields !== 'object') {
+    payload.rows[0].extraFields = {};
+  }
+  if (!payload.extraFields || typeof payload.extraFields !== 'object') {
+    payload.extraFields = {};
+  }
+
+  Object.keys(updateObj).forEach(function(col) {
+    const idx = Number(col);
+    const header = headers[idx];
+    if (!header) return;
+
+    const value = updateObj[col];
+
+    payload.rows[0].extraFields[header] = value;
+    payload.extraFields[header] = value;
+    item[header] = value;
+    item['_col' + idx] = value;
+  });
+
+  function firstNonEmpty(list) {
+    for (const v of list) {
+      const s = safeStr(v);
+      if (s) return s;
+    }
+    return '';
+  }
+
+  function toNumber(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(String(v).replace(/[^0-9.\-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function valueByNames(names) {
+    for (const name of names) {
+      if (item[name] !== undefined && item[name] !== null && item[name] !== '') return item[name];
+      if (payload.rows[0].extraFields[name] !== undefined && payload.rows[0].extraFields[name] !== null && payload.rows[0].extraFields[name] !== '') return payload.rows[0].extraFields[name];
+      if (payload.extraFields[name] !== undefined && payload.extraFields[name] !== null && payload.extraFields[name] !== '') return payload.extraFields[name];
+    }
+    return '';
+  }
+
+  const inferred = inferScorePayload(payload);
+
+  const unit = firstNonEmpty([
+    valueByNames(['참가자번호', '참가자 번호', '선수번호', '컵번호', 'Cup No', '샘플번호', '팀번호', '팀 번호']),
+    current.unit,
+    inferred.unit
+  ]);
+
+  const participantName = firstNonEmpty([
+    valueByNames(['선수명', '참가자명', '이름', '팀명']),
+    current.participant_name,
+    inferred.participantName
+  ]);
+
+  let total = inferred.total;
+  if (total === null || total === undefined || Number.isNaN(Number(total))) {
+    total = toNumber(valueByNames(['총점', '최종점수', 'Total', 'Total Score']));
+  }
+  if (total === null || total === undefined || Number.isNaN(Number(total))) {
+    total = current.total_score;
+  }
+
+  const dqText = firstNonEmpty([
+    valueByNames(['실격여부', 'Disqualified', 'DQ']),
+    inferred.disqualified ? 'Y' : '',
+    current.disqualified ? 'Y' : ''
+  ]);
+
+  const disqualified =
+    dqText === true ||
+    dqText === 'true' ||
+    dqText === 'Y' ||
+    dqText === 'y' ||
+    dqText === '1';
+
+  const dqReason = firstNonEmpty([
+    valueByNames(['실격사유', 'DQ Reason', 'Disqualification Reason']),
+    inferred.dqReason,
+    current.disqualification_reason
+  ]);
+
+  const status = safeStr(newStatus) || current.review_status || '미검수';
+
+  await env.DB.prepare(`
+    UPDATE scores
+    SET unit=?,
+        participant_name=?,
+        total_score=?,
+        disqualified=?,
+        disqualification_reason=?,
+        review_status=?,
+        payload_json=?
+    WHERE id=? AND competition_code=?
+  `).bind(
+    unit,
+    participantName,
+    total === null || total === undefined || Number.isNaN(Number(total)) ? null : Number(total),
+    boolInt(disqualified),
+    dqReason,
+    status,
+    JSON.stringify(payload),
+    id,
+    code
+  ).run();
+
+  return {
+    success: true,
+    message: '검수 수정 저장 완료',
+    rowIndex: id,
+    status
+  };
+}
 async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus) {
   const ids = Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes];
   for (const id of ids) await env.DB.prepare('UPDATE scores SET review_status=? WHERE id=?').bind(safeStr(newStatus) || '미검수', Number(id)).run();
