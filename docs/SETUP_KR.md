@@ -1,8 +1,8 @@
 # KCL Cloudflare v2 설치 가이드
 
 ## 목표
-기존 Google Apps Script 웹앱을 Cloudflare 중심 구조로 개편합니다.
-Apps Script 없이 Cloudflare Pages + Functions + D1을 사용합니다.
+KCL 평가 시스템을 Cloudflare 중심 구조로 운영합니다.
+Cloudflare Pages + Functions + D1을 사용하며, 기존 Apps Script/Google Sheets 저장 방식은 사용하지 않습니다.
 
 ## 구조
 - `public/assessment/` 평가/관리자 화면
