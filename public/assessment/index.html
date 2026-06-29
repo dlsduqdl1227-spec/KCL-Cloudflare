@@ -6525,11 +6525,18 @@ function normalizeDisplayVal(v) {
 }
 function isDetailScoreHeader(h) {
   h = String(h || '');
+
+  // 코멘트류는 점수 항목보다 먼저 제외해야 함.
+  // 예: "Espresso Flavor 코멘트" 안에 Flavor가 들어가도 점수가 아니라 코멘트로 처리.
+  if (/코멘트|메모|Comment|Comments|총평|의견|심사평|평가의견/i.test(h)) return false;
+
   if (/번호|연락처|전화|휴대폰|시간|대회코드|라운드|모드|상태|서명|주제|선택\s*컵|지정국가|농장|발효방식|평가구분/i.test(h)) return false;
-  return /점|총점|최종|감점|정답|가산|보너스|완성도|균형|품질|비율|선명도|표현|수행|청결|맛|질감|프레젠|Flavor|Sweetness|Acidity|Body|Mouthfeel|Clean|Aroma|Overall|Balance|Tactile/i.test(h);
+
+  return /점|총점|최종|감점|정답|가산|보너스|완성도|균형|품질|비율|선명도|표현|수행|청결|맛|질감|프레젠|Flavor|Sweetness|Acidity|Body|Mouthfeel|Clean|Aroma|Overall|Balance|Tactile|Taste|Design|Machine|Equipment/i.test(h);
 }
 function isDetailCommentHeader(h) {
-  return /코멘트|메모|Comment|평가|총평|종합/i.test(String(h || '')) && !isDetailScoreHeader(h);
+  h = String(h || '');
+  return /코멘트|메모|Comment|Comments|총평|의견|심사평|평가의견/i.test(h);
 }
 function isDetailBaseHeader(h) {
   return /제출시간|라운드|심사위원|팀|역할|모드|컵번호|샘플번호|참가자번호|선수명|우유종류|프로세스|상태|검수|서명|가이드URL/i.test(String(h || ''));
