@@ -1,0 +1,17 @@
+name = "kcl-cloudflare-v2"
+compatibility_date = "2025-08-01"
+pages_build_output_dir = "public"
+
+# 1) Cloudflare에서 D1 데이터베이스를 만든 뒤 database_id를 교체하세요.
+# wrangler d1 create kcl-v2-db
+[[d1_databases]]
+binding = "DB"
+database_name = "kcl-v2-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[vars]
+# 최초 관리자 계정. 배포 전 Cloudflare Pages Variables and secrets에서 값 교체 권장.
+KCL_ADMIN_NAME = "관리자"
+KCL_ADMIN_PHONE = "01000000000"
+KCL_ADMIN_AFFILIATION = "KCL"
+SMS_PROVIDER = ""

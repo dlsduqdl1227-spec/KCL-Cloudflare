@@ -1,0 +1,15 @@
+{
+  "name": "kcl-cloudflare-v2",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler pages dev public --d1 DB=kcl-v2-db --compatibility-date=2025-08-01",
+    "deploy": "wrangler pages deploy public",
+    "d1:create": "wrangler d1 create kcl-v2-db",
+    "d1:migrate:local": "wrangler d1 migrations apply kcl-v2-db --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply kcl-v2-db --remote"
+  },
+  "devDependencies": {
+    "wrangler": "latest"
+  }
+}
