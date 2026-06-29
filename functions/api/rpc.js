@@ -192,7 +192,7 @@ async function dispatch(action, args, env) {
     saveIkrcSeedToCupMatch: async () => ({ success: true, message: '저장되었습니다.' }),
     updateIkrcSeedToCupResult: async () => ({ success: true, message: '저장되었습니다.' }),
     markIkrcCalibrationChecked: async () => ({ success: true, message: '확인 처리되었습니다.' }),
-    cleanupCompetitionSheetTabs: async () => ({ success: true, message: 'Cloudflare v2에서는 보조 시트 정리가 필요 없습니다.', hiddenSheets: [] })
+    cleanupCompetitionSheetTabs: async () => ({ success: true, message: 'Cloudflare v2에서는 별도의 보조 탭 정리가 필요 없습니다. 데이터는 D1 DB 기준으로 관리됩니다.', hiddenSheets: [] })
   };
   if (!handlers[action]) return { success: false, message: '아직 v2에 구현되지 않은 기능입니다: ' + action };
   return handlers[action]();
@@ -546,17 +546,159 @@ async function verifyOTP(env, name, phone, competitionCode, otp) {
   }
   return { success: true, name, phone, competitionCode: code, rounds, scores: scoreRows.results || [] };
 }
-function _num(v) { const n = Number(String(v ?? '').replace(/[^0-9.\-]/g, '')); return Number.isFinite(n) ? n : 0; }
-function _avg(list) { const nums = (list || []).map(_num).filter(n => n > 0); return nums.length ? nums.reduce((a,b)=>a+b,0) / nums.length : 0; }
-function _fmt(n) { n = _num(n); return n ? (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/,'') : '-'; }
-function _tags(arr, max=3) { return Array.isArray(arr) ? arr.filter(Boolean).slice(0,max) : []; }
-function _joinTags(arr, fallback='') { arr = _tags(arr, 3); return arr.length ? arr.join(', ') : fallback; }
-function _tone5(v) { v=_num(v); if (v>=4.5) return '매우 선명한'; if (v>=4) return '뚜렷한'; if (v>=3.5) return '안정적인'; if (v>=3) return '기준을 충족하는'; if (v>=2) return '다소 약한'; return '보완이 필요한'; }
-function _tone7(v) { v=_num(v); if (v>=5.5) return '완성도가 높은'; if (v>=5) return '매우 안정적인'; if (v>=4) return '안정적인'; if (v>=3) return '기준을 충족하는'; if (v>=2) return '보완이 필요한'; return '개선이 필요한'; }
-function _result(comments) { return { success: true, comments: (comments || []).filter(Boolean).slice(0,3) }; }
-function generateCuppingComment(payload) { payload = payload || {}; const fl=_num(payload.flavor), at=_num(payload.aftertaste), ac=_num(payload.acidity), bo=_num(payload.body), sw=_num(payload.sweetness), ov=_num(payload.overall); const tags=payload.tags||{}; const avg=_avg([fl,at,ac,bo,sw,ov]); return _result([`${_joinTags(tags.flavor,'향미')} 계열의 인상이 컵의 첫인상을 형성하고, Aftertaste는 ${_joinTags(tags.aftertaste,'여운')} 중심으로 이어진다. 산미는 ${_tone5(ac)} 수준으로 나타나며 전체 향미 구조 안에서 균형을 만든다.`, `Body는 ${_joinTags(tags.body,'질감')} 질감으로 컵을 지지하고, Sweetness는 ${_joinTags(tags.sweetness,'단맛')} 방향으로 감지된다. Flavor ${_fmt(fl)}, Aftertaste ${_fmt(at)}, Acidity ${_fmt(ac)}, Body ${_fmt(bo)}, Sweetness ${_fmt(sw)}의 흐름을 종합하면 ${_tone5(avg)} 커핑 결과로 볼 수 있다.`, `Overall ${_fmt(ov)} 기준에서 컵의 강점은 향미의 선명도와 구조감에 있으며, 낮게 기록된 항목은 로스팅 포인트와 클린컵, 단맛 지속성을 중심으로 보완하면 좋다.`]); }
-function generateKbcComment(payload) { payload=payload||{}; const techCount=_num(payload.techCount), sensorAvg=_num(payload.sensorAvg), sigAvg=payload.sigAvg==null?0:_num(payload.sigAvg), total=_num(payload.totalScore), isMain=!!payload.isMain, practical=safeStr(payload.practical); const techStr=techCount>=5?'기술 항목 전반을 안정적으로 수행했다':techCount>=4?'대부분의 기술 항목을 무리 없이 수행했다':techCount>=3?'핵심 기술은 수행했으나 일부 안정성에서 보완 여지가 있었다':'기술 수행의 일관성에서 보완이 필요했다'; const sensorStr=sensorAvg>=5?'에스프레소의 향미 설계와 균형이 뚜렷하게 전달되었다':sensorAvg>=4?'에스프레소의 맛과 질감이 비교적 안정적으로 표현되었다':sensorAvg>=3?'에스프레소가 기준은 충족했으나 향미 선명도와 일관성에 보완 여지가 있었다':'에스프레소 추출 안정성과 향미 표현을 함께 보완할 필요가 있었다'; const sigStr=isMain?(sigAvg>=5?'창작음료는 에스프레소와 부재료의 연결성이 분명하고 설계 의도가 잘 드러났다':sigAvg>=4?'창작음료는 전체 균형이 안정적이나 향미 포인트를 더 선명하게 만들 수 있다':'창작음료는 의도 전달과 향미 균형을 추가로 다듬을 필요가 있다'):''; const practicalStr=practical==='Y'?'실무 수행성은 비교적 안정적으로 확인되었다':practical==='N'?'실무 수행성에서는 준비와 동선의 보완이 필요했다':'서비스 흐름과 준비 과정은 전체 완성도에 영향을 주는 요소로 확인되었다'; return _result([`${techStr}. ${sensorStr}.`, isMain?`${sigStr}. ${practicalStr}.`:`${practicalStr}. 프레젠테이션과 장비 운용의 안정성이 음료 평가와 함께 전체 인상을 구성했다.`, `총점 ${_fmt(total)}점 기준으로 강점은 유지하되, 낮게 기록된 세부 항목을 중심으로 추출 일관성, 향미 설명, 서비스 완성도를 보완하면 전체 경쟁력이 높아질 수 있다.`]); }
-function generateKcacComment(payload) { payload=payload||{}; const total=_num(payload.subtotal||payload.totalScore||payload.total), round=safeStr(payload.round||payload.stage||''), pattern=safeStr(payload.patternType||payload.pattern||'패턴'), scores=payload.scores||{}, visualAvg=_avg(Object.values(scores)); return _result([`${round?round+' ':''}${pattern} 평가는 패턴의 위치, 균형, 표면 품질과 선명도를 중심으로 진행되었다. 전체적으로 ${_tone5(visualAvg||total)} 시각적 완성도를 보였다.`, `점수 흐름을 보면 중심축과 비율, 표면 정리감이 전체 인상을 결정했다. 패턴의 대비와 라인 선명도가 안정적으로 유지될수록 완성도가 더 높게 전달된다.`, `최종 ${_fmt(total)}점 기준으로 강점은 유지하되, 리프 간격·대칭·표면 질감처럼 낮게 기록된 항목을 중심으로 보완하면 컵의 표현력이 더 선명해질 수 있다.`]); }
-function generateMobComment(payload) { payload=payload||{}; const menu=safeStr(payload.menu||'브루잉'), total=_num(payload.totalScore||payload.total), techAvg=_avg(payload.techVals||[]), sensAvg=_avg(payload.sensVals||[]), sigAvg=_avg(payload.sigVals||[]), attrComments=safeStr(payload.attributeComments||''); return _result([`${menu} 평가는 추출 설계와 서비스 흐름, 향미 표현이 함께 연결되는지를 중심으로 확인했다. 기술 수행은 ${_tone7(techAvg)} 수준이며, 준비와 시연 동선이 전체 인상에 직접적으로 영향을 주었다.`, `센서리 항목은 ${_tone7(sensAvg)} 흐름을 보였다${sigAvg?`, 창작 요소는 ${_tone7(sigAvg)} 완성도로 평가되었다`:''}. 향미 설명과 컵의 실제 인상이 자연스럽게 맞물릴수록 설계 의도가 더 분명하게 전달된다.`, `${attrComments?attrComments+' ':''}총점 ${_fmt(total)}점 기준으로 낮게 기록된 항목을 중심으로 추출 일관성, 향미 균형, 서비스 완성도를 함께 보완하면 좋다.`]); }
-function generateIkrcComment(payload) { payload=payload||{}; const scores=payload.scores||{}, intensities=payload.intensities||{}, tags=payload.tags||{}; const fl=_num(scores.flavor), clean=_num(scores.cleanCup), sw=_num(scores.sweetness), ac=_num(scores.acidity), mf=_num(scores.mouthfeel), avg=_avg([fl,clean,sw,ac,mf]); return _result([`Sample ${payload.sampleNo||''}은 ${_joinTags(tags.flavor,'플레이버')} 계열의 향미가 중심이 되며, Clean Cup은 ${_tone5(clean)} 수준으로 평가되었다. 향미 강도 ${intensities.flavor||'-'} 기준에서 컵의 첫인상이 결정된다.`, `Sweetness ${_fmt(sw)}, Acidity ${_fmt(ac)}, Mouthfeel ${_fmt(mf)}의 흐름을 보면 단맛, 산미, 질감의 연결성이 전체 로스팅 완성도를 좌우했다. ${_joinTags(tags.mouthfeel,'질감')} 질감이 컵의 구조감을 만든다.`, `평균 ${_fmt(avg)}점 기준으로 강점은 유지하되, 낮은 항목은 로스팅 포인트와 후반부 클린함, 단맛 지속성을 중심으로 조정하면 더 안정적인 결과를 기대할 수 있다.`]); }
+function _num(v) {
+  const n = Number(String(v ?? '').replace(/[^0-9.\-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+function _avg(list) {
+  const nums = (list || []).map(_num).filter(n => n > 0);
+  return nums.length ? nums.reduce((a,b)=>a+b,0) / nums.length : 0;
+}
+function _fmt(n) {
+  n = _num(n);
+  return n ? (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/,'') : '-';
+}
+function _tags(arr, max=4) {
+  return Array.isArray(arr) ? arr.map(safeStr).filter(Boolean).slice(0,max) : [];
+}
+function _joinTags(arr, fallback='') {
+  const t = _tags(arr, 4);
+  return t.length ? t.join(', ') : fallback;
+}
+function _tone5(v) {
+  v=_num(v);
+  if (v>=4.6) return '매우 선명하고 완성도 높은';
+  if (v>=4.1) return '뚜렷하고 안정적인';
+  if (v>=3.5) return '안정적인';
+  if (v>=3.0) return '기준을 충족하는';
+  if (v>=2.0) return '보완 여지가 있는';
+  return '개선이 필요한';
+}
+function _tone7(v) {
+  v=_num(v);
+  if (v>=5.8) return '매우 완성도 높은';
+  if (v>=5.0) return '완성도 높은';
+  if (v>=4.0) return '안정적인';
+  if (v>=3.0) return '기준을 충족하는';
+  if (v>=2.0) return '보완 여지가 있는';
+  return '개선이 필요한';
+}
+function _result(comments) {
+  return { success: true, comments: (comments || []).filter(Boolean).slice(0,3) };
+}
+function _lowHighScore(items) {
+  const valid = (items || []).filter(x => x && _num(x.score) > 0);
+  valid.sort((a,b) => _num(b.score) - _num(a.score));
+  return { high: valid[0] || null, low: valid[valid.length - 1] || null };
+}
+function _tagLine(tags, key, fallback) {
+  return _joinTags(tags && tags[key], fallback);
+}
+
+function generateCuppingComment(payload) {
+  payload = payload || {};
+  const tags = payload.tags || {};
+  const items = [
+    {name:'Flavor', score:payload.flavor, tag:_tagLine(tags,'flavor','향미')},
+    {name:'Aftertaste', score:payload.aftertaste, tag:_tagLine(tags,'aftertaste','여운')},
+    {name:'Acidity', score:payload.acidity, tag:_tagLine(tags,'acidity','산미')},
+    {name:'Body', score:payload.body, tag:_tagLine(tags,'body','질감')},
+    {name:'Sweetness', score:payload.sweetness, tag:_tagLine(tags,'sweetness','단맛')},
+    {name:'Overall', score:payload.overall, tag:'전체 인상'}
+  ];
+  const avg = _avg(items.map(x=>x.score));
+  const hl = _lowHighScore(items);
+  const cupNo = safeStr(payload.cupNumber || payload.cupNo || '');
+  const process = safeStr(payload.process || '');
+  return _result([
+    `${cupNo ? cupNo + '번 컵은 ' : '해당 컵은 '}${process ? process + ' 프로세스의 특성을 바탕으로 ' : ''}${_tagLine(tags,'flavor','향미')} 인상이 먼저 드러나고, Aftertaste는 ${_tagLine(tags,'aftertaste','여운')} 흐름으로 이어졌다. Acidity는 ${_tone5(payload.acidity)} 수준으로 전체 구조 안에서 균형을 만들었다.`,
+    `Body는 ${_tagLine(tags,'body','질감')} 방향으로 컵을 지지하고, Sweetness는 ${_tagLine(tags,'sweetness','단맛')} 인상을 형성했다. 점수 흐름은 Flavor ${_fmt(payload.flavor)}, Aftertaste ${_fmt(payload.aftertaste)}, Acidity ${_fmt(payload.acidity)}, Body ${_fmt(payload.body)}, Sweetness ${_fmt(payload.sweetness)}로 정리된다.`,
+    `${hl.high ? hl.high.name + ' 항목이 상대적으로 강점으로 보였고' : '전반적인 인상은 안정적이며'}, ${hl.low && hl.low !== hl.high ? hl.low.name + ' 항목은 보완 포인트로 볼 수 있다. ' : ''}Overall ${_fmt(payload.overall)} 기준으로 향미 선명도와 클린컵, 단맛 지속성을 함께 다듬으면 컵의 완성도가 더 높아질 수 있다.`
+  ]);
+}
+
+function generateKbcComment(payload) {
+  payload = payload || {};
+  const presentation = _num(payload.presentationVal);
+  const espressoVals = Array.isArray(payload.espressoVals) ? payload.espressoVals.map(_num) : [];
+  const sigVals = Array.isArray(payload.sigVals) ? payload.sigVals.map(_num) : [];
+  const machine = _num(payload.machineVal);
+  const total = _num(payload.totalScore || payload.subtotalScore);
+  const penalty = _num(payload.timePenalty);
+  const isMain = !!payload.isMain;
+  const espressoAvg = _avg(espressoVals);
+  const sigAvg = _avg(sigVals);
+  const attrComments = safeStr(payload.attributeComments || '');
+  const flow = presentation >= 5 ? '서비스 흐름과 프레젠테이션의 안정감이 먼저 확인되었다' : presentation >= 3.5 ? '서비스 흐름은 기준을 충족했으나 전달력과 동선의 정리가 더해지면 좋다' : '서비스 흐름과 프레젠테이션의 안정성에서 보완이 필요하다';
+  const espressoText = espressoAvg >= 5 ? '에스프레소는 맛의 설계, 클린컵, 질감, 플레이버가 비교적 선명하게 연결되었다' : espressoAvg >= 4 ? '에스프레소는 전반적으로 안정적이나 일부 향미 요소의 선명도를 더 높일 수 있다' : '에스프레소는 추출 안정성과 향미 표현의 일관성을 함께 보완할 필요가 있다';
+  const signatureText = isMain ? (sigAvg >= 5 ? '창작음료는 에스프레소와 부재료의 연결성이 분명하고 설계 의도가 잘 드러났다' : sigAvg >= 4 ? '창작음료는 구성은 안정적이나 핵심 향미 포인트를 더 선명하게 만들 수 있다' : '창작음료는 의도 전달, 향미 균형, 질감의 연결성을 추가로 다듬을 필요가 있다') : '';
+  const machineText = machine >= 5 ? '장비 운용과 기물 관리도 전체 수행을 안정적으로 뒷받침했다' : machine >= 3.5 ? '장비 운용은 기준을 충족했지만 세부 동작의 완성도를 높일 여지가 있다' : '장비 운용과 작업대 관리 측면의 보완이 필요하다';
+  return _result([
+    `${flow}. ${espressoText}.`,
+    isMain ? `${signatureText}. ${machineText}.` : `${machineText}. 예선 단계에서는 에스프레소 평가와 서비스 완성도가 전체 인상을 결정하는 핵심 축으로 작용했다.`,
+    `${attrComments ? '세부 코멘트 흐름을 보면 ' + attrComments + ' ' : ''}총점 ${_fmt(total)}점${penalty ? ', 시간감점 ' + _fmt(penalty) + '점' : ''} 기준으로 강점은 유지하되, 낮게 기록된 세부 항목을 중심으로 추출 일관성, 향미 설명, 서비스 완성도를 보완하면 전체 경쟁력이 높아질 수 있다.`
+  ]);
+}
+
+function generateKcacComment(payload) {
+  payload = payload || {};
+  const scores = payload.scores || {};
+  const smartTags = payload.smartTags || {};
+  const total = _num(payload.subtotal || payload.totalScore || payload.total);
+  const type = safeStr(payload.type || '');
+  const label = safeStr(payload.label || '검수 대상');
+  const pattern = safeStr(payload.patternType || payload.pattern || '패턴');
+  const milk = [safeStr(payload.milkType), safeStr(payload.milkProduct)].filter(Boolean).join(' ');
+  const scoreItems = Object.keys(scores).map(k => ({name:k, score:scores[k]}));
+  const avg = _avg(scoreItems.map(x=>x.score)) || total;
+  const hl = _lowHighScore(scoreItems);
+  const tagText = Object.keys(smartTags).map(k => `${k}: ${_joinTags(smartTags[k], '')}`).filter(x => !/: $/.test(x)).slice(0,2).join(' / ');
+  const isSensory = /sensory|맛|질감/i.test(type);
+  return _result([
+    `${label}은 ${milk ? milk + ' 조건에서 ' : ''}${pattern}의 완성도와 표면 품질, 위치와 비율을 중심으로 평가되었다. 전체적으로 ${_tone5(avg)} 시각적 완성도를 보였다.`,
+    isSensory ? `센서리 항목에서는 맛의 균형과 질감, 프레젠테이션의 연결성이 중요하게 작용했다. ${tagText ? '스마트태그 기준 ' + tagText + ' 인상이 확인되었다. ' : ''}` : `패턴 항목에서는 중심축, 대칭, 리프 간격, 라인 선명도가 전체 인상을 결정했다. ${tagText ? '스마트태그 기준 ' + tagText + ' 인상이 확인되었다. ' : ''}`,
+    `${hl.high ? hl.high.name + ' 항목이 상대적으로 강점으로 보였고' : '전반적인 구조는 확인되었고'}, ${hl.low && hl.low !== hl.high ? hl.low.name + ' 항목은 보완 포인트로 볼 수 있다. ' : ''}최종 ${_fmt(total)}점 기준으로 패턴의 대비와 표면 정리감을 높이면 표현력이 더 선명해질 수 있다.`
+  ]);
+}
+
+function generateMobComment(payload) {
+  payload = payload || {};
+  const menu = safeStr(payload.menu || '브루잉');
+  const total = _num(payload.totalScore || payload.total);
+  const techAvg = _avg(payload.techVals || []);
+  const sensAvg = _avg(payload.sensVals || []);
+  const sigAvg = _avg(payload.sigVals || []);
+  const attrComments = safeStr(payload.attributeComments || '');
+  const isCreative = /창작|creative|signature/i.test(menu) || sigAvg > 0;
+  const techText = techAvg ? `기술 수행은 ${_tone7(techAvg)} 수준으로, 준비 과정과 서비스 동선이 전체 인상에 영향을 주었다` : '기술 수행보다는 센서리와 메뉴 설계 중심으로 평가되었다';
+  const sensText = sensAvg ? `센서리 항목은 ${_tone7(sensAvg)} 흐름을 보였고, 단맛·플레이버·균형·클린컵·질감의 연결성이 컵의 설득력을 만들었다` : '센서리 항목은 제출 데이터 기준으로 별도 점수 흐름이 확인되지 않았다';
+  const sigText = isCreative ? (sigAvg ? `창작 요소는 ${_tone7(sigAvg)} 완성도로, 형태와 용이성, 향미, 균형, 전문성의 연결성이 중요하게 작용했다` : '창작 메뉴는 설계 의도와 실제 향미의 연결성을 중심으로 보완점을 볼 수 있다') : '기본 브루잉 메뉴에서는 추출 설계와 서비스 설명의 일관성이 핵심이다';
+  return _result([
+    `${menu} 평가는 추출 설계, 서비스 흐름, 향미 표현이 서로 맞물리는지를 중심으로 진행되었다. ${techText}.`,
+    `${sensText}. ${sigText}.`,
+    `${attrComments ? '세부 코멘트 흐름을 보면 ' + attrComments + ' ' : ''}총점 ${_fmt(total)}점 기준으로 낮게 기록된 항목을 중심으로 추출 일관성, 향미 균형, 설명의 명확성을 함께 보완하면 완성도를 높일 수 있다.`
+  ]);
+}
+
+function generateIkrcComment(payload) {
+  payload = payload || {};
+  const scores = payload.scores || {};
+  const intensities = payload.intensities || {};
+  const tags = payload.tags || {};
+  const items = [
+    {name:'Flavor', score:scores.flavor, tag:_tagLine(tags,'flavor','플레이버')},
+    {name:'Clean Cup', score:scores.cleanCup, tag:_tagLine(tags,'cleanCup','클린컵')},
+    {name:'Sweetness', score:scores.sweetness, tag:_tagLine(tags,'sweetness','단맛')},
+    {name:'Acidity', score:scores.acidity, tag:_tagLine(tags,'acidity','산미')},
+    {name:'Mouthfeel', score:scores.mouthfeel, tag:_tagLine(tags,'mouthfeel','질감')}
+  ];
+  const avg = _avg(items.map(x=>x.score));
+  const hl = _lowHighScore(items);
+  const sample = safeStr(payload.sampleNo || '');
+  return _result([
+    `${sample ? 'Sample ' + sample + '은 ' : '해당 샘플은 '}${_tagLine(tags,'flavor','플레이버')} 계열의 향미가 첫인상을 형성하고, Clean Cup은 ${_tone5(scores.cleanCup)} 수준으로 평가되었다. 향미 강도 ${intensities.flavor || '-'} 기준에서 컵의 선명도가 판단되었다.`,
+    `Sweetness ${_fmt(scores.sweetness)}, Acidity ${_fmt(scores.acidity)}, Mouthfeel ${_fmt(scores.mouthfeel)}의 흐름을 보면 단맛, 산미, 질감의 연결성이 로스팅 완성도를 좌우했다. ${_tagLine(tags,'mouthfeel','질감')} 질감이 컵의 구조감을 만들었다.`,
+    `${hl.high ? hl.high.name + ' 항목은 강점으로 보였고' : '전반적인 점수 흐름은 확인되었고'}, ${hl.low && hl.low !== hl.high ? hl.low.name + ' 항목은 보완 포인트로 볼 수 있다. ' : ''}평균 ${_fmt(avg)}점 기준으로 로스팅 포인트, 후반부 클린함, 단맛 지속성을 조정하면 더 안정적인 결과를 기대할 수 있다.`
+  ]);
+}
 
