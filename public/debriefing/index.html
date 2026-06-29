@@ -295,7 +295,7 @@ function hasGas_() {
 function gasRun_(fnName, args, onSuccess, onFailure) {
   if (!hasGas_()) {
     hideOverlay();
-    toast('Apps Script 웹앱 주소에서 열어야 합니다. 배포된 웹앱 URL로 다시 접속해주세요.', true);
+    toast('Cloudflare Pages 배포 주소에서 열어야 합니다. /debriefing/ 주소로 다시 접속해주세요.', true);
     if (typeof onFailure === 'function') onFailure(new Error('google.script.run is not available'));
     return;
   }
