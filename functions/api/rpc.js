@@ -171,6 +171,7 @@ async function dispatch(action, args, env) {
     submitScores: () => submitScores(env, args[0], null),
     submitWithSignature: () => submitScores(env, args[0], args[1]),
     getReviewList: () => getReviewList(env, args[0], args[1]),
+    updateReviewRow: () => updateReviewRow(env, args[0], args[1], args[2], args[3], args[4], args[5]),
     updateReviewStatus: () => updateReviewStatus(env, args[0], [args[1]], args[2], args[3], args[4]),
     updateReviewStatusBatch: () => updateReviewStatus(env, args[0], args[1], args[2], args[3], args[4]),
     deleteReviewRow: () => deleteReviewRow(env, args[0], args[1], args[2]),
