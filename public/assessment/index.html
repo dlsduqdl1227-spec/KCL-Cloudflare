@@ -1033,6 +1033,31 @@ button,input,select,textarea{font-family:'Pretendard',-apple-system,BlinkMacSyst
   .divider{border-top:2px solid #000}
 }
 .print-only{display:none}
+
+/* Review v4 mobile-first controls */
+.review-v4-progress{font-size:11px;color:var(--text-3);text-align:center;line-height:1.55;margin-top:6px}
+.review-v4-action-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
+.review-v4-action-grid button{margin:0!important;width:100%}
+.review-overall-card{background:rgba(255,255,255,.045);border:1.5px solid var(--border-lt);border-radius:14px;padding:14px;margin:0 0 14px}
+.review-overall-card .review-overall-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+.review-overall-title{font-size:15px;font-weight:900;color:#fff;line-height:1.35}
+.review-overall-sub{font-size:11px;color:var(--text-3);line-height:1.55;margin-top:3px}
+.review-overall-card textarea{min-height:132px;margin:10px 0 0}
+.review-overall-card .btn-gen-comment{margin:0;white-space:nowrap;min-width:132px}
+.review-eval-like-tabs{position:sticky;top:calc(max(10px,var(--safe-top)) + 64px);z-index:2}
+@media(max-width:520px){
+  .review-summary-grid{grid-template-columns:1fr}
+  .review-top-actions{top:max(8px,var(--safe-top));padding:10px 9px}
+  .review-eval-like-tabs{display:flex;overflow-x:auto;grid-template-columns:none;padding:8px;margin-left:-2px;margin-right:-2px;top:calc(max(8px,var(--safe-top)) + 74px)}
+  .review-eval-like-tab{min-width:116px;max-width:148px;padding:10px 8px;font-size:11px}
+  .review-eval-like-card{border-radius:14px;padding:14px 12px}
+  .review-overall-card .review-overall-head{display:block}
+  .review-overall-card .btn-gen-comment{width:100%;margin-top:10px!important}
+  .review-score-card{padding:16px 13px}
+  .score-row-head{grid-template-columns:minmax(0,1fr) 66px}
+  .score-row-bignum{font-size:24px}
+}
+
 </style>
 <script src="/assets/kcl-api-shim.js"></script>
 </head>
@@ -1150,7 +1175,6 @@ button,input,select,textarea{font-family:'Pretendard',-apple-system,BlinkMacSyst
 
   <div class="divider"></div>
   <button class="btn-outline" onclick="loadAdminPanel()">관리 정보 새로고침</button>
-  <button class="btn-outline" onclick="adminCleanupSheetTabs()">엑셀 보조 탭 정리</button>
   <button class="btn-danger" onclick="doLogout()">로그아웃</button>
 </div>
 
@@ -1215,7 +1239,7 @@ button,input,select,textarea{font-family:'Pretendard',-apple-system,BlinkMacSyst
   </div>
   <div class="eval-content">
     <div class="eval-hero-logo" id="review-edit-logo"></div>
-    <div class="review-edit-help" id="review-edit-help">검수 화면입니다. 기존 평가 화면의 입력 구조를 최대한 유지해 점수·강도·O/X·코멘트를 확인하고 수정할 수 있습니다.</div>
+    <div class="review-edit-help" id="review-edit-help">검수 화면입니다. 평가 입력 화면과 동일한 방식으로 점수·강도·스마트태그·코멘트를 확인하고 급한 수정까지 처리할 수 있습니다.</div>
     <div class="review-top-actions" id="review-top-actions">
       <div id="review-autosave-state" style="font-size:11px;color:var(--text-3);text-align:center;line-height:1.5">수정 내용은 자동 저장됩니다.</div>
     </div>
@@ -3104,7 +3128,7 @@ function doLogin() {
   clearTimeout(_loginTimeout);
   _loginTimeout = setTimeout(function(){
     hideOverlay();
-    toast('로그인 응답이 지연되고 있습니다. 운영탭/Config 시트명과 배포 버전을 확인해주세요.', true);
+    toast('로그인 응답이 지연되고 있습니다. Cloudflare 배포 상태와 D1 연결 상태를 확인해주세요.', true);
   }, 25000);
 
   google.script.run
@@ -3378,7 +3402,7 @@ function adminRenderConfigList_() {
     var div = document.createElement('div');
     div.className = 'admin-mini-card';
     div.innerHTML = '<div class="admin-mini-title">' + escHtml(c.name || code) + ' <span class="role-mode-badge">' + escHtml(code) + '</span></div>' +
-      '<div class="admin-mini-sub">시트명: ' + escHtml(c.sheetName || '-') + ' · SMS Prefix: ' + escHtml(c.smsPrefix || '-') + '</div>' +
+      '<div class="admin-mini-sub">저장키: ' + escHtml(c.sheetName || c.code || '-') + ' · SMS Prefix: ' + escHtml(c.smsPrefix || '-') + '</div>' +
       '<div class="admin-form-grid">' +
         '<select id="admin-cfg-round-' + code + '">' + adminRoundOptionsHtml_(code, c.currentRound || '') + '</select>' +
         '<input type="text" id="admin-cfg-name-' + code + '" value="' + escHtml(c.name || '') + '" placeholder="대회명">' +
@@ -3495,22 +3519,7 @@ function adminDeleteAccount(a) {
 }
 
 function adminCleanupSheetTabs() {
-  if (!confirm('IKRC/MOB 보조 탭을 각 대회 메인 탭으로 이관 후 숨김 처리할까요?')) return;
-  showOverlay();
-  google.script.run.withSuccessHandler(function(res){
-    hideOverlay();
-    var msg = (res && res.message) || (res && res.success ? '보조 탭 정리 완료' : '보조 탭 정리 실패');
-    if (res && res.hiddenSheets && res.hiddenSheets.length) {
-      msg += ' · 숨김: ' + res.hiddenSheets.join(', ');
-    }
-    if (res && res.afterAudit && res.afterAudit.cleanupCandidates && res.afterAudit.cleanupCandidates.length) {
-      msg += ' · 아직 남은 후보: ' + res.afterAudit.cleanupCandidates.join(', ');
-    }
-    toast(msg, !(res && res.success));
-  }).withFailureHandler(function(err){
-    hideOverlay();
-    toast('보조 탭 정리 실패: ' + ((err && err.message) || err || ''), true);
-  }).cleanupCompetitionSheetTabs(adminActorPayload_());
+  toast('Cloudflare v2에서는 별도의 보조 데이터 정리가 필요하지 않습니다. 데이터는 D1 DB 기준으로 관리됩니다.');
 }
 
 function loadAdminPanel() {
@@ -5537,8 +5546,8 @@ function buildReviewEvalLikeGroups(scoreItems, intensityItems, commentItems, tag
   // KCR은 Overall 점수와 전체 코멘트를 분리해 최신 점수를 확인한 뒤 코멘트를 생성한다.
   commentItems.forEach(function(cItem){
     var cKey = reviewBaseKeyFromHeader(cItem.h);
-    var isKcrOverallComment = String(_reviewState.code || '').toUpperCase() === 'KCR' && reviewIsOverallCommentHeader_(cItem.h);
-    var target = isKcrOverallComment ? ensureGroup('overall_comment', '전체 코멘트', cItem.idx) : byKey[cKey];
+    var isOverallComment = reviewIsOverallCommentHeader_(cItem.h);
+    var target = isOverallComment ? ensureGroup('overall_comment', '종합 코멘트', cItem.idx) : byKey[cKey];
     if (!target && cKey === 'seedtocup') {
       target = ensureGroup('seedtocup', 'Seed to Cup', cItem.idx);
     }
@@ -5602,7 +5611,7 @@ function reviewIsOverallCommentHeader_(header) {
   return /종합\s*코멘트|종합코멘트|Overall\s*Comment|General\s*Comment/i.test(String(header || ''));
 }
 function reviewCanGenerateOverallComment_(commentItem) {
-  return !!(commentItem && commentItem.editable && reviewCommentGeneratorCode_() && reviewIsOverallCommentHeader_(commentItem.h));
+  return !!(commentItem && reviewCommentGeneratorCode_() && reviewIsOverallCommentHeader_(commentItem.h));
 }
 function reviewFindHeaderIndexByNames_(names) {
   var targets = (names || []).map(function(n){ return reviewHeaderKey_(n); }).filter(function(n){ return !!n; });
@@ -5852,6 +5861,56 @@ function reviewBuildCommentPayload_(code) {
   if (code === 'IKRC') return reviewBuildIkrcCommentPayload_();
   return null;
 }
+function reviewOverallCommentIndex_() {
+  var hs = _reviewState.headers || [];
+  for (var i=0;i<hs.length;i++) {
+    if (reviewIsOverallCommentHeader_(hs[i])) return i;
+  }
+  return -1;
+}
+function reviewSetFieldValueByIndex_(idx, value) {
+  document.querySelectorAll('#review-edit-fields input[data-col="' + idx + '"], #review-edit-fields textarea[data-col="' + idx + '"]').forEach(function(el){
+    el.value = String(value == null ? '' : value);
+  });
+}
+function ensureReviewOverallCard_() {
+  var code = reviewCommentGeneratorCode_();
+  if (!code) return;
+  var idx = reviewOverallCommentIndex_();
+  if (idx < 0) return;
+  var wrap = document.getElementById('review-edit-fields');
+  if (!wrap) return;
+  if (document.getElementById('review-overall-card')) return;
+  var h = (_reviewState.headers || [])[idx] || '종합코멘트';
+  var item = _reviewState.current || {};
+  var val = item[h] != null ? item[h] : (item['_col' + idx] || '');
+  var editable = canReviewEditDetails();
+  var card = document.createElement('div');
+  card.className = 'review-overall-card';
+  card.id = 'review-overall-card';
+  card.innerHTML =
+    '<div class="review-overall-head">' +
+      '<div><div class="review-overall-title">종합 코멘트</div>' +
+      '<div class="review-overall-sub">점수·스마트태그·세부 코멘트를 반영해 대회별 흐름에 맞춘 초안을 생성합니다. 선택 후 현장 판단에 맞게 수정하세요.</div></div>' +
+      '<button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">종합 코멘트 자동 생성</button>' +
+    '</div>' +
+    '<div class="gen-comment-area" id="review-gen-comment-area-' + idx + '"></div>' +
+    '<textarea data-col="' + idx + '" oninput="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave()" onblur="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave(true)"' + (!editable ? ' disabled' : '') + '>' + escHtml(String(val || '')) + '</textarea>';
+  wrap.insertBefore(card, wrap.firstChild);
+}
+function renderReviewTopActionsV4_() {
+  var top = document.getElementById('review-top-actions');
+  if (!top) return;
+  var code = reviewCommentGeneratorCode_();
+  var idx = reviewOverallCommentIndex_();
+  var statusText = (_reviewState.current && (_reviewState.current.status || _reviewState.current['검수상태'])) || '미검수';
+  var html = '<div id="review-autosave-state" style="font-size:11px;color:var(--text-3);text-align:center;line-height:1.5">수정 내용은 자동 저장됩니다.</div>' +
+    '<div class="review-v4-progress">현재 상태: ' + escHtml(statusText) + ' · 점수/코멘트 수정은 자동 저장, 최종 확인 후 검수완료를 누르세요.</div>';
+  if (code && idx >= 0) {
+    html += '<div class="review-v4-action-grid"><button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">종합 코멘트 자동 생성</button></div>';
+  }
+  top.innerHTML = html;
+}
 function generateReviewOverallComment(commentIdx) {
   var code = reviewCommentGeneratorCode_();
   if (!code) return;
@@ -5889,9 +5948,9 @@ function generateReviewCuppingComment(commentIdx) {
 function useReviewGeneratedComment(commentIdx, comment) {
   var ta = document.querySelector('#review-edit-fields textarea[data-col="' + commentIdx + '"]');
   if (!ta || ta.disabled) return;
-  ta.value = String(comment || '');
+  reviewSetFieldValueByIndex_(commentIdx, String(comment || ''));
   scheduleReviewAutoSave(true);
-  toast('종합 코멘트가 적용되었습니다.');
+  toast('종합 코멘트가 적용되었습니다. 현장 판단에 맞게 문장을 다듬어주세요.');
 }
 function appendReviewEvalLikeFields(wrap, groups) {
   if (!groups || !groups.length) return false;
@@ -6211,7 +6270,7 @@ function openReviewEdit(item) {
     if (reviewIsIkrc_() && isEmptyVal && /Seed\s*to\s*Cup|SeedToCup|시드\s*투\s*컵|시드투컵/i.test(String(h || ''))) return;
     // KCAC 시간초과 감점은 제출 단위 1회 항목이므로 식물성대체우유/대체우유 행에만 노출한다.
     if (!reviewShouldShowKcacPenalty_(h, item)) return;
-    // KCAC처럼 한 시트에 예선/결선 컬럼이 함께 있는 경우, 해당 라운드에서 비어 있는 평가 점수 컬럼은 표시하지 않는다.
+    // KCAC처럼 한 데이터 구조에 예선/결선 컬럼이 함께 있는 경우, 해당 라운드에서 비어 있는 평가 점수 컬럼은 표시하지 않는다.
     if (isEmptyVal && isNumericHeader(h, val)) return;
 
     // 검수 화면은 실제 평가 항목 중심으로만 노출한다.
@@ -6340,6 +6399,8 @@ function openReviewEdit(item) {
   document.getElementById('review-edit-enable').style.display = 'none';
   document.getElementById('review-edit-save-complete').style.display = (item.status === '검수완료') ? 'none' : 'block';
   document.getElementById('review-edit-delete').style.display = canReviewDelete() ? 'block' : 'none';
+  renderReviewTopActionsV4_();
+  ensureReviewOverallCard_();
   setReviewAutoSaveState('수정 내용은 자동 저장됩니다.', 'review-autosaved');
   syncReviewDerivedTotals_();
   showPanel('pReviewEdit');
@@ -6425,7 +6486,9 @@ function collectReviewUpdates() {
     var col = el.getAttribute('data-col');
     var h = hs[parseInt(col,10)] || '';
     if (!canReviewEditDetails() && canReviewEditDisqualification_() && !isDisqualificationHeader(h) && !isDisqualificationReasonHeader(h)) return;
-    updates[col] = isReviewTimeResultHeader(h) ? normalizeElapsedTimeDisplay_(el.value) : el.value;
+    var nextVal = isReviewTimeResultHeader(h) ? normalizeElapsedTimeDisplay_(el.value) : el.value;
+    if (updates[col] !== undefined && String(updates[col] || '').trim() && !String(nextVal || '').trim()) return;
+    updates[col] = nextVal;
   });
   if (canReviewEditDetails()) {
     var kcrTotalInfo = reviewKcrTotalInfo_();
