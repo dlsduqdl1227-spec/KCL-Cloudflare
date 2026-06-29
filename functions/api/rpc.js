@@ -907,22 +907,277 @@ async function getRanking(env, competitionCode, actorArg) {
   });
   return { success: true, compCode: code, compName: cfg ? cfg.name : code, unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking, tieBreakRule: '' };
 }
-async function getRankingDetail(env, competitionCode, unit, round) {
+async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
-  const rows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND COALESCE(NULLIF(unit,\'\'), CAST(id AS TEXT))=? AND round=? ORDER BY id')
-    .bind(code, safeStr(unit), safeStr(round)).all();
-  const detailRows = (rows.results || []).map(r => ({
-    rowIndex: r.id,
-    submittedAt: r.submitted_at,
-    judgeName: r.judge_name || '',
-    role: r.role || '',
-    team: r.team || '',
-    totalScore: r.total_score,
-    status: r.review_status || '미검수',
-    payload: parseJson(r.payload_json, {})
-  }));
-  const avg = detailRows.length ? detailRows.reduce((s, x) => s + (Number(x.totalScore) || 0), 0) / detailRows.length : null;
-  return { success: true, compCode: code, compName: COMPETITION_NAMES[code] || code, unit, unitDisplay: unit, round, totalScore: avg, rows: detailRows, headers: [] };
+  const targetUnit = safeStr(unit);
+  const targetRound = safeStr(round);
+
+  if (!code || !targetUnit) {
+    return {
+      success: false,
+      message: '상세 조회할 대회코드 또는 참가자번호가 없습니다.'
+    };
+  }
+
+  const actor = await getActor(env, actorArg);
+  if (!hasAccess(actor, code)) {
+    return { success: false, message: '순위 상세 조회 권한이 없습니다.' };
+  }
+
+  const comp = await env.DB.prepare(
+    'SELECT * FROM competitions WHERE code=?'
+  ).bind(code).first();
+
+  const compName = comp ? comp.name : (COMPETITION_NAMES[code] || code);
+
+  const allRows = await env.DB.prepare(
+    'SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC'
+  ).bind(code).all();
+
+  const baseHeaders = [
+    '제출시간',
+    '대회코드',
+    '라운드',
+    '심사위원명',
+    '팀',
+    '역할',
+    '모드'
+  ];
+
+  const extraHeaderOrder = [];
+  const extraHeaderSet = new Set();
+
+  function addHeader(h) {
+    h = safeStr(h);
+    if (!h) return;
+    if (baseHeaders.includes(h)) return;
+    if (extraHeaderSet.has(h)) return;
+    extraHeaderSet.add(h);
+    extraHeaderOrder.push(h);
+  }
+
+  function firstNonEmpty(list) {
+    for (const v of list) {
+      const s = safeStr(v);
+      if (s) return s;
+    }
+    return '';
+  }
+
+  function toNumber(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(String(v).replace(/[^0-9.\-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function convertScoreRow(r) {
+    const payload = parseJson(r.payload_json, {});
+    const payloadRows = Array.isArray(payload.rows) ? payload.rows : [];
+    const firstRow = payloadRows[0] || {};
+
+    const extra = Object.assign(
+      {},
+      firstRow.extraFields || {},
+      payload.extraFields || {}
+    );
+
+    Object.keys(extra).forEach(addHeader);
+
+    const data = Array.isArray(firstRow.data) ? firstRow.data : [];
+
+    const rowUnit = firstNonEmpty([
+      r.unit,
+      extra['참가자번호'],
+      extra['참가자 번호'],
+      extra['선수번호'],
+      extra['선수 번호'],
+      extra['컵번호'],
+      extra['Cup No'],
+      extra['샘플번호'],
+      extra['팀번호'],
+      extra['팀 번호'],
+      payload.unit,
+      payload.cupNo,
+      payload.participantNo,
+      payload.teamNo,
+      data[0]
+    ]);
+
+    const rowRound = firstNonEmpty([
+      r.round,
+      payload.round,
+      payload.currentRound,
+      extra['라운드']
+    ]);
+
+    const participantName = firstNonEmpty([
+      r.participant_name,
+      extra['선수명'],
+      extra['참가자명'],
+      extra['이름'],
+      extra['팀명'],
+      payload.participantName,
+      payload.playerName,
+      payload.teamName
+    ]);
+
+    const totalScore =
+      r.total_score === null || r.total_score === undefined
+        ? firstNonEmpty([
+            extra['총점'],
+            extra['최종점수'],
+            extra['Total'],
+            extra['Total Score']
+          ])
+        : Number(r.total_score);
+
+    const item = {};
+
+    item.rowIndex = r.id;
+
+    item['제출시간'] = r.submitted_at || '';
+    item['대회코드'] = r.competition_code || code;
+    item['라운드'] = rowRound;
+    item['심사위원명'] = r.judge_name || payload.judgeName || '';
+    item['팀'] = r.team || payload.team || payload.teamGroup || '';
+    item['역할'] = r.role || payload.judgeRole || payload.role || '';
+    item['모드'] = r.mode || payload.mode || '';
+
+    Object.keys(extra).forEach(k => {
+      item[k] = extra[k];
+    });
+
+    if (!item['참가자번호']) item['참가자번호'] = rowUnit;
+    if (!item['컵번호']) item['컵번호'] = rowUnit;
+    if (!item['샘플번호']) item['샘플번호'] = rowUnit;
+    if (!item['팀번호']) item['팀번호'] = rowUnit;
+
+    if (!item['선수명']) item['선수명'] = participantName;
+    if (!item['참가자명']) item['참가자명'] = participantName;
+    if (!item['팀명'] && code === 'KTCC') item['팀명'] = participantName;
+
+    item['총점'] = totalScore;
+    item['최종점수'] = totalScore;
+
+    item['실격여부'] = r.disqualified ? 'Y' : (item['실격여부'] || '');
+    item['실격사유'] = r.disqualification_reason || item['실격사유'] || '';
+    item['검수상태'] = r.review_status || item['검수상태'] || '미검수';
+
+    item.status = item['검수상태'];
+    item.submittedAt = item['제출시간'];
+    item.timestamp = item['제출시간'];
+    item.competitionCode = item['대회코드'];
+    item.round = item['라운드'];
+    item.judgeName = item['심사위원명'];
+    item.team = item['팀'];
+    item.role = item['역할'];
+    item.mode = item['모드'];
+    item.unit = rowUnit;
+    item.participantName = participantName;
+    item.totalScore = totalScore;
+    item.disqualified = !!r.disqualified;
+    item.disqualificationReason = item['실격사유'];
+    item.payload = payload;
+
+    return item;
+  }
+
+  const converted = (allRows.results || []).map(convertScoreRow);
+
+  const rows = converted.filter(item => {
+    const sameUnit = safeStr(item.unit) === targetUnit;
+    const sameRound = !targetRound || safeStr(item.round) === targetRound;
+    return sameUnit && sameRound;
+  });
+
+  [
+    '참가자번호',
+    '선수명',
+    '컵번호',
+    '샘플번호',
+    '팀번호',
+    '팀명',
+    '총점',
+    '최종점수',
+    '실격여부',
+    '실격사유',
+    '검수상태'
+  ].forEach(addHeader);
+
+  const headers = baseHeaders.concat(extraHeaderOrder);
+
+  rows.forEach(item => {
+    item.values = headers.map((h, idx) => {
+      const v = item[h] === undefined || item[h] === null ? '' : item[h];
+      item['_col' + idx] = v;
+      return v;
+    });
+  });
+
+  let totalScore = 0;
+  let count = 0;
+  let reviewedCount = 0;
+  let disqualified = false;
+  const disqReasons = [];
+
+  rows.forEach(item => {
+    const n = toNumber(item['총점']);
+    if (n !== null) {
+      totalScore += n;
+      count++;
+    }
+
+    if (String(item['검수상태'] || '').replace(/\s/g, '') === '검수완료') {
+      reviewedCount++;
+    }
+
+    if (item.disqualified || item['실격여부'] === 'Y') {
+      disqualified = true;
+      if (item['실격사유']) disqReasons.push(item['실격사유']);
+    }
+  });
+
+  totalScore = Math.round(totalScore * 100) / 100;
+
+  let rankInfo = null;
+  try {
+    const rankResult = await getRanking(env, code, actorArg);
+    if (rankResult && rankResult.success && Array.isArray(rankResult.ranking)) {
+      rankInfo = rankResult.ranking.find(r => {
+        return safeStr(r.unit) === targetUnit &&
+          (!targetRound || safeStr(r.round) === targetRound);
+      }) || null;
+    }
+  } catch (e) {
+    rankInfo = null;
+  }
+
+  return {
+    success: true,
+    compCode: code,
+    compName,
+    unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호',
+    unit: targetUnit,
+    unitDisplay: targetUnit,
+    round: targetRound,
+    headers,
+    rows,
+    scores: rows,
+    totalScore,
+    avgScore: count ? Math.round((totalScore / count) * 100) / 100 : 0,
+    rankInfo,
+    disqualified: disqualified || (rankInfo && rankInfo.disqualified) || false,
+    disqualificationReason:
+      disqReasons.join(' / ') ||
+      (rankInfo && rankInfo.disqualificationReason) ||
+      '',
+    reviewedCount,
+    totalCount: rows.length,
+    playerNameSummary:
+      rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)
+        ? (rankInfo.playerNameSummary || rankInfo.nameSummary)
+        : (rows[0] && rows[0].participantName) || ''
+  };
 }
 
 async function sendOTP(env, name, phone, competitionCode) {
