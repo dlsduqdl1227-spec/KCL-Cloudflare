@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>KCL Admin</title>
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+:root{--bg:#050505;--panel:rgba(16,16,18,.88);--line:rgba(255,255,255,.14);--text:#fff;--muted:rgba(255,255,255,.62);--ok:#6ee7b7;--danger:#ff6b6b;--accent:#c98a52}
+*{box-sizing:border-box;font-family:Pretendard,-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif}html,body{margin:0;min-height:100%;background:#050505;color:#fff}body{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 18% 14%,rgba(201,138,82,.24),transparent 32%),radial-gradient(circle at 78% 86%,rgba(158,184,255,.14),transparent 30%),#050505}.wrap{width:min(860px,100%)}.panel{border:1px solid var(--line);border-radius:28px;background:var(--panel);box-shadow:0 30px 90px rgba(0,0,0,.45);padding:30px}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px}.badge{display:inline-flex;gap:8px;align-items:center;border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:8px 11px;color:var(--muted);font-size:12px;font-weight:900}.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 18px var(--ok)}h1{margin:12px 0 8px;font-size:clamp(32px,6vw,56px);letter-spacing:-.07em;line-height:.98}.sub{margin:0;color:rgba(255,255,255,.72);line-height:1.65}.home{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:10px 13px;font-size:13px;font-weight:900;background:rgba(255,255,255,.05)}.login{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-top:20px}input{width:100%;border:1px solid rgba(255,255,255,.16);background:#050505;color:#fff;border-radius:15px;padding:15px;outline:none}button,.linkbtn{border:0;border-radius:15px;background:#fff;color:#000;padding:15px 18px;font-weight:950;cursor:pointer;text-decoration:none;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px}.msg{min-height:24px;margin-top:12px;color:#ddd;white-space:pre-line;line-height:1.5}.msg.err{color:var(--danger)}.msg.ok{color:var(--ok)}.hidden{display:none}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}.admin-card{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.055);border-radius:20px;padding:18px;text-decoration:none;color:#fff;min-height:134px;display:flex;flex-direction:column;justify-content:space-between;transition:.18s ease}.admin-card:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.085)}.admin-card strong{font-size:20px;letter-spacing:-.04em}.admin-card span{font-size:13px;line-height:1.5;color:rgba(255,255,255,.62)}.admin-card.primary{background:linear-gradient(135deg,rgba(201,138,82,.26),rgba(255,255,255,.06));border-color:rgba(201,138,82,.35)}.foot{margin-top:20px;color:rgba(255,255,255,.4);font-size:12px;line-height:1.6}@media(max-width:760px){body{display:block;padding:18px;padding-top:46px}.panel{padding:22px;border-radius:24px}.top{display:block}.home{display:inline-flex;margin-top:16px}.login{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.admin-card{min-height:116px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="panel">
+    <div class="top">
+      <div>
+        <div class="badge"><i class="dot"></i>ADMIN CENTER</div>
+        <h1>KCL Admin</h1>
+        <p class="sub">관리자 인증 후 선수·운영계정 등록, 평가 관리, 디브리핑 확인 페이지로 이동합니다.</p>
+      </div>
+      <a class="home" href="/">Home</a>
+    </div>
+
+    <div id="loginBox">
+      <div class="login">
+        <input id="loginName" placeholder="관리자 이름" value="관리자">
+        <input id="loginPhone" placeholder="연락처 숫자만" inputmode="numeric" value="01000000000" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+        <button onclick="login()">관리자 로그인</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <div id="adminMain" class="hidden">
+      <div class="msg ok" id="welcome"></div>
+      <div class="cards">
+        <a class="admin-card primary" href="/registry/"><strong>등록 관리</strong><span>선수·팀·운영진·스텝·심사위원 엑셀 업로드 및 블라인드 번호 매핑</span></a>
+        <a class="admin-card" href="/assessment/"><strong>평가 관리</strong><span>평가 입력, 검수/수정, 검수완료, 순위 확인</span></a>
+        <a class="admin-card" href="/debriefing/"><strong>디브리핑</strong><span>선수 인증 및 상세 점수·코멘트 확인, PDF 저장</span></a>
+      </div>
+      <div class="foot">관리자 로그인 정보는 이 브라우저에 임시 저장되어 /registry/ 접속 시 자동으로 이어집니다.</div>
+    </div>
+  </section>
+</main>
+<script src="/assets/kcl-api-shim.js"></script>
+<script>
+function msg(text, type){var el=document.getElementById('msg');el.textContent=text||'';el.className='msg'+(type==='err'?' err':(type==='ok'?' ok':''));}
+function saveActor(actor){try{localStorage.setItem('kclAdminActor', JSON.stringify(actor));}catch(e){}}
+function readActor(){try{return JSON.parse(localStorage.getItem('kclAdminActor')||'null');}catch(e){return null;}}
+function showAdmin(actor){document.getElementById('loginBox').classList.add('hidden');document.getElementById('adminMain').classList.remove('hidden');document.getElementById('welcome').textContent=(actor.name||actor.judgeName||'관리자')+'님, 관리자 페이지에 접속했습니다.';}
+function isAdmin(res){return res && (res.accountType==='ADMIN'||res.type==='ADMIN'||res.access==='ALL'||res.competitionCode==='ALL');}
+function login(){msg('로그인 중...');var name=document.getElementById('loginName').value;var phone=document.getElementById('loginPhone').value;google.script.run.withSuccessHandler(function(res){if(!res||!res.success){msg((res&&res.message)||'로그인 실패','err');return;} if(!isAdmin(res)){msg('관리자 권한이 필요합니다.','err');return;} saveActor(res);showAdmin(res);}).withFailureHandler(function(e){msg(e.message||String(e),'err');}).judgeLogin(name,phone);}
+var existing=readActor();if(existing&&isAdmin(existing)) showAdmin(existing);
+</script>
+</body>
+</html>
