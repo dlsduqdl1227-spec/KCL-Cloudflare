@@ -1,4 +1,4 @@
-name = "kcl-cloudflare-v2"
+name = "kcl-cloudflare"
 compatibility_date = "2025-08-01"
 pages_build_output_dir = "public"
 
