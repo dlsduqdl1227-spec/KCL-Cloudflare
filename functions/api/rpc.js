@@ -1459,6 +1459,15 @@ function roundScoreValue_(v, decimals=3) {
   const m = Math.pow(10, decimals);
   return Math.round(n * m) / m;
 }
+function positivePenaltyValue_(v) {
+  const n = toNumber(v);
+  if (n === null || !Number.isFinite(n)) return 0;
+  return Math.max(0, Math.abs(n));
+}
+function isDisqualifiedValue_(v) {
+  const s = safeStr(v).replace(/\s/g, '');
+  return v === true || /^(Y|YES|TRUE|1|실격)$/i.test(s);
+}
 
 function valueFromKeysAny_(obj, keys) {
   const n = firstNumberFromKeys_(obj, keys);
@@ -1499,9 +1508,7 @@ function kbcSignatureTotalFromItem_(item) {
   return weightedSubtotalFromSpec_(item, KBC_SIGNATURE_TOTAL_SPEC_) || 0;
 }
 function mobPenaltyValue_(v) {
-  const n = toNumber(v);
-  if (n === null || !Number.isFinite(n)) return 0;
-  return Math.max(0, Math.abs(n));
+  return positivePenaltyValue_(v);
 }
 function mobPenaltyFromExtra_(extra) {
   return mobPenaltyValue_(valueFromKeysAny_(extra, ['시간감점','Time Penalty']));
@@ -1560,6 +1567,8 @@ function canonicalScoreForPayload_(code, payload, rowIndex=0) {
   payload = payload || {};
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
   const extra = singleRowExtra_(payload, code, rowIndex);
+  const payloadDq = isDisqualifiedValue_(payload.disqualified) || isDisqualifiedValue_(payload.dq) || isDisqualifiedValue_(payload.disqualifiedYn) || isDisqualifiedValue_(extra['실격여부']) || isDisqualifiedValue_(extra['DQ']) || isDisqualifiedValue_(extra.disqualified);
+  if (payloadDq) return 0;
   const fallback = () => {
     const direct = toNumber(payload.totalScore ?? payload.total ?? payload.finalScore ?? payload.subtotalScore ?? payload.subtotal);
     if (direct !== null) return roundScoreValue_(direct);
@@ -1604,7 +1613,7 @@ function canonicalScoreForPayload_(code, payload, rowIndex=0) {
     const machine = firstNumberFromKeys_(extra, ['Machine & Equipment Professionalism(머신 및 기물 운용 전문성)']) || 0;
     const hasKbc = [p, et, ec, em, ef, st, sc, sm, sf, machine].some(v => v > 0) || firstNumberFromKeys_(extra, ['시간감점']) !== null;
     if (hasKbc) {
-      const penalty = firstNumberFromKeys_(extra, ['시간감점','Time Penalty']) || 0;
+      const penalty = positivePenaltyValue_(firstNumberFromKeys_(extra, ['시간감점','Time Penalty']));
       return roundScoreValue_(Math.max(0, p + (et * 2) + ec + em + ef + (st * 2) + sc + sm + sf + machine - penalty));
     }
     return fallback();
@@ -1713,9 +1722,11 @@ function kcacRowTotalFromExtra_(extra) {
   extra = extra || {};
   const subDirect = firstNumberFromKeys_(extra, ['소계','Subtotal']);
   const subRaw = subDirect !== null ? subDirect : kcacSubtotalFromRaw_(extra);
-  const leaf = firstNumberFromKeys_(extra, ['리프수감점','리프 수 감점','Leaf Penalty']) || 0;
-  const time = firstNumberFromKeys_(extra, ['시간감점','시간 초과 감점','Time Penalty']) || 0;
-  const genericPenalty = firstNumberFromKeys_(extra, ['감점','Penalty']);
+  const leaf = positivePenaltyValue_(firstNumberFromKeys_(extra, ['리프수감점','리프 수 감점','Leaf Penalty']));
+  const rawTimePenalty = firstNumberFromKeys_(extra, ['시간감점','시간 초과 감점','Time Penalty']);
+  const time = rawTimePenalty !== null && Math.abs(Number(rawTimePenalty)) >= 999 ? 999 : positivePenaltyValue_(rawTimePenalty);
+  const genericPenaltyRaw = firstNumberFromKeys_(extra, ['감점','Penalty']);
+  const genericPenalty = genericPenaltyRaw !== null && Math.abs(Number(genericPenaltyRaw)) >= 999 ? 999 : positivePenaltyValue_(genericPenaltyRaw);
   const hasSplitPenalty = firstNumberFromKeys_(extra, ['리프수감점','리프 수 감점','Leaf Penalty']) !== null || firstNumberFromKeys_(extra, ['시간감점','시간 초과 감점','Time Penalty']) !== null;
   const penalty = hasSplitPenalty ? (time >= 999 ? 999 : leaf + time) : (genericPenalty || 0);
   if (subRaw !== null && subRaw !== undefined) return penalty >= 999 ? 0 : roundScoreValue_(Math.max(0, subRaw - penalty));
@@ -1745,7 +1756,8 @@ function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0) {
   const round = firstNonEmpty([r.round, payload.round, payload.currentRound, extra['라운드'], fallbackRound]);
   const participantName = firstNonEmpty([r.participant_name, extra['선수명'], extra['참가자명'], extra['이름'], extra['팀명'], payload.participantName, payload.playerName, payload.teamName]);
   const computedTotal = isKcacMulti ? kcacRowTotalFromExtra_(extra) : canonicalScoreForPayload_(code, payload, 0);
-  const totalScore = computedTotal !== null && computedTotal !== undefined ? computedTotal : (r.total_score === null || r.total_score === undefined ? firstNonEmpty([extra['총점'], extra['최종점수'], extra['Total'], extra['Total Score']]) : Number(r.total_score));
+  let totalScore = computedTotal !== null && computedTotal !== undefined ? computedTotal : (r.total_score === null || r.total_score === undefined ? firstNonEmpty([extra['총점'], extra['최종점수'], extra['Total'], extra['Total Score']]) : Number(r.total_score));
+  if (r.disqualified || isDisqualifiedValue_(extra['실격여부']) || isDisqualifiedValue_(extra['DQ']) || isDisqualifiedValue_(extra.disqualified)) totalScore = 0;
   const item = Object.assign({}, extra);
   item.rowIndex = isKcacMulti ? (String(r.id) + ':' + String(payloadRowIndex)) : r.id;
   item.scoreRowId = r.id;
