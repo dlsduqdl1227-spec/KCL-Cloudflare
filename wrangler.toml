@@ -1,0 +1,27 @@
+name = "kcl-cloudflare"
+main = "src/worker/index.ts"
+compatibility_date = "2026-06-29"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kcl-db"
+database_id = "a9bc0972-1523-4b1b-baff-06e2c54e72e8"
+
+[vars]
+OTP_TTL_SECONDS = "300"
+OTP_COOLDOWN_SECONDS = "60"
+SESSION_TTL_SECONDS = "21600"
+SOLAPI_API_BASE = "https://api.solapi.com"
+# Optional for local development only. Prefer wrangler secret for production.
+# GAS_WEBAPP_URL = "https://script.google.com/macros/s/..."
+
+# Register these with wrangler secret:
+# wrangler secret put GAS_WEBAPP_URL
+# wrangler secret put GAS_SHARED_SECRET
+# wrangler secret put SOLAPI_API_KEY
+# wrangler secret put SOLAPI_API_SECRET
+# wrangler secret put SOLAPI_FROM
