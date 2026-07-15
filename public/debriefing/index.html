@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>KCL 디브리핑</title>
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+:root{
+  --bg:#000;--panel:#111;--card:#181818;--text:#fff;--border:#2b2b2b;
+  --gold:#d9d9d9;--gold-lt:#fff;--green:#fff;
+  --text-2:#d7d7d7;--text-3:#9a9a9a;--surface:#0b0b0b;
+  --safe-top:env(safe-area-inset-top, 0px);
+  --safe-bot:env(safe-area-inset-bottom, 0px);
+  --safe-left:env(safe-area-inset-left, 0px);
+  --safe-right:env(safe-area-inset-right, 0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+*{font-family:'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;word-break:keep-all}
+html{height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;
+  font-size:16px;
+  min-height:100vh;
+  min-height:-webkit-fill-available;
+  min-height:100dvh;
+  overscroll-behavior-y:none;
+}
+
+.panel{
+  display:none;
+  padding:20px;
+  padding-top:max(20px, var(--safe-top));
+  padding-bottom:max(20px, var(--safe-bot));
+  padding-left:max(20px, var(--safe-left));
+  padding-right:max(20px, var(--safe-right));
+  max-width:560px;margin:0 auto
+}
+.panel.active{display:block}
+h2{text-align:center;font-size:22px;font-weight:700;margin-bottom:8px}
+.subtitle{text-align:center;color:#666;font-size:14px;margin-bottom:28px}
+
+input,select{
+  width:100%;padding:14px;
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);
+  font-size:16px;line-height:1.4;
+  margin-bottom:14px;outline:none;
+  -webkit-appearance:none;-moz-appearance:none;appearance:none;
+  font-family:'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif
+}
+select{
+  background-image:linear-gradient(45deg,transparent 50%,#999 50%),linear-gradient(135deg,#999 50%,transparent 50%);
+  background-position:calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size:5px 5px, 5px 5px;
+  background-repeat:no-repeat;
+  padding-right:36px;
+}
+input:focus,select:focus{border-color:#555}
+input[type=tel],input[type=number]{-moz-appearance:textfield}
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button,
+input[type=tel]::-webkit-outer-spin-button,
+input[type=tel]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+.btn{width:100%;padding:16px;background:#fff;color:#000;border:none;border-radius:8px;
+  font-weight:700;font-size:16px;cursor:pointer;margin-bottom:12px;
+  min-height:50px;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.btn:active{opacity:.8;transform:scale(.98)}
+.btn:disabled{background:#555;color:#999;cursor:not-allowed}
+.btn-outline{width:100%;padding:16px;background:transparent;color:var(--text);
+  border:2px solid var(--border);border-radius:8px;font-weight:600;
+  font-size:15px;cursor:pointer;margin-bottom:12px;
+  min-height:48px;touch-action:manipulation}
+.btn-outline:active{opacity:.7;transform:scale(.98)}
+.btn-danger{width:100%;padding:14px;background:transparent;color:#ff4444;
+  border:2px solid #ff4444;border-radius:8px;font-weight:600;
+  cursor:pointer;margin-bottom:12px;min-height:44px;touch-action:manipulation}
+
+.divider{border:none;border-top:2px solid #222;margin:20px 0}
+.section-label{font-size:11px;color:#666;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}
+
+/* 대회 로고 - 블랙/화이트 통일 */
+.hero-logo-wrap{display:flex;align-items:center;justify-content:center;margin:18px auto 14px;min-height:112px}
+.hero-logo-wrap:empty{display:none;min-height:0;margin:0}
+.hero-logo{display:block;width:174px;height:124px;object-fit:contain;opacity:.98}
+.result-logo-wrap{display:flex;align-items:center;justify-content:center;margin-bottom:12px;min-height:86px}
+.result-logo{display:block;width:150px;height:106px;object-fit:contain;opacity:.98}
+.kcl-login-mark{width:min(340px,86vw);margin:42px auto 24px;padding:24px 22px;border:1px solid #3a3a3a;border-radius:10px;background:#050505;text-align:center;box-shadow:0 22px 60px rgba(0,0,0,.32)}
+.kcl-login-logo{display:block;width:min(258px,74vw);height:auto;margin:0 auto;overflow:visible}
+
+/* Typography balance */
+button,input,select,textarea{font-family:'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;letter-spacing:-0.02em}
+h2,.subtitle,.section-label,.result-name,.result-affil,.result-comp,.round-title,.judge-name,.score-item-label,.score-item-val,.comment-label,.comment-text,.avg-title,.avg-sub,.avg-item-label,.avg-item-val{
+  word-break:keep-all;overflow-wrap:normal;line-break:strict;
+}
+.score-grid{grid-template-columns:repeat(auto-fit,minmax(148px,1fr))}
+.score-item-label{line-height:1.35}
+
+@media (min-width:720px){.hero-logo{width:188px;height:134px}.result-logo{width:162px;height:114px}}
+
+
+/* Global navigation */
+.global-nav-buttons{
+  position:fixed;z-index:900;top:max(12px,var(--safe-top));left:max(12px,var(--safe-left));
+  display:inline-flex;align-items:center;gap:8px;
+}
+.global-nav-btn{
+  display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:0 14px;
+  border:1px solid rgba(255,255,255,.24);border-radius:999px;
+  background:rgba(18,18,18,.72);color:#fff;text-decoration:none;
+  font-size:13px;font-weight:800;letter-spacing:-.02em;backdrop-filter:blur(10px);
+  box-shadow:0 10px 30px rgba(0,0,0,.26);cursor:pointer;
+}
+.global-nav-btn:active{transform:scale(.97);opacity:.82}
+.global-nav-btn .home-dot{width:6px;height:6px;border-radius:50%;background:#fff;opacity:.9}
+@media print{.global-nav-buttons{display:none!important}}
+@media (max-width:520px){.global-nav-buttons{top:max(10px,var(--safe-top));left:max(10px,var(--safe-left));gap:6px}.global-nav-btn{min-height:34px;padding:0 12px;font-size:12px}}
+
+/* OTP */
+.otp-info{background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:14px;margin-bottom:14px;font-size:14px;color:#999;line-height:1.6;text-align:center}
+.otp-timer{text-align:center;font-size:13px;color:#666;margin-bottom:14px}
+.otp-timer.warn{color:#ff9800}
+.otp-timer.expired{color:#ff4444}
+
+/* Result */
+.result-header{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.28)}
+.result-name{font-size:24px;font-weight:700;margin-bottom:4px}
+.result-affil{font-size:14px;color:#999}
+.result-comp{display:inline-block;border:1px solid #555;color:#fff;
+  padding:5px 14px;border-radius:999px;font-size:12px;font-weight:800;margin-top:10px;letter-spacing:.04em;text-transform:uppercase;background:#050505}
+
+.round-section{margin-bottom:20px}
+.round-title{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.round-badge{display:inline-block;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:700}
+.badge-예선{background:#fff;color:#000}
+.badge-결선{background:linear-gradient(135deg,var(--gold),var(--gold-lt));color:#000}
+
+.score-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px}
+.score-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.score-card-meta{margin:-6px 0 12px;color:#aaa;font-size:12px;font-weight:700}
+.judge-name{font-size:15px;font-weight:700}
+.total-score{font-size:28px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums}
+
+.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.score-item{background:var(--surface);border:1px solid #252525;border-radius:8px;padding:10px 12px}
+.score-item-label{font-size:11px;color:#888;margin-bottom:5px;font-weight:700;letter-spacing:.01em}
+.score-item-val{font-size:18px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums}
+.score-item-sub{font-size:11px;color:#999;margin-top:2px}
+
+.comment-box{background:var(--panel);border-left:3px solid #fff;
+  border-radius:0 8px 8px 0;padding:12px 14px;margin-top:10px}
+.smart-tag-box{margin-top:10px;border:1px solid #dedede;border-radius:7px;background:#fafafa;padding:10px 12px}
+.smart-tag-title{font-size:11px;font-weight:800;color:#555;margin-bottom:7px;text-transform:uppercase;letter-spacing:.4px}
+.smart-tag-row{display:flex;gap:8px;align-items:flex-start;border-top:1px solid #ececec;padding-top:7px;margin-top:7px}
+.smart-tag-row:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.smart-tag-label{min-width:92px;font-size:11px;font-weight:800;color:#222}
+.smart-tag-chips{display:flex;flex-wrap:wrap;gap:5px;flex:1}
+.smart-tag-chip{border:1px solid #cfcfcf;background:#fff;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700;color:#111}
+.comment-label{font-size:11px;color:#8e8e8e;font-weight:800;margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase}
+.comment-text{font-size:14px;color:#ddd;line-height:1.7}
+
+.avg-box{background:#101010;border:1px solid #3a3a3a;border-radius:10px;padding:16px;margin-bottom:20px}
+.avg-title{font-size:12px;color:#aaa;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px}
+.avg-total{text-align:center;font-size:42px;font-weight:800;color:#fff;margin-bottom:4px;font-variant-numeric:tabular-nums}
+.avg-sub{text-align:center;font-size:13px;color:#999;margin-bottom:14px}
+.avg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.avg-item{background:#080808;border:1px solid #252525;border-radius:8px;padding:10px 6px;text-align:center}
+.avg-item-label{font-size:11px;color:#999;margin-bottom:4px}
+.avg-item-val{font-size:16px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums}
+.rank-box{background:#080808;border:1px solid #333;border-radius:10px;padding:14px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rank-box .cell{background:#111;border:1px solid #282828;border-radius:8px;padding:10px;text-align:center}
+.rank-box small{display:block;color:#888;font-size:11px;font-weight:800;margin-bottom:4px;letter-spacing:.04em;text-transform:uppercase}
+.rank-box b{font-size:22px;color:#fff;font-variant-numeric:tabular-nums}
+.tie-rule{grid-column:1/-1;text-align:center;color:#999;font-size:12px;line-height:1.5}
+
+.toast{position:fixed;
+  bottom:calc(28px + var(--safe-bot));
+  left:50%;transform:translateX(-50%) translateY(80px);
+  background:#fff;color:#000;padding:14px 24px;border-radius:8px;font-weight:600;
+  font-size:14px;z-index:10000;opacity:0;transition:all .3s;white-space:nowrap;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:#ff4444;color:#fff}
+.overlay{display:none;position:fixed;top:0;left:0;width:100%;
+  height:100vh;height:-webkit-fill-available;height:100dvh;
+  background:rgba(0,0,0,.8);z-index:9999;align-items:center;justify-content:center}
+.overlay.active{display:flex}
+.spinner{border:4px solid #333;border-top:4px solid #fff;border-radius:50%;
+  width:48px;height:48px;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.no-score{text-align:center;padding:30px 0;color:#555;font-size:14px}
+
+
+/* PDF / Print 품질 고도화 */
+.pdf-note{margin:10px 0 14px;color:#8d8d8d;font-size:12px;line-height:1.55;text-align:center}
+@media print{
+  @page{size:A4;margin:12mm}
+  html,body{background:#fff!important;color:#111!important;min-height:auto!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body *{visibility:hidden!important}
+  #pResult,#pResult *{visibility:visible!important}
+  #pResult{display:block!important;position:absolute!important;left:0!important;top:0!important;width:100%!important;max-width:none!important;padding:0!important;margin:0!important;background:#fff!important;color:#111!important}
+  #btn-pdf,.btn,.btn-outline,.btn-danger,#toast,#overlay{display:none!important;visibility:hidden!important}
+  .result-header,.rank-box,.avg-box,.score-card,.comment-box{background:#fff!important;color:#111!important;border-color:#d7d7d7!important;box-shadow:none!important;break-inside:avoid;page-break-inside:avoid}
+  .round-section{break-inside:auto;page-break-inside:auto;margin-bottom:9mm!important}
+  .score-card{margin-bottom:6mm!important;padding:5mm!important;border-radius:8px!important}
+  .score-card-header{border-bottom:1px solid #eee!important;padding-bottom:3mm!important;margin-bottom:4mm!important}
+  .result-name,.total-score,.score-item-val,.avg-total,.rank-box b{color:#111!important}
+  .result-affil,.result-comp,.score-item-label,.comment-label,.avg-title,.avg-sub,.tie-rule{color:#555!important}
+  .result-comp{border-color:#999!important;background:#fff!important;color:#111!important}
+  .round-badge{border:1px solid #111!important;background:#111!important;color:#fff!important}
+  .score-grid{grid-template-columns:repeat(3,1fr)!important;gap:3mm!important}
+  .score-item,.avg-item,.rank-box .cell{background:#fafafa!important;border-color:#ddd!important;color:#111!important;break-inside:avoid;page-break-inside:avoid}
+  .comment-box{border-left:4px solid #111!important;background:#fafafa!important}
+  .comment-text{color:#222!important;font-size:11pt!important;line-height:1.65!important}
+  .panel{max-width:none!important}
+  .result-logo-wrap{min-height:0!important;margin-bottom:4mm!important}
+  .result-logo{max-width:34mm!important;max-height:24mm!important;filter:grayscale(1)!important}
+}
+
+/* 태블릿 */
+@media (min-width:720px){
+  .panel{max-width:720px}
+  .score-grid{grid-template-columns:repeat(3,1fr)}
+  .avg-grid{grid-template-columns:repeat(6,1fr)}
+}
+
+
+/* ─────────────────────────────────────────
+   FINAL COMPETITION POLISH v1.0.2
+   - 선수 공개용 디브리핑/PDF 전용 정돈
+   - 검수완료·수정완료 데이터만 공식 결과로 표시
+───────────────────────────────────────── */
+.report-label{display:inline-flex;align-items:center;justify-content:center;margin:0 auto 14px;padding:6px 12px;border:1px solid rgba(255,255,255,.22);border-radius:999px;color:#cfcfcf;font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;background:rgba(255,255,255,.04)}
+.result-header{position:relative;overflow:hidden;padding:30px 24px 26px;border-radius:18px;background:linear-gradient(180deg,#161616 0%,#0c0c0c 100%);border:1px solid rgba(255,255,255,.12);box-shadow:0 28px 70px rgba(0,0,0,.35)}
+.result-header:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(255,255,255,.10),transparent 44%);pointer-events:none}
+.result-header>*{position:relative;z-index:1}
+.result-logo-wrap{margin:0 auto 12px;min-height:78px}.result-logo{width:132px;height:88px;object-fit:contain;opacity:.96;filter:drop-shadow(0 6px 18px rgba(0,0,0,.32))}
+.result-name{font-size:26px;font-weight:900;letter-spacing:-.04em}.result-affil{margin-top:5px;color:#aaa;font-size:13px}.result-comp{margin-top:14px;padding:7px 16px;border-color:rgba(255,255,255,.28);font-size:11px;background:#000;color:#fff}
+.report-intro{display:grid;gap:8px;margin:12px 0 16px;padding:14px 16px;border:1px solid rgba(255,255,255,.13);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));color:#cfcfcf;font-size:12px;line-height:1.55;word-break:keep-all}.report-intro b{color:#fff}.report-intro .intro-title{font-size:13px;color:#fff;font-weight:900;letter-spacing:-.02em}.report-intro .intro-text{color:#aaa}
+.rank-box{grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0 18px;padding:14px;border-radius:16px;background:linear-gradient(180deg,#131313,#080808);border-color:rgba(255,255,255,.14)}.rank-box .cell{border-radius:12px;padding:14px 10px;background:#0f0f0f;border-color:rgba(255,255,255,.13)}.rank-box small{color:#9a9a9a}.rank-box b{font-size:26px;font-weight:950}.tie-rule{padding:6px 4px 0;color:#8f8f8f}
+.round-section{margin-bottom:24px}.round-title{margin:18px 0 12px}.round-badge{padding:6px 15px;font-size:12px;border:1px solid rgba(255,255,255,.22)}.badge-예선{background:#fff;color:#000}.badge-결선{background:#fff;color:#000}
+.score-card{border-radius:16px;padding:18px;background:linear-gradient(180deg,#151515 0%,#0d0d0d 100%);border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 48px rgba(0,0,0,.22)}.score-card-header{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,.10)}.judge-name{font-size:14px;font-weight:950;letter-spacing:-.02em}.reviewed-pill{display:inline-flex;align-items:center;margin-left:8px;padding:4px 8px;border-radius:999px;background:#fff;color:#000;font-size:10px;font-weight:950;vertical-align:middle;letter-spacing:-.02em}.total-score{font-size:30px;font-weight:950;letter-spacing:-.04em}
+.score-grid{gap:10px}.score-item{border-radius:12px;padding:13px 14px;background:#101010;border:1px solid rgba(255,255,255,.11)}.score-item-label{color:#a0a0a0;font-size:11px;font-weight:850}.score-item-val{font-size:20px;font-weight:950;letter-spacing:-.03em}.score-item-sub{color:#969696;font-weight:700}
+.smart-tag-box{margin-top:12px;border-radius:12px;background:#111;border:1px solid rgba(255,255,255,.12);padding:12px}.smart-tag-title{color:#aaa;font-size:10px;letter-spacing:.08em}.smart-tag-row{border-top-color:rgba(255,255,255,.08)}.smart-tag-label{color:#e6e6e6}.smart-tag-chip{border-color:rgba(255,255,255,.18);background:#1a1a1a;color:#e8e8e8;font-weight:800}
+.comment-box{margin-top:14px;border:1px solid rgba(255,255,255,.12);border-left:4px solid #fff;border-radius:12px;background:#111;padding:15px 16px}.comment-label{color:#aaa}.comment-text{font-size:14.5px;line-height:1.78;color:#e7e7e7;word-break:keep-all;overflow-wrap:anywhere}.no-score{border:1px solid rgba(255,255,255,.12);border-radius:16px;background:#101010;color:#aaa;line-height:1.6}
+
+@media print{
+  @page{size:A4;margin:10mm 11mm}
+  html,body{background:#fff!important;color:#111!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body *{visibility:hidden!important}#pResult,#pResult *{visibility:visible!important}
+  #pResult{position:absolute!important;left:0!important;top:0!important;width:100%!important;max-width:none!important;padding:0!important;margin:0!important;background:#fff!important;color:#111!important}.btn,.btn-outline,.btn-danger,#btn-pdf,#pdf-note,.divider,#toast,#overlay{display:none!important;visibility:hidden!important}
+  .result-header{background:#fff!important;color:#111!important;border:1.2px solid #111!important;border-radius:10px!important;box-shadow:none!important;padding:13mm 10mm 11mm!important;margin:0 0 6mm!important}.result-header:before{display:none!important}.report-label{background:#111!important;border-color:#111!important;color:#fff!important;margin-bottom:7mm!important;padding:1.8mm 4mm!important;font-size:8pt!important}.result-logo-wrap{min-height:13mm!important;margin-bottom:4mm!important}.result-logo{width:30mm!important;height:18mm!important;object-fit:contain!important;opacity:.82!important;filter:invert(1) grayscale(1) contrast(1.45)!important}.result-name{font-size:18pt!important;color:#111!important}.result-affil{font-size:9.5pt!important;color:#555!important}.result-comp{background:#fff!important;color:#111!important;border:1px solid #111!important;padding:1.8mm 5mm!important;font-size:8pt!important}
+  .report-intro{background:#fafafa!important;color:#333!important;border:1px solid #ddd!important;border-radius:7px!important;padding:4mm!important;margin:0 0 5mm!important;font-size:9pt!important;line-height:1.55!important;break-inside:avoid;page-break-inside:avoid}.report-intro b,.report-intro .intro-title{color:#111!important}.report-intro .intro-text{color:#555!important}
+  .rank-box{background:#fff!important;border:1px solid #d7d7d7!important;border-radius:8px!important;padding:3.5mm!important;margin:0 0 5mm!important;box-shadow:none!important;break-inside:avoid;page-break-inside:avoid}.rank-box .cell{background:#fafafa!important;border:1px solid #ddd!important;border-radius:7px!important;padding:3.5mm!important}.rank-box small{font-size:8pt!important;color:#555!important}.rank-box b{font-size:18pt!important;color:#111!important}.tie-rule{font-size:8.5pt!important;color:#555!important;padding-top:1mm!important}
+  .round-section{margin-bottom:6mm!important}.round-title{margin:4mm 0 3mm!important}.round-badge{background:#111!important;color:#fff!important;border-color:#111!important;border-radius:999px!important;padding:1.6mm 4.5mm!important;font-size:8.5pt!important}.score-card{background:#fff!important;color:#111!important;border:1px solid #d8d8d8!important;border-radius:8px!important;box-shadow:none!important;padding:5mm!important;margin-bottom:5mm!important;break-inside:avoid;page-break-inside:avoid}.score-card-header{border-bottom:1px solid #e5e5e5!important;margin-bottom:4mm!important;padding-bottom:3mm!important}.judge-name{font-size:10pt!important;color:#111!important}.reviewed-pill{background:#111!important;color:#fff!important;font-size:7.5pt!important;padding:1mm 2.4mm!important}.total-score{font-size:21pt!important;color:#111!important}
+  .score-grid{grid-template-columns:repeat(3,1fr)!important;gap:2.5mm!important}.score-item{background:#fafafa!important;border:1px solid #ddd!important;border-radius:6px!important;padding:3mm!important}.score-item-label{font-size:7.8pt!important;color:#555!important}.score-item-val{font-size:13pt!important;color:#111!important}.score-item-sub{font-size:7.5pt!important;color:#666!important}.smart-tag-box{background:#fafafa!important;border-color:#ddd!important;border-radius:7px!important;padding:3mm!important;break-inside:avoid;page-break-inside:avoid}.smart-tag-title{font-size:7.5pt!important;color:#555!important}.smart-tag-label{font-size:8pt!important;color:#111!important}.smart-tag-chip{background:#fff!important;border-color:#ccc!important;color:#111!important;font-size:7.5pt!important}.comment-box{background:#fafafa!important;border:1px solid #ddd!important;border-left:4px solid #111!important;border-radius:7px!important;padding:3.5mm!important;break-inside:avoid;page-break-inside:avoid}.comment-label{font-size:7.8pt!important;color:#555!important}.comment-text{font-size:10pt!important;line-height:1.68!important;color:#222!important}.panel{max-width:none!important}
+}
+
+
+
+/* ─────────────────────────────────────────
+   FINAL FIELD-READY POLISH v1.0.4
+   - PDF 가독성/공식 리포트 레이아웃 강화
+   - 흐린 로고는 인쇄에서 숨기고 대회명 중심으로 표기
+───────────────────────────────────────── */
+@media screen{
+  .score-card{border-radius:18px;border-color:rgba(255,255,255,.16)}
+  .comment-box{border-left-width:5px;background:linear-gradient(180deg,#121212,#0c0c0c)}
+  .comment-label{letter-spacing:.08em}.comment-text{font-size:15px;line-height:1.82}
+}
+@media print{
+  @page{size:A4;margin:12mm 12mm 13mm}
+  #pResult{font-family:'Pretendard','Malgun Gothic',sans-serif!important}
+  .result-header{display:grid!important;grid-template-columns:1fr!important;align-items:center!important;text-align:center!important;border:1.5px solid #111!important;border-radius:6mm!important;padding:10mm 8mm 8mm!important;margin-bottom:5mm!important;background:#fff!important}
+  .report-label{display:inline-flex!important;justify-self:center!important;margin:0 0 5mm!important;background:#111!important;color:#fff!important;border-radius:999px!important;font-size:7.5pt!important;letter-spacing:.16em!important}
+  .result-logo-wrap{display:none!important}
+  .result-name{font-size:19pt!important;font-weight:900!important;letter-spacing:-.04em!important;margin-bottom:1.5mm!important}
+  .result-affil{font-size:9pt!important;color:#555!important;margin-bottom:2mm!important}
+  .result-comp{font-size:8pt!important;font-weight:900!important;letter-spacing:.08em!important;border:1px solid #111!important;border-radius:999px!important;padding:1.7mm 5mm!important;background:#fff!important;color:#111!important}
+  .report-intro{display:none!important}
+  .rank-box{display:grid!important;grid-template-columns:1fr 1fr!important;border:1px solid #111!important;border-radius:5mm!important;background:#fff!important;padding:3mm!important;margin-bottom:5mm!important}
+  .rank-box .cell{background:#f7f7f7!important;border:1px solid #dfdfdf!important;border-radius:4mm!important;padding:3mm!important}.rank-box small{font-size:7.5pt!important}.rank-box b{font-size:18pt!important;line-height:1.1!important}.tie-rule{grid-column:1/-1!important;font-size:7.5pt!important;text-align:center!important;color:#555!important;padding-top:1mm!important}
+  .round-title{margin:0 0 3mm!important}.round-badge{font-size:8pt!important;border-radius:999px!important;background:#111!important;color:#fff!important}
+  .score-card{border:1px solid #d9d9d9!important;border-radius:5mm!important;padding:4.5mm!important;margin-bottom:4.5mm!important;background:#fff!important;box-shadow:none!important}
+  .score-card-header{border-bottom:1px solid #111!important;padding-bottom:2.5mm!important;margin-bottom:3mm!important}.judge-name{font-size:10pt!important}.total-score{font-size:22pt!important}
+  .score-grid{grid-template-columns:repeat(3,1fr)!important;gap:2.2mm!important}.score-item{border-radius:3mm!important;background:#fafafa!important;padding:2.7mm!important}.score-item-label{font-size:7.2pt!important;line-height:1.25!important}.score-item-val{font-size:12.5pt!important}
+  .smart-tag-box{border-radius:4mm!important;background:#fff!important;padding:3mm!important}.smart-tag-title{font-size:7.5pt!important}.smart-tag-row{display:flex!important;gap:2.5mm!important}.smart-tag-label{min-width:24mm!important}.smart-tag-chip{font-size:7.2pt!important;border-radius:999px!important;padding:.8mm 2mm!important}
+  .comment-box{border:1px solid #111!important;border-left:5px solid #111!important;border-radius:4mm!important;background:#fff!important;padding:4mm!important}.comment-label{font-size:7.5pt!important;color:#111!important;margin-bottom:1.5mm!important}.comment-text{font-size:9.5pt!important;line-height:1.72!important;color:#222!important;word-break:keep-all!important}
+}
+
+
+
+/* ─────────────────────────────────────────
+   FIELD READY SYSTEM POLISH v1.0.3
+   - KCL 전체 UI 톤 통일
+   - PDF 리포트 가독성/점수 슬라이드형 미터 보강
+───────────────────────────────────────── */
+:root{
+  --kcl-radius-lg:20px;
+  --kcl-radius-md:14px;
+  --kcl-line:rgba(255,255,255,.14);
+  --kcl-soft:rgba(255,255,255,.055);
+}
+.report-label::before{content:"KCL OFFICIAL · ";opacity:.72}
+.result-header{max-width:760px;margin-left:auto;margin-right:auto}
+.report-intro{max-width:760px;margin-left:auto;margin-right:auto}
+.rank-box{max-width:760px;margin-left:auto;margin-right:auto}
+.round-section{max-width:760px;margin-left:auto;margin-right:auto}
+.score-card{position:relative;overflow:hidden}
+.score-card:before{content:"";position:absolute;left:0;top:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.26),transparent);pointer-events:none}
+.score-card-header{align-items:flex-start;gap:14px}.judge-name{line-height:1.35}.total-score{text-align:right;min-width:86px;font-variant-numeric:tabular-nums}
+.score-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(178px,1fr))!important;gap:10px!important}
+.score-item{min-height:86px;display:flex;flex-direction:column;justify-content:space-between;gap:7px}
+.score-item-label{min-height:30px;display:flex;align-items:flex-start;line-height:1.35;letter-spacing:-.02em}
+.score-item-val{display:flex;align-items:baseline;gap:4px;line-height:1}.score-item-val .unit{font-size:12px;color:#929292;font-weight:800}
+.score-meter{position:relative;width:100%;height:6px;border-radius:999px;background:rgba(255,255,255,.10);overflow:hidden;margin-top:1px}
+.score-meter-fill{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#9a9a9a,#fff);width:0%}
+.score-item-sub{min-height:16px;line-height:1.35}
+.smart-tag-box,.comment-box{max-width:100%;overflow:hidden}.smart-tag-row{gap:10px}.smart-tag-label{line-height:1.35}.smart-tag-chip{line-height:1.25}
+.comment-box{margin-top:16px}.comment-label+.comment-text{margin-bottom:12px}.comment-text:last-child{margin-bottom:0}
+@media (min-width:860px){.panel{max-width:820px}.score-grid{grid-template-columns:repeat(3,1fr)!important}}
+@media (max-width:520px){.score-grid{grid-template-columns:1fr!important}.rank-box{grid-template-columns:1fr!important}.total-score{min-width:auto}.score-card-header{align-items:center}.result-name{font-size:23px}}
+@media print{
+  .report-label::before{content:""!important}.result-header,.report-intro,.rank-box,.round-section{max-width:none!important}
+  .score-grid{grid-template-columns:repeat(3,1fr)!important;gap:2.2mm!important}.score-item{min-height:23mm!important;gap:1.8mm!important}
+  .score-item-label{font-size:7.5pt!important;line-height:1.28!important;min-height:8mm!important}.score-item-val{font-size:13pt!important}.score-item-val .unit{font-size:7.5pt!important;color:#555!important}.score-meter{height:1.3mm!important;background:#e9e9e9!important}.score-meter-fill{background:#111!important}.score-item-sub{font-size:7.2pt!important;min-height:auto!important}.score-card{break-inside:avoid!important;page-break-inside:avoid!important}.comment-text{font-size:9.3pt!important}.smart-tag-chip{font-size:7pt!important}
+}
+
+
+/* Stage9 final layout guard */
+
+/* STAGE43 DEBRIEFING SCROLL GUARD */
+html,body{min-height:100%;overflow-y:auto!important;-webkit-overflow-scrolling:touch}.panel{min-height:100dvh;overflow:visible!important}.result-body{overflow:visible!important}
+html,body{width:100%;overflow-x:hidden}.panel{width:min(100%,560px);padding-top:max(62px,var(--safe-top));overflow-x:hidden}.global-nav-buttons{max-width:calc(100% - 24px);flex-wrap:wrap}.global-nav-btn{white-space:nowrap}.result-header,.rank-box,.avg-box,.score-card,.comment-box,.report-intro{min-width:0;overflow-wrap:anywhere}.score-grid{grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px}.score-item,.score-item *{min-width:0}.score-item-label,.score-item-val,.score-item-sub,.comment-text,.smart-tag-chip{overflow-wrap:anywhere}.btn,.btn-outline,.btn-danger{white-space:normal}@media(max-width:560px){.panel{padding-left:max(14px,var(--safe-left));padding-right:max(14px,var(--safe-right))}.score-grid{grid-template-columns:1fr}.rank-box{grid-template-columns:1fr}.global-nav-btn{font-size:12px;padding:0 10px}.result-header{padding:22px 14px}}@media print{html,body{overflow:visible!important}.panel{width:100%!important;max-width:none!important;overflow:visible!important}.global-nav-buttons{display:none!important}.score-card,.comment-box,.rank-box,.avg-box,.score-item,.smart-tag-box,.report-intro{break-inside:avoid;page-break-inside:avoid}.score-grid{grid-template-columns:repeat(2,1fr)!important;gap:2.4mm!important}.score-item-label{min-height:auto!important}.comment-text{word-break:keep-all!important;overflow-wrap:anywhere!important}}
+
+
+
+/* STAGE10 mobile safe-area / no-overlap guard */
+@media (max-width:640px){
+  html,body{overflow-x:hidden!important;width:100%!important;}
+  .global-nav-buttons{top:max(8px,calc(var(--safe-top) + 6px))!important;left:max(8px,var(--safe-left))!important;right:max(8px,var(--safe-right))!important;max-width:calc(100vw - 16px)!important;flex-wrap:wrap!important;gap:6px!important;z-index:1500!important;}
+  .global-nav-btn{min-height:32px!important;padding:0 11px!important;font-size:12px!important;max-width:45vw!important;}
+  .panel{padding-top:max(68px,calc(var(--safe-top) + 62px))!important;padding-left:max(14px,var(--safe-left))!important;padding-right:max(14px,var(--safe-right))!important;overflow-x:hidden!important;}
+  h1,h2,h3,.title,.subtitle,.result-title,.result-sub,.hero-title{word-break:keep-all!important;overflow-wrap:anywhere!important;}
+  .btn,.btn-outline,.btn-danger,button{white-space:normal!important;}
+}
+@media print{.global-nav-buttons{display:none!important}}
+
+
+
+/* ═══════════════════════════════════════════════════════
+   Stage29 - Option A · Dark Glass Individual Debriefing
+   - 선수 공개용 개별 디브리핑 / PDF
+   - 전체 코멘트만 있는 데이터도 리포트에 안정적으로 표시
+   ═══════════════════════════════════════════════════════ */
+.result-header{background:linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,.035));border-color:rgba(255,255,255,.16);border-radius:22px;padding:26px 20px}
+.report-intro,.rank-box,.avg-box,.score-card,.comment-box{border-color:rgba(255,255,255,.13)}
+.score-card{border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.03));padding:18px}
+.score-item{border-color:rgba(255,255,255,.12);background:rgba(255,255,255,.045);border-radius:14px}
+.comment-box{border-left:4px solid #fff;border-radius:16px;background:rgba(255,255,255,.06)}
+.comment-label{color:rgba(255,255,255,.62);letter-spacing:.04em}.comment-text{color:rgba(255,255,255,.9)}
+@media print {
+  @page { size:A4; margin:10mm; }
+  html,body{
+    background:#05070b!important;color:#f4f6fb!important;
+    font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif!important;
+    -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
+  }
+  body::before{content:"";position:fixed;inset:0;z-index:-1;background:radial-gradient(circle at 10% 0%,rgba(255,255,255,.13),transparent 30%),radial-gradient(circle at 92% 12%,rgba(255,255,255,.08),transparent 32%),linear-gradient(135deg,#05070b 0%,#0d111a 55%,#05070b 100%)!important}
+  .global-nav-buttons,#btn-pdf,#pdf-note,.btn,.btn-outline,.btn-danger,#toast,#overlay,.divider{display:none!important;visibility:hidden!important}
+  #pResult{display:block!important;position:relative!important;left:auto!important;top:auto!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;background:transparent!important;color:#f4f6fb!important;overflow:visible!important}
+  #pResult h2{display:none!important}
+  #debrief-logo{display:none!important}
+  .result-header{position:relative!important;text-align:left!important;background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.04))!important;color:#f4f6fb!important;border:1px solid rgba(255,255,255,.17)!important;border-radius:6mm!important;padding:7mm 8mm!important;margin:0 0 5mm!important;box-shadow:0 16px 54px rgba(0,0,0,.25)!important;page-break-inside:avoid!important;break-inside:avoid!important}
+  .result-header::before{content:"KCL OFFICIAL · INDIVIDUAL DEBRIEFING REPORT";display:block;color:rgba(255,255,255,.65)!important;font-size:7.5pt!important;font-weight:900!important;letter-spacing:.14em!important;margin-bottom:4mm!important}
+  .result-logo-wrap{position:absolute!important;right:7mm!important;top:6mm!important;min-height:0!important;margin:0!important;opacity:.55!important}.result-logo{width:28mm!important;height:20mm!important;object-fit:contain!important}
+  .result-name{color:#fff!important;font-size:22pt!important;font-weight:950!important;line-height:1.16!important;letter-spacing:-.055em!important;margin-right:34mm!important}
+  .result-affil{color:rgba(255,255,255,.66)!important;font-size:9pt!important;line-height:1.5!important;margin-top:1.5mm!important}
+  .result-comp{display:inline-flex!important;align-items:center!important;margin-top:4mm!important;border:1px solid rgba(255,255,255,.26)!important;background:rgba(255,255,255,.08)!important;color:#fff!important;border-radius:999px!important;font-size:7.8pt!important;font-weight:900!important;padding:2mm 4mm!important;letter-spacing:.08em!important}
+  .report-intro,.rank-box,.avg-box,.score-card,.comment-box,.smart-tag-box{background:rgba(255,255,255,.075)!important;color:#f4f6fb!important;border:1px solid rgba(255,255,255,.14)!important;box-shadow:0 10px 32px rgba(0,0,0,.18)!important;break-inside:avoid!important;page-break-inside:avoid!important}
+  .report-intro{border-radius:5mm!important;padding:4mm 5mm!important;margin:0 0 4mm!important}.intro-title{color:#fff!important;font-size:9.5pt!important;font-weight:950!important}.intro-text{color:rgba(255,255,255,.70)!important;font-size:8pt!important;line-height:1.55!important;margin-top:1mm!important}
+  .rank-box{display:grid!important;grid-template-columns:repeat(2,1fr)!important;gap:2.5mm!important;border-radius:5mm!important;padding:3mm!important;margin:0 0 4mm!important}.rank-box .cell{background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:3.5mm!important;padding:3mm!important}.rank-box small{color:rgba(255,255,255,.55)!important;font-size:7pt!important;font-weight:900!important}.rank-box b{color:#fff!important;font-size:17pt!important;font-weight:950!important}.tie-rule{grid-column:1/-1!important;color:rgba(255,255,255,.66)!important;font-size:7.5pt!important;line-height:1.5!important;text-align:center!important;padding-top:1mm!important}
+  .round-title{margin:6mm 0 3mm!important}.round-badge{background:#fff!important;color:#05070b!important;border-radius:999px!important;font-size:8.5pt!important;font-weight:950!important;padding:1.7mm 4mm!important}.round-section{margin-bottom:5mm!important}
+  .score-card{background:rgba(255,255,255,.075)!important;border-radius:4.5mm!important;padding:4mm!important;margin:0 0 4mm!important}.score-card-header{margin-bottom:3mm!important;padding-bottom:2.2mm!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.judge-name{color:#fff!important;font-size:10pt!important;font-weight:950!important;line-height:1.35!important}.reviewed-pill{border-color:rgba(255,255,255,.28)!important;background:rgba(255,255,255,.10)!important;color:#fff!important}.total-score{color:#fff!important;font-size:20pt!important;font-weight:950!important;line-height:1.05!important}.score-card-meta{color:rgba(255,255,255,.60)!important;font-size:7.4pt!important;margin:0 0 2.5mm!important}
+  .score-grid{grid-template-columns:repeat(3,1fr)!important;gap:2.2mm!important}.score-item{background:rgba(255,255,255,.075)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:3mm!important;padding:2.6mm!important;min-width:0!important}.score-item-label{color:rgba(255,255,255,.56)!important;font-size:7pt!important;font-weight:900!important;line-height:1.28!important;min-height:auto!important}.score-item-val{color:#fff!important;font-size:12.5pt!important;font-weight:950!important}.score-item-val .unit{color:rgba(255,255,255,.55)!important;font-size:7pt!important}.score-meter{height:1.2mm!important;background:rgba(255,255,255,.14)!important}.score-meter-fill{background:#fff!important}.score-item-sub{color:rgba(255,255,255,.60)!important;font-size:7.2pt!important}
+  .avg-title,.avg-sub,.avg-item-label,.smart-tag-title,.smart-tag-label,.comment-label{color:rgba(255,255,255,.56)!important}.avg-total,.avg-item-val,.smart-tag-label{color:#fff!important}.smart-tag-box{border-radius:4mm!important;padding:3mm!important;background:rgba(255,255,255,.06)!important}.smart-tag-row{border-top-color:rgba(255,255,255,.12)!important}.smart-tag-chip{background:rgba(255,255,255,.10)!important;border-color:rgba(255,255,255,.16)!important;color:#fff!important;font-size:7pt!important}
+  .comment-box{border-left:1.5mm solid #fff!important;border-radius:4mm!important;background:rgba(255,255,255,.095)!important;padding:4mm!important;margin-top:3mm!important}.comment-label{font-size:7.3pt!important;font-weight:950!important;margin-bottom:1.4mm!important}.comment-text{font-size:9.1pt!important;line-height:1.78!important;color:rgba(255,255,255,.90)!important;font-weight:650!important;word-break:keep-all!important;overflow-wrap:anywhere!important}.comment-label + .comment-text{margin-bottom:3mm!important}.comment-text:last-child{margin-bottom:0!important}
+}
+
+
+
+/* ═══════════════════════════════════════════════════════
+   Stage38 - A4 Compact Debriefing PDF Layout
+   - 일반적인 4~5명 평가 결과가 A4 1장에 최대한 들어가도록 압축
+   - 긴 코멘트/이미지가 있는 경우에도 2장 이내에서 밀림·겹침 방지
+   ═══════════════════════════════════════════════════════ */
+@media print {
+  @page { size:A4 portrait; margin:7mm; }
+  html,body{
+    width:auto!important; min-height:auto!important; overflow:visible!important;
+    background:#05070b!important;color:#f4f6fb!important;
+    -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
+  }
+  body::before{
+    content:"";position:fixed;inset:0;z-index:-1;
+    background:radial-gradient(circle at 8% 0%,rgba(255,255,255,.12),transparent 25%),
+      radial-gradient(circle at 94% 10%,rgba(255,255,255,.07),transparent 28%),
+      linear-gradient(135deg,#05070b 0%,#0b1018 56%,#05070b 100%)!important;
+  }
+  body *{visibility:hidden!important}
+  #pResult,#pResult *{visibility:visible!important}
+  .global-nav-buttons,#btn-pdf,#pdf-note,.btn,.btn-outline,.btn-danger,#toast,#overlay,.divider{display:none!important;visibility:hidden!important}
+  #pResult{
+    display:block!important;position:relative!important;left:auto!important;top:auto!important;
+    width:100%!important;max-width:none!important;margin:0!important;padding:0!important;
+    background:transparent!important;color:#f4f6fb!important;overflow:visible!important;
+    font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif!important;
+  }
+  #pResult h2,#debrief-logo{display:none!important}
+  .result-header{
+    display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;column-gap:5mm!important;align-items:end!important;
+    text-align:left!important;background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.04))!important;
+    border:1px solid rgba(255,255,255,.17)!important;border-radius:4.2mm!important;
+    padding:4.2mm 5mm!important;margin:0 0 3mm!important;box-shadow:none!important;break-inside:avoid!important;page-break-inside:avoid!important;
+  }
+  .result-header::before{
+    content:"KCL OFFICIAL · INDIVIDUAL DEBRIEFING REPORT";display:block!important;grid-column:1/-1!important;
+    color:rgba(255,255,255,.62)!important;font-size:6.3pt!important;font-weight:900!important;letter-spacing:.12em!important;margin:0 0 2mm!important;
+  }
+  .report-label{display:none!important}
+  .result-logo-wrap{display:none!important}
+  .result-name{
+    grid-column:1/2!important;color:#fff!important;font-size:16.5pt!important;font-weight:950!important;line-height:1.12!important;
+    letter-spacing:-.055em!important;margin:0!important;min-width:0!important;
+  }
+  .result-affil{grid-column:1/2!important;color:rgba(255,255,255,.64)!important;font-size:7.2pt!important;line-height:1.35!important;margin:1mm 0 0!important}
+  .result-comp{
+    grid-column:2/3!important;grid-row:2/4!important;align-self:center!important;justify-self:end!important;
+    display:inline-flex!important;align-items:center!important;margin:0!important;border:1px solid rgba(255,255,255,.26)!important;
+    background:rgba(255,255,255,.08)!important;color:#fff!important;border-radius:999px!important;font-size:6.7pt!important;font-weight:900!important;
+    padding:1.3mm 3mm!important;letter-spacing:.07em!important;white-space:nowrap!important;
+  }
+  .report-intro{display:none!important}
+  .rank-box{
+    display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:1.6mm!important;
+    background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.13)!important;border-radius:3.5mm!important;
+    padding:2mm!important;margin:0 0 3mm!important;box-shadow:none!important;break-inside:avoid!important;page-break-inside:avoid!important;
+  }
+  .rank-box .cell{background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.11)!important;border-radius:2.6mm!important;padding:1.8mm 2mm!important;text-align:center!important}
+  .rank-box small{color:rgba(255,255,255,.56)!important;font-size:5.8pt!important;font-weight:900!important;margin-bottom:.6mm!important}
+  .rank-box b{color:#fff!important;font-size:12.5pt!important;font-weight:950!important;line-height:1.05!important}
+  .tie-rule{display:none!important}
+  .round-section{
+    display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:2.2mm!important;
+    align-items:start!important;max-width:none!important;margin:0!important;page-break-inside:auto!important;break-inside:auto!important;
+  }
+  .round-title{grid-column:1/-1!important;margin:1.5mm 0 .3mm!important;min-height:0!important}
+  .round-badge{background:#fff!important;color:#05070b!important;border-radius:999px!important;font-size:6.8pt!important;font-weight:950!important;padding:.9mm 2.8mm!important;border:0!important}
+  .avg-box{grid-column:1/-1!important;background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:3mm!important;padding:2mm 2.5mm!important;margin:0!important;box-shadow:none!important}
+  .avg-title{font-size:6.2pt!important}.avg-total{font-size:13pt!important;margin:0!important}.avg-sub{font-size:6.5pt!important;margin:0!important}.avg-grid{display:none!important}
+  .score-card{
+    width:auto!important;display:block!important;background:rgba(255,255,255,.075)!important;color:#f4f6fb!important;
+    border:1px solid rgba(255,255,255,.14)!important;border-radius:3.4mm!important;padding:2.5mm!important;margin:0!important;
+    box-shadow:none!important;break-inside:avoid!important;page-break-inside:avoid!important;overflow:hidden!important;
+  }
+  .score-card::before{display:none!important}
+  .score-card-header{
+    display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:2mm!important;
+    margin:0 0 1.6mm!important;padding:0 0 1.5mm!important;border-bottom:1px solid rgba(255,255,255,.12)!important;
+  }
+  .judge-name{color:#fff!important;font-size:7.6pt!important;font-weight:950!important;line-height:1.25!important;letter-spacing:-.02em!important}
+  .reviewed-pill{margin-left:1.2mm!important;padding:.5mm 1.4mm!important;border-radius:999px!important;background:rgba(255,255,255,.12)!important;border:1px solid rgba(255,255,255,.22)!important;color:#fff!important;font-size:5.6pt!important}
+  .total-score{min-width:14mm!important;text-align:right!important;color:#fff!important;font-size:13.8pt!important;font-weight:950!important;line-height:1!important;letter-spacing:-.04em!important}
+  .total-score span{font-size:5.8pt!important;margin-bottom:.5mm!important;color:rgba(255,255,255,.58)!important}
+  .score-card-meta{color:rgba(255,255,255,.58)!important;font-size:5.9pt!important;line-height:1.32!important;margin:0 0 1.6mm!important}
+  .score-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:1.2mm!important;margin:0!important}
+  .score-item{
+    min-height:0!important;display:block!important;background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.11)!important;
+    border-radius:2.2mm!important;padding:1.35mm 1.55mm!important;color:#fff!important;overflow:hidden!important;
+  }
+  .score-item-label{display:block!important;min-height:0!important;color:rgba(255,255,255,.56)!important;font-size:5.75pt!important;font-weight:900!important;line-height:1.2!important;margin:0 0 .7mm!important;letter-spacing:-.03em!important}
+  .score-item-val{display:block!important;color:#fff!important;font-size:9.5pt!important;font-weight:950!important;line-height:1!important;letter-spacing:-.03em!important}
+  .score-item-val .unit{font-size:5.5pt!important;color:rgba(255,255,255,.56)!important}
+  .score-meter{display:none!important}
+  .score-item-sub{font-size:5.7pt!important;line-height:1.22!important;color:rgba(255,255,255,.58)!important;margin-top:.7mm!important;min-height:0!important}
+  .smart-tag-box{
+    margin-top:1.5mm!important;border-radius:2.4mm!important;padding:1.7mm!important;background:rgba(255,255,255,.055)!important;
+    border:1px solid rgba(255,255,255,.11)!important;box-shadow:none!important;break-inside:avoid!important;page-break-inside:avoid!important;
+  }
+  .smart-tag-title{font-size:5.7pt!important;color:rgba(255,255,255,.55)!important;margin-bottom:.9mm!important}
+  .smart-tag-row{display:block!important;border-top:1px solid rgba(255,255,255,.10)!important;padding-top:.8mm!important;margin-top:.8mm!important}
+  .smart-tag-row:first-of-type{border-top:0!important;padding-top:0!important;margin-top:0!important}
+  .smart-tag-label{min-width:0!important;color:#fff!important;font-size:5.9pt!important;font-weight:900!important;margin-bottom:.7mm!important}
+  .smart-tag-chips{gap:.7mm!important}.smart-tag-chip{font-size:5.7pt!important;line-height:1.15!important;border-radius:999px!important;padding:.45mm 1.15mm!important;background:rgba(255,255,255,.10)!important;border-color:rgba(255,255,255,.14)!important;color:#fff!important}
+  .comment-box{
+    margin-top:1.7mm!important;border:1px solid rgba(255,255,255,.13)!important;border-left:1mm solid #fff!important;border-radius:2.5mm!important;
+    background:rgba(255,255,255,.085)!important;padding:2mm!important;box-shadow:none!important;break-inside:auto!important;page-break-inside:auto!important;
+  }
+  .comment-label{font-size:5.9pt!important;font-weight:950!important;color:rgba(255,255,255,.56)!important;margin:0 0 .8mm!important;line-height:1.2!important}
+  .comment-text{font-size:7.05pt!important;line-height:1.43!important;color:rgba(255,255,255,.90)!important;font-weight:600!important;word-break:keep-all!important;overflow-wrap:anywhere!important;margin:0 0 1.3mm!important}
+  .comment-label + .comment-text{margin-bottom:1.3mm!important}.comment-text:last-child{margin-bottom:0!important}
+}
+
+
+
+/* Stage38.1 - Print reliability override: 브라우저 인쇄/Weasy 계열 모두에서 카드가 밀리지 않도록 단순 배치 */
+@media print {
+  .result-header{
+    display:block!important;text-align:left!important;padding:3.4mm 4.2mm!important;margin:0 0 2.6mm!important;border-radius:3.6mm!important;
+  }
+  .result-header::before{display:block!important;margin:0 0 1.7mm!important;font-size:6pt!important;line-height:1.1!important;letter-spacing:.10em!important}
+
+  /* compact header: 제목 겹침 방지를 위해 인쇄용 레이블은 숨김 */
+  .result-header::before{display:none!important;content:""!important}
+  .result-name{display:block!important;color:#fff!important;font-size:15.4pt!important;line-height:1.08!important;margin:0 0 .8mm!important;letter-spacing:-.055em!important;white-space:normal!important}
+  .result-affil{display:block!important;font-size:6.9pt!important;line-height:1.25!important;margin:0 0 1.4mm!important;color:rgba(255,255,255,.64)!important}
+  .result-comp{display:inline-flex!important;position:static!important;float:none!important;font-size:6.3pt!important;padding:1mm 2.4mm!important;margin:0!important;white-space:normal!important;max-width:100%!important}
+  .rank-box{grid-template-columns:repeat(2,minmax(0,1fr))!important;margin-bottom:2.4mm!important}.rank-box .cell{padding:1.5mm!important}.rank-box small{font-size:5.5pt!important}.rank-box b{font-size:11.5pt!important}
+  .round-section{display:block!important;max-width:none!important;margin:0!important;font-size:0!important;line-height:0!important}
+  .round-title{display:block!important;margin:1.3mm 0 1.3mm!important;font-size:0!important;line-height:1!important}
+  .round-badge{font-size:6.5pt!important;line-height:1.1!important}
+  .avg-box{display:block!important;width:100%!important;margin:0 0 1.6mm!important}
+  .score-card{
+    display:inline-block!important;vertical-align:top!important;width:49.1%!important;max-width:49.1%!important;
+    margin:0 1.4% 2.2mm 0!important;padding:2.15mm!important;border-radius:2.9mm!important;
+    font-size:7pt!important;line-height:1.2!important;box-sizing:border-box!important;overflow:hidden!important;
+  }
+  .score-card:nth-child(2n+1){margin-right:0!important}
+  .score-card-header{margin-bottom:1.25mm!important;padding-bottom:1.1mm!important;gap:1.4mm!important}
+  .judge-name{font-size:7.05pt!important;line-height:1.18!important}
+  .reviewed-pill{font-size:5pt!important;padding:.35mm 1mm!important}
+  .total-score{font-size:12.5pt!important;min-width:12mm!important}
+  .score-card-meta{font-size:5.5pt!important;line-height:1.22!important;margin-bottom:1.1mm!important}
+  .score-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:.9mm!important}
+  .score-item{padding:1.05mm 1.2mm!important;border-radius:1.8mm!important}
+  .score-item-label{font-size:5.25pt!important;line-height:1.12!important;margin-bottom:.45mm!important;letter-spacing:-.04em!important}
+  .score-item-val{font-size:8.5pt!important}.score-item-val .unit{font-size:5pt!important}.score-item-sub{font-size:5.1pt!important}
+  .smart-tag-box{padding:1.2mm!important;margin-top:1.1mm!important;border-radius:1.9mm!important}.smart-tag-title{font-size:5.1pt!important}.smart-tag-label{font-size:5.2pt!important}.smart-tag-chip{font-size:5.1pt!important;padding:.3mm .85mm!important}
+  .comment-box{padding:1.45mm!important;margin-top:1.2mm!important;border-radius:2mm!important;border-left:.8mm solid #fff!important}
+  .comment-label{font-size:5.25pt!important;margin-bottom:.55mm!important}.comment-text{font-size:6.4pt!important;line-height:1.34!important;margin-bottom:.8mm!important}
+}
+
+
+/* STAGE44 scroll lock override */
+html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavior-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+.wrap,.card,.result-card,.debrief-card,.print-page{max-height:none!important;overflow-y:visible;}
+@media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}.wrap{min-height:100dvh!important;}}
+</style>
+<script src="/assets/kcl-api-shim.js"></script>
+</head>
+<body>
+
+<div id="overlay" class="overlay"><div class="spinner"></div></div>
+<div id="toast" class="toast"></div>
+
+<div class="global-nav-buttons" aria-label="페이지 이동"><button type="button" class="global-nav-btn" onclick="return goBackContext_()">이전</button><button type="button" class="global-nav-btn" onclick="return goRootHome_()"><span class="home-dot"></span>홈</button></div>
+
+<!-- PANEL 1 -->
+<div id="pStep1" class="panel active">
+  <div class="kcl-login-mark" aria-label="Korea Coffee League">
+    <svg class="kcl-login-logo" xmlns="http://www.w3.org/2000/svg" viewBox="214.433 342.798 651.134 394.405" role="img" aria-label="Korea Coffee League"><path d="M233.232 723.522L253.33 723.522L253.33 736.593L215.243 736.593L215.243 675.157L233.232 675.157Z" fill="#f5f5f5"/><path d="M276.457 688.839L276.457 698.861L297.106 698.861L297.106 711.844L276.457 711.844L276.457 722.912L299.86 722.912L299.86 736.592L258.468 736.592L258.468 675.156L299.86 675.156L299.86 688.839Z" fill="#f5f5f5"/><path d="M343.358 713.5L336.382 693.631L329.499 713.5ZM347.854 726.571L324.912 726.571L321.424 736.593L302.518 736.593L326.105 675.156L346.845 675.156L370.339 736.593L351.341 736.593Z" fill="#f5f5f5"/><path d="M415.673 695.374C414.632 693.749 413.209 692.499 411.406 691.628C409.6 690.756 407.475 690.321 405.027 690.321C400.499 690.321 396.937 691.715 394.337 694.503C391.736 697.291 390.437 701.039 390.437 705.744C390.437 711.032 391.827 715.054 394.613 717.814C397.395 720.574 401.449 721.954 406.772 721.954C413.071 721.954 417.57 719.251 420.262 713.849L402.183 713.849L402.183 701.562L435.771 701.562L435.771 718.118C434.363 721.372 432.298 724.424 429.577 727.268C426.854 730.115 423.413 732.453 419.253 734.283C415.091 736.113 410.35 737.029 405.027 737.029C398.542 737.029 392.807 735.707 387.821 733.063C382.832 730.421 378.979 726.731 376.257 721.996C373.534 717.263 372.173 711.845 372.173 705.744C372.173 699.704 373.534 694.314 376.257 689.579C378.979 684.846 382.818 681.156 387.774 678.512C392.73 675.87 398.45 674.547 404.936 674.547C413.071 674.547 419.802 676.407 425.125 680.125C430.448 683.843 433.753 688.927 435.037 695.374Z" fill="#f5f5f5"/><path d="M459.631 675.156L459.631 710.799C459.631 714.11 460.441 716.667 462.062 718.466C463.683 720.267 466.145 721.169 469.45 721.169C472.755 721.169 475.247 720.253 476.929 718.423C478.612 716.594 479.453 714.053 479.453 710.799L479.453 675.156L497.44 675.156L497.44 710.799C497.44 716.434 496.186 721.242 493.677 725.219C491.169 729.201 487.759 732.191 483.445 734.195C479.131 736.199 474.343 737.202 469.083 737.202C463.821 737.202 459.126 736.199 454.995 734.195C450.866 732.191 447.622 729.215 445.267 725.264C442.913 721.313 441.736 716.492 441.736 710.799L441.736 675.156Z" fill="#f5f5f5"/><path d="M523.505 688.839L523.505 698.861L544.154 698.861L544.154 711.844L523.505 711.844L523.505 722.912L546.908 722.912L546.908 736.592L505.516 736.592L505.516 675.156L546.908 675.156L546.908 688.839Z" fill="#f5f5f5"/><path d="M298.489 496.067L255.626 430.032L255.626 496.067L214.433 496.067L214.433 346.582L255.626 346.582L255.626 409.593L295.144 346.582L342.884 346.582L295.013 418.998L347.371 496.067Z" fill="#f5f5f5"/><path d="M430.728 499.858C385.227 499.858 351.236 466.175 351.236 421.453C351.236 376.492 385.227 342.797 430.728 342.797C469.901 342.797 500.256 368.667 506.329 406.569L464.595 406.569C459.473 391.239 446.551 381.299 430.823 381.299C409.635 381.299 394.104 398.304 394.104 421.453C394.104 444.518 409.635 461.279 430.823 461.279C447.412 461.279 460.424 450.477 464.619 433.871L506.745 433.871C501.077 473.168 470.537 499.846 430.728 499.846Z" fill="#f5f5f5"/><path d="M571.643 466.434L635.038 466.434L635.038 494.941L532.752 494.941L532.752 346.634L571.643 346.634Z" fill="#f5f5f5"/><path d="M531.625 600.018C531.625 581.366 545.713 567.412 564.563 567.412C580.805 567.412 593.382 578.133 595.926 593.844L578.611 593.844C576.492 587.488 571.123 583.356 564.587 583.356C555.833 583.356 549.389 590.412 549.389 600.018C549.389 609.577 555.833 616.522 564.587 616.522C571.473 616.522 576.883 612.04 578.628 605.165L596.072 605.165C593.743 621.448 581.073 632.507 564.563 632.507C545.713 632.507 531.625 618.559 531.625 600.018" fill="#f5f5f5"/><path d="M635.167 616.651C644.592 616.651 651.415 609.665 651.415 599.972C651.415 590.266 644.592 583.292 635.167 583.292C625.725 583.292 618.803 590.325 618.803 599.972C618.803 609.612 625.725 616.628 635.167 616.628ZM601.004 599.954C601.004 581.01 615.225 567.412 635.167 567.412C655.021 567.412 669.191 580.97 669.191 599.954C669.191 618.956 655.021 632.507 635.167 632.507C615.225 632.507 601.004 618.903 601.004 599.954" fill="#f5f5f5"/><path d="M695.127 584.418L695.127 594.288L715.051 594.288L715.051 609.227L695.127 609.227L695.127 630.955L677.911 630.955L677.911 568.976L717.35 568.976L717.35 584.418Z" fill="#f5f5f5"/><path d="M743.67 584.418L743.67 594.288L763.559 594.288L763.559 609.227L743.67 609.227L743.67 630.955L726.407 630.955L726.407 568.976L765.882 568.976L765.882 584.418Z" fill="#f5f5f5"/><path d="M815.36 616.143L815.36 630.955L774.952 630.955L774.952 568.976L814.607 568.976L814.607 583.736L791.934 583.736L791.934 592.857L812.307 592.857L812.307 606.864L791.934 606.864L791.934 616.143Z" fill="#f5f5f5"/><path d="M865.567 616.143L865.567 630.955L825.153 630.955L825.153 568.976L864.808 568.976L864.808 583.736L842.141 583.736L842.141 592.857L862.508 592.857L862.508 606.864L842.141 606.864L842.141 616.143Z" fill="#f5f5f5"/><path d="M250.131 631.019L232.331 603.607L232.331 631.019L215.243 631.019L215.243 568.965L232.331 568.965L232.331 595.121L248.742 568.965L268.573 568.965L248.672 599.032L270.411 631.019Z" fill="#f5f5f5"/><path d="M364.645 597.631L372.471 597.631C377.239 597.631 379.982 594.749 379.982 590.874C379.982 586.993 377.239 584.157 372.471 584.157L364.645 584.157ZM370.843 612.029L364.645 612.029L364.645 631.019L347.557 631.019L347.557 568.965L374.449 568.965C387.832 568.965 397.525 577.947 397.525 590.919C397.525 598.535 393.813 604.781 387.685 608.457L400.023 631.019L380.927 631.019Z" fill="#f5f5f5"/><path d="M447.937 616.19L447.937 631.02L407.493 631.02L407.493 568.965L447.178 568.965L447.178 583.742L424.505 583.742L424.505 592.876L444.89 592.876L444.89 606.905L424.505 606.905L424.505 616.19Z" fill="#f5f5f5"/><path d="M484.446 588.341L477.665 607.564L491.31 607.564ZM495.5 620.935L473.475 620.935L470.043 631.019L451.741 631.019L476.089 568.965L492.809 568.965L517.723 631.019L498.908 631.019Z" fill="#f5f5f5"/><path d="M303.951 616.68C313.382 616.68 320.233 609.711 320.233 599.995C320.233 590.278 313.382 583.304 303.951 583.304C294.497 583.304 287.569 590.33 287.569 599.995C287.569 609.653 294.497 616.674 303.951 616.674ZM269.776 599.995C269.776 581.027 284.015 567.395 303.951 567.395C323.84 567.395 338.022 580.969 338.022 599.995C338.022 619.002 323.84 632.6 303.951 632.6C284.015 632.6 269.776 618.956 269.776 599.995" fill="#f5f5f5"/></svg>
+  </div>
+  <h2>KCL 디브리핑</h2>
+  <div id="debrief-logo" class="hero-logo-wrap"></div>
+  <p class="subtitle">본인 확인 후 점수를 조회할 수 있습니다</p>
+  <div class="section-label">대회 선택</div>
+  <select id="sel-comp">
+    <option value="">-- 대회를 선택하세요 --</option>
+  </select>
+  <div class="section-label" id="identity-label">본인 확인</div>
+  <input type="text" id="inp-name" placeholder="이름" autocomplete="name" autocapitalize="off">
+  <input type="tel" id="inp-phone" placeholder="연락처 (숫자만)" maxlength="11" inputmode="numeric"
+    autocomplete="one-time-code" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+  <button class="btn" id="btn-send-otp" onclick="doSendOTP()">인증번호 받기</button>
+</div>
+
+<!-- PANEL 2 -->
+<div id="pStep2" class="panel">
+  <h2 style="margin-top:40px">인증번호 입력</h2>
+  <p class="subtitle">문자로 발송된 6자리 번호를 입력하세요</p>
+  <div class="otp-info" id="otp-info"></div>
+  <div class="otp-timer" id="otp-timer"></div>
+  <input type="tel" id="inp-otp" placeholder="인증번호 6자리" maxlength="6" inputmode="numeric"
+    autocomplete="one-time-code"
+    oninput="this.value=this.value.replace(/[^0-9]/g,'')"
+    onkeydown="if(event.key==='Enter')doVerifyOTP()">
+  <button class="btn" id="btn-verify" onclick="doVerifyOTP()">확인</button>
+  <button class="btn-outline" onclick="backToStep1()">다시 요청</button>
+</div>
+
+<!-- PANEL 3: 결과 -->
+<div id="pResult" class="panel">
+  <div class="result-header">
+    <div class="report-label">OFFICIAL DEBRIEFING REPORT</div>
+    <div id="result-logo" class="result-logo-wrap"></div>
+    <div class="result-name" id="res-name"></div>
+    <div class="result-affil" id="res-affil"></div>
+    <div class="result-comp" id="res-comp"></div>
+  </div>
+  <div id="res-body"></div>
+  <button class="btn" id="btn-pdf" style="display:none" onclick="downloadDebriefPdf()">PDF 저장 / 다운로드</button>
+  <div class="pdf-note" id="pdf-note" style="display:none">인쇄 창에서 대상 또는 프린터를 <b>PDF로 저장</b>으로 선택하면 A4 디브리핑 PDF로 저장됩니다.</div>
+  <div class="divider"></div>
+  <button class="btn-outline" onclick="backToStep1()">처음으로</button>
+</div>
+
+<script>
+var _name = '', _phone = '', _compCode = '', _maskedPhone = '';
+var _lastResult = null;
+var _timerInterval = null;
+var _configs = [];
+
+function debriefHomeTarget_() {
+  return '/';
+}
+function clearDebriefSession_() {
+  try {
+    if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+    sessionStorage.removeItem('kcl_debrief_auth');
+  } catch(e) {}
+}
+function goRootHome_() {
+  clearDebriefSession_();
+  window.location.href = debriefHomeTarget_();
+  return false;
+}
+function goBackContext_() {
+  var active = document.querySelector('.panel.active');
+  var id = active ? active.id : '';
+  if (id === 'pStep2') { showPanel('pStep1'); return false; }
+  goRootHome_();
+  return false;
+}
+
+// ─────────────────────────────────────────
+// 대회 로고: 흰색/투명 배경 통일 버전
+// ─────────────────────────────────────────
+var COMP_LOGOS = {"KCAC":"/assets/logos/kcac.8fc71deb554e.png","KTCC":"/assets/logos/ktcc.c29d59851490.png","KBC":"/assets/logos/kbc.635a88067c9e.png","MOB":"/assets/logos/mob.e47166f20c3e.png","KCR":"/assets/logos/kcr.5cb74ccbba71.png","IKRC":"/assets/logos/ikrc.74e44d111296.png","MOC":"/assets/logos/moc.af6a6bf043f7.png"};
+function logoImg_(code, className) {
+  var src = COMP_LOGOS[String(code || '').toUpperCase()];
+  if (!src) return '';
+  var codeText = String(code || '').toUpperCase();
+  return '<img class="' + (className || 'hero-logo') + ' logo-' + codeText + '" src="' + src + '" alt="' + codeText + ' logo">';
+}
+function updateDebriefLogo() {
+  var code = document.getElementById('sel-comp').value;
+  document.getElementById('debrief-logo').innerHTML = logoImg_(code, 'hero-logo');
+  updateIdentityLabels_();
+}
+
+function updateIdentityLabels_() {
+  var code = String(document.getElementById('sel-comp').value || '').toUpperCase();
+  var label = document.getElementById('identity-label');
+  var nameInput = document.getElementById('inp-name');
+  var phoneInput = document.getElementById('inp-phone');
+  if (code === 'KTCC') {
+    if (label) label.textContent = '팀 확인';
+    if (nameInput) {
+      nameInput.placeholder = '팀명';
+      nameInput.style.display = '';
+      nameInput.setAttribute('autocomplete', 'off');
+    }
+    if (phoneInput) phoneInput.placeholder = '팀원 연락처 (둘 중 아무 번호 / 숫자만)';
+  } else {
+    if (label) label.textContent = '본인 확인';
+    if (nameInput) {
+      nameInput.placeholder = '이름';
+      nameInput.style.display = '';
+      nameInput.setAttribute('autocomplete', 'name');
+    }
+    if (phoneInput) phoneInput.placeholder = '연락처 (숫자만)';
+  }
+}
+
+
+function hasGas_() {
+  return (typeof google !== 'undefined' && google.script && google.script.run);
+}
+function gasRun_(fnName, args, onSuccess, onFailure) {
+  if (!hasGas_()) {
+    hideOverlay();
+    toast('Cloudflare Pages 배포 주소에서 열어야 합니다. /debriefing/ 주소로 다시 접속해주세요.', true);
+    if (typeof onFailure === 'function') onFailure(new Error('google.script.run is not available'));
+    return;
+  }
+  var runner = google.script.run
+    .withSuccessHandler(onSuccess || function(){})
+    .withFailureHandler(onFailure || function(){ hideOverlay(); toast('서버 통신 중 오류가 발생했습니다', true); });
+  runner[fnName].apply(runner, args || []);
+}
+
+window.onload = function() {
+  showOverlay();
+  gasRun_('getConfig', [], function(res) {
+    hideOverlay();
+    if (!res.success) { toast(res.message, true); return; }
+    _configs = res.configs;
+    var sel = document.getElementById('sel-comp');
+    sel.onchange = updateDebriefLogo;
+    res.configs.forEach(function(c) {
+      if (!c.debriefing) return;
+      var opt = document.createElement('option');
+      opt.value = c.code;
+      opt.textContent = c.name;
+      sel.appendChild(opt);
+    });
+    if (sel.options.length <= 1) {
+      sel.innerHTML = '<option value="">현재 오픈된 디브리핑이 없습니다</option>';
+    }
+    updateDebriefLogo();
+  }, function() {
+    hideOverlay();
+    toast('설정을 불러오지 못했습니다', true);
+  });
+};
+
+function toast(msg, isErr) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(t._t);
+  t._t = setTimeout(function(){ t.className='toast'; }, 3000);
+}
+function showOverlay() { document.getElementById('overlay').classList.add('active'); }
+function hideOverlay() { document.getElementById('overlay').classList.remove('active'); }
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function doSendOTP() {
+  var comp = document.getElementById('sel-comp').value;
+  var name = document.getElementById('inp-name').value.trim();
+  var phone = document.getElementById('inp-phone').value.replace(/[^0-9]/g,'');
+
+  var isKtcc = String(comp || '').toUpperCase() === 'KTCC';
+  if (!comp) { toast('대회를 선택해주세요', true); return; }
+  if (!name) { toast(isKtcc ? '팀명을 입력해주세요' : '이름을 입력해주세요', true); return; }
+  if (phone.length < 10 || phone.length > 11) { toast(isKtcc ? '팀원 연락처를 숫자만 정확히 입력해주세요' : '연락처를 숫자만 정확히 입력해주세요', true); return; }
+
+  _name = name; _phone = phone; _compCode = comp;
+
+  var btn = document.getElementById('btn-send-otp');
+  btn.disabled = true;
+  btn.textContent = '발송 중...';
+  showOverlay();
+
+  gasRun_('sendOTP', [_name, _phone, _compCode], function(res) {
+    hideOverlay();
+    btn.disabled = false;
+    btn.textContent = '인증번호 받기';
+    if (!res.success) { toast(res.message, true); return; }
+    _maskedPhone = res.maskedPhone || '';
+    showOTPPanel();
+  }, function() {
+    hideOverlay();
+    btn.disabled = false;
+    btn.textContent = '인증번호 받기';
+    toast('발송 중 오류가 발생했습니다', true);
+  });
+}
+
+function showOTPPanel() {
+  document.getElementById('otp-info').textContent =
+    (_maskedPhone ? _maskedPhone + ' 번호로 ' : '등록된 휴대폰 번호로 ') + '인증번호를 발송했습니다.';
+  document.getElementById('inp-otp').value = '';
+  document.getElementById('btn-verify').disabled = false;
+  startTimer(300);
+  showPanel('pStep2');
+  setTimeout(function(){ document.getElementById('inp-otp').focus(); }, 300);
+}
+
+function startTimer(seconds) {
+  clearInterval(_timerInterval);
+  var remain = seconds;
+  var timerEl = document.getElementById('otp-timer');
+  var verifyBtn = document.getElementById('btn-verify');
+  function tick() {
+    if (remain <= 0) {
+      clearInterval(_timerInterval);
+      timerEl.textContent = '인증번호가 만료되었습니다. 다시 요청해주세요.';
+      timerEl.className = 'otp-timer expired';
+      verifyBtn.disabled = true;
+      return;
+    }
+    var m = Math.floor(remain / 60);
+    var s = remain % 60;
+    timerEl.textContent = '유효시간 ' + m + ':' + (s < 10 ? '0' : '') + s;
+    timerEl.className = 'otp-timer' + (remain <= 60 ? ' warn' : '');
+    remain--;
+  }
+  tick();
+  _timerInterval = setInterval(tick, 1000);
+}
+
+function doVerifyOTP() {
+  var otp = document.getElementById('inp-otp').value.trim();
+  if (!otp || otp.length < 6) { toast('인증번호 6자리를 입력해주세요', true); return; }
+  showOverlay();
+  gasRun_('verifyOTP', [_name, _phone, _compCode, otp], function(res) {
+    hideOverlay();
+    clearInterval(_timerInterval);
+    if (!res.success) { toast(res.message, true); return; }
+    renderResult(res);
+    showPanel('pResult');
+  }, function() {
+    hideOverlay();
+    toast('인증 중 오류가 발생했습니다', true);
+  });
+}
+
+function fmtScore(v, digits) {
+  var n = Number(v);
+  if (isNaN(n)) return String(v == null ? '' : v);
+  var d = digits == null ? 2 : digits;
+  return (Math.round(n * 100 + 1e-8) / 100).toFixed(d).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+}
+function isSmartTagLabel(label) {
+  return /Smart\s*Tags?|\bTags?\b|Tag\s*List|스마트\s*태그|스마트태그|태그/i.test(String(label || ''));
+}
+function isCommentLabel(label) {
+  return /Comment|Comments|Memo|Feedback|Note|코멘트|메모|심사평|평가\s*코멘트|평가\s*의견|총평|종합\s*코멘트|종합\s*의견/i.test(String(label || ''));
+}
+
+function isOverallReportCommentLabel_(label) {
+  return /Overall|General|종합|총평|전체\s*코멘트|전체\s*의견|평가\s*메모|평가\s*의견|심사평|메모/i.test(String(label || ''));
+}
+function normalizeKclLabelText(label) {
+  return String(label || '')
+    .replace(/블렌딩/g, '블렌딩')
+    .replace(/애프터테이스트/g, '애프터테이스트')
+    .replace(/스윗니스/g, '스윗니스')
+    .replace(/Aftertaste\(([^)]*)\)/ig, 'Aftertaste(애프터테이스트)')
+    .replace(/Sweetness\(([^)]*)\)/ig, 'Sweetness(스윗니스)')
+    .replace(/Flavor\(([^)]*)\)/ig, 'Flavor(플레이버)');
+}
+function commentPublicLabel(label) {
+  var s = String(label || '');
+  if (isSmartTagLabel(s)) {
+    if (/Service.*Professionalism|서비스의\s*전문성|Presentation.*Service/i.test(s)) return 'Service Professionalism Smart Tags(스마트태그)';
+    if (/Espresso.*Taste.*Design/i.test(s)) return 'Espresso Taste & Design Smart Tags(스마트태그)';
+    if (/Espresso.*Clean/i.test(s)) return 'Espresso Clean Cup Smart Tags(스마트태그)';
+    if (/Espresso.*Mouth/i.test(s)) return 'Espresso Mouthfeel Smart Tags(스마트태그)';
+    if (/Espresso.*Flavor/i.test(s)) return 'Espresso Flavor Smart Tags(스마트태그)';
+    if (/Signature.*Taste.*Design/i.test(s)) return 'Signature Taste & Design Smart Tags(스마트태그)';
+    if (/Signature.*Clean/i.test(s)) return 'Signature Clean Cup Smart Tags(스마트태그)';
+    if (/Signature.*Mouth/i.test(s)) return 'Signature Mouthfeel Smart Tags(스마트태그)';
+    if (/Signature.*Flavor/i.test(s)) return 'Signature Flavor Smart Tags(스마트태그)';
+    if (/Machine.*Equipment/i.test(s)) return 'Machine & Equipment Smart Tags(스마트태그)';
+    if (/Aftertaste/i.test(s)) return 'Aftertaste Smart Tags(애프터테이스트 태그)';
+    if (/Sweetness/i.test(s)) return 'Sweetness Smart Tags(스윗니스 태그)';
+    if (/Acidity/i.test(s)) return 'Acidity Smart Tags(산미 태그)';
+    if (/Body/i.test(s)) return 'Body Smart Tags(바디 태그)';
+    if (/Flavor/i.test(s)) return 'Flavor Smart Tags(플레이버 태그)';
+  }
+  if (isOverallReportCommentLabel_(s)) return 'Overall Comment(종합 코멘트)';
+  if (/Aftertaste/i.test(s)) return 'Aftertaste Comment(애프터테이스트 코멘트)';
+  if (/Sweetness/i.test(s)) return 'Sweetness Comment(스윗니스 코멘트)';
+  if (/Acidity/i.test(s)) return 'Acidity Comment(산미 코멘트)';
+  if (/Body/i.test(s)) return 'Body Comment(바디 코멘트)';
+  if (/Flavor/i.test(s)) return 'Flavor Comment(플레이버 코멘트)';
+  return normalizeKclLabelText(s);
+}
+function isCuppingAttributeLabel(label) {
+  return /Flavor|Aftertaste|Acidity|Body|Sweetness|Overall|플레이버|애프터|에프터|피니시|산미|바디|스윗니스|단맛|오버롤|주관/i.test(String(label || ''));
+}
+function valueLooksNumericScore(value) {
+  var s = String(value == null ? '' : value).trim();
+  if (!s) return false;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return true;
+  if (/^-?\d+(\.\d+)?\s*\/\s*\d+/.test(s)) return true;
+  return false;
+}
+function scoreMaxForLabel(label, compCode) {
+  label = String(label || '');
+  compCode = String(compCode || '').toUpperCase();
+  if (isSmartTagLabel(label)) return '';
+  if (isCommentLabel(label)) return '';
+  if (/총점|최종점수|총평가\s*반영|감점\s*전\s*합산|정답|가산|감점|시간|번호|리프수|패턴종류|Leaf|Pattern Type/.test(label)) return '';
+  if (compCode === 'IKRC' && /Flavor|Aftertaste|Acidity|Body|Sweetness|Mouthfeel|Clean Cup|Aroma|Overall|플레이버|애프터|에프터|산미|바디|스윗니스|단맛|질감|클린|아로마|종합/i.test(label)) return 10;
+  if (compCode === 'KCR' && /Flavor|Aftertaste|Acidity|Body|Sweetness|Mouthfeel|Clean Cup|Aroma|Overall|플레이버|애프터|에프터|산미|바디|스윗니스|단맛|질감|클린|아로마|종합/i.test(label)) return 5;
+  if (/Flavor|Aftertaste|Acidity|Body|Sweetness|Mouthfeel|Clean Cup|Aroma|Overall|플레이버|애프터|에프터|산미|바디|스윗니스|단맛|질감|클린|아로마|종합|완성도|균형|품질|비율|선명도|표현|수행|청결|맛|프레젠|전문성|운용|Machine|Equipment|Taste.*Design|Balance|Tactile/i.test(label)) return 5;
+  return '';
+}
+function scoreDisplay(label, value, compCode) {
+  if (isSmartTagLabel(label)) return escHtml(value);
+  var n = Number(value);
+  if (isNaN(n)) return escHtml(value);
+  var max = scoreMaxForLabel(label, compCode);
+  return max ? ('<span>' + escHtml(fmtScore(n,2)) + '</span><span class="unit">/ ' + escHtml(max) + '</span>') : escHtml(fmtScore(n,2));
+}
+function scoreMeterHtml_(label, value, compCode) {
+  var n = Number(value); var max = Number(scoreMaxForLabel(label, compCode));
+  if (!isFinite(n) || !isFinite(max) || max <= 0) return '';
+  var pct = Math.max(0, Math.min(100, (n / max) * 100));
+  return '<div class="score-meter" aria-hidden="true"><span class="score-meter-fill" style="width:' + pct.toFixed(1) + '%"></span></div>';
+}
+function publicLabel(k) {
+  if (isCommentLabel(k)) return commentPublicLabel(k);
+  var c = String(k || '').replace(/\s/g,'');
+  var map = [
+    [/^테크니컬총점$|TechnicalTotal/i,'테크니컬 평가항목 점수'],
+    [/^센서리총점$|SensoryTotal/i,'센서리 평가항목 점수'],
+    [/^창작메뉴총점$|CreativeTotal/i,'창작메뉴 평가항목 점수'],
+    [/^총평가반영점수$|OfficialTotal|FinalReflected/i,'총평가 반영점수'],
+    [/^감점전합산$|SubtotalBeforePenalty/i,'감점 전 합산'],
+    [/패턴종류|PatternType/i,'패턴 종류'],
+    [/리프수감점|LeafPenalty/i,'리프 수 감점'],
+    [/시간감점|TimePenalty/i,'시간 감점'],
+    [/리프수|LeafCount/i,'리프 수'],
+    [/종합코멘트|OverallComment|GeneralComment|Comment/i,'Overall Comment(종합 코멘트)'],
+    [/DesignCompletion|디자인완성도/i,'Design Completion(디자인 완성도)'],
+    [/Position.*Symmetry|위치.*대칭|대칭/i,'Position & Symmetry(위치와 대칭)'],
+    [/PatternCompletion|패턴완성도/i,'Pattern Completion(패턴 완성도)'],
+    [/PatternBalance|패턴균형|PatternSymmetry.*Balance|대칭.*균형/i,'Pattern Symmetry & Balance(대칭과 균형)'],
+    [/SurfaceQuality|표면품질|표면/i,'Surface Quality(표면 품질)'],
+    [/Position|Proportion|위치|비율/i,'Position & Proportion(위치와 비율)'],
+    [/LineClarity|PatternDefinition|선명도/i,'Pattern Definition(패턴 선명도)'],
+    [/ThemeExpression|주제표현/i,'Theme Expression(주제 표현력)'],
+    [/Workflow|TechnicalExecution|작업수행/i,'Technical Execution(작업 수행 완성도)'],
+    [/Cleanliness|청결/i,'Cleanliness(청결)'],
+    [/Signature.*Taste.*Design|Signature.*맛.*설계/i,'Signature Taste & Design(맛과 설계) ×2'],
+    [/Signature.*CleanCup|Signature.*클린컵/i,'Signature Clean Cup(클린컵)'],
+    [/Signature.*Mouthfeel|Signature.*마우스필|Signature.*질감/i,'Signature Mouthfeel(마우스필)'],
+    [/Signature.*Flavor|Signature.*플레이버/i,'Signature Flavor(플레이버)'],
+    [/Espresso.*Taste.*Design|Espresso.*맛.*설계/i,'Espresso Taste & Design(맛과 설계) ×2'],
+    [/Espresso.*CleanCup|Espresso.*클린컵/i,'Espresso Clean Cup(클린컵)'],
+    [/Espresso.*Mouthfeel|Espresso.*마우스필|Espresso.*질감/i,'Espresso Mouthfeel(마우스필)'],
+    [/Espresso.*Flavor|Espresso.*플레이버/i,'Espresso Flavor(플레이버)'],
+    [/Machine.*Equipment|머신.*기물|기물.*운용/i,'Machine & Equipment Professionalism(머신 및 기물 운용 전문성)'],
+    [/TasteBalance|맛.*균형|맛의균형/i,'Taste Balance(맛의 균형)'],
+    [/Presentation|프레젠/i,'Presentation(프레젠테이션)'],
+    [/FlavorAccuracy|플레이버일치/i,'Flavor Accuracy(플레이버 일치성)'],
+    [/TextureAccuracy|촉감일치/i,'Texture Accuracy(촉감 일치성)'],
+    [/AromaAccuracy|아로마정확/i,'Aroma Accuracy(아로마 정확성)'],
+    [/SignatureExplanation|설명.*준비/i,'Signature Explanation(설명과 준비성)'],
+    [/SignatureCreativity|창조성/i,'Signature Creativity(창조성)'],
+    [/Professionalism|전문성|독창성/i,'Professionalism(전문성)'],
+    [/CreativeForm|형태.*용이/i,'Creative Form & Usability(형태와 용이성)'],
+    [/CreativeFlavor|창작향미/i,'Creative Flavor(창작 향미)'],
+    [/CreativeBalance/i,'Creative Balance(창작 균형)'],
+    [/CreativeMouthfeel/i,'Creative Mouthfeel(창작 질감)'],
+    [/SignatureTechnicalPre-Service|Signature.*시연전/i,'Signature Technical Pre-Service Station(창작음료 시연 전 작업대)'],
+    [/SignatureTechnicalServiceStation|Signature.*시연중/i,'Signature Technical Service Station(창작음료 시연 중 작업대)'],
+    [/SignatureTechnicalIngredientUse|부재료.*적절/i,'Signature Technical Ingredient Use(부재료 사용의 적절함)'],
+    [/SignatureTechnicalPost-Service|Signature.*시연후/i,'Signature Technical Post-Service Station(창작음료 시연 후 작업대)'],
+    [/Pre-Service|PreService|시연전/i,'Pre-Service Station(시연 전 작업대)'],
+    [/Post-Service|PostService|시연후/i,'Post-Service Station(시연 후 작업대)'],
+    [/ServiceStation|시연중/i,'Service Station(시연 중 작업대)'],
+    [/CleanCup|클린컵/i,'Clean Cup(클린컵)'],
+    [/Aftertaste|피니시|에프터/i,'Aftertaste(애프터테이스트)'],
+    [/Mouthfeel|마우스필|질감|촉감/i,'Mouthfeel(질감)'],
+    [/Sweetness|스윗니스|스윗니스|단맛/i,'Sweetness(스윗니스)'],
+    [/Acidity|산미/i,'Acidity(산미)'],
+    [/Aroma|아로마/i,'Aroma(아로마)'],
+    [/Flavor|플레이버|향미/i,'Flavor(플레이버)'],
+    [/Body|바디/i,'Body(바디)'],
+    [/Overall|오버롤|주관/i,'Overall(주관적 종합평가)'],
+    [/Balance|균형/i,'Balance(균형)']
+  ];
+  for (var i=0;i<map.length;i++) if (map[i][0].test(c)) return normalizeKclLabelText(map[i][1]);
+  return normalizeKclLabelText(k);
+}
+function publicIntensityLabel(k) {
+  var base = String(k || '').replace(/강도|Intensity|지속성|Persistence|범위/g, '');
+  var label = publicLabel(base);
+  if (/지속성|Persistence/i.test(k)) return label + ' 지속성';
+  if (/범위/i.test(k)) return label + ' 범위';
+  return label + ' 강도';
+}
+function publicIntensityText(value) {
+  var labels = {1:'매우 약함',2:'약함',3:'약간 약함',4:'중간',5:'약간 강함',6:'강함',7:'매우 강함'};
+  var n = parseInt(value, 10);
+  return labels[n] || '-';
+}
+function normalizeKcacRoundForDisplay_(competition, round) {
+  if (String(competition || '').toUpperCase() !== 'KCAC') return String(round || '');
+  return /결선|본선|본\/?결선|final|main/i.test(String(round || '')) ? '결선' : '예선';
+}
+function renderResult(res) {
+  _lastResult = res;
+  var info = res.playerInfo;
+  var comp = '';
+  for (var i = 0; i < _configs.length; i++) {
+    if (_configs[i].code === res.competition) { comp = _configs[i].name; break; }
+  }
+  var isKtcc = String(res.competition || '').toUpperCase() === 'KTCC';
+  var displayName = isKtcc ? (info.teamName || info.name || '') : info.name;
+  document.getElementById('res-name').textContent = displayName;
+  var subInfo = '';
+  if (isKtcc) {
+    subInfo = (info.teamNo ? ('팀번호 ' + info.teamNo) : '') + (info.maskedPhone ? ((info.teamNo ? ' · ' : '') + '인증 연락처 ' + info.maskedPhone) : '');
+  } else {
+    subInfo = (info.affiliation || '') + (info.maskedPhone ? ' · ' + info.maskedPhone : '');
+  }
+  document.getElementById('res-affil').textContent = subInfo;
+  document.getElementById('res-comp').textContent = comp;
+  document.getElementById('result-logo').innerHTML = logoImg_(res.competition, 'result-logo');
+
+  var body = document.getElementById('res-body');
+  body.innerHTML = '';
+
+  var scores = res.scores || [];
+  var resultPanel = document.getElementById('pResult');
+  if (resultPanel) {
+    resultPanel.setAttribute('data-score-count', String(scores.length));
+    resultPanel.classList.toggle('compact-debrief-print', scores.length <= 5);
+    resultPanel.classList.toggle('extended-debrief-print', scores.length > 5);
+  }
+  document.getElementById('btn-pdf').style.display = scores.length ? 'block' : 'none';
+  var pdfNoteEl = document.getElementById('pdf-note'); if (pdfNoteEl) pdfNoteEl.style.display = scores.length ? 'block' : 'none';
+  if (scores.length === 0) {
+    body.innerHTML = '<div class="no-score">아직 공개된 검수 완료 평가가 없습니다.<br>운영팀 검수 상태와 선수 등록 정보를 확인해주세요.</div>';
+    return;
+  }
+
+  var rankBox = buildRankBox(res);
+  var introBox = buildReportIntro(res, scores);
+  if (introBox) body.appendChild(introBox);
+  if (rankBox) body.appendChild(rankBox);
+
+  var rounds = {};
+  scores.forEach(function(s) {
+    var displayRound = normalizeKcacRoundForDisplay_(res.competition, s.round);
+    s.round = displayRound;
+    s['라운드'] = displayRound;
+    if (!rounds[displayRound]) rounds[displayRound] = [];
+    rounds[displayRound].push(s);
+  });
+  var isIkrcDebrief = String(res.competition || '').toUpperCase() === 'IKRC';
+  var ikrcRankByRound = {};
+  if (isIkrcDebrief) {
+    (res.rankInfos || (res.rankInfo ? [res.rankInfo] : [])).forEach(function(r){
+      if (r && r.round) ikrcRankByRound[r.round] = r;
+    });
+    Object.keys(rounds).forEach(function(round){
+      var rank = ikrcRankByRound[round];
+      var fallbackAvg = ikrcLocalRoundAverage_(rounds[round]);
+      rounds[round].forEach(function(s){
+        if (s.__ikrcRoundAvgScore == null || s.__ikrcRoundAvgScore === '') {
+          s.__ikrcRoundAvgScore = rank && rank.avgScore != null ? rank.avgScore : fallbackAvg;
+        }
+        if (s.__ikrcRoundFinalScore == null || s.__ikrcRoundFinalScore === '') {
+          s.__ikrcRoundFinalScore = rank && rank.rankingScore != null ? rank.rankingScore : s.__ikrcRoundAvgScore;
+        }
+      });
+    });
+  }
+
+  var order = String(res.competition || '').toUpperCase() === 'KCAC' ? ['예선', '결선'] : ['예선', '본선', '결선'];
+  Object.keys(rounds).forEach(function(r){ if (order.indexOf(r) < 0) order.push(r); });
+  order.forEach(function(round) {
+    if (!rounds[round]) return;
+    var list = rounds[round];
+    var section = document.createElement('div');
+    section.className = 'round-section';
+    var rtitle = document.createElement('div');
+    rtitle.className = 'round-title';
+    var badgeClass = round.indexOf('결선') > -1 ? 'badge-결선' : 'badge-예선';
+    rtitle.innerHTML = '<span class="round-badge ' + badgeClass + '">' + round + '</span>';
+    section.appendChild(rtitle);
+    if (isIkrcDebrief) {
+      var avgBox = buildIkrcRoundAverageBox_(round, list, ikrcRankByRound[round]);
+      if (avgBox) section.appendChild(avgBox);
+    }
+
+    list.forEach(function(s) {
+      var card = buildScoreCard(s, res.competition);
+      section.appendChild(card);
+    });
+    body.appendChild(section);
+  });
+}
+
+function ikrcLocalRoundAverage_(list) {
+  var vals = (list || []).map(function(s){ return Number(s['총점'] || s['최종점수']); }).filter(function(n){ return !isNaN(n); });
+  if (!vals.length) return 0;
+  var sum = vals.reduce(function(a,b){ return a + b; }, 0);
+  return Math.round((sum / vals.length) * 100 + 1e-8) / 100;
+}
+
+function buildIkrcRoundAverageBox_(round, list, rank) {
+  list = list || [];
+  rank = rank || {};
+  var avg = rank.avgScore != null ? Number(rank.avgScore) : ikrcLocalRoundAverage_(list);
+  if (isNaN(avg)) avg = 0;
+  var finalScore = rank.rankingScore != null ? Number(rank.rankingScore) : avg;
+  if (isNaN(finalScore)) finalScore = avg;
+  var judgeCount = rank.judgeCount || list.length || 0;
+  var box = document.createElement('div');
+  box.className = 'avg-box';
+  box.innerHTML =
+    '<div class="avg-title">IKRC 심사위원 평균</div>' +
+    '<div class="avg-total">' + fmtScore(avg, 2) + '</div>' +
+    '<div class="avg-sub">' + escHtml(round || '-') + ' · 센서리 평균 (' + judgeCount + '명)' + (finalScore !== avg ? ' · 최종 ' + fmtScore(finalScore, 2) : '') + '</div>';
+  return box;
+}
+
+
+
+function buildReportIntro(res, scores) {
+  var code = String(res && res.competition || '').toUpperCase();
+  var count = (scores || []).length;
+  var rounds = Array.from(new Set((scores || []).map(function(s){ return normalizeKcacRoundForDisplay_(code, s.round || s['라운드'] || ''); }).filter(Boolean)));
+  var box = document.createElement('div');
+  box.className = 'report-intro';
+  box.innerHTML = '<div class="intro-title">공식 검수 완료 평가 결과</div>' +
+    '<div class="intro-text">이 리포트는 운영팀 검수를 완료한 공식 평가 항목만 기준으로 표시됩니다.' +
+    (count ? ' 공개 항목 ' + count + '건' : '') + (rounds.length ? ' · 라운드 ' + rounds.join(', ') : '') + '</div>';
+  return box;
+}
+
+function buildRankBox(res) {
+  var ranks = res.rankInfos || [];
+  if (!ranks.length && res.rankInfo) ranks = [res.rankInfo];
+  if (!ranks.length) return null;
+  var main = ranks[0];
+  var isIkrc = String(res.competition || '').toUpperCase() === 'IKRC';
+  var isKcr = String(res.competition || '').toUpperCase() === 'KCR';
+  var isMob = String(res.competition || '').toUpperCase() === 'MOB';
+  var box = document.createElement('div');
+  box.className = 'rank-box';
+  if (isKcr || isMob) {
+    var order = {'예선':1, '본선':2, '결선':3};
+    ranks = ranks.slice().sort(function(a,b){
+      return (order[a.round] || 99) - (order[b.round] || 99);
+    });
+    var html = '';
+    ranks.forEach(function(r){
+      var round = r.round || (isMob ? 'MOB' : 'KCR');
+      var rankText = r.rank ? (r.totalInRound ? (r.rank + ' / ' + r.totalInRound) : String(r.rank)) : '-';
+      var score = r.totalScore != null ? r.totalScore : (r.rankingScore != null ? r.rankingScore : (r.avgScore || 0));
+      html += '<div class="cell"><small>' + escHtml(round + ' 순위') + '</small><b>' + escHtml(rankText) + '</b></div>';
+      html += '<div class="cell"><small>' + escHtml(round + ' 총점') + '</small><b>' + escHtml(fmtScore(score, 2)) + '</b></div>';
+    });
+    box.innerHTML = html + '<div class="tie-rule">동점 기준: ' + escHtml(main.tieBreakRule || (isMob ? '총점 → 센서리 → 테크니컬 → 경기시간' : '총점 → Sweetness → Overall → 재심사')) + '</div>';
+    return box;
+  }
+  var rankFullText = main.rank ? (main.totalInRound ? (main.rank + ' / ' + main.totalInRound) : String(main.rank)) : '-';
+  var scoreCells = isIkrc
+    ? '<div class="cell"><small>센서리 평균</small><b>' + escHtml(fmtScore(main.avgScore || 0, 2)) + '</b></div>' +
+      '<div class="cell"><small>최종 점수</small><b>' + escHtml(fmtScore(main.rankingScore != null ? main.rankingScore : (main.avgScore || 0), 2)) + '</b></div>'
+    : '<div class="cell"><small>공식 점수</small><b>' + escHtml(fmtScore(main.totalScore || 0, 2)) + '</b></div>';
+  box.innerHTML =
+    '<div class="cell"><small>순위</small><b>' + escHtml(rankFullText) + '</b></div>' +
+    scoreCells +
+    '<div class="tie-rule">동점 기준: ' + escHtml(main.tieBreakRule || '-') + (main.tieBreakSummary ? '<br>세부 기준: ' + escHtml(main.tieBreakSummary) : '') + '</div>';
+  return box;
+}
+
+function buildKcrAvgBox(list, avg) {
+  var keys = ['플레이버','피니시','산미','바디','스윗니스','오버롤'];
+  var avgs = {};
+  keys.forEach(function(k) {
+    var vals = list.map(function(s){ return Number(s[k]) || 0; });
+    avgs[k] = vals.reduce(function(a,b){ return a+b; }, 0) / vals.length;
+  });
+  var box = document.createElement('div');
+  box.className = 'avg-box';
+  box.innerHTML =
+    '<div class="avg-title">심사위원 평균</div>' +
+    '<div class="avg-total">' + avg.toFixed(2) + '</div>' +
+    '<div class="avg-sub">총점 평균 (' + list.length + '명)</div>' +
+    '<div class="avg-grid">' +
+      keys.map(function(k) {
+        var sw = (k === '스윗니스') ? ' <span style="font-size:10px;color:#999">×2</span>' : '';
+        return '<div class="avg-item">' +
+          '<div class="avg-item-label">' + k + '</div>' +
+          '<div class="avg-item-val">' + avgs[k].toFixed(2) + sw + '</div>' +
+        '</div>';
+      }).join('') +
+    '</div>';
+  return box;
+}
+
+
+function smartTagPublicLabel_(k) {
+  var s = String(k || '');
+  if (/Aftertaste/i.test(s)) return 'Aftertaste';
+  if (/Acidity/i.test(s)) return 'Acidity';
+  if (/Body/i.test(s)) return 'Body';
+  if (/Sweetness/i.test(s)) return 'Sweetness';
+  if (/Flavor/i.test(s)) return 'Flavor';
+  return publicLabel(s.replace(/스마트\s*태그|스마트태그|Smart\s*Tags?|Tag\s*List|태그/ig, '').trim() || s);
+}
+function normalizePublicTag_(tag) {
+  var s = String(tag == null ? '' : tag).trim().replace(/\s+/g, ' ');
+  if (!s) return '';
+  var compact = s.replace(/\s/g, '');
+  var map = [
+    [/^채소같은$/i, '채소 같은'], [/^과일같은$/i, '과일 같은'], [/^시럽같은$/i, '시럽 같은'],
+    [/^발효된$/i, '발효 계열'], [/^꽃같은$/i, '플로럴'], [/^와인같은$/i, '와이니'],
+    [/^단맛$/i, '단맛'], [/^실키한$/i, '실키한'], [/^크리미한$/i, '크리미한']
+  ];
+  for (var i=0;i<map.length;i++) if (map[i][0].test(compact)) return map[i][1];
+  return s;
+}
+function uniqueList_(arr) {
+  var out = [], seen = {};
+  (arr || []).forEach(function(v){
+    var s = normalizePublicTag_(v);
+    var key = s.replace(/\s/g, '').toLowerCase();
+    if (!s || seen[key]) return;
+    seen[key] = 1; out.push(s);
+  });
+  return out;
+}
+function splitPublicTokens_(raw) {
+  return String(raw == null ? '' : raw).split(/[,;\n\/]+/).map(function(x){ return x.trim(); }).filter(Boolean);
+}
+function isNumericOnlyText_(text) {
+  var parts = splitPublicTokens_(text);
+  if (!parts.length) return false;
+  return parts.every(function(x){ return /^-?\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?$/.test(x); });
+}
+function cleanupPublicCommentText_(label, raw, scoreObj, compCode) {
+  var text = String(raw == null ? '' : raw).replace(/\r/g, '\n').trim();
+  if (!text) return '';
+  if (isNumericOnlyText_(text)) return '';
+  text = text.replace(/\s+/g, ' ')
+    .replace(/채소같은/g, '채소 같은')
+    .replace(/과일같은/g, '과일 같은')
+    .replace(/시럽같은/g, '시럽 같은')
+    .replace(/발효된/g, '발효 계열')
+    .replace(/질감로/g, '질감으로')
+    .replace(/보완 지점로/g, '보완 지점으로')
+    .replace(/가 첫인상을/g, '이 첫인상을')
+    .replace(/\.\.+/g, '.')
+    .replace(/,\s*,/g, ',')
+    .trim();
+  var labelText = String(label || '');
+  var comp = String(compCode || '').toUpperCase();
+  var looksOldAuto = /점수 흐름은|검수 관점에서 이 컵은|항목은 강점으로|보완 지점|1번 컵은/.test(text);
+  if ((comp === 'KCR' || comp === 'IKRC') && /Overall|종합|총평|General/i.test(labelText)) {
+    if (looksOldAuto || text.length > 220 || (text.match(/검수 관점/g) || []).length > 1) {
+      var generated = buildProfessionalOverallComment_(scoreObj, compCode);
+      if (generated) return generated;
+    }
+  }
+  return text;
+}
+
+function scoreVal_(s, keys) {
+  for (var i=0;i<keys.length;i++) {
+    var v = s && s[keys[i]];
+    if (v == null || String(v).trim() === '') continue;
+    var n = Number(String(v).replace(/[^0-9.\-]/g,''));
+    if (!isNaN(n)) return n;
+  }
+  return null;
+}
+function tagValsFor_(s, names) {
+  var out = [];
+  Object.keys(s || {}).forEach(function(k){
+    if (!isSmartTagLabel(k)) return;
+    var key = String(k || '').toLowerCase();
+    var ok = names.some(function(n){ return key.indexOf(n.toLowerCase()) > -1; });
+    if (!ok) return;
+    out = out.concat(splitPublicTokens_(s[k]));
+  });
+  return uniqueList_(out).slice(0, 4);
+}
+function joinNatural_(arr, fallback) {
+  arr = uniqueList_(arr).filter(Boolean);
+  if (!arr.length) return fallback || '향미';
+  if (arr.length === 1) return arr[0];
+  if (arr.length === 2) return arr[0] + '와 ' + arr[1];
+  return arr.slice(0, -1).join(', ') + ', 그리고 ' + arr[arr.length - 1];
+}
+function buildProfessionalOverallComment_(s, compCode) {
+  compCode = String(compCode || '').toUpperCase();
+  if (compCode !== 'KCR' && compCode !== 'IKRC') return '';
+  var flavorTags = tagValsFor_(s, ['Flavor','플레이버']);
+  var afterTags = tagValsFor_(s, ['Aftertaste','애프터','에프터']);
+  var acidityTags = tagValsFor_(s, ['Acidity','산미']);
+  var bodyTags = tagValsFor_(s, ['Body','Mouthfeel','바디','마우스필']);
+  var sweetTags = tagValsFor_(s, ['Sweetness','스윗니스','단맛']);
+  var flavor = scoreVal_(s, ['Flavor(플레이버)','Flavor(플레이버) ×3','Flavor']);
+  var after = scoreVal_(s, ['Aftertaste(애프터테이스트)','Aftertaste(에프터테이스트)','Aftertaste']);
+  var acidity = scoreVal_(s, ['Acidity(산미)','Acidity']);
+  var body = scoreVal_(s, ['Body(바디)','Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','Body','Mouthfeel']);
+  var sweet = scoreVal_(s, ['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness']);
+  var overall = scoreVal_(s, ['Overall(주관적 종합평가)','Overall']);
+  var values = [flavor, after, acidity, body, sweet, overall].filter(function(n){ return n != null; });
+  if (!values.length && !flavorTags.length && !afterTags.length && !bodyTags.length) return '';
+  var avg = values.length ? values.reduce(function(a,b){ return a+b; }, 0) / values.length : 3;
+  var tone = avg >= 4 ? '향미 표현이 선명하게 드러난 컵' : (avg >= 3 ? '기본 향미 구조가 확인되는 컵' : '향미 구조의 불안정성이 함께 확인된 컵');
+  var high = [['플레이버', flavor], ['여운', after], ['산미', acidity], ['질감', body], ['단맛', sweet], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return b[1]-a[1]; })[0];
+  var low = [['플레이버', flavor], ['여운', after], ['산미', acidity], ['질감', body], ['단맛', sweet], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return a[1]-b[1]; })[0];
+  var first = '이 컵은 ' + joinNatural_(flavorTags, '주요 향미') + ' 인상을 중심으로 첫 향미가 형성됩니다.';
+  var second = '';
+  if (afterTags.length || acidityTags.length || bodyTags.length || sweetTags.length) {
+    second = ' 이후 ' + joinNatural_(afterTags, '여운') + '의 흐름, ' + joinNatural_(acidityTags, '산미') + '의 구조, ' + joinNatural_(bodyTags, '질감') + '이 연결되며, ' + joinNatural_(sweetTags, '단맛') + '이 전체 균형에 반영됩니다.';
+  } else {
+    second = ' 향미, 산미, 질감, 단맛의 연결성이 전체 평가의 주요 판단 기준으로 작용했습니다.';
+  }
+  var third = ' 전체적으로 ' + tone + '으로 평가됩니다';
+  if (high && low && high[0] !== low[0]) third += '. 항목별 인상에서는 ' + high[0] + '이 가장 두드러졌고, ' + low[0] + '에서 상대적으로 낮은 평가가 확인되었습니다.';
+  else third += '. 항목 간 편차는 크지 않고, 전체 인상은 각 세부 항목의 균형 속에서 형성되었습니다.';
+  return first + second + third;
+}
+function buildSmartTagBox(s, compCode) {
+  var rows = [];
+  Object.keys(s || {}).forEach(function(k){
+    if (!isSmartTagLabel(k)) return;
+    var raw = s[k];
+    if (raw == null || String(raw).trim() === '') return;
+    var chips = uniqueList_(splitPublicTokens_(raw)).slice(0, 6);
+    if (!chips.length) return;
+    rows.push({ label: smartTagPublicLabel_(k), chips: chips });
+  });
+  if (!rows.length) return null;
+  var box = document.createElement('div');
+  box.className = 'smart-tag-box';
+  box.innerHTML = '<div class="smart-tag-title">평가 키워드</div>' + rows.map(function(r){
+    return '<div class="smart-tag-row"><div class="smart-tag-label">' + escHtml(r.label) + '</div><div class="smart-tag-chips">' +
+      r.chips.map(function(c){ return '<span class="smart-tag-chip">' + escHtml(c) + '</span>'; }).join('') +
+      '</div></div>';
+  }).join('');
+  return box;
+}
+
+function buildCommentBox(s, compCode) {
+  var rows = [];
+  var comp = String(compCode || '').toUpperCase();
+  Object.keys(s || {}).forEach(function(k){
+    var raw = s[k];
+    if (raw == null || String(raw).trim() === '') return;
+    if (isSmartTagLabel(k)) return;
+    var isComment = isCommentLabel(k);
+    var isTextAttr = !isComment && isCuppingAttributeLabel(k) && !valueLooksNumericScore(raw);
+    if (!isComment && !isTextAttr) return;
+    var label = commentPublicLabel(k);
+    // KCR/IKRC 선수 공개 리포트는 종합 코멘트 중심으로 정리한다.
+    // 예전 데이터에서 개별 항목 코멘트 칸에 숫자가 들어간 경우가 있어 공개 화면에서는 숨긴다.
+    if ((comp === 'KCR' || comp === 'IKRC') && !isOverallReportCommentLabel_(label)) return;
+    var text = cleanupPublicCommentText_(label, raw, s, compCode);
+    if (!text || /^(0|0\.0+|0\s*\/\s*\d+)$/i.test(text)) return;
+    var key = label.replace(/\s/g,'').toLowerCase();
+    if (rows.some(function(r){ return r.key === key; })) return;
+    rows.push({ key:key, label: label, text: text });
+  });
+  if ((comp === 'KCR' || comp === 'IKRC') && !rows.some(function(r){ return isOverallReportCommentLabel_(r.label); })) {
+    var generated = buildProfessionalOverallComment_(s, compCode);
+    if (generated) rows.push({ key:'overallcomment', label:'Overall Comment(종합 코멘트)', text:generated });
+  }
+  if (!rows.length) return null;
+  var box = document.createElement('div');
+  box.className = 'comment-box';
+  box.innerHTML = rows.map(function(r){
+    return '<div class="comment-label">' + escHtml(r.label) + '</div><div class="comment-text">' + escHtml(r.text) + '</div>';
+  }).join('');
+  return box;
+}
+
+function displayJudgeLabel(name, role, fallback) {
+  var n = String(name == null ? '' : name).trim();
+  var r = String(role == null ? '' : role).trim();
+  var compact = r.replace(/\s/g, '').toLowerCase();
+  var label = '';
+  if (/관리자|admin/.test(compact)) label = '관리자';
+  else if (/운영|스텝|부팀장|staff|operator/.test(compact)) label = '운영진';
+  else if (/팀장|teamlead|leader/.test(compact)) label = '팀장';
+  else if (/헤드/.test(compact) || /head/.test(compact)) label = (/테크|기술|technical|tech/.test(compact) ? '테크니컬 헤드 심사위원' : '센서리 헤드 심사위원');
+  else if (/테크|기술|technical|tech/.test(compact)) label = '테크니컬 심사위원';
+  else if (/센서|감각|sensory|sensor|심사|judge/.test(compact)) label = '센서리 심사위원';
+  else label = '심사위원';
+
+  if (!n || n === '-' || n === '심사위원') return fallback || label;
+  if (/심사위원|운영진|팀장|관리자/.test(n)) return n;
+  return label + ' ' + n;
+}
+
+
+function mobPublicRoleFlags_(s) {
+  s = s || {};
+  var role = String(s['역할'] || s['Role'] || s['JudgeRole'] || '').toLowerCase();
+  var onlyTech = /테크|기술|technical|tech/i.test(role) && !/센서|감각|sensory|sensor/i.test(role);
+  var onlySens = /센서|감각|sensory|sensor/i.test(role) && !/테크|기술|technical|tech/i.test(role);
+  return { onlyTech: onlyTech, onlySens: onlySens };
+}
+function mobPublicHeaderGroup_(h) {
+  h = String(h || '');
+  if (!h) return '';
+  if (/시간감점|경기시간|시연시간|종료시간|Time\s*Penalty|Elapsed/i.test(h)) return 'time';
+  if (/^테크니컬\s*총점$|^Technical\s*Total$/i.test(h)) return 'derivedTech';
+  if (/^센서리\s*총점$|^Sensory\s*Total$/i.test(h)) return 'derivedSensory';
+  if (/^창작메뉴\s*총점$|^Creative\s*Total$/i.test(h)) return 'derivedCreative';
+  if (/^감점\s*전\s*합산$|^총평가\s*반영점수$/i.test(h)) return 'derivedOfficial';
+  if (/Signature\s*Technical|창작음료\s*시연|Ingredient\s*Use|부재료\s*사용/i.test(h)) return 'sigTech';
+  if (/Pre-Service\s*Station|Service\s*Station|Post-Service\s*Station|시연\s*전\s*작업대|시연\s*중\s*작업대|시연\s*후\s*작업대/i.test(h)) return 'tech';
+  if (/Creative\s*Form|Creative\s*Flavor|Creative\s*Balance|Creative\s*Mouthfeel|Creative\s*Professionalism|창작\s*향미|전문성과\s*독창성|형태와\s*용이성/i.test(h)) return 'creative';
+  if (/Sweetness|Flavor|Balance|Clean\s*Cup|Mouthfeel|Professionalism|스윗니스|플레이버|균형|클린컵|질감|시연\s*전문성/i.test(h)) return 'sensory';
+  return '';
+}
+function mobPublicHeaderAppliesToRole_(h, s) {
+  var group = mobPublicHeaderGroup_(h);
+  if (!group) return true;
+  var flags = mobPublicRoleFlags_(s || {});
+  var menu = String((s && (s['메뉴'] || s['Menu'] || s._col8)) || '브루잉');
+  var creative = /창작|signature|creative/i.test(menu);
+  if (!creative && (group === 'sigTech' || group === 'creative' || group === 'derivedCreative')) return false;
+  if (flags.onlyTech) return group === 'tech' || group === 'sigTech' || group === 'time' || group === 'derivedTech' || group === 'derivedOfficial';
+  if (flags.onlySens) return group === 'sensory' || group === 'creative' || group === 'derivedSensory' || group === 'derivedCreative' || group === 'derivedOfficial';
+  return true;
+}
+function buildMobBreakdownGrid_(s, compCode) {
+  var flags = mobPublicRoleFlags_(s || {});
+  var items = [];
+  function hasVal(k){ return s[k] !== undefined && s[k] !== null && String(s[k]).trim() !== ''; }
+  if (flags.onlyTech || hasVal('테크니컬 총점')) items.push({label:'테크니컬 평가항목 점수', value: hasVal('테크니컬 총점') ? s['테크니컬 총점'] : ''});
+  if (!flags.onlyTech && hasVal('센서리 총점')) items.push({label:'센서리 평가항목 점수', value:s['센서리 총점']});
+  if (!flags.onlyTech && hasVal('창작메뉴 총점')) items.push({label:'창작메뉴 평가항목 점수', value:s['창작메뉴 총점']});
+  if (flags.onlyTech || hasVal('시간감점')) { var mobTp = Number(s['시간감점']) || 0; items.push({label:'시간 감점', value: mobTp ? ('-' + fmtScore(mobTp,0)) : '0'}); }
+  var official = hasVal('총평가 반영점수') ? s['총평가 반영점수'] : (s['총점'] || s['최종점수'] || 0);
+  items.push({label: flags.onlySens ? '센서리 반영점수' : '총평가 반영점수', value:official});
+  var grid = document.createElement('div');
+  grid.className = 'score-grid mob-breakdown-grid';
+  items.forEach(function(item){
+    if (item.value === '' || item.value == null) return;
+    var div = document.createElement('div');
+    div.className = 'score-item';
+    div.innerHTML = '<div class="score-item-label">' + escHtml(item.label) + '</div><div class="score-item-val">' + scoreDisplay(item.label, item.value, compCode) + '</div>';
+    grid.appendChild(div);
+  });
+  return grid;
+}
+
+function buildScoreCard(s, compCode) {
+  var card = document.createElement('div');
+  card.className = 'score-card';
+  var isKtcc = String(compCode || '').toUpperCase() === 'KTCC';
+  var isIkrc = String(compCode || '').toUpperCase() === 'IKRC';
+  var judge = s['심사위원명'] || s['심사위원'] || s['Judge'] || '-';
+  var judgeLabel = displayJudgeLabel(judge, s['역할'] || s['Role'] || s['JudgeRole'] || '', '심사위원');
+  var teamTitle = (s['팀번호'] ? ('Team ' + s['팀번호']) : '') + (s['팀명'] ? ((s['팀번호'] ? ' · ' : '') + s['팀명']) : '');
+  var roleRaw = String(s['역할'] || s['Role'] || s['JudgeRole'] || '').toLowerCase();
+  var publicTitle = '공식 평가 결과';
+  if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
+  else if (/sensory|센서|감각|심사/.test(roleRaw)) publicTitle = '센서리 평가 결과';
+  if (isKtcc) publicTitle = teamTitle || '팀 평가 결과';
+  var statusRaw = String(s['검수상태'] || s.status || '').replace(/\s/g, '');
+  var statusBadge = (statusRaw === '검수완료' || statusRaw === '수정완료') ? '<span class="reviewed-pill">' + escHtml(statusRaw) + '</span>' : '';
+  var isMob = String(compCode || '').toUpperCase() === 'MOB';
+  var totalValue = isIkrc && s.__ikrcRoundAvgScore != null && s.__ikrcRoundAvgScore !== '' ? s.__ikrcRoundAvgScore : (isMob && s['총평가 반영점수'] != null && String(s['총평가 반영점수']) !== '' ? s['총평가 반영점수'] : (s['총점'] || s['최종점수'] || 0));
+  var total = fmtScore(totalValue, 2);
+  var totalHtml = isIkrc && s.__ikrcRoundAvgScore != null && s.__ikrcRoundAvgScore !== ''
+    ? '<span style="display:block;font-size:10px;color:#888;line-height:1;margin-bottom:4px;letter-spacing:.06em">평균</span>' + escHtml(total)
+    : escHtml(total);
+  card.innerHTML =
+    '<div class="score-card-header">' +
+      '<div class="judge-name">' + escHtml(publicTitle) + statusBadge + '</div>' +
+      '<div class="total-score">' + totalHtml + '</div>' +
+    '</div>';
+  var kcacMeta = compCode === 'KCAC' ? buildKcacCupMetaLine(s) : '';
+  if (kcacMeta) card.insertAdjacentHTML('beforeend', '<div class="score-card-meta">' + escHtml(kcacMeta) + '</div>');
+  if (compCode === 'MOB') {
+    card.appendChild(buildMobBreakdownGrid_(s, compCode));
+    card.appendChild(buildGenericScoreGrid(s, compCode));
+  }
+  else if (compCode === 'KCR' || compCode === 'IKRC') card.appendChild(buildCuppingScoreGrid(s, compCode));
+  else if (compCode === 'KCAC') card.appendChild(buildKcacScoreGrid(s, compCode));
+  else card.appendChild(buildGenericScoreGrid(s, compCode));
+  var smartTagBox = buildSmartTagBox(s, compCode);
+  if (smartTagBox) card.appendChild(smartTagBox);
+
+  var commentBox = buildCommentBox(s, compCode);
+  if (commentBox) card.appendChild(commentBox);
+  return card;
+}
+
+
+function isPublicScoreKey(k) {
+  if (!k) return false;
+  if (isSmartTagLabel(k)) return false;
+  if (isCommentLabel(k)) return false;
+  if (/번호|연락처|전화|휴대폰|제출시간|라운드|심사위원|팀|역할|모드|상태|검수|서명|프로세스|우유종류|우유명|우유제품|제품명|잔용도|컵용도|평가용도|가이드URL|패턴종류|리프수|Leaf|PatternType|주제|선택\s*컵|지정국가|농장|발효방식|평가구분/i.test(k)) return false;
+  if (/코멘트|메모|Comment|총평|종합/i.test(k)) return false;
+  return /점|총점|최종점수|감점|정답|가산|보너스|종료시간|경기시간|소요시간|OX|O\/X|Y\/N|완성도|균형|품질|비율|선명도|표현|수행|청결|맛|질감|프레젠|Flavor|Sweetness|Acidity|Body|Mouthfeel|Clean|Aroma|Overall|Balance|Tactile/i.test(k);
+}
+function buildGenericScoreGrid(s, compCode) {
+  var grid = document.createElement('div');
+  grid.className = 'score-grid';
+  Object.keys(s || {}).forEach(function(k){
+    if (String(compCode || '').toUpperCase() === 'MOB') {
+      if (!mobPublicHeaderAppliesToRole_(k, s)) return;
+      if (/^테크니컬\s*총점$|^센서리\s*총점$|^창작메뉴\s*총점$|^감점\s*전\s*합산$|^총평가\s*반영점수$|^시간감점$/i.test(String(k || ''))) return;
+    }
+    if (!isPublicScoreKey(k) || k === '총점' || k === '최종점수') return;
+    var v = s[k];
+    if (v == null || String(v) === '') return;
+    var div = document.createElement('div');
+    div.className = 'score-item';
+    div.innerHTML = '<div class="score-item-label">' + escHtml(publicLabel(k)) + '</div><div class="score-item-val">' + scoreDisplay(k, v, compCode) + '</div>' + scoreMeterHtml_(k, v, compCode);
+    grid.appendChild(div);
+  });
+  return grid;
+}
+function firstFilledScoreValue(s, keys) {
+  var zeroFallback = '';
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (s[k] == null || String(s[k]) === '') continue;
+    var n = Number(s[k]);
+    if (isNaN(n)) continue;
+    if (zeroFallback === '') zeroFallback = s[k];
+    if (Math.abs(n) > 1e-9) return s[k];
+  }
+  return zeroFallback;
+}
+
+function buildCuppingScoreGrid(s, compCode) {
+  var isIkrc = String(compCode || '').toUpperCase() === 'IKRC';
+  var items = isIkrc ? [
+    { label:'Flavor(플레이버) ×3', keys:['Flavor(플레이버) ×3','Flavor(플레이버)','플레이버','Flavor'] },
+    { label:'Clean Cup(클린컵) ×2', keys:['Clean Cup(클린컵) ×2','Clean Cup(클린컵)','클린컵','Clean Cup'] },
+    { label:'Sweetness(스윗니스) ×2', keys:['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','스윗니스','Sweetness'] },
+    { label:'Acidity(산미)', keys:['Acidity(산미)','산미','Acidity'] },
+    { label:'Mouthfeel(마우스필) ×2', keys:['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','마우스필','Mouthfeel'] }
+  ] : [
+    { label:'Flavor(플레이버)', keys:['Flavor(플레이버)','플레이버','Flavor'] },
+    { label:'Aftertaste(애프터테이스트)', keys:['Aftertaste(애프터테이스트)','Aftertaste(에프터테이스트)','피니시','Aftertaste'] },
+    { label:'Acidity(산미)', keys:['Acidity(산미)','산미','Acidity'] },
+    { label:'Body(바디)', keys:['Body(바디)','바디','Body'] },
+    { label:'Sweetness(스윗니스)', keys:['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','스윗니스','Sweetness'] },
+    { label:'Overall(주관적 종합평가)', keys:['Overall(주관적 종합평가)','오버롤','Overall'] }
+  ];
+  var grid = document.createElement('div');
+  grid.className = 'score-grid';
+  items.forEach(function(item){
+    var value = firstFilledScoreValue(s, item.keys);
+    if (value === '') return;
+    var div = document.createElement('div');
+    div.className = 'score-item';
+    div.innerHTML = '<div class="score-item-label">' + escHtml(item.label) + '</div><div class="score-item-val">' + scoreDisplay(item.label, value, compCode) + '</div>' + scoreMeterHtml_(item.label, value, compCode);
+    grid.appendChild(div);
+  });
+  Object.keys(s || {}).forEach(function(k){
+    if (!/강도|Intensity|지속성|Persistence/i.test(k) || s[k] == null || String(s[k]) === '') return;
+    var div = document.createElement('div');
+    div.className = 'score-item';
+    div.innerHTML = '<div class="score-item-label">' + escHtml(publicIntensityLabel(k)) + '</div><div class="score-item-val">' + escHtml(publicIntensityText(s[k])) + '</div>';
+    grid.appendChild(div);
+  });
+  if (!grid.children.length) return buildGenericScoreGrid(s, compCode);
+  return grid;
+}
+
+function buildKcrScoreGrid(s, compCode) {
+  var items = [
+    { label:'Flavor(플레이버)', val:firstFilledScoreValue(s, ['Flavor(플레이버)','플레이버','Flavor']), sub:s['Flavor 강도'] || s['플레이버강도'] },
+    { label:'Aftertaste(애프터테이스트)', val:firstFilledScoreValue(s, ['Aftertaste(애프터테이스트)','피니시','Aftertaste']), sub:s['Aftertaste 지속성'] || s['피니시지속성'] },
+    { label:'Acidity(산미)', val:firstFilledScoreValue(s, ['Acidity(산미)','산미','Acidity']), sub:s['Acidity 강도'] || s['산미강도'] },
+    { label:'Body(바디)', val:firstFilledScoreValue(s, ['Body(바디)','바디','Body']), sub:s['Body 강도'] || s['바디강도'] },
+    { label:'Sweetness(스윗니스)', val:firstFilledScoreValue(s, ['Sweetness(스윗니스)','스윗니스','Sweetness']), sub:s['Sweetness 강도'] || s['스윗니스강도'] },
+    { label:'Overall(주관적 종합평가)', val:firstFilledScoreValue(s, ['Overall(주관적 종합평가)','오버롤','Overall']), sub:'' }
+  ];
+  var grid = document.createElement('div');
+  grid.className = 'score-grid';
+  items.forEach(function(item) {
+    if (item.val === '') return;
+    var v = Number(item.val);
+    var div = document.createElement('div');
+    div.className = 'score-item';
+    div.innerHTML =
+      '<div class="score-item-label">' + item.label + '</div>' +
+      '<div class="score-item-val">' + scoreDisplay(item.label, v, compCode) + '</div>' + scoreMeterHtml_(item.label, v, compCode) +
+      (item.sub ? '<div class="score-item-sub">강도 ' + escHtml(publicIntensityText(item.sub)) + '</div>' : '');
+    grid.appendChild(div);
+  });
+  return grid;
+}
+
+function buildKcacCupMetaLine(s) {
+  var purpose = s['잔용도'] || s['컵용도'] || s['평가용도'] || '';
+  if (purpose === '센서리평가') purpose = '센서리용아트';
+  var milk = s['우유종류'] || s['사용우유'] || '';
+  var product = s['우유명'] || s['우유제품'] || s['제품명'] || '';
+  var patternType = s['패턴종류'] || s['Pattern Type'] || '';
+  var leafCount = s['리프수'] || s['Leaf Count'] || '';
+  var milkText = milk ? milk + (product ? '(' + product + ')' : '') : product;
+  var leafText = leafCount !== '' ? ('리프 ' + leafCount + '개') : '';
+  return [purpose, milkText, patternType, leafText].filter(function(v){ return v != null && String(v).trim() !== ''; }).join(' · ');
+}
+
+function firstKcacVal_(s, keys) {
+  for (var i = 0; i < keys.length; i++) {
+    var v = s[keys[i]];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return '';
+}
+
+function buildKcacScoreGrid(s, compCode) {
+  var isFinale = /본선|결선/.test(String(s['라운드'] || ''));
+  var qualItems = [
+    { label:'Pattern Completion(패턴 완성도)', val:firstKcacVal_(s, ['패턴완성도','예선 Pattern Completion(패턴 완성도)']) },
+    { label:'Pattern Symmetry & Balance(대칭과 균형)', val:firstKcacVal_(s, ['패턴균형','대칭과균형','예선 Pattern Symmetry & Balance(대칭과 균형)','예선 Pattern Balance(패턴 균형)']) },
+    { label:'Surface Quality(표면 품질)', val:firstKcacVal_(s, ['표면품질','예선 Surface Quality(표면 품질)']) },
+    { label:'Position & Proportion(위치와 비율)', val:firstKcacVal_(s, ['위치비율','예선 Position & Proportion(위치와 비율)']) },
+    { label:'Pattern Definition(패턴 선명도)', val:firstKcacVal_(s, ['패턴선명도','예선 Pattern Definition(패턴 선명도)']) }
+  ];
+  var finalItems = [
+    { label:'Theme Expression(주제 표현력)', val:firstKcacVal_(s, ['주제표현력','결선 Theme Expression(주제 표현력)']) },
+    { label:'Technical Execution(작업 수행 완성도)', val:firstKcacVal_(s, ['작업수행완성도','작업수행','결선 Technical Execution(작업 수행 완성도)']) },
+    { label:'Cleanliness(청결)', val:firstKcacVal_(s, ['청결','결선 Cleanliness(청결)']) },
+    { label:'Taste Balance(맛의 균형)', val:firstKcacVal_(s, ['맛의균형','맛균형','결선 Taste Balance(맛의 균형)']) },
+    { label:'Mouthfeel(질감)', val:firstKcacVal_(s, ['질감','결선 Mouthfeel(질감)']) },
+    { label:'Presentation(프레젠테이션)', val:firstKcacVal_(s, ['프레젠테이션','결선 Presentation(프레젠테이션)']) },
+    { label:'Surface Quality(표면 품질)', val:firstKcacVal_(s, ['표면품질','결선 Surface Quality(표면 품질)']) },
+    { label:'Position & Symmetry(위치와 대칭)', val:firstKcacVal_(s, ['위치대칭','위치비율','결선 Position & Symmetry(위치와 대칭)']) },
+    { label:'Design Completion(디자인 완성도)', val:firstKcacVal_(s, ['디자인완성도','패턴완성도','결선 Design Completion(디자인 완성도)']) }
+  ];
+  var items = (isFinale ? finalItems : qualItems).filter(function(item){
+    return item.val !== undefined && item.val !== null && String(item.val).trim() !== '';
+  });
+  var grid = document.createElement('div');
+  grid.className = 'score-grid';
+  items.forEach(function(item) {
+    var v = Number(item.val || 0);
+    var div = document.createElement('div');
+    div.className = 'score-item';
+    div.innerHTML =
+      '<div class="score-item-label">' + item.label + '</div>' +
+      '<div class="score-item-val">' + scoreDisplay(item.label, v, compCode) + '</div>' + scoreMeterHtml_(item.label, v, compCode);
+    grid.appendChild(div);
+  });
+  var timePenalty = Number(s['시간감점'] || 0);
+  var leafPenalty = Number(s['리프수감점'] || 0);
+  var penalty = Number(s['감점'] || 0);
+  if (!penalty && (timePenalty || leafPenalty)) penalty = timePenalty >= 999 ? 999 : timePenalty + leafPenalty;
+  var final_ = Number(s['최종점수'] || 0);
+  if (!grid.children.length) return buildGenericScoreGrid(s, compCode);
+  if (penalty > 0) {
+    var penDiv = document.createElement('div');
+    penDiv.style.cssText = 'margin-top:8px;font-size:13px;color:#ff9800;text-align:right';
+    if (penalty >= 999) penDiv.textContent = '실격 처리 → 최종 ' + fmtScore(final_,2) + '점';
+    else penDiv.textContent = '감점 -' + fmtScore(penalty,2) + '점' + (timePenalty || leafPenalty ? ' (시간 -' + fmtScore(timePenalty,0) + ' / 리프 -' + fmtScore(leafPenalty,0) + ')' : '') + ' → 최종 ' + fmtScore(final_,2) + '점';
+    grid.appendChild(penDiv);
+  }
+  return grid;
+}
+
+function downloadBase64Pdf(res) {
+  if (!res || !res.base64) { toast('PDF 데이터가 없습니다', true); return; }
+  var binary = atob(res.base64);
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  var blob = new Blob([bytes], { type: res.mimeType || 'application/pdf' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = res.fileName || 'KCL_debriefing.pdf';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
+function downloadDebriefPdf() {
+  if (!_lastResult || !(_lastResult.scores || []).length) { toast('다운로드할 디브리핑 자료가 없습니다', true); return; }
+  var info = _lastResult.playerInfo || {};
+  var comp = String(_lastResult.competition || 'KCL');
+  var name = String(info.teamName || info.name || 'Debriefing').replace(/[\\/:*?"<>|]/g, '_');
+  var oldTitle = document.title;
+  document.title = comp + '_' + name + '_Debriefing';
+  toast('PDF 저장용 화면을 준비했습니다. 인쇄 창에서 PDF로 저장을 선택하세요.');
+  setTimeout(function(){
+    window.print();
+    setTimeout(function(){ document.title = oldTitle; }, 800);
+  }, 160);
+}
+
+function backToStep1() {
+  clearInterval(_timerInterval);
+  document.getElementById('inp-otp').value = '';
+  showPanel('pStep1');
+}
+
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/\n/g,'<br>');
+}
+
+// iOS 키보드 가림 방지
+document.addEventListener('focusin', function(e) {
+  var t = e.target;
+  if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'SELECT' && t.tagName !== 'TEXTAREA')) return;
+  setTimeout(function() {
+    try { t.scrollIntoView({ block:'center', behavior:'smooth' }); } catch(e2) {}
+  }, 320);
+});
+
+// iOS Safari 더블탭 줌 방지
+var _lastTap = 0;
+document.addEventListener('touchend', function(e) {
+  var now = Date.now();
+  if (now - _lastTap <= 350) {
+    var t = e.target;
+    if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'SELECT' && t.tagName !== 'TEXTAREA')) {
+      e.preventDefault();
+    }
+  }
+  _lastTap = now;
+}, { passive: false });
+</script>
+</body>
+</html>
