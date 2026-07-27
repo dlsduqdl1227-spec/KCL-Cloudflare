@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>KCAC 컵 가이드 카메라</title>
+  <style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d10;
+      --panel: #14181f;
+      --panel2: #1b212b;
+      --line: #303846;
+      --text: #f4f7fb;
+      --muted: #9aa6b5;
+      --accent: #5ee0b7;
+      --warn: #ffcd66;
+      --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family:'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;
+      overflow: hidden;
+    }
+    button, input, select {
+      font: inherit;
+      color: inherit;
+    }
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #07110e; }
+    button.warn { background: var(--warn); border-color: var(--warn); color: #171005; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    input[type="file"] { display: none; }
+    select, input[type="range"] { width: 100%; }
+    select {
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      border-radius: 8px;
+      padding: 9px 10px;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      height: 100%;
+      min-height: 0;
+    }
+    .stage {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,.04) 1px, transparent 1px),
+        #080a0d;
+      background-size: 28px 28px;
+    }
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    video {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+      pointer-events: none;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      z-index: 2;
+    }
+    .side {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    .brand small { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .status {
+      border: 1px solid var(--line);
+      background: #0f1319;
+      border-radius: 8px;
+      color: var(--muted);
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-bottom: 14px;
+    }
+    .section {
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+      margin-top: 14px;
+    }
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0;
+    }
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .media-grid { grid-template-columns: 1fr 1fr; }
+    .media-grid button { min-height: 42px; }
+    .control { margin-bottom: 12px; }
+    .control label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .thumbs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .thumb {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #050608;
+      aspect-ratio: 1 / 1;
+      padding: 0;
+    }
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.82);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      padding: 20px;
+    }
+    .modal.on { display: flex; }
+    .modal img {
+      max-width: 100%;
+      max-height: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #000;
+    }
+    .modal button {
+      position: fixed;
+      right: 18px;
+      top: 18px;
+    }
+    @media (max-width: 860px) {
+      body { overflow: auto; }
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(420px, 68vh) auto;
+        min-height: 100%;
+      }
+      .side { border-left: 0; border-top: 1px solid var(--line); }
+      .toolbar { left: 10px; top: 10px; }
+    }
+  
+/* Stage9 final layout guard */
+html,body{width:100%;overflow-x:hidden}.wrap,.panel,.card{max-width:100%;min-width:0}button,input,select{min-width:0}.btn,.btn-outline{white-space:normal}.top{flex-wrap:wrap}@media(max-width:560px){body{padding-left:12px;padding-right:12px}.grid,.grid2{grid-template-columns:1fr!important}}
+
+
+
+/* STAGE10 mobile safe-area / no-overlap guard */
+@media (max-width:640px){
+  html,body{overflow-x:hidden!important;width:100%!important;}
+  .global-nav-buttons{top:max(8px,calc(var(--safe-top) + 6px))!important;left:max(8px,var(--safe-left))!important;right:max(8px,var(--safe-right))!important;max-width:calc(100vw - 16px)!important;flex-wrap:wrap!important;gap:6px!important;z-index:1500!important;}
+  .global-nav-btn{min-height:32px!important;padding:0 11px!important;font-size:12px!important;max-width:45vw!important;}
+  .panel{padding-top:max(68px,calc(var(--safe-top) + 62px))!important;padding-left:max(14px,var(--safe-left))!important;padding-right:max(14px,var(--safe-right))!important;overflow-x:hidden!important;}
+  h1,h2,h3,.title,.subtitle,.result-title,.result-sub,.hero-title{word-break:keep-all!important;overflow-wrap:anywhere!important;}
+  .btn,.btn-outline,.btn-danger,button{white-space:normal!important;}
+}
+@media print{.global-nav-buttons{display:none!important}}
+
+
+/* STAGE44 scroll lock override */
+html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavior-y:auto!important;-webkit-overflow-scrolling:touch!important;}
+@media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}}
+</style>
+</head>
+<body>
+  <main class="app">
+    <section class="stage" id="stage">
+      <canvas id="canvas"></canvas>
+      <video id="video" autoplay playsinline muted></video>
+      <div class="empty" id="empty">촬영하기 또는 앨범에서 사진을 불러오세요.</div>
+      <div class="toolbar">
+        <button class="primary" id="captureBtn" disabled>촬영</button>
+        <button id="fitBtn">맞춤 전환</button>
+        <button id="resetBtn">가이드 초기화</button>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="brand">
+        <div>
+          <h1>KCAC 컵 가이드</h1>
+          <small>촬영 사진 또는 앨범 사진 위에 평가용 기준선을 맞춰 저장합니다.</small>
+        </div>
+      </div>
+
+      <div class="status" id="status">대기 중</div>
+
+      <div class="grid2 media-grid">
+        <button id="cameraBtn" class="primary">촬영하기</button>
+        <button id="uploadPhotoBtn">앨범에서 사진 불러오기</button>
+        <button id="stopCameraBtn" disabled>카메라 중지</button>
+      </div>
+      <input id="fileInputPhoto" type="file" accept="image/*">
+
+      <div class="section">
+        <h2>가이드</h2>
+        <div class="control">
+          <label for="guideSelect">표시 방식 <span id="guideLabel">원형</span></label>
+          <select id="guideSelect">
+            <option value="circle">원형</option>
+            <option value="cross">중앙 십자</option>
+            <option value="thirds">3분할</option>
+            <option value="diagonal">대각선</option>
+            <option value="concentric">동심원</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="radiusRange">원 크기 <span id="radiusLabel">32%</span></label>
+          <input id="radiusRange" type="range" min="12" max="48" value="32">
+        </div>
+        <div class="control">
+          <label for="opacityRange">가이드 진하기 <span id="opacityLabel">85%</span></label>
+          <input id="opacityRange" type="range" min="20" max="100" value="85">
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>저장</h2>
+        <div class="grid2">
+          <button class="warn" id="saveBtn">스냅샷</button>
+          <button id="downloadBtn">다운로드</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>스냅샷</h2>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="modal" id="modal">
+    <button id="modalClose">닫기</button>
+    <img id="modalImg" alt="저장된 가이드 이미지">
+  </div>
+
+  <script>
+    (function() {
+      var canvas = document.getElementById('canvas');
+      var ctx = canvas.getContext('2d');
+      var stage = document.getElementById('stage');
+      var video = document.getElementById('video');
+      var empty = document.getElementById('empty');
+      var statusEl = document.getElementById('status');
+      var fileInputPhoto = document.getElementById('fileInputPhoto');
+      var captureBtn = document.getElementById('captureBtn');
+      var cameraBtn = document.getElementById('cameraBtn');
+      var uploadPhotoBtn = document.getElementById('uploadPhotoBtn');
+      var stopCameraBtn = document.getElementById('stopCameraBtn');
+      var fitBtn = document.getElementById('fitBtn');
+      var resetBtn = document.getElementById('resetBtn');
+      var saveBtn = document.getElementById('saveBtn');
+      var downloadBtn = document.getElementById('downloadBtn');
+      var guideSelect = document.getElementById('guideSelect');
+      var radiusRange = document.getElementById('radiusRange');
+      var opacityRange = document.getElementById('opacityRange');
+      var guideLabel = document.getElementById('guideLabel');
+      var radiusLabel = document.getElementById('radiusLabel');
+      var opacityLabel = document.getElementById('opacityLabel');
+      var thumbs = document.getElementById('thumbs');
+      var modal = document.getElementById('modal');
+      var modalImg = document.getElementById('modalImg');
+      var modalClose = document.getElementById('modalClose');
+
+      var state = {
+        image: null,
+        stream: null,
+        fit: 'contain',
+        guide: 'circle',
+        opacity: 0.85,
+        circle: { x: 0.5, y: 0.5, r: 0.32 },
+        dragging: false,
+        snapshots: []
+      };
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function resizeCanvas() {
+        var rect = stage.getBoundingClientRect();
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.round(rect.width * dpr));
+        canvas.height = Math.max(1, Math.round(rect.height * dpr));
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw();
+      }
+
+      function imageRect(img) {
+        var w = canvas.clientWidth;
+        var h = canvas.clientHeight;
+        var iw = img.videoWidth || img.naturalWidth || img.width || 1;
+        var ih = img.videoHeight || img.naturalHeight || img.height || 1;
+        var scale = state.fit === 'cover' ? Math.max(w / iw, h / ih) : Math.min(w / iw, h / ih);
+        var dw = iw * scale;
+        var dh = ih * scale;
+        return { x: (w - dw) / 2, y: (h - dh) / 2, w: dw, h: dh };
+      }
+
+      function drawGuide(rect) {
+        var alpha = state.opacity;
+        var cx = rect.x + rect.w * state.circle.x;
+        var cy = rect.y + rect.h * state.circle.y;
+        var r = Math.min(rect.w, rect.h) * state.circle.r;
+        var colors = {
+          circle: '#ffffff',
+          cross: '#00e5ff',
+          thirds: '#ffd600',
+          diagonal: '#ff4cd8',
+          concentric: '#ffffff'
+        };
+        function strokePath(drawPath, color, width, dash) {
+          ctx.save();
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.setLineDash(dash || []);
+          ctx.globalAlpha = Math.max(0.2, alpha * 0.58);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = width + 2.1;
+          drawPath(); ctx.stroke();
+          ctx.globalAlpha = alpha;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          drawPath(); ctx.stroke();
+          ctx.restore();
+        }
+        var lw = 1.6;
+
+        if (state.guide === 'circle' || state.guide === 'concentric') {
+          strokePath(function(){ ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); }, colors.circle, lw, []);
+        }
+        if (state.guide === 'concentric') {
+          strokePath(function(){ ctx.beginPath(); ctx.arc(cx, cy, r * 0.66, 0, Math.PI * 2); }, colors.concentric, lw, [6, 7]);
+          strokePath(function(){ ctx.beginPath(); ctx.arc(cx, cy, r * 0.33, 0, Math.PI * 2); }, colors.concentric, lw, [6, 7]);
+        }
+        if (state.guide === 'cross' || state.guide === 'circle' || state.guide === 'concentric') {
+          var c = state.guide === 'cross' ? colors.cross : '#00e5ff';
+          strokePath(function(){ ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); }, c, lw, []);
+          strokePath(function(){ ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); }, c, lw, []);
+        }
+        if (state.guide === 'thirds') {
+          for (var i = 1; i <= 2; i++) {
+            strokePath(function(i){ return function(){ ctx.beginPath(); ctx.moveTo(rect.x + rect.w * i / 3, rect.y); ctx.lineTo(rect.x + rect.w * i / 3, rect.y + rect.h); }; }(i), colors.thirds, lw, [5, 6]);
+            strokePath(function(i){ return function(){ ctx.beginPath(); ctx.moveTo(rect.x, rect.y + rect.h * i / 3); ctx.lineTo(rect.x + rect.w, rect.y + rect.h * i / 3); }; }(i), colors.thirds, lw, [5, 6]);
+          }
+        }
+        if (state.guide === 'diagonal') {
+          strokePath(function(){ ctx.beginPath(); ctx.moveTo(rect.x, rect.y); ctx.lineTo(rect.x + rect.w, rect.y + rect.h); }, colors.diagonal, lw, [9, 8]);
+          strokePath(function(){ ctx.beginPath(); ctx.moveTo(rect.x + rect.w, rect.y); ctx.lineTo(rect.x, rect.y + rect.h); }, colors.diagonal, lw, [9, 8]);
+        }
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4.4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = '#111111';
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+        var source = state.stream ? video : state.image;
+        empty.style.display = source ? 'none' : 'flex';
+        if (!source) return;
+        var rect = imageRect(source);
+        ctx.drawImage(source, rect.x, rect.y, rect.w, rect.h);
+        drawGuide(rect);
+        if (state.stream) requestAnimationFrame(draw);
+      }
+
+      function setImageFromDataUrl(url) {
+        var img = new Image();
+        img.onload = function() {
+          state.image = img;
+          stopCamera(false);
+          setStatus('사진 불러오기 완료');
+          draw();
+        };
+        img.onerror = function() { setStatus('사진을 불러오지 못했습니다.'); };
+        img.src = url;
+      }
+
+      function stopCamera(updateStatus) {
+        if (state.stream) {
+          state.stream.getTracks().forEach(function(track) { track.stop(); });
+        }
+        state.stream = null;
+        video.srcObject = null;
+        captureBtn.disabled = true;
+        stopCameraBtn.disabled = true;
+        cameraBtn.disabled = false;
+        cameraBtn.textContent = '촬영하기';
+        if (updateStatus) setStatus('카메라 중지');
+      }
+
+      function exportDataUrl() {
+        var out = document.createElement('canvas');
+        out.width = canvas.width;
+        out.height = canvas.height;
+        var octx = out.getContext('2d');
+        octx.drawImage(canvas, 0, 0);
+        return out.toDataURL('image/png');
+      }
+
+      function addSnapshot(url) {
+        state.snapshots.unshift(url);
+        state.snapshots = state.snapshots.slice(0, 12);
+        thumbs.innerHTML = '';
+        state.snapshots.forEach(function(src) {
+          var btn = document.createElement('button');
+          btn.className = 'thumb';
+          btn.innerHTML = '<img alt="스냅샷" src="' + src + '">';
+          btn.onclick = function() {
+            modalImg.src = src;
+            modal.classList.add('on');
+          };
+          thumbs.appendChild(btn);
+        });
+      }
+
+      function pointerToCircle(evt) {
+        var rect = imageRect(state.stream ? video : state.image);
+        var x = (evt.clientX - rect.x) / rect.w;
+        var y = (evt.clientY - rect.y) / rect.h;
+        state.circle.x = Math.max(0, Math.min(1, x));
+        state.circle.y = Math.max(0, Math.min(1, y));
+        draw();
+      }
+
+      function loadPhotoFile(file) {
+        if (!file) return;
+        if (!file.type || file.type.indexOf('image/') !== 0) { setStatus('이미지 파일만 선택할 수 있습니다.'); return; }
+        var reader = new FileReader();
+        reader.onload = function(e) { setImageFromDataUrl(e.target.result); };
+        reader.onerror = function() { setStatus('사진 파일 읽기 실패'); };
+        reader.readAsDataURL(file);
+      }
+
+      // 영상 파일은 용량 안정성을 위해 지원하지 않습니다.
+
+      uploadPhotoBtn.onclick = function() { fileInputPhoto.value = ''; fileInputPhoto.click(); };
+      fileInputPhoto.onchange = function() { loadPhotoFile(fileInputPhoto.files && fileInputPhoto.files[0]); fileInputPhoto.value = ''; };
+
+      cameraBtn.onclick = function() {
+        if (state.stream) return;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setStatus('이 브라우저는 카메라를 지원하지 않습니다.');
+          return;
+        }
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+          .then(function(stream) {
+            state.stream = stream;
+            state.image = null;
+            video.srcObject = stream;
+            cameraBtn.disabled = true;
+            stopCameraBtn.disabled = false;
+            captureBtn.disabled = false;
+            setStatus('카메라 실행 중입니다. 상단의 촬영 버튼으로 현재 화면을 저장하세요.');
+            draw();
+          })
+          .catch(function(err) {
+            setStatus('카메라 권한을 확인해주세요: ' + (err && err.message ? err.message : err));
+          });
+      };
+
+      stopCameraBtn.onclick = function() { stopCamera(true); draw(); };
+
+      captureBtn.onclick = function() {
+        if (!state.stream) return;
+        var url = exportDataUrl();
+        addSnapshot(url);
+        setImageFromDataUrl(url);
+      };
+
+      saveBtn.onclick = function() {
+        if (!state.image && !state.stream) { setStatus('저장할 이미지가 없습니다.'); return; }
+        addSnapshot(exportDataUrl());
+        setStatus('스냅샷 저장 완료');
+      };
+
+      downloadBtn.onclick = function() {
+        if (!state.image && !state.stream) { setStatus('다운로드할 이미지가 없습니다.'); return; }
+        var a = document.createElement('a');
+        a.href = exportDataUrl();
+        a.download = 'KCAC_guide_' + new Date().toISOString().replace(/[:.]/g, '-') + '.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      };
+
+      fitBtn.onclick = function() {
+        state.fit = state.fit === 'contain' ? 'cover' : 'contain';
+        fitBtn.textContent = state.fit === 'contain' ? '맞춤 전환' : '채움 전환';
+        draw();
+      };
+
+      resetBtn.onclick = function() {
+        state.circle = { x: 0.5, y: 0.5, r: 0.32 };
+        radiusRange.value = '32';
+        radiusLabel.textContent = '32%';
+        draw();
+      };
+
+      guideSelect.onchange = function() {
+        state.guide = guideSelect.value;
+        guideLabel.textContent = guideSelect.options[guideSelect.selectedIndex].text;
+        draw();
+      };
+      radiusRange.oninput = function() {
+        state.circle.r = Number(radiusRange.value) / 100;
+        radiusLabel.textContent = radiusRange.value + '%';
+        draw();
+      };
+      opacityRange.oninput = function() {
+        state.opacity = Number(opacityRange.value) / 100;
+        opacityLabel.textContent = opacityRange.value + '%';
+        draw();
+      };
+
+      canvas.addEventListener('pointerdown', function(evt) {
+        if (!state.image && !state.stream) return;
+        state.dragging = true;
+        canvas.setPointerCapture(evt.pointerId);
+        pointerToCircle(evt);
+      });
+      canvas.addEventListener('pointermove', function(evt) {
+        if (!state.dragging) return;
+        pointerToCircle(evt);
+      });
+      canvas.addEventListener('pointerup', function(evt) {
+        state.dragging = false;
+        try { canvas.releasePointerCapture(evt.pointerId); } catch (e) {}
+      });
+      canvas.addEventListener('pointercancel', function() { state.dragging = false; });
+
+      modalClose.onclick = function() { modal.classList.remove('on'); };
+      modal.onclick = function(evt) {
+        if (evt.target === modal) modal.classList.remove('on');
+      };
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+    })();
+  </script>
+</body>
+</html>
