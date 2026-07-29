@@ -167,6 +167,11 @@ function normalizeAccountType_(type, role='') {
 function normalizePersonName_(v) {
   return safeStr(v).replace(/\s+/g, '').toLowerCase();
 }
+function operatorIdentityKey_(name, phone) {
+  const normalizedName = normalizePersonName_(name);
+  const normalizedPhone = normalizePhone(phone);
+  return normalizedName && normalizedPhone ? normalizedName + '|' + normalizedPhone : '';
+}
 function operatorIsAdminRow_(row) {
   if (!row) return false;
   // ALL is a competition-access scope, not an account-type promotion.
@@ -634,6 +639,11 @@ async function judgeLogin(env, name, phone, request = null) {
 async function issueSession(env, kind, payload, seconds) {
   const token = uuid();
   const expires = new Date(Date.now() + seconds * 1000).toISOString();
+  try {
+    await env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(nowIso()).run();
+  } catch (e) {
+    // 세션 발급 자체는 만료 데이터 정리 실패와 무관하게 계속 진행합니다.
+  }
   await env.DB.prepare('INSERT INTO sessions (token, kind, payload_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
     .bind(token, kind, JSON.stringify(payload), expires, nowIso()).run();
   return token;
@@ -766,25 +776,30 @@ function payloadIdentityCandidates_(payload) {
   return {
     names: [payload.judgeName, payload.name, payload.operatorName, judge.name],
     phones: [payload.judgePhone, payload.phone, payload.operatorPhone, judge.phone],
-    tokens: [payload.judgeToken, payload.actorToken, payload.operatorToken, payload.token, judge.judgeToken, judge.actorToken]
+    tokens: [payload.judgeToken, payload.actorToken, payload.operatorToken, payload.token, judge.judgeToken, judge.actorToken],
+    identityKeys: [payload.operatorIdentityKey, payload.judgeIdentityKey, judge.operatorIdentityKey, judge.identityKey]
   };
 }
 function scoreOwnedByActor_(scoreRow, actor) {
   if (!scoreRow || !actor) return false;
   const actorName = normalizePersonName_(actor.name || actor.judgeName || actor.operatorName || '');
   const actorPhone = normalizePhone(actor.phone || '');
+  const actorIdentityKey = operatorIdentityKey_(actor.name || actor.judgeName || actor.operatorName || '', actorPhone);
   const actorToken = safeStr(actor.judgeToken || actor.actorToken || actor.operatorToken || '');
   const payload = parseJson(scoreRow.payload_json, {});
   const ids = payloadIdentityCandidates_(payload);
   const names = [scoreRow.judge_name].concat(ids.names || []).map(v => normalizePersonName_(v)).filter(Boolean);
   const phones = (ids.phones || []).map(v => normalizePhone(v)).filter(Boolean);
   const tokens = (ids.tokens || []).map(v => safeStr(v)).filter(Boolean);
-  // 제출 payload에 연락처가 남아 있으면 연락처를 우선으로 확인합니다.
+  const identityKeys = (ids.identityKeys || []).map(v => safeStr(v)).filter(Boolean);
+  // Stage107 이후 제출은 인증된 이름+연락처 키를 최우선으로 사용합니다.
+  // 같은 연락처를 공유하는 서로 다른 이름의 계정이 상대 기록을 소유한 것으로 오인하지 않게 합니다.
+  if (identityKeys.length) return !!actorIdentityKey && identityKeys.some(key => key === actorIdentityKey);
+  // 구버전 기록도 저장된 심사위원 이름이 있으면 이름을 먼저 확인합니다.
+  // 이름이 명시된 다른 계정의 기록을 같은 연락처라는 이유만으로 소유 처리하지 않습니다.
   if (actorToken && tokens.some(t => t === actorToken)) return true;
+  if (actorName && names.length) return names.some(n => n === actorName);
   if (actorPhone && phones.some(p => p === actorPhone)) return true;
-  if ((tokens.length || phones.length) && (actorToken || actorPhone)) return false;
-  // 기존 제출 데이터에는 연락처가 저장되지 않는 경우가 있어 심사위원명으로도 소유권을 확인합니다.
-  if (actorName && names.some(n => n === actorName)) return true;
   return false;
 }
 function reviewManageScopeRequested_(actorArg) {
@@ -1377,6 +1392,9 @@ function participantRoundNumber_(r, code, round) {
   const normalized = normalizeRoundForCompetition_(code, round || '예선');
   if (normalized === '예선') return r.prelim_cup_no || r.cup_no || r.sample_no || r.team_no || r.unique_no || String(r.id);
   if (normalized === '본선') return r.main_cup_no || r.prelim_cup_no || r.cup_no || r.sample_no || r.team_no || r.unique_no || String(r.id);
+  // 블라인드 출품/샘플 대회는 결선 코드가 없을 때 예선 코드를 재사용하면 다른 선수에게
+  // 점수가 연결될 수 있으므로 결선 배정을 명시적으로 완료해야 합니다.
+  if (code === 'KCR' || code === 'IKRC') return r.final_cup_no || '';
   return r.final_cup_no || r.main_cup_no || r.prelim_cup_no || r.cup_no || r.sample_no || r.team_no || r.unique_no || String(r.id);
 }
 function participantKey_(v) {
@@ -2416,6 +2434,24 @@ function validateIkrcStationSubmission_(payload, cfg) {
   return { ok:true, station, expectedUnits };
 }
 
+function utf8ByteLength_(value) {
+  return new TextEncoder().encode(String(value == null ? '' : value)).length;
+}
+function kcrProcessKeyFromPayload_(payload) {
+  payload = payload && typeof payload === 'object' ? payload : {};
+  const row = Array.isArray(payload.rows) && payload.rows[0] && typeof payload.rows[0] === 'object' ? payload.rows[0] : {};
+  const extra = row.extraFields && typeof row.extraFields === 'object' ? row.extraFields : {};
+  const data = Array.isArray(row.data) ? row.data : [];
+  return safeStr(firstNonEmpty([
+    payload.process,
+    payload.processName,
+    row.process,
+    extra['프로세스'],
+    extra.Process,
+    data[1]
+  ])).replace(/\s+/g, '').toLowerCase();
+}
+
 async function submitScores(env, payload, signature, request = null) {
   const basePayload = payload || {};
   const initial = inferScorePayload(basePayload);
@@ -2424,6 +2460,7 @@ async function submitScores(env, payload, signature, request = null) {
   if (!auth.ok) return auth.res;
   const actorName = safeStr(auth.actor && (auth.actor.name || auth.actor.judgeName || auth.actor.operatorName));
   const actorPhone = normalizePhone(auth.actor && auth.actor.phone);
+  const actorIdentityKey = operatorIdentityKey_(actorName, actorPhone);
   const actorRoleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
   const actorTeamMap = auth.actor && auth.actor.teamMap && typeof auth.actor.teamMap === 'object' ? auth.actor.teamMap : {};
   const actorRole = safeStr(actorRoleMap[initial.code] || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
@@ -2432,6 +2469,9 @@ async function submitScores(env, payload, signature, request = null) {
   const lim = await rateLimit_(env, submitKey, 60, 60);
   if (!lim.ok) return { success: false, message: '제출 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' };
   const rows = Array.isArray(basePayload.rows) ? basePayload.rows : [];
+  if (initial.code === 'KCR' && rows.length > 20) {
+    return { success:false, message:'KCR은 기록 안전을 위해 한 번에 최대 20개 컵까지 제출할 수 있습니다. 범위를 나누어 진행해주세요.' };
+  }
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(initial.code).first();
   const submitRound = safeStr(initial.round || (cfg && cfg.current_round) || '예선');
   if (initial.code === 'IKRC') {
@@ -2455,7 +2495,7 @@ async function submitScores(env, payload, signature, request = null) {
     ? rows.map((row, idx) => Object.assign({}, basePayload, { rows: [row], originalRowCount: rows.length, originalRowIndex: idx + 1 }))
     : [basePayload];
   let inserted = 0, skipped = 0;
-  const ikrcInsertStatements = [];
+  const atomicInsertStatements = [];
   const duplicateCutoff = new Date(Date.now() - 20 * 1000).toISOString();
   for (const rawPayload of payloads) {
     const onePayload = Object.assign({}, rawPayload || {});
@@ -2469,6 +2509,10 @@ async function submitScores(env, payload, signature, request = null) {
       onePayload.judgePhone = actorPhone;
       onePayload.operatorPhone = actorPhone;
     }
+    if (actorIdentityKey) {
+      onePayload.operatorIdentityKey = actorIdentityKey;
+      onePayload.judgeIdentityKey = actorIdentityKey;
+    }
     if (actorRole) {
       onePayload.judgeRole = actorRole;
       onePayload.role = actorRole;
@@ -2479,7 +2523,7 @@ async function submitScores(env, payload, signature, request = null) {
     }
     onePayload.actorType = auth.actor && (auth.actor.type || auth.actor.accountType) || '';
     if (onePayload.judge && typeof onePayload.judge === 'object') {
-      onePayload.judge = Object.assign({}, onePayload.judge, { name: actorName, phone: actorPhone, role: actorRole, teamGroup: actorTeam });
+      onePayload.judge = Object.assign({}, onePayload.judge, { name: actorName, phone: actorPhone, role: actorRole, teamGroup: actorTeam, operatorIdentityKey: actorIdentityKey });
       delete onePayload.judge.judgeToken;
       delete onePayload.judge.actorToken;
       delete onePayload.judge.operatorToken;
@@ -2503,6 +2547,15 @@ async function submitScores(env, payload, signature, request = null) {
     onePayload.currentRound = x.round;
     if (!x.unit) return { success: false, message: '참가자번호/컵번호/샘플번호/팀번호를 찾지 못했습니다. 번호 입력을 확인해주세요.' };
     const payloadJson = JSON.stringify(onePayload || {});
+    const payloadBytes = utf8ByteLength_(payloadJson);
+    if (payloadBytes > 1750000) {
+      return {
+        success:false,
+        message:'평가 데이터가 안전 저장 용량을 초과했습니다. KCAC 사진은 각 잔의 최신 스냅샷 1개만 남긴 뒤 다시 제출해주세요.',
+        payloadTooLarge:true,
+        payloadBytes
+      };
+    }
     if (x.code === 'IKRC') {
       const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
         .bind(x.code, x.round, x.role, x.unit).all();
@@ -2519,12 +2572,34 @@ async function submitScores(env, payload, signature, request = null) {
         };
       }
     }
-    const dup = await env.DB.prepare(`SELECT id FROM scores WHERE competition_code=? AND round=? AND judge_name=? AND unit=? AND payload_json=? AND submitted_at>? LIMIT 1`)
-      .bind(x.code, x.round, x.judgeName, x.unit, payloadJson, duplicateCutoff).first();
-    if (dup && dup.id) { skipped++; continue; }
+    if (x.code === 'KCR') {
+      const processKey = kcrProcessKeyFromPayload_(onePayload);
+      const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
+        .bind(x.code, x.round, x.role, x.unit).all();
+      const submittedAsCalibration = isCalibrationMode_(x.mode) || isHeadRole_(x.role);
+      const existingSameCategory = (existingRows.results || []).find(existing => {
+        const existingPayload = parseJson(existing.payload_json, {});
+        return scoreOwnedByActor_(existing, auth.actor)
+          && (isCalibrationMode_(existing.mode) || isHeadRole_(existing.role)) === submittedAsCalibration
+          && kcrProcessKeyFromPayload_(existingPayload) === processKey;
+      });
+      if (existingSameCategory) {
+        return {
+          success:false,
+          message:`이미 제출된 KCR ${x.unit} 평가입니다. 중복 제출하지 말고 검수 화면에서 수정해주세요.`,
+          duplicateId:existingSameCategory.id
+        };
+      }
+    }
+    if (x.code !== 'KCR' && x.code !== 'IKRC') {
+      const dup = await env.DB.prepare(`SELECT id FROM scores WHERE competition_code=? AND round=? AND judge_name=? AND unit=? AND payload_json=? AND submitted_at>? LIMIT 1`)
+        .bind(x.code, x.round, x.judgeName, x.unit, payloadJson, duplicateCutoff).first();
+      if (dup && dup.id) { skipped++; continue; }
+    }
     if (x.code === 'KBC') {
-      const existingKbc = await env.DB.prepare(`SELECT id FROM scores WHERE competition_code=? AND round=? AND judge_name=? AND role=? AND unit=? LIMIT 1`)
-        .bind(x.code, x.round, x.judgeName, x.role, x.unit).first();
+      const existingKbcRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=?`)
+        .bind(x.code, x.round, x.role, x.unit).all();
+      const existingKbc = (existingKbcRows.results || []).find(row => scoreOwnedByActor_(row, auth.actor));
       if (existingKbc && existingKbc.id) {
         return { success: false, message: '이미 제출된 KBC 평가입니다. 같은 심사위원의 같은 참가자 평가는 검수 화면에서 수정해주세요.', duplicateId: existingKbc.id };
       }
@@ -2533,15 +2608,15 @@ async function submitScores(env, payload, signature, request = null) {
     const insertStatement = env.DB.prepare(`INSERT INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(nowIso(), x.code, x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
-    if (x.code === 'IKRC') ikrcInsertStatements.push(insertStatement);
+    if (x.code === 'IKRC' || x.code === 'KCR') atomicInsertStatements.push(insertStatement);
     else {
       await insertStatement.run();
       inserted++;
     }
   }
-  if (ikrcInsertStatements.length) {
-    await env.DB.batch(ikrcInsertStatements);
-    inserted += ikrcInsertStatements.length;
+  if (atomicInsertStatements.length) {
+    await env.DB.batch(atomicInsertStatements);
+    inserted += atomicInsertStatements.length;
   }
   if (!inserted && skipped) return { success: true, message: '이미 저장된 동일 제출입니다.', inserted: 0, skipped };
   if (!inserted) return { success: false, message: '저장할 평가 데이터가 없습니다.' };
@@ -3341,6 +3416,14 @@ function itemJudgeIdentityKey_(item) {
   item = item || {};
   const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
   const nested = payload.judge && typeof payload.judge === 'object' ? payload.judge : {};
+  const operatorIdentityKey = safeStr(firstNonEmpty([
+    payload.operatorIdentityKey,
+    payload.judgeIdentityKey,
+    nested.operatorIdentityKey,
+    nested.identityKey,
+    item.operatorIdentityKey
+  ]));
+  if (operatorIdentityKey) return 'operator:' + operatorIdentityKey;
   const phone = normalizePhone(firstNonEmpty([payload.judgePhone, payload.operatorPhone, nested.phone, item.judgePhone, item.operatorPhone]));
   if (phone) return 'phone:' + phone;
   const name = safeStr(item['심사위원명'] || item.judgeName || item.judge || item.operatorName || item['운영자명']).replace(/\s+/g, '').toLowerCase();

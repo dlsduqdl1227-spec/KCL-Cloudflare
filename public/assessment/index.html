@@ -1924,15 +1924,15 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     </div>
     <div class="finals-input-section active" id="cupSection_range">
       <div class="finals-range-row">
-        <input type="number" id="cuppingFinalsStart" placeholder="시작 컵 번호" inputmode="numeric">
+        <input type="text" id="cuppingFinalsStart" placeholder="시작 번호 (예: 1, A-1)" inputmode="text" autocomplete="off" maxlength="16">
         <span class="finals-range-sep">~</span>
-        <input type="number" id="cuppingFinalsEnd" placeholder="마지막 컵 번호" inputmode="numeric">
+        <input type="text" id="cuppingFinalsEnd" placeholder="마지막 번호 (예: 20, A-10)" inputmode="text" autocomplete="off" maxlength="16">
       </div>
       <button class="btn-outline" id="cuppingRangeStartBtn" onclick="startCuppingFinalsRange()">평가 시작</button>
     </div>
     <div class="finals-input-section" id="cupSection_single">
       <div class="finals-add-row">
-        <input type="number" id="cuppingFinalsCupInput" placeholder="컵 번호" inputmode="numeric"
+        <input type="text" id="cuppingFinalsCupInput" placeholder="컵 번호 (예: 1, A-1)" inputmode="text" autocomplete="off" maxlength="16"
           onkeydown="if(event.key==='Enter'){addCuppingFinalsCup();event.preventDefault()}">
         <button onclick="addCuppingFinalsCup()">추가</button>
       </div>
@@ -2971,22 +2971,23 @@ function normalizeCupId_(value) {
   var s = String(value == null ? '' : value).trim().toUpperCase();
   if (!s) return '';
   s = s.replace(/[–—_\s]/g, '-').replace(/-+/g, '-');
-  var m = s.match(/^([A-Z])[-]?(\d+)$/);
-  if (m) return m[1] + '-' + String(parseInt(m[2], 10));
-  if (/^\d+$/.test(s)) return String(parseInt(s, 10));
+  var m = s.match(/^([A-Z가-힣][A-Z0-9가-힣]{0,7})-(\d{1,4})$/);
+  if (!m) m = s.match(/^([A-Z가-힣]{1,8})(\d{1,4})$/);
+  if (m) return m[1] + '-' + m[2];
+  if (/^\d{1,4}$/.test(s)) return s;
   return s;
 }
 function cupIdParts_(id) {
   id = normalizeCupId_(id);
-  var m = id.match(/^([A-Z])-(\d+)$/);
-  if (m) return { prefix:m[1], num:parseInt(m[2],10), isNumeric:false };
-  if (/^\d+$/.test(id)) return { prefix:'', num:parseInt(id,10), isNumeric:true };
-  return { prefix:id, num:0, isNumeric:false };
+  var m = id.match(/^([A-Z가-힣][A-Z0-9가-힣]{0,7})-(\d{1,4})$/);
+  if (m) return { prefix:m[1], num:parseInt(m[2],10), width:m[2].length, padded:/^0/.test(m[2]), isNumeric:false };
+  if (/^\d{1,4}$/.test(id)) return { prefix:'', num:parseInt(id,10), width:id.length, padded:/^0/.test(id), isNumeric:true };
+  return { prefix:id, num:0, width:0, padded:false, isNumeric:false };
 }
 function compareCupIds_(a,b) {
   var pa = cupIdParts_(a), pb = cupIdParts_(b);
   if (pa.prefix !== pb.prefix) return pa.prefix < pb.prefix ? -1 : 1;
-  return pa.num - pb.num;
+  return (pa.num - pb.num) || String(a).localeCompare(String(b), 'ko', {numeric:true});
 }
 function escapeJsString_(value) {
   return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -2998,8 +2999,15 @@ function buildCupRange_(startValue, endValue) {
   if (!start || !end) return { success:false, message:'컵 번호를 입력하세요' };
   if (ps.prefix !== pe.prefix) return { success:false, message:'같은 조 안에서만 범위 입력이 가능합니다. 예: A-1 ~ A-10' };
   if (!ps.num || !pe.num || ps.num > pe.num) return { success:false, message:'올바른 컵 범위를 입력하세요' };
+  if (pe.num - ps.num + 1 > 20) return { success:false, message:'한 번에 최대 20개까지 평가할 수 있습니다. 기록 안전을 위해 범위를 나누어 진행해주세요.' };
   var arr = [];
-  for (var i = ps.num; i <= pe.num; i++) arr.push(ps.prefix ? (ps.prefix + '-' + i) : String(i));
+  var width = Math.max(ps.width || 1, pe.width || 1);
+  var keepPadding = !!(ps.padded || pe.padded);
+  for (var i = ps.num; i <= pe.num; i++) {
+    var numberText = String(i);
+    if (keepPadding) numberText = numberText.padStart(width, '0');
+    arr.push(ps.prefix ? (ps.prefix + '-' + numberText) : numberText);
+  }
   return { success:true, cups:arr };
 }
 
@@ -3047,6 +3055,9 @@ var _kcac = {
   isBlindPrelim: false,
   submissionUrl: ''
 };
+var KCAC_PERSISTED_SNAPSHOT_LIMIT = 1;
+var KCAC_FULL_IMAGE_MAX_BYTES = 120 * 1024;
+var KCAC_THUMB_IMAGE_MAX_BYTES = 18 * 1024;
 
 var _sigState = {
   isDrawing: false,
@@ -3156,6 +3167,24 @@ function participantAssignmentByNumber_(code, number) {
         participantNumberMatches_(list[i].uniqueNo, number)) return list[i];
   }
   return null;
+}
+function registeredTargetsForRange_(code, values) {
+  var st = participantStateForCode_(code);
+  var source = Array.isArray(values) ? values : [];
+  if (st.loading) return { success:false, message:'등록 참가자 목록을 불러오는 중입니다. 잠시 후 다시 시도해주세요.', values:[], missing:[] };
+  if (!st.loaded || !(st.list || []).length) return { success:true, validated:false, values:source.slice(), missing:[] };
+  var valid = [], missing = [];
+  source.forEach(function(value){
+    if (participantAssignmentByNumber_(code, value)) valid.push(value);
+    else missing.push(value);
+  });
+  if (!valid.length) return { success:false, message:'선수등록 목록과 일치하는 번호가 없습니다. 등록자료와 현재 라운드를 확인해주세요.', values:[], missing:missing };
+  return { success:true, validated:true, values:valid, missing:missing };
+}
+function confirmUnregisteredTarget_(code, value, label) {
+  var st = participantStateForCode_(code);
+  if (!st.loaded || !(st.list || []).length || participantAssignmentByNumber_(code, value)) return true;
+  return window.confirm((label || '번호') + ' ' + value + '은(는) 현재 라운드 선수등록 목록에 없습니다.\n현장 추가 대상이 맞을 때만 계속 진행해주세요.');
 }
 function participantNameForAssignment_(a) {
   if (participantAssignmentIdentityHidden_(a)) return '';
@@ -3284,7 +3313,7 @@ function competitionOptionSettings_(cfg) {
   return (cfg && cfg.optionSettings && typeof cfg.optionSettings === 'object') ? cfg.optionSettings : {};
 }
 function ikrcStationPrefix_(value, fallback) {
-  var prefix = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9가-힣]/g, '').slice(0, 4);
+  var prefix = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9가-힣]/g, '').slice(0, 8);
   return prefix || fallback;
 }
 function ikrcDefaultStationPrefix_(index) {
@@ -3422,7 +3451,7 @@ function ikrcStationConfigRowHtml_(station, index) {
   var end = ikrcStationRangeNumber_(station.end, 10);
   return '<div class="ikrc-station-config-row" data-ikrc-station-row>' +
     '<div class="ikrc-station-row-title" data-field="label">스테이션 ' + (index + 1) + '</div>' +
-    '<label>코드<input type="text" maxlength="4" autocapitalize="characters" data-field="prefix" value="' + escHtml(stationPrefix) + '" placeholder="' + escHtml(ikrcDefaultStationPrefix_(index)) + '"></label>' +
+    '<label>코드<input type="text" maxlength="8" autocapitalize="characters" data-field="prefix" value="' + escHtml(stationPrefix) + '" placeholder="' + escHtml(ikrcDefaultStationPrefix_(index)) + '"></label>' +
     '<label>시작 번호<input type="number" min="1" max="99" inputmode="numeric" data-field="start" value="' + start + '"></label>' +
     '<label>끝 번호<input type="number" min="1" max="99" inputmode="numeric" data-field="end" value="' + end + '"></label>' +
     '<button type="button" class="btn-danger ikrc-station-remove" title="스테이션 삭제" aria-label="스테이션 삭제" onclick="ikrcRemoveStationConfigRow_(this)">×</button>' +
@@ -8914,6 +8943,7 @@ function showCuppingSetup() {
   if (cw) cw.style.display = 'block';
   if (cb) cb.checked = !!_forceKcrCalibrationMode;
   renderCuppingFinalsCupList();
+  loadParticipantAssignmentsForCode_('KCR');
   switchCuppingFinalsTab('range');
   showPanel('pCuppingSetup');
 }
@@ -8927,18 +8957,21 @@ function switchCuppingFinalsTab(tab) {
 
 function addCuppingFinalsCup() {
   var input = document.getElementById('cuppingFinalsCupInput');
-  var val = parseInt(input.value);
-  if (!val || val < 1) { toast('올바른 컵 번호를 입력하세요', true); return; }
+  var val = normalizeCupId_(input.value);
+  var parts = cupIdParts_(val);
+  if (!val || !parts.num) { toast('올바른 컵 번호를 입력하세요. 예: 1, A-1, AA-01', true); return; }
+  if (_cuppingFinalsCups.length >= 20) { toast('한 번에 최대 20개까지 평가할 수 있습니다. 현재 목록을 먼저 제출한 뒤 다음 범위를 진행해주세요.', true); return; }
+  if (!confirmUnregisteredTarget_('KCR', val, '컵 번호')) return;
   if (_cuppingFinalsCups.indexOf(val) > -1) { toast('이미 추가된 컵 번호입니다', true); input.value=''; return; }
   _cuppingFinalsCups.push(val);
-  _cuppingFinalsCups.sort(function(a,b){return a-b;});
+  _cuppingFinalsCups.sort(compareCupIds_);
   input.value = '';
   renderCuppingFinalsCupList();
   input.focus();
 }
 
-function removeCuppingFinalsCup(num) {
-  var idx = _cuppingFinalsCups.indexOf(num);
+function removeCuppingFinalsCupAt(idx) {
+  idx = Number(idx);
   if (idx > -1) { _cuppingFinalsCups.splice(idx, 1); renderCuppingFinalsCupList(); }
 }
 
@@ -8950,8 +8983,8 @@ function renderCuppingFinalsCupList() {
     list.innerHTML = '<span class="finals-empty">컵 번호를 추가하세요</span>';
     return;
   }
-  list.innerHTML = _cuppingFinalsCups.map(function(c) {
-    return '<div class="finals-cup-tag">Cup ' + c + '<button class="remove-btn" onclick="removeCuppingFinalsCup('+c+')">×</button></div>';
+  list.innerHTML = _cuppingFinalsCups.map(function(c, idx) {
+    return '<div class="finals-cup-tag">Cup ' + escHtml(c) + '<button class="remove-btn" onclick="removeCuppingFinalsCupAt('+idx+')" aria-label="Cup '+escHtml(c)+' 삭제">×</button></div>';
   }).join('');
 }
 
@@ -8963,11 +8996,12 @@ function startCuppingFinalsRange() {
   var process = document.getElementById('cuppingFinalsProcess').value;
   if (!process) { toast('프로세스를 선택하세요', true); return; }
   if (!assertKcrProcessOpenForEval_(process)) return;
-  var start = parseInt(document.getElementById('cuppingFinalsStart').value);
-  var end   = parseInt(document.getElementById('cuppingFinalsEnd').value);
-  if (!start || !end || start > end) { toast('올바른 컵 범위를 입력하세요', true); return; }
-  var cups = [];
-  for (var i = start; i <= end; i++) cups.push(i);
+  var built = buildCupRange_(document.getElementById('cuppingFinalsStart').value, document.getElementById('cuppingFinalsEnd').value);
+  if (!built.success) { toast(built.message, true); return; }
+  var checked = registeredTargetsForRange_('KCR', built.cups);
+  if (!checked.success) { toast(checked.message, true); return; }
+  var cups = checked.values;
+  if (checked.missing.length) toast('등록되지 않은 컵 번호를 제외했습니다: ' + checked.missing.join(', '), true);
   var mode = getRoundEvalLabel(_selComp.currentRound);
   initCuppingEval(cups, mode, process, String(_selComp.currentRound || '').indexOf('결선') > -1, !!(document.getElementById('cuppingCalibrationMode') && document.getElementById('cuppingCalibrationMode').checked));
 }
@@ -10888,7 +10922,7 @@ function saveKcacSnapshot() {
 
   var fullDataUrl;
   try {
-    fullDataUrl = kclCanvasToTargetJpeg_(out, 0.72, 450 * 1024, 720);
+    fullDataUrl = kclCanvasToTargetJpeg_(out, 0.70, KCAC_FULL_IMAGE_MAX_BYTES, 720);
   } catch (e) {
     toast('이미지 저장 실패 (메모리 부족일 수 있습니다)', true);
     out.width = 1; out.height = 1;
@@ -10897,11 +10931,11 @@ function saveKcacSnapshot() {
 
   // 썸네일 (목록용)
   var thumb = document.createElement('canvas');
-  var thumbW = 180;
+  var thumbW = 160;
   var thumbH = Math.round(outH * (thumbW / outW));
   thumb.width = thumbW; thumb.height = thumbH;
   thumb.getContext('2d').drawImage(out, 0, 0, thumbW, thumbH);
-  var thumbUrl = kclCanvasToTargetJpeg_(thumb, 0.62, 80 * 1024, 180);
+  var thumbUrl = kclCanvasToTargetJpeg_(thumb, 0.60, KCAC_THUMB_IMAGE_MAX_BYTES, 160);
 
   // 메모리 해제 힌트
   out.width = 1; out.height = 1;
@@ -10913,6 +10947,7 @@ function saveKcacSnapshot() {
               ('0'+now.getSeconds()).slice(-2);
 
   j.snapshots.push({ thumb: thumbUrl, full: fullDataUrl, label: label });
+  if (j.snapshots.length > 3) j.snapshots = j.snapshots.slice(-3);
   renderKcacSnapshots();
   toast(j.snapshots.length + '번째 스냅샷 저장됨');
 }
@@ -11072,7 +11107,7 @@ function useKcacComment(text) {
 
 
 function kcacBuildPersistedMedia_(j) {
-  var snaps = (j && Array.isArray(j.snapshots)) ? j.snapshots.slice(-2) : [];
+  var snaps = (j && Array.isArray(j.snapshots)) ? j.snapshots.slice(-KCAC_PERSISTED_SNAPSHOT_LIMIT) : [];
   return {
     type: 'KCAC_PATTERN_IMAGE',
     jarLabel: kcacCupFullLabel(j),
@@ -14657,6 +14692,7 @@ function addMocTarget() {
   var inp = document.getElementById('mocSetupSingleInput');
   var n = parseInt(inp.value, 10);
   if (!n || n < 1) { toast('올바른 번호를 입력하세요', true); return; }
+  if (!confirmUnregisteredTarget_('MOC', n, '참가자 번호')) return;
   if (_moc.setupSingles.indexOf(n) > -1) { toast('이미 추가된 번호입니다', true); inp.value=''; return; }
   _moc.setupSingles.push(n); _moc.setupSingles.sort(function(a,b){return a-b;}); inp.value=''; renderMocSetupList();
 }
@@ -14674,7 +14710,11 @@ function renderMocSetupList() {
 function startMocRange() {
   var a=parseInt(document.getElementById('mocSetupStart').value,10), b=parseInt(document.getElementById('mocSetupEnd').value,10);
   if(!a||!b||a>b){ toast('올바른 번호 범위를 입력하세요', true); return; }
-  var arr=[]; for(var i=a;i<=b;i++) arr.push(i); initMocTargets(arr);
+  var arr=[]; for(var i=a;i<=b;i++) arr.push(i);
+  var checked=registeredTargetsForRange_('MOC',arr);
+  if(!checked.success){ toast(checked.message,true); return; }
+  if(checked.missing.length) toast('등록되지 않은 참가자 번호를 제외했습니다: '+checked.missing.join(', '),true);
+  initMocTargets(checked.values);
 }
 function startMocSingle() { if(!_moc.setupSingles.length){ toast('번호를 1개 이상 추가하세요', true); return; } initMocTargets(_moc.setupSingles.slice()); }
 function initMocTargets(nums) {
