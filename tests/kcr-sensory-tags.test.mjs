@@ -44,11 +44,12 @@ const api = context.KcrSensoryTags;
 const comments = context.KcrSensoryComments;
 assert.deepEqual(Array.from(context.KCR_SENSORY_CONFIG.categoryOrder), ["flavor", "aftertaste", "acidity", "sweetness", "mouthfeel"]);
 assert.equal(new Set(tags.map((tag) => tag.id)).size, tags.length, "KCR tag IDs must be unique");
-assert.equal(tags.length, 139, "The complete KCR tag catalog must contain 139 final tags");
+assert.equal(tags.length, 138, "The updated KCR tag catalog must contain 138 final tags");
 assert.deepEqual(
   Object.fromEntries(["flavor", "mouthfeel", "acidity", "sweetness", "aftertaste"].map((category) => [category, tags.filter((tag) => tag.category === category).length])),
-  { flavor:71, mouthfeel:18, acidity:15, sweetness:14, aftertaste:21 },
+  { flavor:70, mouthfeel:18, acidity:15, sweetness:14, aftertaste:21 },
 );
+assert.equal(tags.some((tag) => tag.id === "flavor_improvement_raw" || tag.labelKo === "생두"), false);
 for (const tag of tags) {
   for (const field of ["id", "category", "group", "family", "labelKo", "labelEn", "order", "isActive"]) {
     assert.notEqual(tag[field], undefined, `Missing ${field} on ${tag.id}`);

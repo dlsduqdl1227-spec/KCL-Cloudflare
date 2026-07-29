@@ -141,7 +141,6 @@
   ]);
   add("flavor", "improvement", "improvement", [
     ["flavor_improvement_grassy", "풀", "Grassy"],
-    ["flavor_improvement_raw", "생두", "Raw"],
     ["flavor_improvement_woody", "나무", "Woody"],
     ["flavor_improvement_earthy", "흙", "Earthy"],
     ["flavor_improvement_papery", "종이", "Papery"],
