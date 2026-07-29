@@ -1626,7 +1626,16 @@ function expectedHeadersForCompetition(code) {
   const meta = ['제출시간','대회코드','라운드','심사위원명','팀','역할','모드'];
   code = safeStr(code).toUpperCase();
   let data = [];
-  if (code === 'KCR') data = ['컵번호','프로세스','Flavor(플레이버)','Flavor 강도','Aftertaste(애프터테이스트)','Aftertaste 지속성','Acidity(산미)','Acidity 강도','Body(바디)','Body 강도','Sweetness(스윗니스) ×2','Sweetness 강도','Overall(주관적 종합평가)','종합코멘트','총점','실격여부','실격사유','검수상태','Flavor 스마트태그','Aftertaste 스마트태그','Acidity 스마트태그','Body 스마트태그','Sweetness 스마트태그','정규화점수','공식점수','순위반영점수','정규화메모'];
+  if (code === 'KCR') data = [
+    '컵번호','프로세스',
+    'Flavor(플레이버)','Flavor 강도','Flavor 코멘트','Flavor 자동생성상태','Flavor 스마트태그',
+    'Aftertaste(에프터테이스트)','Aftertaste 지속성','Aftertaste 코멘트','Aftertaste 자동생성상태','Aftertaste 스마트태그','Aftertaste 플레이버참조 스마트태그',
+    'Acidity(산미)','Acidity 강도','Acidity 코멘트','Acidity 자동생성상태','Acidity 스마트태그',
+    'Sweetness(단맛) ×2','Sweetness 강도','Sweetness 코멘트','Sweetness 자동생성상태','Sweetness 스마트태그',
+    'Mouthfeel(마우스필)','Mouthfeel 강도','Mouthfeel 코멘트','Mouthfeel 자동생성상태','Mouthfeel 스마트태그',
+    'Overall(오버롤)','종합코멘트','총점','실격여부','실격사유','검수상태',
+    '정규화점수','공식점수','순위반영점수','정규화메모'
+  ];
   else if (code === 'KCAC') data = ['참가자번호','선수명','우유종류','잔용도','우유명','예선 Pattern Completion(패턴 완성도)','예선 Pattern Symmetry & Balance(대칭과 균형)','예선 Surface Quality(표면 품질)','예선 Position & Proportion(위치와 비율)','예선 Pattern Definition(패턴 선명도)','결선 Theme Expression(주제 표현력)','결선 Technical Execution(작업 수행 완성도)','결선 Cleanliness(청결)','결선 Taste Balance(맛의 균형)','결선 Mouthfeel(질감)','결선 Presentation(프레젠테이션)','결선 Surface Quality(표면 품질)','결선 Position & Symmetry(위치와 대칭)','결선 Design Completion(디자인 완성도)','소계','감점','최종점수','가이드URL','종합코멘트','실격여부','실격사유','검수상태','패턴종류','리프수','리프수감점','시간감점','예선 Pattern Completion 스마트태그','예선 Pattern Symmetry & Balance 스마트태그','예선 Surface Quality 스마트태그','예선 Position & Proportion 스마트태그','예선 Pattern Definition 스마트태그','결선 Theme Expression 스마트태그','결선 Technical Execution 스마트태그','결선 Cleanliness 스마트태그','결선 Taste Balance 스마트태그','결선 Mouthfeel 스마트태그','결선 Presentation 스마트태그','결선 Surface Quality 스마트태그','결선 Position & Symmetry 스마트태그','결선 Design Completion 스마트태그','예선영상URL','제출영상URL','영상제출확인','패턴스크린샷개수','미디어불러오기방식','미디어파일명'];
   else if (code === 'KBC') data = ['참가자번호','Service Professionalism(서비스의 전문성)','Espresso Taste & Design(맛과 설계) ×2','Espresso Clean Cup(클린컵)','Espresso Mouthfeel(마우스필)','Espresso Flavor(플레이버)','Espresso Total','Signature Taste & Design(맛과 설계) ×2','Signature Clean Cup(클린컵)','Signature Mouthfeel(마우스필)','Signature Flavor(플레이버)','Signature Total','Machine & Equipment Professionalism(머신 및 기물 운용 전문성)','시간감점','총점','종합코멘트','실격여부','실격사유','검수상태','선수명','경기시간','Service Professionalism 코멘트','Espresso Taste & Design 코멘트','Espresso Clean Cup 코멘트','Espresso Mouthfeel 코멘트','Espresso Flavor 코멘트','Signature Taste & Design 코멘트','Signature Clean Cup 코멘트','Signature Mouthfeel 코멘트','Signature Flavor 코멘트','Machine & Equipment Professionalism 코멘트','Service Professionalism 스마트태그','Espresso Taste & Design 스마트태그','Espresso Clean Cup 스마트태그','Espresso Mouthfeel 스마트태그','Espresso Flavor 스마트태그','Signature Taste & Design 스마트태그','Signature Clean Cup 스마트태그','Signature Mouthfeel 스마트태그','Signature Flavor 스마트태그','Machine & Equipment Professionalism 스마트태그'];
   else if (code === 'MOB') data = ['참가자번호','메뉴','Pre-Service Station(시연 전 작업대)','Service Station(시연 중 작업대)','Post-Service Station(시연 후 작업대)','Sweetness(스윗니스)','Flavor(플레이버)','Balance(균형)','Clean Cup(클린컵)','Mouthfeel(질감)','Professionalism(시연 전문성)','Creative Form & Usability(형태와 용이성)','Creative Flavor(창작 향미)','Creative Balance(균형)','Creative Mouthfeel(질감)','Creative Professionalism(전문성과 독창성)','총점','종합코멘트','실격여부','실격사유','검수상태','Pre-Service Station 코멘트','Service Station 코멘트','Post-Service Station 코멘트','Sweetness 코멘트','Flavor 코멘트','Balance 코멘트','Clean Cup 코멘트','Mouthfeel 코멘트','Professionalism 코멘트','Creative Form & Usability 코멘트','Creative Flavor 코멘트','Creative Balance 코멘트','Creative Mouthfeel 코멘트','Creative Professionalism 코멘트','시간감점','경기시간','선수명','Pre-Service Station 스마트태그','Service Station 스마트태그','Post-Service Station 스마트태그','Sweetness 스마트태그','Flavor 스마트태그','Balance 스마트태그','Clean Cup 스마트태그','Mouthfeel 스마트태그','Professionalism 스마트태그','Creative Form & Usability 스마트태그','Creative Flavor 스마트태그','Creative Balance 스마트태그','Creative Mouthfeel 스마트태그','Creative Professionalism 스마트태그','Signature Technical Pre-Service Station(창작음료 시연 전 작업대)','Signature Technical Service Station(창작음료 시연 중 작업대)','Signature Technical Ingredient Use(부재료 사용의 적절함)','Signature Technical Post-Service Station(창작음료 시연 후 작업대)','Signature Technical Pre-Service Station 코멘트','Signature Technical Service Station 코멘트','Signature Technical Ingredient Use 코멘트','Signature Technical Post-Service Station 코멘트','Signature Technical Pre-Service Station 스마트태그','Signature Technical Service Station 스마트태그','Signature Technical Ingredient Use 스마트태그','Signature Technical Post-Service Station 스마트태그','테크니컬 총점','센서리 총점','창작메뉴 총점','감점 전 합산','감점 적용 후 점수','순위 반영점수','총평가 반영점수'];
@@ -1865,12 +1874,12 @@ function canonicalScoreForPayload_(code, payload, rowIndex=0) {
 
   if (code === 'KCR') {
     const flavor = firstNumberFromKeys_(extra, ['Flavor(플레이버)','Flavor']);
-    const after = firstNumberFromKeys_(extra, ['Aftertaste(애프터테이스트)','Aftertaste']);
+    const after = firstNumberFromKeys_(extra, ['Aftertaste(에프터테이스트)','Aftertaste(애프터테이스트)','Aftertaste']);
     const acidity = firstNumberFromKeys_(extra, ['Acidity(산미)','Acidity']);
-    const body = firstNumberFromKeys_(extra, ['Body(바디)','Body']);
-    const sweet = firstNumberFromKeys_(extra, ['Sweetness(스윗니스) ×2','Sweetness(단맛) ×2','Sweetness(스윗니스)','Sweetness']);
-    const overall = firstNumberFromKeys_(extra, ['Overall(주관적 종합평가)','Overall']);
-    if ([flavor, after, acidity, body, sweet, overall].every(v => v !== null)) return roundScoreValue_(flavor + after + acidity + body + (sweet * 2) + overall);
+    const sweet = firstNumberFromKeys_(extra, ['Sweetness(단맛) ×2','Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness']);
+    const mouthfeel = firstNumberFromKeys_(extra, ['Mouthfeel(마우스필)','Mouthfeel']);
+    const overall = firstNumberFromKeys_(extra, ['Overall(오버롤)','Overall(주관적 종합평가)','Overall']);
+    if ([flavor, after, acidity, sweet, mouthfeel, overall].every(v => v !== null)) return roundScoreValue_(flavor + after + acidity + (sweet * 2) + mouthfeel + overall);
     return fallback();
   }
   if (code === 'IKRC') {
@@ -3281,7 +3290,7 @@ function tieInfoForItem_(code, item, round) {
   if (code === 'KCR') {
     return {
       sweetness: itemBestScore_(item, ['Sweetness(스윗니스) ×2','Sweetness(단맛) ×2','스윗니스','Sweetness','Sweetness(스윗니스)']),
-      overall: itemBestScore_(item, ['Overall(주관적 종합평가)','Overall','오버롤'])
+      overall: itemBestScore_(item, ['Overall(오버롤)','Overall(주관적 종합평가)','Overall','오버롤'])
     };
   }
   if (code === 'IKRC') {
@@ -3703,7 +3712,7 @@ function aggregateRankingGroup_(code, g, round) {
       score, total: score, basis: officialRows.some(item => firstNumberFromKeys_(item, ['정규화점수','Normalized Score','공식점수','순위반영점수']) !== null) ? '정규화 총점' : '항목 총점',
       tie: {
         sweetness: avgRowsBy_(officialRows, item => firstNumberFromKeys_(item, ['Sweetness(스윗니스) ×2','Sweetness(단맛) ×2','Sweetness(스윗니스)','Sweetness','스위트니스','스윗니스'])) || 0,
-        overall: avgRowsBy_(officialRows, item => firstNumberFromKeys_(item, ['Overall(주관적 종합평가)','Overall','오버롤'])) || 0
+        overall: avgRowsBy_(officialRows, item => firstNumberFromKeys_(item, ['Overall(오버롤)','Overall(주관적 종합평가)','Overall','오버롤'])) || 0
       }
     };
   }
@@ -4351,15 +4360,15 @@ function generateCuppingComment(payload) {
     {name:'Flavor', score:payload.flavor},
     {name:'Aftertaste', score:payload.aftertaste},
     {name:'Acidity', score:payload.acidity},
-    {name:'Body', score:payload.body},
     {name:'Sweetness', score:payload.sweetness},
+    {name:'Mouthfeel', score:payload.mouthfeel},
     {name:'Overall', score:payload.overall}
   ];
   const flavor = _tagPhrase_(tags, 'flavor', '주요 향미');
   const after = _tagPhrase_(tags, 'aftertaste', '여운');
   const acidity = _tagPhrase_(tags, 'acidity', '산미');
-  const body = _tagPhrase_(tags, 'body', '질감');
   const sweet = _tagPhrase_(tags, 'sweetness', '단맛');
+  const mouthfeel = _tagPhrase_(tags, 'mouthfeel', '마우스필');
   const avg = _avg(items.map(x=>x.score));
   const hl = _lowHighScore(items);
   const high = hl.high ? _areaKorean_(hl.high.name) : '';
@@ -4369,9 +4378,9 @@ function generateCuppingComment(payload) {
   const processText = process ? `${process} 프로세스의 특성이 반영되어 ` : '';
   const axis = high && low ? `${high}이 가장 두드러졌고, ${low}은 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 나타났습니다.';
   return _optionSet([
-    `${prefix}${processText}${flavor} 인상을 중심으로 첫 향미가 형성됩니다. 이후 ${after}의 흐름, ${acidity}의 산미 구조, ${body}의 질감이 연결되며 ${sweet} 인상이 전체 균형에 반영되었습니다. 전체적으로 ${tone}으로 평가됩니다.`,
-    `${prefix}${flavor} 계열의 향미가 주요 인상으로 기록되었고, 애프터테이스트는 ${after} 방향으로 이어졌습니다. 산미는 ${acidity}, 바디는 ${body}, 단맛은 ${sweet} 특성으로 나타나 전체 컵의 구조를 구성했습니다. ${axis}`,
-    `${prefix}향미, 여운, 산미, 질감, 단맛의 연결성을 기준으로 평가되었습니다. 현재 기록된 감각 단서는 ${flavor}, ${after}, ${sweet}이며, 종합 평가는 각 항목의 균형과 오버롤 인상에 따라 형성되었습니다.`
+    `${prefix}${processText}${flavor} 인상을 중심으로 첫 향미가 형성됩니다. 이후 ${after}의 흐름과 ${acidity}의 산미 구조, ${sweet}의 단맛, ${mouthfeel}의 마우스필이 연결됩니다. 전체적으로 ${tone}으로 평가됩니다.`,
+    `${prefix}${flavor} 계열의 향미가 주요 인상으로 기록되었고, 에프터테이스트는 ${after} 방향으로 이어졌습니다. 산미는 ${acidity}, 단맛은 ${sweet}, 마우스필은 ${mouthfeel} 특성으로 나타나 전체 컵의 구조를 구성했습니다. ${axis}`,
+    `${prefix}플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성을 기준으로 평가했습니다. 현재 기록된 감각 단서는 ${flavor}, ${after}, ${sweet}이며, 종합 평가는 각 항목의 균형과 오버롤 인상에 따라 형성되었습니다.`
   ]);
 }
 

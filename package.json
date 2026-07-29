@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/stage107-safety.test.mjs",
+    "test": "node tests/stage107-safety.test.mjs && node tests/kcr-sensory-tags.test.mjs",
     "dev": "wrangler pages dev public --compatibility-date=2025-08-01",
     "deploy": "wrangler pages deploy public",
     "d1:create": "wrangler d1 create kcl-cloudflare",

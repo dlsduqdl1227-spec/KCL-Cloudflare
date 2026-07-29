@@ -588,6 +588,30 @@ body.kcac-score-dragging, body.kcac-score-dragging *{
 .kcr-smart-tags-section .cat-btn-p,
 .kcr-smart-tags-section .cat-btn-s,
 .kcr-smart-tags-section .cat-btn-t{max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
+.kcr-tag-family-btn{min-height:48px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center}
+.kcr-tag-family-btn .kcr-tag-en{opacity:.68}
+.kcr-tag-options{display:none;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));gap:7px;width:100%;margin:8px 0;padding:10px;background:rgba(0,0,0,.38);border-radius:6px}
+.kcr-tag-options.active{display:grid}
+.kcr-tag-option{min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 7px;text-align:center}
+.kcr-tag-ko{font-size:12px;font-weight:800;line-height:1.25;word-break:keep-all;overflow-wrap:anywhere}
+.kcr-tag-en{font-size:10px;font-weight:600;line-height:1.2;color:var(--muted);word-break:break-word;overflow-wrap:anywhere}
+.kcr-tag-option.selected .kcr-tag-en,.kcr-tag-family-btn.branch-open .kcr-tag-en{color:#555}
+.kcr-tag-option.selected::after{top:3px;right:3px}
+.kcr-selected-tag{display:inline-flex;align-items:center;gap:5px;min-height:34px}
+.kcr-selected-tag small{font-size:9px;opacity:.66}
+.kcr-tag-section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.kcr-tag-clear{min-height:44px;padding:8px 11px;background:transparent;color:var(--text-3);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:800;cursor:pointer}
+.kcr-aftertaste-flavor{margin:10px 0 14px;padding:11px;border:1px solid var(--border);border-radius:7px;background:rgba(255,255,255,.025)}
+.kcr-aftertaste-flavor-title{font-size:12px;font-weight:900;color:var(--text-2);margin-bottom:3px}
+.kcr-aftertaste-flavor-hint{font-size:10px;color:var(--muted);line-height:1.45;margin-bottom:8px}
+.kcr-aftertaste-flavor-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:7px}
+.kcr-sensory-comment{margin-top:14px;padding-top:13px;border-top:1px solid var(--border)}
+.kcr-sensory-comment-head{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:7px}
+.kcr-sensory-comment-title{font-size:12px;font-weight:900;color:var(--text-2)}
+.kcr-comment-reset{min-height:44px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text-2);font-size:10px;font-weight:800;cursor:pointer}
+.kcr-sensory-comment textarea{min-height:88px;margin:0;font-size:13px;line-height:1.55}
+.kcr-comment-state{font-size:10px;color:var(--muted);line-height:1.45;margin-top:6px}
+@media(max-width:420px){.kcr-tag-options,.kcr-aftertaste-flavor-list{grid-template-columns:1fr 1fr}.kcr-tag-ko{font-size:11.5px}.kcr-tag-en{font-size:9.5px}}
 
 .overall-summary-box{background:rgba(255,255,255,.04);border:1px solid var(--border-lt);
   border-radius:8px;padding:14px;margin-bottom:14px}
@@ -1686,6 +1710,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 .panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap{overflow-y:visible;}
 @media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}.eval-wrap,.panel{min-height:100dvh!important;overflow-y:visible!important}.tabs,.review-tabs{overflow-x:auto!important;}}
 </style>
+<script src="/assets/kcr-sensory-tags.js"></script>
+<script src="/assets/kcr-sensory-comments.js"></script>
 <script src="/assets/kcl-api-shim.js"></script>
 </head>
 <body>
@@ -1961,14 +1987,14 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div class="eval-hero-logo" data-comp-logo="KCR"></div>
     <div class="attr-tabs" id="cupping-attr-tabs">
       <div class="attr-tab active" data-attr="flavor" onclick="switchCuppingAttr('flavor')">Flavor(플레이버)</div>
-      <div class="attr-tab" data-attr="aftertaste" onclick="switchCuppingAttr('aftertaste')">Aftertaste(애프터테이스트)</div>
+      <div class="attr-tab" data-attr="aftertaste" onclick="switchCuppingAttr('aftertaste')">Aftertaste(에프터테이스트)</div>
       <div class="attr-tab" data-attr="acidity" onclick="switchCuppingAttr('acidity')">Acidity(산미)</div>
-      <div class="attr-tab" data-attr="body" onclick="switchCuppingAttr('body')">Body(바디)</div>
-      <div class="attr-tab" data-attr="sweetness" onclick="switchCuppingAttr('sweetness')">Sweetness(스윗니스) ×2</div>
-      <div class="attr-tab" data-attr="overall" onclick="switchCuppingAttr('overall')">Overall(주관적 종합평가)</div>
+      <div class="attr-tab" data-attr="sweetness" onclick="switchCuppingAttr('sweetness')">Sweetness(단맛) ×2</div>
+      <div class="attr-tab" data-attr="mouthfeel" onclick="switchCuppingAttr('mouthfeel')">Mouthfeel(마우스필)</div>
+      <div class="attr-tab" data-attr="overall" onclick="switchCuppingAttr('overall')">Overall(오버롤)</div>
       <div class="attr-tab" data-attr="comment" onclick="switchCuppingAttr('comment')">전체 코멘트</div>
     </div>
-    <div class="review-edit-help">커핑 기준: 10분 Flavor/Aftertaste · 15분 Acidity/Body · 20분 Sweetness/Overall · 30분 내 평가 종료</div>
+    <div class="review-edit-help">물 붓기 10분 경과 후 Flavor → Aftertaste → Acidity → Sweetness → Mouthfeel → Overall 순으로 평가하며, 30분 내 모든 평가를 종료합니다.</div>
     <div id="cupping-attr-card"></div>
     <div class="divider"></div>
     <button class="btn" onclick="cuppingSubmitAll()">평가완료</button>
@@ -3040,7 +3066,7 @@ var _loginTimeout = null;
 
 var _cupping = {
   cups:[], currentIdx:0, currentAttr:'flavor',
-  mode:'', process:'', isFinalsMode:false, compCode:''
+  mode:'', process:'', isFinalsMode:false, compCode:'', openTagFamilies:{}
 };
 
 var _kcac = {
@@ -3973,6 +3999,7 @@ function canReviewEditDetails() {
   // 팀장뿐 아니라 해당 대회 운영진/스텝도 본인 제출 건에 한해 수정할 수 있게 엽니다.
   // 목록 자체는 서버에서 '본인 제출 건'으로 필터링되므로, 다른 사람의 개인 평가는 열리지 않습니다.
   if (c === 'MOC' || c === 'KTCC') return isTeamLeaderForCode_(c) || isStaffRoleForCode_(c);
+  if (c === 'KCR' && isTeamLeaderForCode_(c)) return true;
   // IKRC 검수는 센서리/일반 심사위원에게만 열고, 헤드는 켈리브레이션 입력·확인 흐름만 사용합니다.
   if (c === 'IKRC') return isIkrcReviewJudge_(c);
   if (c === 'MOB' && isHeadRoleForCode_(c)) return false;
@@ -5540,6 +5567,7 @@ function isKbcLegacyRemovedHeader_(h) {
 
 function reviewFormatAttributeName(h) {
   h = String(h || '');
+  if (String((_reviewState && _reviewState.code) || '').toUpperCase() === 'KCR') return h;
   var compact = h.replace(/\s/g,'');
   var map = [
     [/SignatureTechnicalPre-Service.*(스마트태그|SmartTags?)/i, 'Signature Technical Pre-Service Station Smart Tags(스마트태그)'],
@@ -6137,8 +6165,8 @@ function reviewKcrTotalInfo_() {
     reviewKcrScoreValue_('flavor') +
     reviewKcrScoreValue_('aftertaste') +
     reviewKcrScoreValue_('acidity') +
-    reviewKcrScoreValue_('body') +
     reviewKcrScoreValue_('sweetness') * 2 +
+    reviewKcrScoreValue_('mouthfeel') +
     reviewKcrScoreValue_('overall')
   );
   return {idx:{total:idx}, total:total};
@@ -6785,7 +6813,22 @@ function reviewSmartTagMeta_(header) {
   if (code === 'MOB') return reviewMobSmartTagMeta_(header);
   if (code === 'IKRC') return reviewIkrcSmartTagMeta_(header);
   var base = reviewBaseKeyFromHeader(header);
-  if (code === 'KCR' && SMART_TAGS[base]) return { header:header, data:SMART_TAGS[base], valueMode:'label', competition:'KCR', attr:base };
+  if (code === 'KCR' && typeof KcrSensoryTags !== 'undefined') {
+    var isFlavorReference = /Aftertaste.*(?:Flavor|플레이버).*(?:Reference|참조)|(?:에프터|애프터)테이스트.*플레이버.*참조/i.test(String(header || ''));
+    var category = isFlavorReference ? 'flavor' : base;
+    if (KCR_SENSORY_CONFIG.categoryOrder.indexOf(category) > -1) {
+      var records = isFlavorReference ? reviewKcrTagsValue_('flavor') : KcrSensoryTags.list(category).map(function(tag){ return tag.id; });
+      return {
+        header:header,
+        data:records,
+        valueMode:'id',
+        competition:'KCR',
+        attr:isFlavorReference ? 'aftertasteFlavor' : category,
+        category:category,
+        isFlavorReference:isFlavorReference
+      };
+    }
+  }
   if (SMART_TAGS[base]) return { header:header, data:SMART_TAGS[base], valueMode:'label' };
   return null;
 }
@@ -6880,29 +6923,36 @@ function reviewHierarchicalSmartTagButtonsHtml_(idx, meta, selected, disabled) {
   return html;
 }
 function reviewKcrSmartTagButtonsHtml_(idx, meta, selected, disabled) {
-  var data = meta && meta.data;
-  if (!data) return '';
-  if (meta.attr === 'body' && typeof BODY_SMART_TAG_GROUPS !== 'undefined') {
-    var bodyPrimary = '질감';
-    var bodyAction = 'toggleReviewKcrBodyCategory(' + idx + ',this)';
-    var bodyHtml = '<div class="category-primary">' + reviewSmartTagActionButtonHtml_(bodyPrimary, bodyPrimary, 'cat-btn-p', selected, disabled, bodyAction, reviewSmartTagValueSelected_(selected, bodyPrimary)) + '</div>';
-    bodyHtml += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0">';
-    var rendered = {};
-    Object.keys(BODY_SMART_TAG_GROUPS).forEach(function(groupLabel){
-      bodyHtml += smartTagGroupLabelHtml_(groupLabel);
-      BODY_SMART_TAG_GROUPS[groupLabel].forEach(function(tag){
-        rendered[tag] = true;
-        bodyHtml += reviewSmartTagButtonHtml_(idx, tag, tag, 'cat-btn-s', selected, disabled);
-      });
+  if (!meta || typeof KcrSensoryTags === 'undefined') return '';
+  if (meta.isFlavorReference) {
+    var refHtml = '<div class="kcr-aftertaste-flavor-head">Flavor에서 선택한 태그</div><div class="kcr-aftertaste-flavor-list">';
+    (meta.data || []).forEach(function(id){
+      var tag = KcrSensoryTags.get(id);
+      if (!tag) return;
+      refHtml += '<button type="button" class="cat-btn-t kcr-tag-option' + (selected.indexOf(id) > -1 ? ' selected' : '') + '" data-review-tag-value="' + escHtml(id) + '"' + (disabled ? ' disabled' : ' onclick="toggleReviewSmartTag(' + idx + ',\'' + escapeJsString_(id) + '\')"') + '>' + kcrTagTextHtml_(tag) + '</button>';
     });
-    var bodyTags = data['질감'] || [];
-    bodyTags.forEach(function(tag){
-      if (!rendered[tag]) bodyHtml += reviewSmartTagButtonHtml_(idx, tag, tag, 'cat-btn-s', selected, disabled);
-    });
-    return bodyHtml + '</div>';
+    if (!(meta.data || []).length) refHtml += '<div class="mob-empty-tag">Flavor 스마트태그가 선택되지 않았습니다.</div>';
+    return refHtml + '</div>';
   }
-  if (Array.isArray(data)) return data.map(function(tag){ return reviewSmartTagButtonHtml_(idx, tag, tag, 'cat-btn-s', selected, disabled); }).join('');
-  return reviewHierarchicalSmartTagButtonsHtml_(idx, meta, selected, disabled);
+  var families = KcrSensoryTags.families(meta.category);
+  if (!families.length) return '';
+  var selectedRecord = selected.length ? KcrSensoryTags.get(selected[0]) : null;
+  var openFamily = _reviewKcrOpenFamilies[idx] || (selectedRecord && selectedRecord.family) || families[0];
+  _reviewKcrOpenFamilies[idx] = openFamily;
+  var html = '<div class="category-primary">';
+  families.forEach(function(family){
+    var labels = KCR_SENSORY_CONFIG.familyLabels[family] || {ko:family,en:''};
+    html += '<button type="button" class="cat-btn-p kcr-tag-family-btn' + (family === openFamily ? ' branch-open' : '') + '" data-kcr-review-family-button="' + escHtml(family) + '"' + (disabled ? ' disabled' : ' onclick="openReviewKcrTagFamily(' + idx + ',\'' + escapeJsString_(family) + '\')"') + '><span class="kcr-tag-ko">' + escHtml(labels.ko) + '</span><span class="kcr-tag-en">' + escHtml(labels.en) + '</span></button>';
+  });
+  html += '</div>';
+  families.forEach(function(family){
+    html += '<div class="kcr-tag-options' + (family === openFamily ? ' active' : '') + '" data-kcr-review-family-panel="' + escHtml(family) + '">';
+    KcrSensoryTags.list(meta.category, family).forEach(function(tag){
+      html += '<button type="button" class="cat-btn-t kcr-tag-option' + (selected.indexOf(tag.id) > -1 ? ' selected' : '') + '" data-review-tag-value="' + escHtml(tag.id) + '"' + (disabled ? ' disabled' : ' onclick="toggleReviewSmartTag(' + idx + ',\'' + escapeJsString_(tag.id) + '\')"') + '>' + kcrTagTextHtml_(tag) + '</button>';
+    });
+    html += '</div>';
+  });
+  return html;
 }
 function reviewSmartTagButtonsHtml_(idx, meta, selected, disabled) {
   var data = meta && meta.data;
@@ -6913,11 +6963,13 @@ function reviewSmartTagButtonsHtml_(idx, meta, selected, disabled) {
   }
   return reviewHierarchicalSmartTagButtonsHtml_(idx, meta, selected, disabled);
 }
+var _reviewKcrOpenFamilies = {};
 function reviewSelectedSmartTagsHtml_(idx, selected, disabled) {
   if (!selected.length) return '<span class="mob-empty-tag">선택 없음</span>';
   return selected.map(function(tag){
     var click = disabled ? '' : ' onclick="toggleReviewSmartTag(' + idx + ',\'' + escapeJsString_(tag) + '\')"';
-    return '<span class="selected-tag"' + click + '>' + escHtml(smartTagLeaf_(tag)) + ' ×</span>';
+    var record = String((_reviewState && _reviewState.code) || '').toUpperCase() === 'KCR' && typeof KcrSensoryTags !== 'undefined' ? KcrSensoryTags.get(tag) : null;
+    return '<span class="selected-tag"' + click + '>' + escHtml(record ? record.labelKo : smartTagLeaf_(tag)) + ' ×</span>';
   }).join('');
 }
 function renderReviewSmartTagField_(item) {
@@ -6926,16 +6978,18 @@ function renderReviewSmartTagField_(item) {
   if (!meta) {
     return '<div class="review-eval-comment"><div class="section-label">' + escHtml(reviewFormatAttributeName(item.h)) + '</div><textarea data-col="' + item.idx + '" oninput="scheduleReviewAutoSave()" onblur="scheduleReviewAutoSave(true)"' + (!item.editable ? ' disabled' : '') + '>' + escHtml(String(item.val || '')) + '</textarea></div>';
   }
-  selected = smartTagNormalizeSelection_(selected, meta.data, meta.valueMode);
+  selected = meta.competition === 'KCR' ? KcrSensoryTags.sanitize(selected, meta.category) : smartTagNormalizeSelection_(selected, meta.data, meta.valueMode);
+  if (meta.isFlavorReference) selected = KcrSensoryTags.syncAftertasteFlavorRefs(meta.data || [], selected);
   var disabled = !item.editable;
   var hierarchical = !!(meta.data && !Array.isArray(meta.data));
   var html = '<div class="smart-tags-section review-smart-tags' + (meta.competition === 'KCR' ? ' kcr-review-smart-tags' : '') + (hierarchical ? ' hierarchical-review-smart-tags' : '') + '" id="review-smart-tags-' + item.idx + '">';
   html += '<div class="smart-tags-title">' + escHtml(reviewFormatAttributeName(item.h)) + '</div>';
-  html += '<div class="smart-tags-hint">' + (hierarchical ? '카테고리를 선택하면 하위 특성이 표시됩니다. ' : '') + '특성 선택 (최대 ' + MAX_TAGS + '개) - 검수 중 다시 적용하거나 직접 추가할 수 있습니다</div>';
+  var max = meta.competition === 'KCR' ? KCR_SENSORY_CONFIG.maxSelections[meta.isFlavorReference ? 'aftertaste' : meta.category] : MAX_TAGS;
+  html += '<div class="smart-tags-hint">' + (meta.competition === 'KCR' && !meta.isFlavorReference ? '계열을 선택하면 최종 특성이 표시됩니다. 계열은 저장되지 않습니다. ' : (hierarchical ? '카테고리를 선택하면 하위 특성이 표시됩니다. ' : '')) + '특성 선택 (최대 ' + max + '개)</div>';
   html += '<input type="hidden" id="' + reviewSmartTagInputId_(item.idx) + '" data-col="' + item.idx + '" value="' + escHtml(selected.join(', ')) + '">';
   html += '<div class="selected-tags mob-inline-selected-tags" id="' + reviewSmartTagSelectedId_(item.idx) + '">' + reviewSelectedSmartTagsHtml_(item.idx, selected, disabled) + '</div>';
   html += '<div class="mob-inline-tag-buttons" id="' + reviewSmartTagButtonsId_(item.idx) + '">' + reviewSmartTagButtonsHtml_(item.idx, meta, selected, disabled) + '</div>';
-  html += '<div class="custom-tag-row"><input type="text" id="' + reviewSmartTagCustomId_(item.idx) + '" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'){addReviewCustomSmartTag(' + item.idx + ');event.preventDefault()}"' + (disabled ? ' disabled' : '') + '><button type="button" onclick="addReviewCustomSmartTag(' + item.idx + ')"' + (disabled ? ' disabled' : '') + '>추가</button></div>';
+  if (meta.competition !== 'KCR') html += '<div class="custom-tag-row"><input type="text" id="' + reviewSmartTagCustomId_(item.idx) + '" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'){addReviewCustomSmartTag(' + item.idx + ');event.preventDefault()}"' + (disabled ? ' disabled' : '') + '><button type="button" onclick="addReviewCustomSmartTag(' + item.idx + ')"' + (disabled ? ' disabled' : '') + '>추가</button></div>';
   html += '</div>';
   return html;
 }
@@ -6971,7 +7025,8 @@ function reviewSetSmartTagCurrent_(idx, selected) {
   selected = reviewParseSmartTags_(selected.join(', '));
   var headers = _reviewState.headers || [];
   var meta = reviewSmartTagMeta_(headers[idx] || '');
-  if (meta) selected = smartTagNormalizeSelection_(selected, meta.data, meta.valueMode);
+  if (meta) selected = meta.competition === 'KCR' ? KcrSensoryTags.sanitize(selected, meta.category) : smartTagNormalizeSelection_(selected, meta.data, meta.valueMode);
+  if (meta && meta.isFlavorReference) selected = KcrSensoryTags.syncAftertasteFlavorRefs(meta.data || [], selected);
   var input = document.getElementById(reviewSmartTagInputId_(idx));
   if (input) input.value = selected.join(', ');
   var wrap = document.getElementById(reviewSmartTagSelectedId_(idx));
@@ -6981,7 +7036,7 @@ function reviewSetSmartTagCurrent_(idx, selected) {
     root.querySelectorAll('[data-review-tag-value]').forEach(function(btn){
       var value = btn.getAttribute('data-review-tag-value');
       var leaf = reviewSmartTagLeaf_(value);
-      var matched = selected.indexOf(value) > -1 || selected.some(function(t){ return reviewSmartTagLeaf_(t) === leaf; });
+      var matched = selected.indexOf(value) > -1 || (meta && meta.competition !== 'KCR' && selected.some(function(t){ return reviewSmartTagLeaf_(t) === leaf; }));
       btn.classList.toggle('selected', matched);
     });
   }
@@ -6991,7 +7046,26 @@ function toggleReviewSmartTag(idx, tag) {
   if (!input) return;
   var headers = _reviewState.headers || [];
   var header = headers[idx] || '';
+  var meta = reviewSmartTagMeta_(header);
   var selected = reviewSmartTagCurrent_(idx);
+  if (meta && meta.competition === 'KCR') {
+    var maxCategory = meta.isFlavorReference ? 'aftertaste' : meta.category;
+    var otherCount = 0;
+    if (maxCategory === 'aftertaste') {
+      var otherIdx = reviewFindBaseIndex_('aftertaste', function(h){ return isSmartTagHeader(h) && (meta.isFlavorReference ? !/플레이버.*참조|Flavor.*Reference/i.test(h) : /플레이버.*참조|Flavor.*Reference/i.test(h)); });
+      otherCount = otherIdx >= 0 ? reviewParseSmartTags_(reviewFieldValueByIndex_(otherIdx)).length : 0;
+    }
+    var result = KcrSensoryTags.toggle(selected, tag, meta.category, otherCount);
+    if (!result.success) { toast(result.message || KcrSensoryTags.maxMessage(maxCategory), true); return; }
+    reviewSetSmartTagCurrent_(idx, result.selected);
+    reviewSyncKcrSensoryComment_(meta.isFlavorReference ? 'aftertaste' : meta.category, false);
+    if (meta.category === 'flavor' && !meta.isFlavorReference) {
+      reviewSyncKcrAftertasteFlavorRefs_();
+      reviewSyncKcrSensoryComment_('aftertaste', false);
+    }
+    scheduleReviewAutoSave(true);
+    return;
+  }
   var cur = selected.indexOf(tag);
   if (cur < 0) {
     var leaf = reviewSmartTagLeaf_(tag);
@@ -7004,13 +7078,32 @@ function toggleReviewSmartTag(idx, tag) {
   } else {
     selected = reviewApplySmartTagConflicts_(header, tag, selected);
     var candidate = selected.concat([tag]);
-    var meta = reviewSmartTagMeta_(header);
     if (meta) candidate = smartTagNormalizeSelection_(candidate, meta.data, meta.valueMode);
     if (candidate.length > MAX_TAGS) { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return; }
     selected = candidate;
   }
   reviewSetSmartTagCurrent_(idx, selected);
   scheduleReviewAutoSave(true);
+}
+function openReviewKcrTagFamily(idx, family) {
+  _reviewKcrOpenFamilies[idx] = family;
+  var root = document.getElementById('review-smart-tags-' + idx);
+  if (!root) return;
+  root.querySelectorAll('[data-kcr-review-family-button]').forEach(function(btn){
+    btn.classList.toggle('branch-open', btn.getAttribute('data-kcr-review-family-button') === family);
+  });
+  root.querySelectorAll('[data-kcr-review-family-panel]').forEach(function(panel){
+    panel.classList.toggle('active', panel.getAttribute('data-kcr-review-family-panel') === family);
+  });
+}
+function reviewSyncKcrAftertasteFlavorRefs_() {
+  var refIdx = reviewFindBaseIndex_('aftertaste', function(h){ return isSmartTagHeader(h) && /플레이버.*참조|Flavor.*Reference/i.test(h); });
+  if (refIdx < 0) return;
+  var flavorIds = reviewKcrTagsValue_('flavor');
+  reviewSetSmartTagCurrent_(refIdx, KcrSensoryTags.syncAftertasteFlavorRefs(flavorIds, reviewSmartTagCurrent_(refIdx)));
+  var buttonWrap = document.getElementById(reviewSmartTagButtonsId_(refIdx));
+  var meta = reviewSmartTagMeta_((_reviewState.headers || [])[refIdx] || '');
+  if (buttonWrap && meta) buttonWrap.innerHTML = reviewKcrSmartTagButtonsHtml_(refIdx, meta, reviewSmartTagCurrent_(refIdx), false);
 }
 function reviewToggleSmartTagBranch_(idx, tag, branchData, ancestors, valueMode) {
   var selected = reviewSmartTagCurrent_(idx);
@@ -7059,18 +7152,6 @@ function toggleReviewSmartTagSecondary(idx, primaryIndex, secondaryIndex, tag, s
     var ancestors = primary && !smartTagIsToneGroup_(primary) ? [reviewSmartTagValue_(meta, primary, '', '', 'primary')] : [];
     if (meta && secondary) reviewToggleSmartTagBranch_(idx, tag, secondaryData[secondary], ancestors, meta.valueMode);
   }
-}
-function toggleReviewKcrBodyCategory(idx, button) {
-  var meta = reviewSmartTagMeta_((_reviewState.headers || [])[idx] || '');
-  if (!meta || !meta.data || !meta.data['질감']) return;
-  reviewToggleSmartTagBranch_(idx, '질감', meta.data['질감'], [], 'label');
-  if (button) button.classList.toggle('branch-open', reviewSmartTagCurrent_(idx).indexOf('질감') > -1);
-}
-function toggleReviewKcrPrimary(idx, primaryIndex, tag) {
-  toggleReviewSmartTagPrimary(idx, primaryIndex, '', false, null);
-}
-function toggleReviewKcrSecondary(idx, primaryIndex, secondaryIndex, tag) {
-  toggleReviewSmartTagSecondary(idx, primaryIndex, secondaryIndex, '', false, null);
 }
 function addReviewCustomSmartTag(idx) {
   var input = document.getElementById(reviewSmartTagCustomId_(idx));
@@ -7192,8 +7273,53 @@ function reviewKcrIntensityValue_(baseKey, fallback) {
   return isNaN(n) ? fallback : n;
 }
 function reviewKcrTagsValue_(baseKey) {
-  var idx = reviewFindBaseIndex_(baseKey, function(h){ return isSmartTagHeader(h); });
+  var idx = reviewFindBaseIndex_(baseKey, function(h){ return isSmartTagHeader(h) && !/플레이버.*참조|Flavor.*Reference/i.test(h); });
   return idx >= 0 ? reviewParseSmartTags_(reviewFieldValueByIndex_(idx)) : [];
+}
+function reviewKcrAftertasteFlavorTagsValue_() {
+  var idx = reviewFindBaseIndex_('aftertaste', function(h){ return isSmartTagHeader(h) && /플레이버.*참조|Flavor.*Reference/i.test(h); });
+  return idx >= 0 ? reviewParseSmartTags_(reviewFieldValueByIndex_(idx)) : [];
+}
+function reviewKcrCommentStateIndex_(category) {
+  return reviewFindBaseIndex_(category, function(h){ return /자동생성상태/.test(String(h)); });
+}
+function reviewKcrCommentIndex_(category) {
+  return reviewFindBaseIndex_(category, function(h){ return /코멘트|Comment/i.test(String(h)) && !/자동생성상태|종합|Overall/i.test(String(h)); });
+}
+function reviewKcrCommentState_(category) {
+  var idx = reviewKcrCommentStateIndex_(category);
+  var raw = reviewFieldValueByIndex_(idx);
+  try { return KcrSensoryComments.createState(raw ? JSON.parse(raw) : {}); }
+  catch (e) { return KcrSensoryComments.createState({ customComment:reviewFieldValueByIndex_(reviewKcrCommentIndex_(category)) }); }
+}
+function reviewKcrTagIdsForCategory_(category) {
+  return reviewKcrTagsValue_(category);
+}
+function reviewSyncKcrSensoryComment_(category, reset) {
+  if (typeof KcrSensoryComments === 'undefined' || KCR_SENSORY_CONFIG.categoryOrder.indexOf(category) < 0) return;
+  var state = reviewKcrCommentState_(category);
+  var options = category === 'aftertaste' ? { aftertasteFlavorTagIds:reviewKcrAftertasteFlavorTagsValue_() } : {};
+  var next = reset
+    ? KcrSensoryComments.resetState(state, category, reviewKcrTagIdsForCategory_(category), options)
+    : KcrSensoryComments.syncState(state, category, reviewKcrTagIdsForCategory_(category), options);
+  var stateIdx = reviewKcrCommentStateIndex_(category);
+  var stateInput = document.getElementById('review-input-' + stateIdx);
+  if (stateInput) stateInput.value = JSON.stringify(next);
+  var commentIdx = reviewKcrCommentIndex_(category);
+  var commentInput = document.getElementById('review-kcr-comment-' + commentIdx);
+  if (commentInput && (!next.commentTouched || reset)) commentInput.value = next.customComment;
+}
+function onReviewKcrSensoryCommentInput(category, idx, value) {
+  var next = KcrSensoryComments.editState(reviewKcrCommentState_(category), value);
+  var stateIdx = reviewKcrCommentStateIndex_(category);
+  var stateInput = document.getElementById('review-input-' + stateIdx);
+  if (stateInput) stateInput.value = JSON.stringify(next);
+  scheduleReviewAutoSave();
+}
+function resetReviewKcrSensoryComment(category) {
+  reviewSyncKcrSensoryComment_(category, true);
+  scheduleReviewAutoSave(true);
+  toast('자동 코멘트로 재설정했습니다.');
 }
 function reviewCommentGeneratorCode_() {
   var code = String((_reviewState && _reviewState.code) || '').toUpperCase();
@@ -7260,6 +7386,7 @@ function reviewCommentAttrText_(attr) {
   return reviewTextByNames_([attr && attr.commentHeader]);
 }
 function reviewBuildKcrCommentPayload_() {
+  function labels(ids) { return typeof KcrSensoryTags === 'undefined' ? ids : KcrSensoryTags.labels(ids); }
   return {
     cupNumber: reviewFieldValueByIndex_(reviewFindHeaderIndex_([/컵번호|Cup/i])),
     process: reviewFieldValueByIndex_(reviewFindHeaderIndex_([/프로세스|Process/i])),
@@ -7269,17 +7396,17 @@ function reviewBuildKcrCommentPayload_() {
     aftertastePersistence: reviewKcrIntensityValue_('aftertaste', 4),
     acidity: reviewKcrScoreValue_('acidity'),
     acidityIntensity: reviewKcrIntensityValue_('acidity', 4),
-    body: reviewKcrScoreValue_('body'),
-    bodyIntensity: reviewKcrIntensityValue_('body', 4),
     sweetness: reviewKcrScoreValue_('sweetness'),
     sweetnessIntensity: reviewKcrIntensityValue_('sweetness', 4),
+    mouthfeel: reviewKcrScoreValue_('mouthfeel'),
+    mouthfeelIntensity: reviewKcrIntensityValue_('mouthfeel', 4),
     overall: reviewKcrScoreValue_('overall'),
     tags: {
-      flavor: reviewKcrTagsValue_('flavor'),
-      aftertaste: reviewKcrTagsValue_('aftertaste'),
-      acidity: reviewKcrTagsValue_('acidity'),
-      body: reviewKcrTagsValue_('body'),
-      sweetness: reviewKcrTagsValue_('sweetness')
+      flavor: labels(reviewKcrTagsValue_('flavor')),
+      aftertaste: labels(reviewKcrTagsValue_('aftertaste').concat(reviewKcrAftertasteFlavorTagsValue_())),
+      acidity: labels(reviewKcrTagsValue_('acidity')),
+      sweetness: labels(reviewKcrTagsValue_('sweetness')),
+      mouthfeel: labels(reviewKcrTagsValue_('mouthfeel'))
     }
   };
 }
@@ -7478,7 +7605,7 @@ function reviewScoreSummaryFromPayload_(code, payload) {
   function fmt(v) { v = n(v); return v == null ? '-' : (Math.round(v * 10) / 10).toString(); }
   var items = [];
   if (code === 'KCR') {
-    items = [['Flavor',payload.flavor],['Aftertaste',payload.aftertaste],['Acidity',payload.acidity],['Body',payload.body],['Sweetness',payload.sweetness],['Overall',payload.overall]];
+    items = [['Flavor',payload.flavor],['Aftertaste',payload.aftertaste],['Acidity',payload.acidity],['Sweetness',payload.sweetness],['Mouthfeel',payload.mouthfeel],['Overall',payload.overall]];
   } else if (code === 'IKRC') {
     var s = payload.scores || {};
     items = [['Flavor',s.flavor],['Clean Cup',s.cleanCup],['Sweetness',s.sweetness],['Acidity',s.acidity],['Mouthfeel',s.mouthfeel]];
@@ -7637,12 +7764,15 @@ function appendReviewEvalLikeFields(wrap, groups) {
     }
     if (g.comments && g.comments.length) {
       g.comments.forEach(function(c){
+        var kcrCommentCategory = String(_reviewState.code || '').toUpperCase() === 'KCR' ? reviewBaseKeyFromHeader(c.h) : '';
+        var isKcrSensoryComment = KCR_SENSORY_CONFIG.categoryOrder.indexOf(kcrCommentCategory) > -1;
         html += '<div class="review-eval-comment"><div class="section-label">' + escHtml(reviewFormatAttributeName(c.h)) + '</div>';
+        if (isKcrSensoryComment) html += '<button type="button" class="kcr-comment-reset" onclick="resetReviewKcrSensoryComment(\'' + kcrCommentCategory + '\')">자동 코멘트로 재설정</button>';
         if (reviewCanGenerateOverallComment_(c)) {
           html += '<button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + c.idx + ')">종합 코멘트 자동 생성</button>';
           html += '<div class="gen-comment-area" id="review-gen-comment-area-' + c.idx + '"></div>';
         }
-        html += '<textarea data-col="' + c.idx + '" oninput="scheduleReviewAutoSave()" onblur="scheduleReviewAutoSave(true)"' + (!c.editable ? ' disabled' : '') + '>' + escHtml(String(c.val || '')) + '</textarea></div>';
+        html += '<textarea' + (isKcrSensoryComment ? ' id="review-kcr-comment-' + c.idx + '"' : '') + ' data-col="' + c.idx + '" oninput="' + (isKcrSensoryComment ? 'onReviewKcrSensoryCommentInput(\'' + kcrCommentCategory + '\',' + c.idx + ',this.value)' : 'scheduleReviewAutoSave()') + '" onblur="scheduleReviewAutoSave(true)"' + (!c.editable ? ' disabled' : '') + '>' + escHtml(String(c.val || '')) + '</textarea></div>';
       });
     }
     card.innerHTML = html;
@@ -7972,6 +8102,15 @@ function openReviewEdit(item) {
   var scoreItems = [], intensityItems = [], ynItems = [], commentItems = [], tagItems = [], disqItems = [], disqReasonItems = [], infoItems = [], resultTextItems = [], resultReadonlyItems = [], otherItems = [];
   headers.forEach(function(h, idx){
     if (!h || h === '서명') return;
+    if (String(_reviewState.code || '').toUpperCase() === 'KCR' && /자동생성상태/.test(String(h))) {
+      var stateInput = document.createElement('input');
+      stateInput.type = 'hidden';
+      stateInput.id = 'review-input-' + idx;
+      stateInput.setAttribute('data-col', idx);
+      stateInput.value = item[h] == null ? (item['_col' + idx] || '') : item[h];
+      wrap.appendChild(stateInput);
+      return;
+    }
     if (reviewIsKbc_() && isKbcLegacyRemovedHeader_(h)) return;
     var val = item[h];
     if (val == null) val = item['_col' + idx] || '';
@@ -9012,16 +9151,21 @@ function startCuppingFinalsSingle() {
 }
 
 function makeCupData(cupNumber) {
+  var commentStates = {};
+  ['flavor','aftertaste','acidity','sweetness','mouthfeel'].forEach(function(attr) {
+    commentStates[attr] = KcrSensoryComments.createState();
+  });
   return {
     cupNumber: cupNumber,
-    flavor:3.0, flavorIntensity:4, selectedTagsFlavor:[],
-    aftertaste:3.0, aftertastePersistence:4, selectedTagsAftertaste:[],
-    acidity:3.0, acidityIntensity:4, selectedTagsAcidity:[],
-    body:3.0, bodyIntensity:4, selectedTagsBody:[],
-    sweetness:3.0, sweetnessIntensity:4, selectedTagsSweetness:[],
+    flavor:3.0, flavorIntensity:4, flavorTagIds:[],
+    aftertaste:3.0, aftertastePersistence:4, aftertasteTagIds:[], aftertasteFlavorTagIds:[],
+    acidity:3.0, acidityIntensity:4, acidityTagIds:[],
+    sweetness:3.0, sweetnessIntensity:4, sweetnessTagIds:[],
+    mouthfeel:3.0, mouthfeelIntensity:4, mouthfeelTagIds:[],
+    sensoryComments:commentStates,
     overall:3.0, noteOverall:'', generatedComment:'', commentEdited:true,
     flavorLocked:false, aftertasteLocked:false, acidityLocked:false,
-    bodyLocked:false, sweetnessLocked:false, overallLocked:false
+    sweetnessLocked:false, mouthfeelLocked:false, overallLocked:false
   };
 }
 
@@ -9034,6 +9178,7 @@ function initCuppingEval(cupNumbers, mode, process, isFinalsMode, isCalibrationM
   _cupping.isFinalsMode = isFinalsMode;
   _cupping.compCode = _selComp.code;
   _cupping.isCalibrationMode = !!isCalibrationMode;
+  _cupping.openTagFamilies = {};
   resetEvaluationDisqualification_('KCR');
 
   document.getElementById('cupping-eval-title').textContent =
@@ -9060,7 +9205,7 @@ function renderCuppingCupNav() {
   var submitBtn = null;
 
   _cupping.cups.forEach(function(c, i) {
-    var total = roundTotal(c.flavor + c.aftertaste + c.acidity + c.body + (c.sweetness * 2) + c.overall);
+    var total = roundTotal(c.flavor + c.aftertaste + c.acidity + (c.sweetness * 2) + c.mouthfeel + c.overall);
     var btn = document.createElement('button');
     btn.className = 'cup-btn' + (i === _cupping.currentIdx ? ' active' : '') +
                     (c.noteOverall && c.noteOverall.length >= 10 ? ' done' : '');
@@ -9095,13 +9240,146 @@ function saveCuppingCurrentFromDOM() {
 
 function updateCuppingTotal() {
   var c = _cupping.cups[_cupping.currentIdx];
-  var t = roundTotal(c.flavor + c.aftertaste + c.acidity + c.body + (c.sweetness * 2) + c.overall);
+  var t = roundTotal(c.flavor + c.aftertaste + c.acidity + (c.sweetness * 2) + c.mouthfeel + c.overall);
   document.getElementById('cupping-total').textContent = fmtScore(t,2);
 }
 
 function switchCuppingAttr(attr) {
   saveCuppingCurrentFromDOM();
   _cupping.currentAttr = attr;
+  renderCuppingAttrCard();
+}
+
+function kcrTagIdsKey_(attr) {
+  return attr + 'TagIds';
+}
+function kcrCommentOptions_(c, attr) {
+  return attr === 'aftertaste' ? { aftertasteFlavorTagIds:(c.aftertasteFlavorTagIds || []).slice() } : {};
+}
+function kcrCommentState_(c, attr) {
+  if (!c.sensoryComments) c.sensoryComments = {};
+  c.sensoryComments[attr] = KcrSensoryComments.createState(c.sensoryComments[attr]);
+  return c.sensoryComments[attr];
+}
+function syncKcrSensoryComment_(c, attr) {
+  var ids = (c[kcrTagIdsKey_(attr)] || []).slice();
+  c.sensoryComments[attr] = KcrSensoryComments.syncState(kcrCommentState_(c, attr), attr, ids, kcrCommentOptions_(c, attr));
+}
+function kcrTagTextHtml_(tag) {
+  return '<span class="kcr-tag-ko">' + escHtml(tag.labelKo) + '</span><span class="kcr-tag-en">' + escHtml(tag.labelEn) + '</span>';
+}
+function kcrSelectedTagHtml_(attr, id, handlerName) {
+  var tag = KcrSensoryTags.get(id);
+  if (!tag) return '';
+  return '<span class="selected-tag kcr-selected-tag" onclick="' + handlerName + '(\'' + attr + '\',\'' + escapeJsString_(id) + '\')"><span>' + escHtml(tag.labelKo) + '</span><small>' + escHtml(tag.labelEn) + '</small> ×</span>';
+}
+function kcrOpenFamilyFor_(attr) {
+  var families = KcrSensoryTags.families(attr);
+  var current = _cupping.openTagFamilies && _cupping.openTagFamilies[attr];
+  return families.indexOf(current) > -1 ? current : (families[0] || '');
+}
+function renderKcrSensoryTagsHtml_(c, attr) {
+  var ids = KcrSensoryTags.sanitize(c[kcrTagIdsKey_(attr)] || [], attr);
+  c[kcrTagIdsKey_(attr)] = ids;
+  if (attr === 'aftertaste') c.aftertasteFlavorTagIds = KcrSensoryTags.syncAftertasteFlavorRefs(c.flavorTagIds || [], c.aftertasteFlavorTagIds || []);
+  var max = KCR_SENSORY_CONFIG.maxSelections[attr] || 3;
+  var totalSelected = ids.length + (attr === 'aftertaste' ? c.aftertasteFlavorTagIds.length : 0);
+  var openFamily = kcrOpenFamilyFor_(attr);
+  var html = '<div class="smart-tags-section kcr-smart-tags-section">';
+  html += '<div class="kcr-tag-section-head"><div><div class="smart-tags-title">Smart Tags</div><div class="smart-tags-hint">대표 특성 ' + totalSelected + ' / ' + max + '개 · 계열 버튼은 탐색용이며 최종 특성 ID만 저장됩니다.</div></div>';
+  html += '<button type="button" class="kcr-tag-clear" onclick="clearKcrTags(\'' + attr + '\')">선택 초기화</button></div>';
+  html += '<div class="selected-tags" id="st-' + attr + '">';
+  ids.forEach(function(id) { html += kcrSelectedTagHtml_(attr, id, 'toggleKcrTag'); });
+  if (attr === 'aftertaste') c.aftertasteFlavorTagIds.forEach(function(id) { html += kcrSelectedTagHtml_(attr, id, 'toggleKcrAftertasteFlavorTag'); });
+  html += '</div>';
+
+  if (attr === 'aftertaste') {
+    html += '<div class="kcr-aftertaste-flavor"><div class="kcr-aftertaste-flavor-title">남아 있는 플레이버</div><div class="kcr-aftertaste-flavor-hint">Flavor에서 선택한 태그 중 실제로 여운에 남는 향미만 다시 선택합니다. 일반 Aftertaste 태그와 합쳐 최대 3개입니다.</div>';
+    html += '<div class="kcr-aftertaste-flavor-list">';
+    (c.flavorTagIds || []).forEach(function(id) {
+      var tag = KcrSensoryTags.get(id);
+      if (!tag) return;
+      var selected = c.aftertasteFlavorTagIds.indexOf(id) > -1;
+      html += '<button type="button" class="cat-btn-t kcr-tag-option' + (selected ? ' selected' : '') + '" onclick="toggleKcrAftertasteFlavorTag(\'aftertaste\',\'' + escapeJsString_(id) + '\')">' + kcrTagTextHtml_(tag) + '</button>';
+    });
+    if (!(c.flavorTagIds || []).length) html += '<div class="mob-empty-tag">Flavor에서 먼저 플레이버 태그를 선택하세요.</div>';
+    html += '</div></div>';
+  }
+
+  html += '<div class="category-primary">';
+  KcrSensoryTags.families(attr).forEach(function(family) {
+    var labels = KCR_SENSORY_CONFIG.familyLabels[family] || {ko:family,en:''};
+    html += '<button type="button" class="cat-btn-p kcr-tag-family-btn' + (family === openFamily ? ' branch-open' : '') + '" onclick="openKcrTagFamily(\'' + attr + '\',\'' + escapeJsString_(family) + '\')"><span class="kcr-tag-ko">' + escHtml(labels.ko) + '</span><span class="kcr-tag-en">' + escHtml(labels.en) + '</span></button>';
+  });
+  html += '</div>';
+  KcrSensoryTags.families(attr).forEach(function(family) {
+    html += '<div class="kcr-tag-options' + (family === openFamily ? ' active' : '') + '" data-kcr-family="' + escHtml(family) + '">';
+    KcrSensoryTags.list(attr, family).forEach(function(tag) {
+      html += '<button type="button" class="cat-btn-t kcr-tag-option' + (ids.indexOf(tag.id) > -1 ? ' selected' : '') + '" onclick="toggleKcrTag(\'' + attr + '\',\'' + escapeJsString_(tag.id) + '\')">' + kcrTagTextHtml_(tag) + '</button>';
+    });
+    html += '</div>';
+  });
+
+  var commentState = kcrCommentState_(c, attr);
+  html += '<div class="kcr-sensory-comment"><div class="kcr-sensory-comment-head"><div class="kcr-sensory-comment-title">' + escHtml(KCR_SENSORY_CONFIG.categoryLabels[attr].ko) + ' 코멘트</div>';
+  if (commentState.commentTouched) html += '<button type="button" class="kcr-comment-reset" onclick="resetKcrSensoryComment(\'' + attr + '\')">자동 생성으로 되돌리기</button>';
+  html += '</div><textarea id="kcr-sensory-comment-' + attr + '" placeholder="태그를 선택하면 자동 코멘트가 생성됩니다. 직접 수정할 수 있습니다." oninput="onKcrSensoryCommentInput(\'' + attr + '\',this.value)">' + escHtml(commentState.customComment) + '</textarea>';
+  html += '<div class="kcr-comment-state">' + (commentState.commentTouched ? '직접 수정한 코멘트입니다. 태그를 변경해도 덮어쓰지 않습니다.' : '현재 선택 태그 기준으로 자동 생성됩니다.') + '</div></div>';
+  return html + '</div>';
+}
+
+function openKcrTagFamily(attr, family) {
+  _cupping.openTagFamilies = _cupping.openTagFamilies || {};
+  _cupping.openTagFamilies[attr] = family;
+  renderCuppingAttrCard();
+}
+function toggleKcrTag(attr, id) {
+  var c = _cupping.cups[_cupping.currentIdx];
+  var key = kcrTagIdsKey_(attr);
+  var otherCount = attr === 'aftertaste' ? (c.aftertasteFlavorTagIds || []).length : 0;
+  var result = KcrSensoryTags.toggle(c[key] || [], id, attr, otherCount);
+  if (!result.success) { toast(result.message, true); return; }
+  c[key] = result.selected;
+  if (attr === 'flavor') {
+    c.aftertasteFlavorTagIds = KcrSensoryTags.syncAftertasteFlavorRefs(c.flavorTagIds, c.aftertasteFlavorTagIds || []);
+    syncKcrSensoryComment_(c, 'aftertaste');
+  }
+  syncKcrSensoryComment_(c, attr);
+  renderCuppingAttrCard();
+}
+function toggleKcrAftertasteFlavorTag(attr, id) {
+  var c = _cupping.cups[_cupping.currentIdx];
+  c.aftertasteFlavorTagIds = KcrSensoryTags.syncAftertasteFlavorRefs(c.flavorTagIds || [], c.aftertasteFlavorTagIds || []);
+  var idx = c.aftertasteFlavorTagIds.indexOf(id);
+  if (idx > -1) c.aftertasteFlavorTagIds.splice(idx, 1);
+  else {
+    if ((c.aftertasteTagIds || []).length + c.aftertasteFlavorTagIds.length >= KCR_SENSORY_CONFIG.maxSelections.aftertaste) { toast(KcrSensoryTags.maxMessage('aftertaste'), true); return; }
+    if ((c.flavorTagIds || []).indexOf(id) < 0) { toast('Flavor에서 현재 선택된 태그만 연결할 수 있습니다.', true); return; }
+    c.aftertasteFlavorTagIds.push(id);
+  }
+  syncKcrSensoryComment_(c, 'aftertaste');
+  renderCuppingAttrCard();
+}
+function clearKcrTags(attr) {
+  var c = _cupping.cups[_cupping.currentIdx];
+  c[kcrTagIdsKey_(attr)] = [];
+  if (attr === 'aftertaste') c.aftertasteFlavorTagIds = [];
+  if (attr === 'flavor') {
+    c.aftertasteFlavorTagIds = [];
+    syncKcrSensoryComment_(c, 'aftertaste');
+  }
+  syncKcrSensoryComment_(c, attr);
+  renderCuppingAttrCard();
+}
+function onKcrSensoryCommentInput(attr, value) {
+  var c = _cupping.cups[_cupping.currentIdx];
+  c.sensoryComments[attr] = KcrSensoryComments.editState(kcrCommentState_(c, attr), value);
+  var stateText = document.querySelector('#cupping-attr-card .kcr-comment-state');
+  if (stateText) stateText.textContent = c.sensoryComments[attr].commentTouched ? '직접 수정한 코멘트입니다. 태그를 변경해도 덮어쓰지 않습니다.' : '현재 선택 태그 기준으로 자동 생성됩니다.';
+}
+function resetKcrSensoryComment(attr) {
+  var c = _cupping.cups[_cupping.currentIdx];
+  c.sensoryComments[attr] = KcrSensoryComments.resetState(kcrCommentState_(c, attr), attr, c[kcrTagIdsKey_(attr)] || [], kcrCommentOptions_(c, attr));
   renderCuppingAttrCard();
 }
 
@@ -9132,12 +9410,9 @@ function renderCuppingAttrCard() {
   var isLocked = c[attr + 'Locked'] || false;
   var intensityKey = (attr === 'aftertaste') ? 'aftertastePersistence' : attr + 'Intensity';
   var iLabel = (attr === 'aftertaste') ? 'Persistence' : 'Intensity';
-  var selectedTagKey = 'selectedTags' + attr.charAt(0).toUpperCase() + attr.slice(1);
-  var selectedTags = smartTagNormalizeSelection_(c[selectedTagKey] || [], SMART_TAGS[attr], 'label');
-  c[selectedTagKey] = selectedTags;
 
   var html = '<div class="attr-card">';
-  var attrLabelMap = {flavor:'Flavor(플레이버)', aftertaste:'Aftertaste(애프터테이스트)', acidity:'Acidity(산미)', body:'Body(바디)', sweetness:'Sweetness(스윗니스) ×2', overall:'Overall(주관적 종합평가)'};
+  var attrLabelMap = {flavor:'Flavor(플레이버)', aftertaste:'Aftertaste(에프터테이스트)', acidity:'Acidity(산미)', sweetness:'Sweetness(단맛) ×2', mouthfeel:'Mouthfeel(마우스필)', overall:'Overall(오버롤)'};
   html += '<h3 style="text-align:center;margin-bottom:16px;font-size:18px;font-weight:700;letter-spacing:1px">' + attrLabelMap[attr] + '</h3>';
   html += '<div class="score-display">' + fmtScore(c[attr],2) + '</div>';
   html += '<div class="score-desc-text">' + kcrGetMeaning(c[attr]) + '</div>';
@@ -9159,62 +9434,7 @@ function renderCuppingAttrCard() {
     html += '</div>';
   }
 
-  if (attr !== 'overall' && SMART_TAGS[attr]) {
-    html += '<div class="smart-tags-section kcr-smart-tags-section">';
-    html += '<div class="smart-tags-title">Smart Tags</div>';
-    html += '<div class="smart-tags-hint">상위 카테고리 또는 하위 특성을 선택하세요 (최대 ' + MAX_TAGS + '개)</div>';
-    html += '<div class="selected-tags" id="st-' + attr + '">';
-    selectedTags.forEach(function(tag){
-      html += '<span class="selected-tag" onclick="removeCuppingTag(\'' + attr + '\',\'' + escapeJsString_(tag) + '\')">' + escHtml(tag) + ' ×</span>';
-    });
-    html += '</div>';
-
-    if (attr === 'body') {
-      html += '<div class="category-primary"><div class="cat-btn-p' + (selectedTags.indexOf('질감') > -1 ? ' selected' : '') + '" onclick="toggleCuppingBranchValue_(\'body\',\'질감\',SMART_TAGS.body[\'질감\'],[])">질감</div></div>';
-      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0">';
-      var bodyRendered = {};
-      Object.keys(BODY_SMART_TAG_GROUPS).forEach(function(groupLabel) {
-        html += smartTagGroupLabelHtml_(groupLabel);
-        BODY_SMART_TAG_GROUPS[groupLabel].forEach(function(tag) {
-          bodyRendered[tag] = true;
-          var isSel = selectedTags.indexOf(tag) > -1;
-          html += '<div class="cat-btn-s' + (isSel ? ' selected' : '') + '" onclick="selectCuppingTag(\'body\',\'' + escapeJsString_(tag) + '\',\'질감\')">' + escHtml(tag) + '</div>';
-        });
-      });
-      SMART_TAGS.body['질감'].forEach(function(tag) {
-        if (bodyRendered[tag]) return;
-        var isSel = selectedTags.indexOf(tag) > -1;
-        html += '<div class="cat-btn-s' + (isSel ? ' selected' : '') + '" onclick="selectCuppingTag(\'body\',\'' + escapeJsString_(tag) + '\',\'질감\')">' + escHtml(tag) + '</div>';
-      });
-      html += '</div>';
-    } else {
-      html += '<div class="category-primary">';
-      for (var p in SMART_TAGS[attr]) {
-        var pOpen = smartTagLabelBranchSelected_(selectedTags, p, SMART_TAGS[attr][p]);
-        html += '<div class="cat-btn-p' + (selectedTags.indexOf(p) > -1 ? ' selected' : '') + (pOpen ? ' branch-open' : '') + '" onclick="toggleCuppingPrimary(\'' + attr + '\',\'' + escapeJsString_(p) + '\',this)">' + escHtml(p) + '</div>';
-      }
-      html += '</div>';
-      for (var p in SMART_TAGS[attr]) {
-        var pOpen = smartTagLabelBranchSelected_(selectedTags, p, SMART_TAGS[attr][p]);
-        html += '<div class="category-secondary' + (pOpen ? ' active' : '') + '" id="cs-' + attr + '-' + p + '">';
-        for (var s in SMART_TAGS[attr][p]) {
-          var sOpen = smartTagLabelBranchSelected_(selectedTags, s, SMART_TAGS[attr][p][s]);
-          html += '<div class="cat-btn-s' + (selectedTags.indexOf(s) > -1 ? ' selected' : '') + (sOpen ? ' branch-open' : '') + '" onclick="toggleCuppingSecondary(\'' + attr + '\',\'' + escapeJsString_(p) + '\',\'' + escapeJsString_(s) + '\',this)">' + escHtml(s) + '</div>';
-          html += '<div class="category-tertiary' + (sOpen ? ' active' : '') + '" id="ct-' + attr + '-' + p + '-' + s + '">';
-          SMART_TAGS[attr][p][s].forEach(function(tag) {
-            var tSel = selectedTags.indexOf(tag) > -1;
-            html += '<div class="cat-btn-t' + (tSel ? ' selected' : '') + '" onclick="selectCuppingTag(\'' + attr + '\',\'' + escapeJsString_(tag) + '\',\'' + escapeJsString_(p) + '\',\'' + escapeJsString_(s) + '\')">' + escHtml(tag) + '</div>';
-          });
-          html += '</div>';
-        }
-        html += '</div>';
-      }
-    }
-    html += '<div class="custom-tag-row kcr-custom-tag-row">';
-    html += '<textarea id="custom-tag-' + attr + '" placeholder="직접 입력 또는 긴 태그 메모" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){addCuppingCustomTag(\'' + attr + '\');event.preventDefault()}"></textarea>';
-    html += '<button onclick="addCuppingCustomTag(\'' + attr + '\')">추가</button>';
-    html += '</div></div>';
-  }
+  if (attr !== 'overall') html += renderKcrSensoryTagsHtml_(c, attr);
 
   html += '</div>';
   document.getElementById('cupping-attr-card').innerHTML = html;
@@ -9285,107 +9505,6 @@ function validateCuppingCommentEdited(c) {
   return true;
 }
 
-function toggleCuppingPrimary(attr, primary, button) {
-  var sid = 'cs-' + attr + '-' + primary;
-  var sd = document.getElementById(sid);
-  document.querySelectorAll('[id^="cs-' + attr + '-"]').forEach(function(d){
-    if (d.id !== sid) d.classList.remove('active');
-  });
-  document.querySelectorAll('[id^="ct-' + attr + '-"]').forEach(function(d){ d.classList.remove('active'); });
-  document.querySelectorAll('#cupping-attr-card .category-primary > .cat-btn-p').forEach(function(d){ d.classList.remove('branch-open'); });
-  if (sd) sd.classList.add('active');
-  if (button) button.classList.add('branch-open');
-  if (!smartTagIsToneGroup_(primary) && SMART_TAGS[attr] && SMART_TAGS[attr][primary]) {
-    toggleCuppingBranchValue_(attr, primary, SMART_TAGS[attr][primary], []);
-  }
-}
-
-function toggleCuppingSecondary(attr, primary, secondary, button) {
-  var tid = 'ct-' + attr + '-' + primary + '-' + secondary;
-  var td = document.getElementById(tid);
-  document.querySelectorAll('[id^="ct-' + attr + '-"]').forEach(function(d){
-    if (d.id !== tid) d.classList.remove('active');
-  });
-  var parent = document.getElementById('cs-' + attr + '-' + primary);
-  if (parent) parent.querySelectorAll(':scope > .cat-btn-s').forEach(function(d){ d.classList.remove('branch-open'); });
-  if (td) td.classList.add('active');
-  if (button) button.classList.add('branch-open');
-  if (!smartTagIsToneGroup_(primary) && !smartTagIsToneGroup_(secondary) && SMART_TAGS[attr] && SMART_TAGS[attr][primary]) {
-    toggleCuppingBranchValue_(attr, secondary, SMART_TAGS[attr][primary][secondary], [primary]);
-  }
-}
-
-function toggleCuppingBranchValue_(attr, tag, branchData, ancestors) {
-  var c = _cupping.cups[_cupping.currentIdx];
-  var key = 'selectedTags' + attr.charAt(0).toUpperCase() + attr.slice(1);
-  var next = smartTagToggleLabelBranchValue_(c[key] || [], tag, branchData, ancestors);
-  if (next.length > MAX_TAGS) { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return false; }
-  c[key] = smartTagNormalizeSelection_(next, SMART_TAGS[attr], 'label');
-  refreshTagDisplay(attr);
-  return true;
-}
-
-function selectCuppingTag(attr, tag, parentPrimary, parentSecondary) {
-  var c = _cupping.cups[_cupping.currentIdx];
-  var key = 'selectedTags' + attr.charAt(0).toUpperCase() + attr.slice(1);
-  if (!c[key]) c[key] = [];
-  c[key] = smartTagNormalizeSelection_(c[key], SMART_TAGS[attr], 'label');
-  if (parentPrimary) c[key] = c[key].filter(function(t){ return t !== parentPrimary; });
-  if (parentSecondary) c[key] = c[key].filter(function(t){ return t !== parentSecondary; });
-
-  if (attr === 'body' && BODY_CONFLICTS[tag]) {
-    var conflicts = BODY_CONFLICTS[tag];
-    c[key] = c[key].filter(function(t){ return conflicts.indexOf(t) === -1; });
-    if (c[key].indexOf(tag) > -1) {
-      c[key].splice(c[key].indexOf(tag), 1);
-      refreshTagDisplay(attr); return;
-    }
-    if (c[key].length < MAX_TAGS) c[key].push(tag);
-    else { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return; }
-    refreshTagDisplay(attr); return;
-  }
-
-  var idx = c[key].indexOf(tag);
-  if (idx > -1) c[key].splice(idx, 1);
-  else if (c[key].length < MAX_TAGS) c[key].push(tag);
-  else { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return; }
-  refreshTagDisplay(attr);
-}
-
-function removeCuppingTag(attr, tag) {
-  var c = _cupping.cups[_cupping.currentIdx];
-  var key = 'selectedTags' + attr.charAt(0).toUpperCase() + attr.slice(1);
-  if (!c[key]) return;
-  var idx = c[key].indexOf(tag);
-  if (idx > -1) c[key].splice(idx, 1);
-  refreshTagDisplay(attr);
-}
-
-function addCuppingCustomTag(attr) {
-  var input = document.getElementById('custom-tag-' + attr);
-  if (!input) return;
-  var tag = input.value.trim().replace(/[<>"]/g, '').replace(/\s*\n+\s*/g, ' / ');
-  if (!tag) return;
-  selectCuppingTag(attr, tag);
-  input.value = '';
-}
-
-function refreshTagDisplay(attr) {
-  var c = _cupping.cups[_cupping.currentIdx];
-  var key = 'selectedTags' + attr.charAt(0).toUpperCase() + attr.slice(1);
-  var tags = smartTagNormalizeSelection_(c[key] || [], SMART_TAGS[attr], 'label');
-  c[key] = tags;
-  var wrap = document.getElementById('st-' + attr);
-  if (!wrap) return;
-  wrap.innerHTML = tags.map(function(t){
-    return '<span class="selected-tag" onclick="removeCuppingTag(\'' + attr + '\',\'' + escapeJsString_(t) + '\')">' + escHtml(t) + ' ×</span>';
-  }).join('');
-  document.querySelectorAll('#cupping-attr-card .cat-btn-p, #cupping-attr-card .cat-btn-s, #cupping-attr-card .cat-btn-t').forEach(function(btn){
-    var txt = btn.textContent.replace(/\s/g,'');
-    btn.classList.toggle('selected', tags.some(function(t){ return t.replace(/\s/g,'') === txt; }));
-  });
-}
-
 function generateCuppingComment() {
   saveCuppingCurrentFromDOM();
   updateCuppingTotal();
@@ -9413,12 +9532,15 @@ function generateCuppingComment() {
       flavor:c.flavor, flavorIntensity:c.flavorIntensity,
       aftertaste:c.aftertaste, aftertastePersistence:c.aftertastePersistence,
       acidity:c.acidity, acidityIntensity:c.acidityIntensity,
-      body:c.body, bodyIntensity:c.bodyIntensity,
       sweetness:c.sweetness, sweetnessIntensity:c.sweetnessIntensity,
+      mouthfeel:c.mouthfeel, mouthfeelIntensity:c.mouthfeelIntensity,
       overall:c.overall,
       tags:{
-        flavor:c.selectedTagsFlavor||[], aftertaste:c.selectedTagsAftertaste||[],
-        acidity:c.selectedTagsAcidity||[], body:c.selectedTagsBody||[], sweetness:c.selectedTagsSweetness||[]
+        flavor:KcrSensoryTags.labels(c.flavorTagIds||[]),
+        aftertaste:KcrSensoryTags.labels((c.aftertasteTagIds||[]).concat(c.aftertasteFlavorTagIds||[])),
+        acidity:KcrSensoryTags.labels(c.acidityTagIds||[]),
+        sweetness:KcrSensoryTags.labels(c.sweetnessTagIds||[]),
+        mouthfeel:KcrSensoryTags.labels(c.mouthfeelTagIds||[])
       }
     });
 }
@@ -9457,21 +9579,21 @@ function cuppingSubmitAll() {
   showOverlay();
   var kcrDqInfo = evalDisqualificationPayload_('KCR', false, '');
   var rows = _cupping.cups.map(function(c) {
-    var total = c.flavor + c.aftertaste + c.acidity + c.body + (c.sweetness * 2) + c.overall;
+    var total = c.flavor + c.aftertaste + c.acidity + (c.sweetness * 2) + c.mouthfeel + c.overall;
+    var flavorComment = kcrCommentState_(c, 'flavor');
+    var aftertasteComment = kcrCommentState_(c, 'aftertaste');
+    var acidityComment = kcrCommentState_(c, 'acidity');
+    var sweetnessComment = kcrCommentState_(c, 'sweetness');
+    var mouthfeelComment = kcrCommentState_(c, 'mouthfeel');
     return { data: [
       c.cupNumber, _cupping.process,
-      c.flavor, c.flavorIntensity,
-      c.aftertaste, c.aftertastePersistence,
-      c.acidity, c.acidityIntensity,
-      c.body, c.bodyIntensity,
-      c.sweetness, c.sweetnessIntensity,
+      c.flavor, c.flavorIntensity, flavorComment.customComment, JSON.stringify(flavorComment), (c.flavorTagIds || []).join(', '),
+      c.aftertaste, c.aftertastePersistence, aftertasteComment.customComment, JSON.stringify(aftertasteComment), (c.aftertasteTagIds || []).join(', '), (c.aftertasteFlavorTagIds || []).join(', '),
+      c.acidity, c.acidityIntensity, acidityComment.customComment, JSON.stringify(acidityComment), (c.acidityTagIds || []).join(', '),
+      c.sweetness, c.sweetnessIntensity, sweetnessComment.customComment, JSON.stringify(sweetnessComment), (c.sweetnessTagIds || []).join(', '),
+      c.mouthfeel, c.mouthfeelIntensity, mouthfeelComment.customComment, JSON.stringify(mouthfeelComment), (c.mouthfeelTagIds || []).join(', '),
       c.overall, c.noteOverall || '',
-      total, kcrDqInfo.disqualified ? 'Y' : 'N', kcrDqInfo.reason, '미검수',
-      (c.selectedTagsFlavor || []).join(', '),
-      (c.selectedTagsAftertaste || []).join(', '),
-      (c.selectedTagsAcidity || []).join(', '),
-      (c.selectedTagsBody || []).join(', '),
-      (c.selectedTagsSweetness || []).join(', ')
+      total, kcrDqInfo.disqualified ? 'Y' : 'N', kcrDqInfo.reason, '미검수'
     ]};
   });
 

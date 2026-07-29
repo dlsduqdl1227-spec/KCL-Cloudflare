@@ -627,6 +627,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   html,body{background:#fff!important}
 }
 </style>
+<script src="/assets/kcr-sensory-tags.js"></script>
 <script src="/assets/kcl-api-shim.js"></script>
 </head>
 <body>
@@ -928,22 +929,25 @@ function commentPublicLabel(label) {
     if (/Signature.*Mouth/i.test(s)) return 'Signature Mouthfeel Smart Tags(스마트태그)';
     if (/Signature.*Flavor/i.test(s)) return 'Signature Flavor Smart Tags(스마트태그)';
     if (/Machine.*Equipment/i.test(s)) return 'Machine & Equipment Smart Tags(스마트태그)';
-    if (/Aftertaste/i.test(s)) return 'Aftertaste Smart Tags(애프터테이스트 태그)';
-    if (/Sweetness/i.test(s)) return 'Sweetness Smart Tags(스윗니스 태그)';
+    if (/Aftertaste.*(?:Flavor|플레이버).*(?:Reference|참조)/i.test(s)) return 'Aftertaste Flavor Reference(에프터테이스트 플레이버 참조)';
+    if (/Aftertaste/i.test(s)) return 'Aftertaste Smart Tags(에프터테이스트 태그)';
+    if (/Sweetness/i.test(s)) return 'Sweetness Smart Tags(단맛 태그)';
     if (/Acidity/i.test(s)) return 'Acidity Smart Tags(산미 태그)';
+    if (/Mouthfeel/i.test(s)) return 'Mouthfeel Smart Tags(마우스필 태그)';
     if (/Body/i.test(s)) return 'Body Smart Tags(바디 태그)';
     if (/Flavor/i.test(s)) return 'Flavor Smart Tags(플레이버 태그)';
   }
   if (isOverallReportCommentLabel_(s)) return 'Overall Comment(종합 코멘트)';
-  if (/Aftertaste/i.test(s)) return 'Aftertaste Comment(애프터테이스트 코멘트)';
-  if (/Sweetness/i.test(s)) return 'Sweetness Comment(스윗니스 코멘트)';
+  if (/Aftertaste/i.test(s)) return 'Aftertaste Comment(에프터테이스트 코멘트)';
+  if (/Sweetness/i.test(s)) return 'Sweetness Comment(단맛 코멘트)';
   if (/Acidity/i.test(s)) return 'Acidity Comment(산미 코멘트)';
+  if (/Mouthfeel/i.test(s)) return 'Mouthfeel Comment(마우스필 코멘트)';
   if (/Body/i.test(s)) return 'Body Comment(바디 코멘트)';
   if (/Flavor/i.test(s)) return 'Flavor Comment(플레이버 코멘트)';
   return normalizeKclLabelText(s);
 }
 function isCuppingAttributeLabel(label) {
-  return /Flavor|Aftertaste|Acidity|Body|Sweetness|Overall|플레이버|애프터|에프터|피니시|산미|바디|스윗니스|단맛|오버롤|주관/i.test(String(label || ''));
+  return /Flavor|Aftertaste|Acidity|Body|Sweetness|Mouthfeel|Overall|플레이버|애프터|에프터|피니시|산미|바디|스윗니스|단맛|마우스필|오버롤|주관/i.test(String(label || ''));
 }
 function valueLooksNumericScore(value) {
   var s = String(value == null ? '' : value).trim();
@@ -1262,12 +1266,21 @@ function buildKcrAvgBox(list, avg) {
 
 function smartTagPublicLabel_(k) {
   var s = String(k || '');
+  if (/Aftertaste.*(?:Flavor|플레이버).*(?:Reference|참조)/i.test(s)) return 'Aftertaste Flavor Reference';
   if (/Aftertaste/i.test(s)) return 'Aftertaste';
   if (/Acidity/i.test(s)) return 'Acidity';
+  if (/Mouthfeel/i.test(s)) return 'Mouthfeel';
   if (/Body/i.test(s)) return 'Body';
   if (/Sweetness/i.test(s)) return 'Sweetness';
   if (/Flavor/i.test(s)) return 'Flavor';
   return publicLabel(s.replace(/스마트\s*태그|스마트태그|Smart\s*Tags?|Tag\s*List|태그/ig, '').trim() || s);
+}
+function kcrPublicTagLabels_(chips) {
+  if (typeof KcrSensoryTags === 'undefined') return chips;
+  return uniqueList_((chips || []).map(function(id){
+    var tag = KcrSensoryTags.get(id);
+    return tag ? tag.labelKo : id;
+  }));
 }
 function normalizePublicTag_(tag) {
   var s = String(tag == null ? '' : tag).trim().replace(/\s+/g, ' ');
@@ -1344,7 +1357,7 @@ function tagValsFor_(s, names) {
     if (!ok) return;
     out = out.concat(splitPublicTokens_(s[k]));
   });
-  return uniqueList_(out).slice(0, 4);
+  return uniqueList_(out).slice(0, 5);
 }
 function joinNatural_(arr, fallback) {
   arr = uniqueList_(arr).filter(Boolean);
@@ -1361,24 +1374,31 @@ function buildProfessionalOverallComment_(s, compCode) {
   var acidityTags = tagValsFor_(s, ['Acidity','산미']);
   var bodyTags = tagValsFor_(s, ['Body','Mouthfeel','바디','마우스필']);
   var sweetTags = tagValsFor_(s, ['Sweetness','스윗니스','단맛']);
+  if (compCode === 'KCR') {
+    flavorTags = kcrPublicTagLabels_(flavorTags);
+    afterTags = kcrPublicTagLabels_(afterTags);
+    acidityTags = kcrPublicTagLabels_(acidityTags);
+    bodyTags = kcrPublicTagLabels_(bodyTags);
+    sweetTags = kcrPublicTagLabels_(sweetTags);
+  }
   var flavor = scoreVal_(s, ['Flavor(플레이버)','Flavor(플레이버) ×3','Flavor']);
   var after = scoreVal_(s, ['Aftertaste(애프터테이스트)','Aftertaste(에프터테이스트)','Aftertaste']);
   var acidity = scoreVal_(s, ['Acidity(산미)','Acidity']);
-  var body = scoreVal_(s, ['Body(바디)','Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','Body','Mouthfeel']);
-  var sweet = scoreVal_(s, ['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness']);
-  var overall = scoreVal_(s, ['Overall(주관적 종합평가)','Overall']);
-  var values = [flavor, after, acidity, body, sweet, overall].filter(function(n){ return n != null; });
+  var sweet = scoreVal_(s, ['Sweetness(단맛) ×2','Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness']);
+  var mouthfeel = scoreVal_(s, ['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','Mouthfeel']);
+  var overall = scoreVal_(s, ['Overall(오버롤)','Overall(주관적 종합평가)','Overall']);
+  var values = [flavor, after, acidity, sweet, mouthfeel, overall].filter(function(n){ return n != null; });
   if (!values.length && !flavorTags.length && !afterTags.length && !bodyTags.length) return '';
   var avg = values.length ? values.reduce(function(a,b){ return a+b; }, 0) / values.length : 3;
   var tone = avg >= 4 ? '향미 표현이 선명하게 드러난 컵' : (avg >= 3 ? '기본 향미 구조가 확인되는 컵' : '향미 구조의 불안정성이 함께 확인된 컵');
-  var high = [['플레이버', flavor], ['여운', after], ['산미', acidity], ['질감', body], ['단맛', sweet], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return b[1]-a[1]; })[0];
-  var low = [['플레이버', flavor], ['여운', after], ['산미', acidity], ['질감', body], ['단맛', sweet], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return a[1]-b[1]; })[0];
+  var high = [['플레이버', flavor], ['에프터테이스트', after], ['산미', acidity], ['단맛', sweet], ['마우스필', mouthfeel], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return b[1]-a[1]; })[0];
+  var low = [['플레이버', flavor], ['에프터테이스트', after], ['산미', acidity], ['단맛', sweet], ['마우스필', mouthfeel], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return a[1]-b[1]; })[0];
   var first = '이 컵은 ' + joinNatural_(flavorTags, '주요 향미') + ' 인상을 중심으로 첫 향미가 형성됩니다.';
   var second = '';
   if (afterTags.length || acidityTags.length || bodyTags.length || sweetTags.length) {
-    second = ' 이후 ' + joinNatural_(afterTags, '여운') + '의 흐름, ' + joinNatural_(acidityTags, '산미') + '의 구조, ' + joinNatural_(bodyTags, '질감') + '이 연결되며, ' + joinNatural_(sweetTags, '단맛') + '이 전체 균형에 반영됩니다.';
+    second = ' 이후 ' + joinNatural_(afterTags, '여운') + '의 흐름, ' + joinNatural_(acidityTags, '산미') + '의 구조, ' + joinNatural_(sweetTags, '단맛') + '과 ' + joinNatural_(bodyTags, '마우스필') + '이 전체 균형에 반영됩니다.';
   } else {
-    second = ' 향미, 산미, 질감, 단맛의 연결성이 전체 평가의 주요 판단 기준으로 작용했습니다.';
+    second = ' 플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성이 전체 평가의 주요 판단 기준으로 작용했습니다.';
   }
   var third = ' 전체적으로 ' + tone + '으로 평가됩니다';
   if (high && low && high[0] !== low[0]) third += '. 항목별 인상에서는 ' + high[0] + '이 가장 두드러졌고, ' + low[0] + '에서 상대적으로 낮은 평가가 확인되었습니다.';
@@ -1391,7 +1411,9 @@ function buildSmartTagBox(s, compCode) {
     if (!isSmartTagLabel(k)) return;
     var raw = s[k];
     if (raw == null || String(raw).trim() === '') return;
-    var chips = uniqueList_(splitPublicTokens_(raw)).slice(0, 6);
+    var chips = uniqueList_(splitPublicTokens_(raw));
+    if (String(compCode || '').toUpperCase() === 'KCR') chips = kcrPublicTagLabels_(chips);
+    chips = chips.slice(0, 6);
     if (!chips.length) return;
     rows.push({ label: smartTagPublicLabel_(k), chips: chips });
   });
@@ -1413,14 +1435,13 @@ function buildCommentBox(s, compCode) {
     var raw = s[k];
     if (raw == null || String(raw).trim() === '') return;
     if (isSmartTagLabel(k)) return;
+    if (comp === 'KCR' && /자동생성상태|generated\s*comment\s*state|comment\s*state/i.test(String(k || ''))) return;
     if (/강도|Intensity|지속성|Persistence|범위/i.test(String(k || ''))) return;
     var isComment = isCommentLabel(k);
     var isTextAttr = !isComment && isCuppingAttributeLabel(k) && !valueLooksNumericScore(raw);
     if (!isComment && !isTextAttr) return;
     var label = commentPublicLabel(k);
-    // KCR/IKRC 선수 공개 리포트는 종합 코멘트 중심으로 정리한다.
-    // 예전 데이터에서 개별 항목 코멘트 칸에 숫자가 들어간 경우가 있어 공개 화면에서는 숨긴다.
-    if (comp === 'KCR' && !isOverallReportCommentLabel_(label)) return;
+    // 새 KCR 양식은 항목별 코멘트도 공식 디브리핑에 공개한다.
     var text = cleanupPublicCommentText_(label, raw, s, compCode);
     if (!text || /^(0|0\.0+|0\s*\/\s*\d+)$/i.test(text)) return;
     var key = label.replace(/\s/g,'').toLowerCase();
@@ -1545,7 +1566,8 @@ function buildScoreCard(s, compCode) {
     card.appendChild(buildMobBreakdownGrid_(s, compCode));
     card.appendChild(buildGenericScoreGrid(s, compCode));
   }
-  else if (compCode === 'KCR' || compCode === 'IKRC') card.appendChild(buildCuppingScoreGrid(s, compCode));
+  else if (compCode === 'KCR') card.appendChild(buildKcrScoreGrid(s, compCode));
+  else if (compCode === 'IKRC') card.appendChild(buildCuppingScoreGrid(s, compCode));
   else if (compCode === 'KCAC') card.appendChild(buildKcacScoreGrid(s, compCode));
   else card.appendChild(buildGenericScoreGrid(s, compCode));
   var smartTagBox = buildSmartTagBox(s, compCode);
@@ -1604,14 +1626,7 @@ function buildCuppingScoreGrid(s, compCode) {
     { label:'Sweetness(스윗니스) ×2', keys:['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','스윗니스','Sweetness'] },
     { label:'Acidity(산미)', keys:['Acidity(산미)','산미','Acidity'] },
     { label:'Mouthfeel(마우스필) ×2', keys:['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','마우스필','Mouthfeel'] }
-  ] : [
-    { label:'Flavor(플레이버)', keys:['Flavor(플레이버)','플레이버','Flavor'] },
-    { label:'Aftertaste(애프터테이스트)', keys:['Aftertaste(애프터테이스트)','Aftertaste(에프터테이스트)','피니시','Aftertaste'] },
-    { label:'Acidity(산미)', keys:['Acidity(산미)','산미','Acidity'] },
-    { label:'Body(바디)', keys:['Body(바디)','바디','Body'] },
-    { label:'Sweetness(스윗니스)', keys:['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','스윗니스','Sweetness'] },
-    { label:'Overall(주관적 종합평가)', keys:['Overall(주관적 종합평가)','오버롤','Overall'] }
-  ];
+  ] : [];
   var grid = document.createElement('div');
   grid.className = 'score-grid';
   items.forEach(function(item){
@@ -1636,11 +1651,11 @@ function buildCuppingScoreGrid(s, compCode) {
 function buildKcrScoreGrid(s, compCode) {
   var items = [
     { label:'Flavor(플레이버)', val:firstFilledScoreValue(s, ['Flavor(플레이버)','플레이버','Flavor']), sub:s['Flavor 강도'] || s['플레이버강도'] },
-    { label:'Aftertaste(애프터테이스트)', val:firstFilledScoreValue(s, ['Aftertaste(애프터테이스트)','피니시','Aftertaste']), sub:s['Aftertaste 지속성'] || s['피니시지속성'] },
+    { label:'Aftertaste(에프터테이스트)', val:firstFilledScoreValue(s, ['Aftertaste(에프터테이스트)','Aftertaste(애프터테이스트)','피니시','Aftertaste']), sub:s['Aftertaste 지속성'] || s['피니시지속성'] },
     { label:'Acidity(산미)', val:firstFilledScoreValue(s, ['Acidity(산미)','산미','Acidity']), sub:s['Acidity 강도'] || s['산미강도'] },
-    { label:'Body(바디)', val:firstFilledScoreValue(s, ['Body(바디)','바디','Body']), sub:s['Body 강도'] || s['바디강도'] },
-    { label:'Sweetness(스윗니스)', val:firstFilledScoreValue(s, ['Sweetness(스윗니스)','스윗니스','Sweetness']), sub:s['Sweetness 강도'] || s['스윗니스강도'] },
-    { label:'Overall(주관적 종합평가)', val:firstFilledScoreValue(s, ['Overall(주관적 종합평가)','오버롤','Overall']), sub:'' }
+    { label:'Sweetness(단맛) ×2', val:firstFilledScoreValue(s, ['Sweetness(단맛) ×2','Sweetness(스윗니스) ×2','Sweetness(스윗니스)','스윗니스','Sweetness']), sub:s['Sweetness 강도'] || s['스윗니스강도'] },
+    { label:'Mouthfeel(마우스필)', val:firstFilledScoreValue(s, ['Mouthfeel(마우스필)','마우스필','Mouthfeel']), sub:s['Mouthfeel 강도'] || s['마우스필강도'] },
+    { label:'Overall(오버롤)', val:firstFilledScoreValue(s, ['Overall(오버롤)','Overall(주관적 종합평가)','오버롤','Overall']), sub:'' }
   ];
   var grid = document.createElement('div');
   grid.className = 'score-grid';
