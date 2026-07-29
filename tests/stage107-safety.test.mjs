@@ -8,8 +8,10 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const assessmentPath = path.join(root, "public", "assessment", "index.html");
 const rpcPath = path.join(root, "functions", "api", "rpc.js");
+const seedPath = path.join(root, "migrations", "0002_seed.sql");
 const assessment = fs.readFileSync(assessmentPath, "utf8");
 const rpc = fs.readFileSync(rpcPath, "utf8");
+const seed = fs.readFileSync(seedPath, "utf8");
 
 function extractFunction(source, name) {
   const marker = `function ${name}(`;
@@ -172,5 +174,23 @@ assert.match(
   "Legacy score ownership must compare an explicit judge name before a shared phone number",
 );
 assert.match(rpc, /DELETE FROM sessions WHERE expires_at <= \?/);
+assert.match(rpc, /DELETE FROM scores WHERE competition_code=\?/);
+assert.doesNotMatch(
+  rpc,
+  /DELETE FROM scores(?! WHERE (?:id=\? AND )?competition_code=\?)/,
+  "Score deletion must always be scoped to one competition",
+);
+assert.match(rpc, /getScoreBackupReport: \(\) => getScoreBackupReport/);
+assert.match(rpc, /requireManageActorForCode_\(env, actorArg, code/);
+assert.match(rpc, /row\['백업구분'\] === '켈리브레이션'/);
+assert.match(assessment, /round \+ '_켈리브레이션'/);
+assert.match(assessment, /function generateMobComment\(\)/);
+assert.match(assessment, /\.generateMobComment\(\{/);
+assert.match(assessment, /\.getScoreBackupReport\(code, adminActorPayload_\(\)\)/);
+assert.match(assessment, /dismissMobileKeyboardBeforeAction_/);
+
+for (const code of ["KBC", "KTCC", "MOB", "MOC", "KCR", "KCAC", "IKRC"]) {
+  assert.match(seed, new RegExp(`'${code}'`), `${code} competition seed missing`);
+}
 
 process.stdout.write("Stage107 safety tests passed.\n");
