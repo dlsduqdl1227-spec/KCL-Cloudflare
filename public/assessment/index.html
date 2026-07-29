@@ -8998,12 +8998,8 @@ function startCuppingFinalsRange() {
   if (!assertKcrProcessOpenForEval_(process)) return;
   var built = buildCupRange_(document.getElementById('cuppingFinalsStart').value, document.getElementById('cuppingFinalsEnd').value);
   if (!built.success) { toast(built.message, true); return; }
-  var checked = registeredTargetsForRange_('KCR', built.cups);
-  if (!checked.success) { toast(checked.message, true); return; }
-  var cups = checked.values;
-  if (checked.missing.length) toast('등록되지 않은 컵 번호를 제외했습니다: ' + checked.missing.join(', '), true);
   var mode = getRoundEvalLabel(_selComp.currentRound);
-  initCuppingEval(cups, mode, process, String(_selComp.currentRound || '').indexOf('결선') > -1, !!(document.getElementById('cuppingCalibrationMode') && document.getElementById('cuppingCalibrationMode').checked));
+  initCuppingEval(built.cups, mode, process, String(_selComp.currentRound || '').indexOf('결선') > -1, !!(document.getElementById('cuppingCalibrationMode') && document.getElementById('cuppingCalibrationMode').checked));
 }
 
 function startCuppingFinalsSingle() {

@@ -83,8 +83,48 @@ assert.deepEqual(
   Array.from(cupContext.buildCupRange_("001", "003").cups),
   ["001", "002", "003"],
 );
+assert.deepEqual(
+  Array.from(cupContext.buildCupRange_("1", "5").cups),
+  ["1", "2", "3", "4", "5"],
+);
+assert.deepEqual(
+  Array.from(cupContext.buildCupRange_("A-1", "A-5").cups),
+  ["A-1", "A-2", "A-3", "A-4", "A-5"],
+);
 assert.equal(cupContext.buildCupRange_("A-1", "B-1").success, false);
 assert.equal(cupContext.buildCupRange_("1", "21").success, false);
+
+const kcrRangeStartSource = extractFunction(assessment, "startCuppingFinalsRange");
+assert.doesNotMatch(
+  kcrRangeStartSource,
+  /registeredTargetsForRange_/,
+  "KCR cup ranges must not be truncated by participant registration data",
+);
+
+const kcrRangeInputs = {
+  cuppingFinalsProcess: { value: "Washed" },
+  cuppingFinalsStart: { value: "1" },
+  cuppingFinalsEnd: { value: "5" },
+  cuppingCalibrationMode: { checked: false },
+};
+const kcrRangeContext = {
+  document: { getElementById: (id) => kcrRangeInputs[id] || null },
+  assertKcrProcessOpenForEval_: () => true,
+  buildCupRange_: cupContext.buildCupRange_,
+  toast: (message) => { throw new Error(message); },
+  getRoundEvalLabel: () => "예선전평가",
+  _selComp: { currentRound: "예선" },
+  initCuppingEval: (cups) => { kcrRangeContext.captured = Array.from(cups); },
+  captured: [],
+};
+vm.createContext(kcrRangeContext);
+vm.runInContext(kcrRangeStartSource, kcrRangeContext);
+kcrRangeContext.startCuppingFinalsRange();
+assert.deepEqual(kcrRangeContext.captured, ["1", "2", "3", "4", "5"]);
+kcrRangeInputs.cuppingFinalsStart.value = "A-1";
+kcrRangeInputs.cuppingFinalsEnd.value = "A-5";
+kcrRangeContext.startCuppingFinalsRange();
+assert.deepEqual(kcrRangeContext.captured, ["A-1", "A-2", "A-3", "A-4", "A-5"]);
 
 const rangeContext = {
   participantStateForCode_: () => ({
