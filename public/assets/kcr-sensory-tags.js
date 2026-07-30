@@ -34,6 +34,16 @@
     primary: { ko: "주요 표현", en: "Primary" },
     improvement: { ko: "보완 표현", en: "Refinement" }
   };
+  var SELECTABLE_FAMILIES = {
+    flavor: ["floral", "citrus", "berry", "stone_fruit", "pome", "tropical", "grape_dried_fruit", "sweet", "nutty_cocoa", "tea_herbal", "spice", "grain_roasted", "fermented"]
+  };
+
+  function isSelectableFamily(category, family) {
+    return (SELECTABLE_FAMILIES[category] || []).indexOf(family) > -1;
+  }
+  function familyTagId(category, family) {
+    return category + "_family_" + family;
+  }
 
   var tags = [];
   var orderByCategory = {};
@@ -49,6 +59,9 @@
         labelKo: value[1],
         labelEn: value[2],
         order: orderByCategory[category],
+        level: 2,
+        isFamily: false,
+        parentId: isSelectableFamily(category, family) ? familyTagId(category, family) : "",
         isActive: true
       });
     });
@@ -239,6 +252,25 @@
     ["aftertaste_hollow", "비어 있는", "Hollow"]
   ]);
 
+  Object.keys(SELECTABLE_FAMILIES).forEach(function(category) {
+    SELECTABLE_FAMILIES[category].forEach(function(family, index) {
+      var labels = FAMILY_LABELS[family] || { ko: family, en: family };
+      tags.push({
+        id: familyTagId(category, family),
+        category: category,
+        group: "primary",
+        family: family,
+        labelKo: labels.ko,
+        labelEn: labels.en,
+        order: index + 1,
+        level: 1,
+        isFamily: true,
+        parentId: "",
+        isActive: true
+      });
+    });
+  });
+
   var byId = {};
   tags.forEach(function(tag) { byId[tag.id] = tag; });
 
@@ -250,10 +282,22 @@
     });
     return out;
   }
-  function sanitize(ids, category) {
+  function sanitizeKnown(ids, category) {
     return uniqueIds(ids).filter(function(id) {
       var tag = byId[id];
       return !!(tag && tag.isActive && tag.category === category);
+    });
+  }
+  function sanitize(ids, category) {
+    var selected = sanitizeKnown(ids, category);
+    var childFamilies = {};
+    selected.forEach(function(id) {
+      var tag = byId[id];
+      if (tag && tag.parentId) childFamilies[tag.family] = true;
+    });
+    return selected.filter(function(id) {
+      var tag = byId[id];
+      return !(tag && tag.isFamily && childFamilies[tag.family]);
     });
   }
   function maxMessage(category) {
@@ -272,6 +316,14 @@
       selected.splice(currentIndex, 1);
       return { success: true, selected: selected, removed: true, message: "" };
     }
+    if (tag.isFamily) {
+      selected = selected.filter(function(selectedId) {
+        var selectedTag = byId[selectedId];
+        return !(selectedTag && selectedTag.family === tag.family);
+      });
+    } else if (tag.parentId) {
+      selected = selected.filter(function(selectedId) { return selectedId !== tag.parentId; });
+    }
     var max = MAX_SELECTIONS[category] || 3;
     if (selected.length + Math.max(0, Number(otherSelectionCount) || 0) >= max) {
       return { success: false, selected: selected, message: maxMessage(category) };
@@ -281,8 +333,11 @@
   }
   function list(category, family) {
     return tags.filter(function(tag) {
-      return tag.isActive && (!category || tag.category === category) && (!family || tag.family === family);
+      return tag.isActive && !tag.isFamily && (!category || tag.category === category) && (!family || tag.family === family);
     }).sort(function(a, b) { return a.order - b.order; });
+  }
+  function familyTag(category, family) {
+    return byId[familyTagId(category, family)] || null;
   }
   function families(category) {
     return (FAMILY_ORDER[category] || []).filter(function(family) { return list(category, family).length > 0; });
@@ -307,6 +362,7 @@
     get: function(id) { return byId[String(id || "")] || null; },
     list: list,
     families: families,
+    familyTag: familyTag,
     labels: labels,
     sanitize: sanitize,
     toggle: toggle,

@@ -6942,7 +6942,9 @@ function reviewKcrSmartTagButtonsHtml_(idx, meta, selected, disabled) {
   var html = '<div class="category-primary">';
   families.forEach(function(family){
     var labels = KCR_SENSORY_CONFIG.familyLabels[family] || {ko:family,en:''};
-    html += '<button type="button" class="cat-btn-p kcr-tag-family-btn' + (family === openFamily ? ' branch-open' : '') + '" data-kcr-review-family-button="' + escHtml(family) + '"' + (disabled ? ' disabled' : ' onclick="openReviewKcrTagFamily(' + idx + ',\'' + escapeJsString_(family) + '\')"') + '><span class="kcr-tag-ko">' + escHtml(labels.ko) + '</span><span class="kcr-tag-en">' + escHtml(labels.en) + '</span></button>';
+    var parentTag = KcrSensoryTags.familyTag(meta.category, family);
+    var parentId = parentTag ? parentTag.id : '';
+    html += '<button type="button" class="cat-btn-p kcr-tag-family-btn' + (selected.indexOf(parentId) > -1 ? ' selected' : '') + (family === openFamily ? ' branch-open' : '') + '" data-kcr-review-family-button="' + escHtml(family) + '"' + (parentId ? ' data-review-tag-value="' + escHtml(parentId) + '"' : '') + (disabled ? ' disabled' : ' onclick="toggleReviewKcrTagFamily(' + idx + ',\'' + escapeJsString_(family) + '\',\'' + escapeJsString_(parentId) + '\')"') + '><span class="kcr-tag-ko">' + escHtml(labels.ko) + '</span><span class="kcr-tag-en">' + escHtml(labels.en) + '</span></button>';
   });
   html += '</div>';
   families.forEach(function(family){
@@ -6985,7 +6987,7 @@ function renderReviewSmartTagField_(item) {
   var html = '<div class="smart-tags-section review-smart-tags' + (meta.competition === 'KCR' ? ' kcr-review-smart-tags' : '') + (hierarchical ? ' hierarchical-review-smart-tags' : '') + '" id="review-smart-tags-' + item.idx + '">';
   html += '<div class="smart-tags-title">' + escHtml(reviewFormatAttributeName(item.h)) + '</div>';
   var max = meta.competition === 'KCR' ? KCR_SENSORY_CONFIG.maxSelections[meta.isFlavorReference ? 'aftertaste' : meta.category] : MAX_TAGS;
-  html += '<div class="smart-tags-hint">' + (meta.competition === 'KCR' && !meta.isFlavorReference ? '계열을 선택하면 최종 특성이 표시됩니다. 계열은 저장되지 않습니다. ' : (hierarchical ? '카테고리를 선택하면 하위 특성이 표시됩니다. ' : '')) + '특성 선택 (최대 ' + max + '개)</div>';
+  html += '<div class="smart-tags-hint">' + (meta.competition === 'KCR' && !meta.isFlavorReference ? (meta.category === 'flavor' ? '1차 계열도 선택할 수 있으며, 세부 특성을 선택하면 같은 계열 선택을 대체합니다. ' : '계열을 선택하면 세부 특성이 표시됩니다. ') : (hierarchical ? '카테고리를 선택하면 하위 특성이 표시됩니다. ' : '')) + '특성 선택 (최대 ' + max + '개)</div>';
   html += '<input type="hidden" id="' + reviewSmartTagInputId_(item.idx) + '" data-col="' + item.idx + '" value="' + escHtml(selected.join(', ')) + '">';
   html += '<div class="selected-tags mob-inline-selected-tags" id="' + reviewSmartTagSelectedId_(item.idx) + '">' + reviewSelectedSmartTagsHtml_(item.idx, selected, disabled) + '</div>';
   html += '<div class="mob-inline-tag-buttons" id="' + reviewSmartTagButtonsId_(item.idx) + '">' + reviewSmartTagButtonsHtml_(item.idx, meta, selected, disabled) + '</div>';
@@ -7095,6 +7097,10 @@ function openReviewKcrTagFamily(idx, family) {
   root.querySelectorAll('[data-kcr-review-family-panel]').forEach(function(panel){
     panel.classList.toggle('active', panel.getAttribute('data-kcr-review-family-panel') === family);
   });
+}
+function toggleReviewKcrTagFamily(idx, family, parentId) {
+  openReviewKcrTagFamily(idx, family);
+  if (parentId) toggleReviewSmartTag(idx, parentId);
 }
 function reviewSyncKcrAftertasteFlavorRefs_() {
   var refIdx = reviewFindBaseIndex_('aftertaste', function(h){ return isSmartTagHeader(h) && /플레이버.*참조|Flavor.*Reference/i.test(h); });
@@ -9308,7 +9314,8 @@ function renderKcrSensoryTagsHtml_(c, attr) {
   var totalSelected = ids.length + (attr === 'aftertaste' ? c.aftertasteFlavorTagIds.length : 0);
   var openFamily = kcrOpenFamilyFor_(attr);
   var html = '<div class="smart-tags-section kcr-smart-tags-section">';
-  html += '<div class="kcr-tag-section-head"><div><div class="smart-tags-title">Smart Tags</div><div class="smart-tags-hint">대표 특성 ' + totalSelected + ' / ' + max + '개 · 계열 버튼은 탐색용이며 최종 특성 ID만 저장됩니다.</div></div>';
+  var hierarchyHint = attr === 'flavor' ? '1차 계열도 선택할 수 있고, 세부 특성을 선택하면 같은 계열 선택을 대체합니다.' : '계열을 선택하면 세부 특성이 표시됩니다.';
+  html += '<div class="kcr-tag-section-head"><div><div class="smart-tags-title">Smart Tags</div><div class="smart-tags-hint">대표 특성 ' + totalSelected + ' / ' + max + '개 · ' + hierarchyHint + '</div></div>';
   html += '<button type="button" class="kcr-tag-clear" onclick="clearKcrTags(\'' + attr + '\')">선택 초기화</button></div>';
   html += '<div class="selected-tags" id="st-' + attr + '">';
   ids.forEach(function(id) { html += kcrSelectedTagHtml_(attr, id, 'toggleKcrTag'); });
@@ -9331,7 +9338,9 @@ function renderKcrSensoryTagsHtml_(c, attr) {
   html += '<div class="category-primary">';
   KcrSensoryTags.families(attr).forEach(function(family) {
     var labels = KCR_SENSORY_CONFIG.familyLabels[family] || {ko:family,en:''};
-    html += '<button type="button" class="cat-btn-p kcr-tag-family-btn' + (family === openFamily ? ' branch-open' : '') + '" onclick="openKcrTagFamily(\'' + attr + '\',\'' + escapeJsString_(family) + '\')"><span class="kcr-tag-ko">' + escHtml(labels.ko) + '</span><span class="kcr-tag-en">' + escHtml(labels.en) + '</span></button>';
+    var parentTag = KcrSensoryTags.familyTag(attr, family);
+    var parentId = parentTag ? parentTag.id : '';
+    html += '<button type="button" class="cat-btn-p kcr-tag-family-btn' + (ids.indexOf(parentId) > -1 ? ' selected' : '') + (family === openFamily ? ' branch-open' : '') + '" onclick="toggleKcrTagFamily(\'' + attr + '\',\'' + escapeJsString_(family) + '\',\'' + escapeJsString_(parentId) + '\')"><span class="kcr-tag-ko">' + escHtml(labels.ko) + '</span><span class="kcr-tag-en">' + escHtml(labels.en) + '</span></button>';
   });
   html += '</div>';
   KcrSensoryTags.families(attr).forEach(function(family) {
@@ -9354,6 +9363,12 @@ function openKcrTagFamily(attr, family) {
   _cupping.openTagFamilies = _cupping.openTagFamilies || {};
   _cupping.openTagFamilies[attr] = family;
   renderCuppingAttrCard();
+}
+function toggleKcrTagFamily(attr, family, parentId) {
+  _cupping.openTagFamilies = _cupping.openTagFamilies || {};
+  _cupping.openTagFamilies[attr] = family;
+  if (parentId) toggleKcrTag(attr, parentId);
+  else renderCuppingAttrCard();
 }
 function toggleKcrTag(attr, id) {
   var c = _cupping.cups[_cupping.currentIdx];

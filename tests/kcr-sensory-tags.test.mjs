@@ -44,20 +44,40 @@ const api = context.KcrSensoryTags;
 const comments = context.KcrSensoryComments;
 assert.deepEqual(Array.from(context.KCR_SENSORY_CONFIG.categoryOrder), ["flavor", "aftertaste", "acidity", "sweetness", "mouthfeel"]);
 assert.equal(new Set(tags.map((tag) => tag.id)).size, tags.length, "KCR tag IDs must be unique");
-assert.equal(tags.length, 138, "The updated KCR tag catalog must contain 138 final tags");
+assert.equal(tags.length, 151, "The KCR tag catalog must include 13 selectable Flavor family tags");
 assert.deepEqual(
   Object.fromEntries(["flavor", "mouthfeel", "acidity", "sweetness", "aftertaste"].map((category) => [category, tags.filter((tag) => tag.category === category).length])),
-  { flavor:70, mouthfeel:18, acidity:15, sweetness:14, aftertaste:21 },
+  { flavor:83, mouthfeel:18, acidity:15, sweetness:14, aftertaste:21 },
 );
 assert.equal(tags.some((tag) => tag.id === "flavor_improvement_raw" || tag.labelKo === "생두"), false);
 for (const tag of tags) {
-  for (const field of ["id", "category", "group", "family", "labelKo", "labelEn", "order", "isActive"]) {
+  for (const field of ["id", "category", "group", "family", "labelKo", "labelEn", "order", "level", "isFamily", "parentId", "isActive"]) {
     assert.notEqual(tag[field], undefined, `Missing ${field} on ${tag.id}`);
   }
   assert.notEqual(tag.category, "body");
 }
 
 const flavorIds = Array.from(api.list("flavor")).slice(0, 6).map((tag) => tag.id);
+const tropicalParent = api.familyTag("flavor", "tropical");
+const pineappleId = "flavor_tropical_pineapple";
+assert.equal(tropicalParent.labelKo, "열대과일 계열");
+assert.equal(api.familyTag("flavor", "improvement"), null, "Structural refinement groups must remain navigation-only");
+assert.equal(api.familyTag("mouthfeel", "primary"), null, "Non-descriptive structural groups must not become tags");
+assert.equal(api.list("flavor", "tropical").some((tag) => tag.id === tropicalParent.id), false, "Family tags must not be repeated among child options");
+let hierarchySelection = Array.from(api.toggle([], tropicalParent.id, "flavor", 0).selected);
+assert.deepEqual(hierarchySelection, [tropicalParent.id], "A broad family must be selectable on its own");
+hierarchySelection = Array.from(api.toggle(hierarchySelection, pineappleId, "flavor", 0).selected);
+assert.deepEqual(hierarchySelection, [pineappleId], "Selecting a child must replace its family tag");
+hierarchySelection = Array.from(api.toggle(hierarchySelection, tropicalParent.id, "flavor", 0).selected);
+assert.deepEqual(hierarchySelection, [tropicalParent.id], "Selecting the family again must replace same-family children");
+assert.deepEqual(Array.from(api.sanitize([tropicalParent.id, pineappleId], "flavor")), [pineappleId], "Saved parent-child conflicts must prefer the more specific child");
+const fullHierarchySelection = [tropicalParent.id, flavorIds[0], flavorIds[5], "flavor_berry_strawberry", "flavor_pome_apple"];
+const fullHierarchyReplacement = api.toggle(fullHierarchySelection, pineappleId, "flavor", 0);
+assert.equal(fullHierarchyReplacement.success, true, "Replacing a family at the five-tag limit must not be blocked");
+assert.equal(fullHierarchyReplacement.selected.length, 5);
+assert.equal(fullHierarchyReplacement.selected.includes(tropicalParent.id), false);
+assert.equal(fullHierarchyReplacement.selected.includes(pineappleId), true);
+assert.deepEqual(Array.from(api.syncAftertasteFlavorRefs([tropicalParent.id], [tropicalParent.id])), [tropicalParent.id]);
 let selected = [];
 for (const id of flavorIds.slice(0, 5)) {
   const result = api.toggle(selected, id, "flavor", 0);
@@ -91,6 +111,9 @@ assert.match(resetState.customComment, new RegExp(api.get(flavorIds[1]).labelKo)
 assert.equal(comments.manualComment(protectedState), "심사위원이 직접 수정한 코멘트");
 assert.equal(comments.manualComment(resetState), "", "Untouched auto comments must not be duplicated in the overall comment");
 assert.equal(comments.generateFlavorComment([]), "");
+assert.match(comments.generateFlavorComment([tropicalParent.id]), /열대과일 계열/);
+assert.doesNotMatch(comments.generateFlavorComment([pineappleId]), /열대과일 계열/);
+assert.match(comments.generateFlavorComment([pineappleId]), /파인애플/);
 assert.equal(
   comments.generateFlavorComment(["flavor_floral_jasmine", "flavor_stone_fruit_peach", "flavor_tea_black_tea"]),
   "재스민과 복숭아, 홍차가 연상되는 향미입니다.",
@@ -143,6 +166,9 @@ assert.ok(kcrMarkup.indexOf("sweetness") < kcrMarkup.indexOf("mouthfeel"));
 assert.match(assessment, /result\.selected/);
 assert.doesNotMatch(assessment, /result\.ids/);
 assert.match(assessment, /KcrSensoryTags\.labels\(c\.flavorTagIds/);
+assert.match(extractFunction(assessment, "renderKcrSensoryTagsHtml_"), /KcrSensoryTags\.familyTag/);
+assert.match(extractFunction(assessment, "toggleKcrTagFamily"), /toggleKcrTag\(attr, parentId\)/);
+assert.match(extractFunction(assessment, "reviewKcrSmartTagButtonsHtml_"), /toggleReviewKcrTagFamily/);
 assert.match(extractFunction(assessment, "generateCuppingComment"), /attributeComments\s*:\s*kcrManualAttributeComments_\(c\)/);
 assert.doesNotMatch(extractFunction(assessment, "generateCuppingComment"), /cupNumber\s*:/);
 assert.match(extractFunction(assessment, "reviewBuildKcrCommentPayload_"), /attributeComments\s*:\s*reviewKcrManualAttributeComments_/);
