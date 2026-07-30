@@ -118,8 +118,37 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 }
 .global-nav-btn:active{transform:scale(.97);opacity:.82}
 .global-nav-btn .home-dot{width:6px;height:6px;border-radius:50%;background:#fff;opacity:.9}
-@media print{.global-nav-buttons{display:none!important}}
+.mobile-context-back{display:none}
+.utility-modal{
+  display:none;position:fixed;inset:0;z-index:1400;padding:20px;
+  padding-top:max(20px,var(--safe-top));padding-bottom:max(20px,var(--safe-bot));
+  background:rgba(0,0,0,.84);align-items:center;justify-content:center
+}
+.utility-modal.active{display:flex}
+.utility-modal-card{
+  width:min(420px,100%);max-height:calc(100dvh - 40px);overflow-y:auto;
+  background:#151515;border:1px solid var(--border-lt);border-radius:14px;padding:20px;
+  box-shadow:0 24px 80px rgba(0,0,0,.55)
+}
+.utility-modal-title{font-size:19px;font-weight:900;text-align:center;margin-bottom:8px}
+.utility-modal-help{font-size:12px;color:var(--text-3);line-height:1.6;text-align:center;margin-bottom:14px}
+.utility-file-name{font-size:12px;color:var(--text-2);line-height:1.5;overflow-wrap:anywhere;background:#0c0c0c;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px}
+.utility-modal-card .btn-link{display:block;text-decoration:none;text-align:center}
+.judge-qr-canvas-wrap{display:flex;justify-content:center;background:#fff;border-radius:12px;padding:12px;margin:12px auto;max-width:304px}
+.judge-qr-canvas-wrap canvas{display:block;width:min(280px,72vw)!important;height:auto!important}
+.judge-qr-url{font-size:11px;color:var(--text-3);line-height:1.45;overflow-wrap:anywhere;text-align:center;margin-bottom:12px}
+@media print{.global-nav-buttons,.mobile-context-back,.utility-modal{display:none!important}}
 @media (max-width:520px){.global-nav-buttons{top:max(10px,var(--safe-top));left:max(10px,var(--safe-left));gap:6px}.global-nav-btn{min-height:34px;padding:0 12px;font-size:12px}}
+@media (max-width:700px){
+  .mobile-context-back{
+    display:inline-flex;position:fixed;z-index:950;left:max(12px,var(--safe-left));
+    bottom:max(14px,calc(var(--safe-bot) + 10px));align-items:center;justify-content:center;
+    min-width:76px;min-height:44px;padding:0 14px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.28);background:rgba(18,18,18,.88);color:#fff;
+    font-size:13px;font-weight:900;backdrop-filter:blur(12px);box-shadow:0 10px 34px rgba(0,0,0,.42)
+  }
+  .mobile-context-back:active{transform:scale(.97);opacity:.84}
+}
 
 .role-badge{display:inline-block;padding:3px 10px;border-radius:5px;font-size:11px;
   font-weight:700;letter-spacing:.5px;vertical-align:middle;margin-left:8px;
@@ -1712,6 +1741,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 </style>
 <script src="/assets/kcr-sensory-tags.js?v=stage111"></script>
 <script src="/assets/kcr-sensory-comments.js?v=stage111"></script>
+<script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js"></script>
 </head>
 <body>
@@ -1720,6 +1750,31 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <div id="toast" class="toast"></div>
 
 <div class="global-nav-buttons" aria-label="페이지 이동"><button type="button" class="global-nav-btn" onclick="return goBackContext_()">이전</button><button type="button" class="global-nav-btn" onclick="return goRootHome_()"><span class="home-dot"></span>홈</button></div>
+<button type="button" class="mobile-context-back" onclick="return goBackContext_()" aria-label="현재 화면에서 이전 단계로 이동">← 뒤로가기</button>
+
+<div id="fileDeliveryModal" class="utility-modal" role="dialog" aria-modal="true" aria-labelledby="file-delivery-title">
+  <div class="utility-modal-card">
+    <div class="utility-modal-title" id="file-delivery-title">엑셀 파일 준비 완료</div>
+    <div class="utility-modal-help">휴대폰에서는 아래 버튼을 한 번 더 눌러 파일 앱·Excel·공유 메뉴로 열어주세요. 카카오톡 안에서도 이 방식으로 저장할 수 있습니다.</div>
+    <div class="utility-file-name" id="file-delivery-name"></div>
+    <a class="btn btn-link" id="file-delivery-download" href="#" download>파일 저장 / 열기</a>
+    <button type="button" class="btn-outline" id="file-delivery-share" onclick="sharePreparedFile_()">다른 앱으로 공유</button>
+    <button type="button" class="btn-danger" onclick="closeFileDelivery_()">닫기</button>
+  </div>
+</div>
+
+<div id="judgeQrModal" class="utility-modal" role="dialog" aria-modal="true" aria-labelledby="judge-qr-title">
+  <div class="utility-modal-card">
+    <div class="utility-modal-title" id="judge-qr-title">심사 웹 QR</div>
+    <div class="utility-modal-help">심사위원이 QR을 스캔하면 해당 대회가 미리 선택된 심사 웹으로 연결됩니다.</div>
+    <div class="judge-qr-canvas-wrap"><canvas id="judge-qr-canvas" width="280" height="280"></canvas></div>
+    <div class="judge-qr-url" id="judge-qr-url"></div>
+    <a class="btn btn-link" id="judge-qr-open" href="#" target="_blank" rel="noopener">심사 웹 열기</a>
+    <button type="button" class="btn-outline" onclick="copyJudgeQrLink_()">링크 복사</button>
+    <button type="button" class="btn-outline" onclick="downloadJudgeQr_()">QR 이미지 저장</button>
+    <button type="button" class="btn-danger" onclick="closeJudgeQr_()">닫기</button>
+  </div>
+</div>
 
 <!-- 디지털 서명 모달 -->
 <div id="sigModal" class="sig-modal">
@@ -2745,12 +2800,7 @@ var SMART_TAGS = {
     '코코아':{'코코아':['다크초콜릿','초콜릿','카카오']},
     '기타':{'기타':['나무같은','흙']}
   },
-  acidity:{
-    '과일같은':{'베리':['블랙베리','크랜베리'],'감귤류':['자몽','오렌지','레몬','라임'],'기타과일':['체리','사과','포도','복숭아']},
-    '발효된':{'발효된':['와인같은','위스키']},
-    '채소같은':{'채소같은':['덜익은','풋내']},
-    '기타':{'기타':['식초같은','말산','구연산']}
-  },
+  acidity:['샤프','마일드','쥬시','브라이트','인텐스','플랫','크리스피','Sour','Harsh','Delicate'],
   body:{
     '질감':['부드러운','벨벳같은','매끄러운','실키한','시럽같은','클린한','크리미한','거친','텁텁한','금속성','기름진','입안이마르는','드라이']
   },
@@ -3354,6 +3404,14 @@ function ikrcStationRangeNumber_(value, fallback) {
 function ikrcStationRoundKey_(round) {
   return /결선|final/i.test(String(round || '')) ? '결선' : '예선';
 }
+function ikrcStationId_(value, index) {
+  var id = String(value || '').trim().toLowerCase().replace(/[^0-9a-z_-]/g, '').slice(0, 48);
+  return id || ('station' + (Math.max(0, Number(index) || 0) + 1));
+}
+function ikrcStationLabel_(value, index) {
+  var label = String(value || '').trim().slice(0, 40);
+  return label || ('스테이션 ' + (Math.max(0, Number(index) || 0) + 1));
+}
 function ikrcStationSettings_(cfg) {
   var raw = competitionOptionSettings_(cfg).ikrcStations || {};
   var roundKey = ikrcStationRoundKey_(cfg && cfg.currentRound);
@@ -3363,10 +3421,18 @@ function ikrcStationSettings_(cfg) {
     {prefix:raw.station1Prefix || 'A', start:1, end:10},
     {prefix:raw.station2Prefix || 'B', start:1, end:10}
   ]);
-  var used = {};
+  var used = {}, usedIds = {};
   return source.slice(0, 12).map(function(item, index){
     item = item || {};
     var fallback = ikrcDefaultStationPrefix_(index);
+    var stationId = ikrcStationId_(item.id, index);
+    if (usedIds[stationId]) {
+      var baseId = 'station' + (index + 1);
+      stationId = baseId;
+      var idSuffix = 2;
+      while (usedIds[stationId]) stationId = (baseId + '-' + idSuffix++).slice(0, 48);
+    }
+    usedIds[stationId] = true;
     var stationPrefix = ikrcStationPrefix_(item.prefix, fallback);
     if (used[stationPrefix]) {
       stationPrefix = fallback;
@@ -3377,7 +3443,7 @@ function ikrcStationSettings_(cfg) {
     var start = ikrcStationRangeNumber_(item.start, 1);
     var end = ikrcStationRangeNumber_(item.end, 10);
     if (end < start) end = start;
-    return {id:'station' + (index + 1), label:'스테이션 ' + (index + 1), prefix:stationPrefix, start:start, end:end};
+    return {id:stationId, label:ikrcStationLabel_(item.label, index), prefix:stationPrefix, start:start, end:end};
   });
 }
 function ikrcStationCups_(station) {
@@ -3472,11 +3538,13 @@ function assertKcrProcessOpenForEval_(process) {
 function ikrcStationConfigRowHtml_(station, index) {
   station = station || {};
   index = Math.max(0, Number(index) || 0);
+  var stationId = ikrcStationId_(station.id, index);
+  var stationLabel = ikrcStationLabel_(station.label, index);
   var stationPrefix = ikrcStationPrefix_(station.prefix, ikrcDefaultStationPrefix_(index));
   var start = ikrcStationRangeNumber_(station.start, 1);
   var end = ikrcStationRangeNumber_(station.end, 10);
-  return '<div class="ikrc-station-config-row" data-ikrc-station-row>' +
-    '<div class="ikrc-station-row-title" data-field="label">스테이션 ' + (index + 1) + '</div>' +
+  return '<div class="ikrc-station-config-row" data-ikrc-station-row data-station-id="' + escHtml(stationId) + '" data-station-label="' + escHtml(stationLabel) + '">' +
+    '<div class="ikrc-station-row-title" data-field="label">' + escHtml(stationLabel) + '</div>' +
     '<label>코드<input type="text" maxlength="8" autocapitalize="characters" data-field="prefix" value="' + escHtml(stationPrefix) + '" placeholder="' + escHtml(ikrcDefaultStationPrefix_(index)) + '"></label>' +
     '<label>시작 번호<input type="number" min="1" max="99" inputmode="numeric" data-field="start" value="' + start + '"></label>' +
     '<label>끝 번호<input type="number" min="1" max="99" inputmode="numeric" data-field="end" value="' + end + '"></label>' +
@@ -3487,15 +3555,27 @@ function ikrcRenumberStationConfigRows_(container) {
   if (!container) return;
   Array.prototype.forEach.call(container.querySelectorAll('[data-ikrc-station-row]'), function(row, index){
     var label = row.querySelector('[data-field="label"]');
-    if (label) label.textContent = '스테이션 ' + (index + 1);
+    if (!row.dataset.stationId) row.dataset.stationId = ikrcStationId_('', index);
+    if (!row.dataset.stationLabel) row.dataset.stationLabel = ikrcStationLabel_('', index);
+    if (label) label.textContent = row.dataset.stationLabel;
   });
+}
+function ikrcNextStationNumber_(container) {
+  var max = 0;
+  Array.prototype.forEach.call(container ? container.querySelectorAll('[data-ikrc-station-row]') : [], function(row){
+    var text = String((row && row.dataset && (row.dataset.stationLabel || row.dataset.stationId)) || '');
+    var match = text.match(/(\d+)(?!.*\d)/);
+    if (match) max = Math.max(max, Number(match[1]) || 0);
+  });
+  return max + 1;
 }
 function ikrcAddStationConfigRow_(prefix, code) {
   var container = document.getElementById(prefix + '-ikrc-stations-' + String(code || 'IKRC').toUpperCase());
   if (!container) return;
   var count = container.querySelectorAll('[data-ikrc-station-row]').length;
   if (count >= 12) { toast('IKRC 스테이션은 최대 12개까지 등록할 수 있습니다.', true); return; }
-  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({prefix:ikrcDefaultStationPrefix_(count),start:1,end:10}, count));
+  var nextNo = ikrcNextStationNumber_(container);
+  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({id:'station' + nextNo,label:'스테이션 ' + nextNo,prefix:ikrcDefaultStationPrefix_(count),start:1,end:10}, count));
   ikrcRenumberStationConfigRows_(container);
 }
 function ikrcRemoveStationConfigRow_(button) {
@@ -3503,6 +3583,7 @@ function ikrcRemoveStationConfigRow_(button) {
   var container = row && row.parentElement;
   if (!row || !container) return;
   if (container.querySelectorAll('[data-ikrc-station-row]').length <= 1) { toast('IKRC 스테이션을 최소 1개는 유지해야 합니다.', true); return; }
+  if (!confirm((row.dataset.stationLabel || '이 스테이션') + '을 현재 운영 설정에서 제거하시겠습니까?\n이미 제출된 점수와 백업 데이터는 삭제되지 않습니다.')) return;
   row.remove();
   ikrcRenumberStationConfigRows_(container);
 }
@@ -3518,7 +3599,7 @@ function configSelectableOptionsHtml_(cfg, prefix) {
   var code = String(cfg && cfg.code || '').toUpperCase();
   if (code === 'IKRC') {
     var stations = ikrcStationSettings_(cfg);
-    return '<div class="review-edit-help" style="margin:10px 0 8px">IKRC 스테이션별 코드와 평가 범위를 지정합니다. 예: 스테이션 1은 A-1~A-10, 스테이션 2는 B-1~B-10. 저장 후 블라인드 배정 화면에서 각 코드에 선수를 연결하세요.</div>' +
+    return '<div class="review-edit-help" style="margin:10px 0 8px">IKRC 스테이션별 코드와 평가 범위를 지정합니다. 예: 스테이션 1은 A-1~A-10, 스테이션 2는 B-1~B-10. 등록 참여인원 수 자체에는 별도 제한이 없으며, 현재 라운드에서 동시에 배정할 수 있는 인원은 열린 샘플 코드 수입니다(최대 12개 스테이션 × 스테이션별 50개 코드). 스테이션을 제거해도 이미 제출된 점수와 백업은 삭제되지 않습니다.</div>' +
       '<div class="ikrc-station-config-list" id="' + prefix + '-ikrc-stations-' + code + '">' +
         stations.map(function(station, index){ return ikrcStationConfigRowHtml_(station, index); }).join('') +
       '</div>' +
@@ -3558,19 +3639,23 @@ function configSelectableOptionsPayload_(code, prefix, cfg) {
     var rows = container ? Array.prototype.slice.call(container.querySelectorAll('[data-ikrc-station-row]')) : [];
     if (!rows.length) { toast('IKRC 스테이션을 1개 이상 등록해주세요.', true); return false; }
     if (rows.length > 12) { toast('IKRC 스테이션은 최대 12개까지 등록할 수 있습니다.', true); return false; }
-    var stations = [], used = {};
+    var stations = [], used = {}, usedIds = {};
     for (var i=0;i<rows.length;i++) {
       var prefixEl = rows[i].querySelector('[data-field="prefix"]');
       var startEl = rows[i].querySelector('[data-field="start"]');
       var endEl = rows[i].querySelector('[data-field="end"]');
       var stationPrefix = ikrcStationPrefix_(prefixEl && prefixEl.value, ikrcDefaultStationPrefix_(i));
+      var stationId = ikrcStationId_(rows[i].dataset.stationId, i);
+      var stationLabel = ikrcStationLabel_(rows[i].dataset.stationLabel, i);
       var start = ikrcStationRangeNumber_(startEl && startEl.value, 1);
       var end = ikrcStationRangeNumber_(endEl && endEl.value, 10);
       if (used[stationPrefix]) { toast('스테이션 코드는 서로 달라야 합니다: ' + stationPrefix, true); return false; }
+      if (usedIds[stationId]) { toast('스테이션 식별자가 중복되었습니다. 화면을 새로고침한 뒤 다시 시도해주세요.', true); return false; }
       if (end < start) { toast('스테이션 ' + (i + 1) + '의 끝 번호는 시작 번호보다 작을 수 없습니다.', true); return false; }
       if (end - start + 1 > 50) { toast('한 스테이션은 최대 50개 샘플까지 지정할 수 있습니다.', true); return false; }
       used[stationPrefix] = true;
-      stations.push({id:'station' + (i + 1), label:'스테이션 ' + (i + 1), prefix:stationPrefix, start:start, end:end});
+      usedIds[stationId] = true;
+      stations.push({id:stationId, label:stationLabel, prefix:stationPrefix, start:start, end:end});
     }
     var existingRaw = competitionOptionSettings_(cfg).ikrcStations || {};
     var byRound = Object.assign({}, existingRaw.byRound || {});
@@ -3686,6 +3771,133 @@ function toast(msg, isErr) {
   t._t = setTimeout(function(){ t.className='toast'; }, 2800);
 }
 
+var _preparedFileDelivery = { url:'', blob:null, fileName:'' };
+var _judgeQrState = { code:'', name:'', url:'' };
+function isMobileFileDelivery_() {
+  var ua = String((navigator && navigator.userAgent) || '').toLowerCase();
+  return /android|iphone|ipad|ipod|kakaotalk|naver|line\//.test(ua) || Math.min(screen.width || 9999, window.innerWidth || 9999) <= 700;
+}
+function closeFileDelivery_() {
+  var modal = document.getElementById('fileDeliveryModal');
+  if (modal) modal.classList.remove('active');
+  if (_preparedFileDelivery.url) {
+    try { URL.revokeObjectURL(_preparedFileDelivery.url); } catch(e) {}
+  }
+  _preparedFileDelivery = { url:'', blob:null, fileName:'' };
+}
+function deliverBlob_(blob, fileName) {
+  if (!blob || !fileName) return false;
+  if (!isMobileFileDelivery_()) {
+    var directUrl = URL.createObjectURL(blob);
+    var direct = document.createElement('a');
+    direct.href = directUrl;
+    direct.download = fileName;
+    direct.style.display = 'none';
+    document.body.appendChild(direct);
+    direct.click();
+    setTimeout(function(){ try { URL.revokeObjectURL(directUrl); direct.remove(); } catch(e) {} }, 60000);
+    return true;
+  }
+  closeFileDelivery_();
+  var url = URL.createObjectURL(blob);
+  _preparedFileDelivery = { url:url, blob:blob, fileName:fileName };
+  var nameEl = document.getElementById('file-delivery-name');
+  var link = document.getElementById('file-delivery-download');
+  var share = document.getElementById('file-delivery-share');
+  if (nameEl) nameEl.textContent = fileName;
+  if (link) {
+    link.href = url;
+    link.download = fileName;
+    link.onclick = function(){ setTimeout(closeFileDelivery_, 1800); };
+  }
+  var canShareFiles = false;
+  try {
+    var probe = new File([blob], fileName, {type:blob.type || 'application/octet-stream'});
+    canShareFiles = !!(navigator.share && navigator.canShare && navigator.canShare({files:[probe]}));
+  } catch(e) {}
+  if (share) share.style.display = canShareFiles ? 'block' : 'none';
+  var modal = document.getElementById('fileDeliveryModal');
+  if (modal) modal.classList.add('active');
+  return true;
+}
+async function sharePreparedFile_() {
+  if (!_preparedFileDelivery.blob || !_preparedFileDelivery.fileName || !navigator.share) return;
+  try {
+    var file = new File([_preparedFileDelivery.blob], _preparedFileDelivery.fileName, {type:_preparedFileDelivery.blob.type || 'application/octet-stream'});
+    await navigator.share({files:[file], title:_preparedFileDelivery.fileName});
+    closeFileDelivery_();
+  } catch(e) {
+    if (!e || e.name !== 'AbortError') toast('공유 메뉴를 열지 못했습니다. 파일 저장 / 열기 버튼을 사용해주세요.', true);
+  }
+}
+function requestedCompetitionCode_() {
+  try {
+    var qs = new URLSearchParams(window.location.search || '');
+    return String(qs.get('competition') || qs.get('comp') || '').trim().toUpperCase();
+  } catch(e) {}
+  return '';
+}
+function judgeEntryUrl_(cfg) {
+  var code = String(cfg && cfg.code || '').trim().toUpperCase();
+  var url = new URL('/assessment/', window.location.origin);
+  if (code) url.searchParams.set('competition', code);
+  return url.toString();
+}
+function openJudgeQr_(cfg) {
+  var code = String(cfg && cfg.code || '').toUpperCase();
+  if (!code) { toast('QR을 만들 대회를 찾지 못했습니다.', true); return; }
+  var url = judgeEntryUrl_(cfg);
+  _judgeQrState = { code:code, name:String(cfg && cfg.name || code), url:url };
+  var title = document.getElementById('judge-qr-title');
+  var urlEl = document.getElementById('judge-qr-url');
+  var open = document.getElementById('judge-qr-open');
+  var canvas = document.getElementById('judge-qr-canvas');
+  if (title) title.textContent = _judgeQrState.name + ' 심사 웹 QR';
+  if (urlEl) urlEl.textContent = url;
+  if (open) open.href = url;
+  var modal = document.getElementById('judgeQrModal');
+  if (modal) modal.classList.add('active');
+  if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function' || !canvas) {
+    toast('QR 생성 라이브러리를 불러오지 못했습니다. 링크 복사를 사용해주세요.', true);
+    return;
+  }
+  window.QRCode.toCanvas(canvas, url, {
+    width:280,
+    margin:2,
+    errorCorrectionLevel:'M',
+    color:{ dark:'#000000', light:'#ffffff' }
+  }).catch(function(err){ toast('QR 생성 실패: ' + ((err && err.message) || err || ''), true); });
+}
+function closeJudgeQr_() {
+  var modal = document.getElementById('judgeQrModal');
+  if (modal) modal.classList.remove('active');
+}
+async function copyJudgeQrLink_() {
+  if (!_judgeQrState.url) return;
+  try {
+    await navigator.clipboard.writeText(_judgeQrState.url);
+    toast('심사 웹 링크를 복사했습니다.');
+  } catch(e) {
+    var input = document.createElement('textarea');
+    input.value = _judgeQrState.url;
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    try { document.execCommand('copy'); toast('심사 웹 링크를 복사했습니다.'); }
+    catch(copyError) { toast('링크 복사에 실패했습니다. 화면의 링크를 길게 눌러 복사해주세요.', true); }
+    input.remove();
+  }
+}
+function downloadJudgeQr_() {
+  var canvas = document.getElementById('judge-qr-canvas');
+  if (!canvas || !_judgeQrState.code) return;
+  canvas.toBlob(function(blob){
+    if (!blob) { toast('QR 이미지를 만들지 못했습니다.', true); return; }
+    deliverBlob_(blob, 'KCL_' + _judgeQrState.code + '_심사웹_QR.png');
+  }, 'image/png');
+}
+
 function isAdminCenterEntry_() {
   try {
     var qs = new URLSearchParams(window.location.search || '');
@@ -3789,10 +4001,7 @@ function installBrowserBackGuard_() {
   window.addEventListener('popstate', function() {
     if (!shouldBlockBrowserBack_()) return;
     pushGuardState_();
-    try {
-      if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
-    } catch (e) {}
-    toast('브라우저 뒤로가기는 비활성화되어 있습니다. 화면 안의 뒤로가기 버튼을 사용하세요.', true);
+    goBackContext_();
   });
 }
 function showEval(id) {
@@ -4592,12 +4801,14 @@ function adminRenderRunCards_() {
         '<button class="primary" data-act="eval">평가 입력</button>' +
         '<button data-act="rank">순위 / 디브리핑</button>' +
         '<button data-act="review">검수 / 표준편차</button>' +
-        '<button data-act="score-backup">점수·검수 백업</button>' + extra +
+        '<button data-act="score-backup">점수·검수 백업</button>' +
+        '<button data-act="judge-qr">심사 웹 QR</button>' + extra +
       '</div>';
     div.querySelector('[data-act="eval"]').onclick = function(){ adminOpenEval_(c, ''); };
     div.querySelector('[data-act="rank"]').onclick = function(){ adminOpenRanking_(c); };
     div.querySelector('[data-act="review"]').onclick = function(){ adminOpenReview_(c); };
     div.querySelector('[data-act="score-backup"]').onclick = function(){ downloadScoreBackupExcel(c.code); };
+    div.querySelector('[data-act="judge-qr"]').onclick = function(){ openJudgeQr_(c); };
     var b;
     b = div.querySelector('[data-act="ikrc-seed"]'); if (b) b.onclick = function(){ openIkrcSeedToCup_(c); };
     b = div.querySelector('[data-act="ikrc-blind"]'); if (b) b.onclick = function(){ openIkrcBlindManager_(c, 'pAdmin'); };
@@ -4851,7 +5062,8 @@ function loadTeamPanel() {
               ((String(c.code).toUpperCase()==='MOC') ? '<button class="primary" data-act="eval">평가 입력</button>' : '') +
               '<button' + ((String(c.code).toUpperCase()==='MOC') ? '' : ' class="primary"') + ' data-act="rank">실시간 순위</button>' +
               '<button data-act="review">평가 검수/수정</button>' +
-              '<button data-act="score-backup">점수·검수 백업</button>' + blindButton + seedButton +
+              '<button data-act="score-backup">점수·검수 백업</button>' +
+              '<button data-act="judge-qr">심사 웹 QR</button>' + blindButton + seedButton +
             '</div>';
           if (String(c.code || '').toUpperCase() === 'IKRC') {
             var teamIkrcRound = div.querySelector('#team-cfg-round-IKRC');
@@ -4875,6 +5087,7 @@ function loadTeamPanel() {
             goReviewByCode(cfg.code, cfg.name, 'pTeam');
           }; })(c);
           div.querySelector('[data-act="score-backup"]').onclick = (function(cfg){ return function(){ downloadScoreBackupExcel(cfg.code); }; })(c);
+          div.querySelector('[data-act="judge-qr"]').onclick = (function(cfg){ return function(){ openJudgeQr_(cfg); }; })(c);
           var seedBtn = div.querySelector('[data-act="ikrc-seed"]');
           if (seedBtn) seedBtn.onclick = (function(cfg){ return function(){ openIkrcSeedToCup_(cfg); }; })(c);
           var blindBtn = div.querySelector('[data-act="ikrc-blind"]');
@@ -4913,6 +5126,7 @@ function renderCompList() {
   var wrap = document.getElementById('comp-list');
   wrap.innerHTML = '';
   var active = filterConfigsByAccess(_configs);
+  var requestedCode = requestedCompetitionCode_();
 
   if (!active.length) {
     wrap.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:14px">담당 대회가 지정되지 않았습니다.<br>운영탭의 담당대회 열을 확인해주세요.</p>';
@@ -4939,7 +5153,12 @@ function renderCompList() {
     };
     wrap.appendChild(div);
   });
-  if (active.length === 1) {
+  var requestedIndex = requestedCode ? active.findIndex(function(c){ return String(c.code || '').toUpperCase() === requestedCode; }) : -1;
+  if (requestedIndex >= 0) {
+    _selComp = active[requestedIndex];
+    Array.prototype.forEach.call(wrap.querySelectorAll('.comp-card'), function(card, index){ card.classList.toggle('active', index === requestedIndex); });
+    toast(_selComp.name + ' 대회가 QR 링크로 선택되었습니다.');
+  } else if (active.length === 1) {
     _selComp = active[0];
     wrap.querySelector('.comp-card').classList.add('active');
   }
@@ -8696,14 +8915,22 @@ function reportRoundOrder_(rounds) {
 }
 function ensureXlsxLib_(cb) {
   if (window.XLSX) { cb(true); return; }
-  var existing = document.getElementById('xlsx-lib-stage16');
+  var existing = document.getElementById('xlsx-lib-stage112');
   if (existing) { existing.addEventListener('load', function(){ cb(!!window.XLSX); }); existing.addEventListener('error', function(){ cb(false); }); return; }
   var s = document.createElement('script');
-  s.id = 'xlsx-lib-stage16';
-  s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  s.id = 'xlsx-lib-stage112';
+  s.src = '/assets/vendor/xlsx.full.min.js?v=stage112';
   s.onload = function(){ cb(!!window.XLSX); };
   s.onerror = function(){ cb(false); };
   document.head.appendChild(s);
+}
+function deliverWorkbook_(wb, fileName) {
+  var bytes = XLSX.write(wb, {bookType:'xlsx', type:'array', compression:true});
+  var blob = new Blob([bytes], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  return deliverBlob_(blob, fileName);
+}
+function excelDeliveryToast_(label) {
+  toast(isMobileFileDelivery_() ? label + ' 파일이 준비되었습니다. 저장 / 열기 버튼을 눌러주세요.' : label + ' 다운로드 완료');
 }
 function safeSheetName_(name) {
   return String(name || 'Sheet').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31) || 'Sheet';
@@ -8884,9 +9111,7 @@ function fallbackFinalReportXls_(res) {
     });
     html += '</body></html>';
     var ikrcBlob = new Blob(['\ufeff', html], {type:'application/vnd.ms-excel;charset=utf-8'});
-    var ikrcA = document.createElement('a');
-    ikrcA.href = URL.createObjectURL(ikrcBlob); ikrcA.download = finalReportFileBase_(res) + '.xls';
-    document.body.appendChild(ikrcA); ikrcA.click(); setTimeout(function(){ URL.revokeObjectURL(ikrcA.href); ikrcA.remove(); }, 1000);
+    deliverBlob_(ikrcBlob, finalReportFileBase_(res) + '.xls');
     return;
   }
   reportRoundOrder_(res.rounds && res.rounds.length ? res.rounds : ['']).forEach(function(round){
@@ -8895,11 +9120,7 @@ function fallbackFinalReportXls_(res) {
   });
   html += '</body></html>';
   var blob = new Blob(['\ufeff', html], {type:'application/vnd.ms-excel;charset=utf-8'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = finalReportFileBase_(res) + '.xls';
-  document.body.appendChild(a); a.click();
-  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  deliverBlob_(blob, finalReportFileBase_(res) + '.xls');
 }
 function fallbackScoreBackupXls_(res) {
   function table(title, rows, headers){
@@ -8921,9 +9142,7 @@ function fallbackScoreBackupXls_(res) {
     });
     html += '</body></html>';
     var ikrcBlob = new Blob(['\ufeff', html], {type:'application/vnd.ms-excel;charset=utf-8'});
-    var ikrcA = document.createElement('a');
-    ikrcA.href = URL.createObjectURL(ikrcBlob); ikrcA.download = scoreBackupFileBase_(res) + '.xls';
-    document.body.appendChild(ikrcA); ikrcA.click(); setTimeout(function(){ URL.revokeObjectURL(ikrcA.href); ikrcA.remove(); }, 1000);
+    deliverBlob_(ikrcBlob, scoreBackupFileBase_(res) + '.xls');
     return;
   }
   html += table('전체_원본백업', scoreBackupRows_(res), headers);
@@ -8937,11 +9156,7 @@ function fallbackScoreBackupXls_(res) {
   });
   html += '</body></html>';
   var blob = new Blob(['\ufeff', html], {type:'application/vnd.ms-excel;charset=utf-8'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = scoreBackupFileBase_(res) + '.xls';
-  document.body.appendChild(a); a.click();
-  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  deliverBlob_(blob, scoreBackupFileBase_(res) + '.xls');
 }
 function downloadScoreBackupExcel(codeOverride) {
   var code = String(codeOverride || (_ranking && _ranking.compCode) || (_selComp && _selComp.code) || '').toUpperCase();
@@ -8955,11 +9170,11 @@ function downloadScoreBackupExcel(codeOverride) {
         try {
           if (ok && window.XLSX) {
             var wb = buildScoreBackupWorkbook_(res);
-            XLSX.writeFile(wb, scoreBackupFileBase_(res) + '.xlsx');
-            hideOverlay(); toast('점수·검수 백업 엑셀 다운로드 완료');
+            deliverWorkbook_(wb, scoreBackupFileBase_(res) + '.xlsx');
+            hideOverlay(); excelDeliveryToast_('점수·검수 백업 엑셀');
           } else {
             fallbackScoreBackupXls_(res);
-            hideOverlay(); toast('엑셀 라이브러리 연결 실패로 XLS 형식으로 저장했습니다.');
+            hideOverlay(); excelDeliveryToast_('점수·검수 백업 XLS');
           }
         } catch(e) { hideOverlay(); toast('백업 엑셀 생성 오류: ' + (e && e.message ? e.message : e), true); }
       });
@@ -8979,11 +9194,11 @@ function downloadFinalReportExcel() {
         try {
           if (ok && window.XLSX) {
             var wb = buildFinalReportWorkbook_(res);
-            XLSX.writeFile(wb, finalReportFileBase_(res) + '.xlsx');
-            hideOverlay(); toast('최종정리 엑셀 다운로드 완료');
+            deliverWorkbook_(wb, finalReportFileBase_(res) + '.xlsx');
+            hideOverlay(); excelDeliveryToast_('최종정리 엑셀');
           } else {
             fallbackFinalReportXls_(res);
-            hideOverlay(); toast('엑셀 라이브러리 연결 실패로 XLS 형식으로 저장했습니다.');
+            hideOverlay(); excelDeliveryToast_('최종정리 XLS');
           }
         } catch(e) { hideOverlay(); toast('엑셀 생성 오류: ' + (e && e.message ? e.message : e), true); }
       });
@@ -14072,12 +14287,13 @@ function clearIkrcGeneratedComment() {
   toast('AI 자동 코멘트 사용을 해제했습니다.');
 }
 function ikrcCalItem_(item) {
-  if (typeof item === 'string') return { sampleNo:item, checked:false, judgeCount:0, checkedAt:'', latestSubmittedAt:'' };
+  if (typeof item === 'string') return { sampleNo:item, checked:false, judgeCount:0, headCount:0, checkedAt:'', latestSubmittedAt:'' };
   item = item || {};
   return {
     sampleNo: item.sampleNo || item.cup || item.no || '',
     checked: !!item.checked,
     judgeCount: item.judgeCount || 0,
+    headCount: item.headCount || 0,
     checkedAt: item.checkedAt || '',
     latestSubmittedAt: item.latestSubmittedAt || '',
     checkerName: item.checkerName || ''
@@ -14107,7 +14323,7 @@ function loadIkrcCalibrationCups() {
         var badge = item.checked
           ? '<span style="display:inline-block;padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid var(--border);color:var(--text-3);font-size:11px;font-weight:800">확인완료</span>'
           : '<span style="display:inline-block;padding:4px 9px;border-radius:999px;background:#fff;color:#000;font-size:11px;font-weight:900">미확인</span>';
-        var meta = '평가자 ' + (item.judgeCount || 0) + '명';
+        var meta = '센서리 ' + (item.judgeCount || 0) + '명' + (item.headCount ? ' · 헤드 기준 ' + item.headCount + '건' : '');
         if (item.checked && item.checkedAt) meta += ' · 확인 ' + String(item.checkedAt).slice(0,10);
         return '<div class="review-item" onclick="loadIkrcCalibrationDetail(\'' + escapeJsString_(item.sampleNo) + '\')">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">' +
