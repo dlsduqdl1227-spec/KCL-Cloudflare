@@ -4465,10 +4465,10 @@ function _kcacEvidenceSentence_(evidence) {
   const positive = _joinWithComma((evidence.positive || []).slice(0, 3));
   const refinement = _joinWithComma((evidence.refinement || []).slice(0, 3));
   const custom = _joinWithComma((evidence.custom || []).slice(0, 2));
-  if (positive && refinement) return `강점 관찰로 ${positive}, 보완 관찰로 ${refinement}이 기록되었습니다.`;
-  if (refinement) return `보완 관찰로 ${refinement}이 기록되어 긍정적으로만 해석하지 않았습니다.`;
-  if (positive) return `강점 관찰로 ${positive}이 기록되었습니다.`;
-  if (custom) return `추가 관찰로 ${custom}이 기록되었습니다.`;
+  if (positive && refinement) return `강점 관찰로 ${positive}, 보완 관찰로 ${refinement}${_subjectParticle_(refinement)} 기록되었습니다.`;
+  if (refinement) return `보완 관찰로 ${refinement}${_subjectParticle_(refinement)} 기록되어 긍정적으로만 해석하지 않았습니다.`;
+  if (positive) return `강점 관찰로 ${positive}${_subjectParticle_(positive)} 기록되었습니다.`;
+  if (custom) return `추가 관찰로 ${custom}${_subjectParticle_(custom)} 기록되었습니다.`;
   return '선택된 스마트태그가 없어 점수 흐름을 중심으로 해석했습니다.';
 }
 
@@ -4486,7 +4486,7 @@ function generateKcacComment(payload) {
   const hl = _lowHighScore(scoreItems);
   const high = hl.high ? _areaKorean_(hl.high.name) : '';
   const low = hl.low && hl.low !== hl.high ? _areaKorean_(hl.low.name) : '';
-  const balance = high && low ? `${high}이 가장 두드러졌고, ${low}은 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 기록되었습니다.';
+  const balance = high && low ? `${high}${_subjectParticle_(high)} 가장 두드러졌고, ${low}${_topicParticle_(low)} 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 기록되었습니다.';
   const evidence = _kcacTagEvidence_({ smartTags, smartTagPolarity:payload.smartTagPolarity });
   const tone = _kcacTone_(avg, evidence);
   const evidenceText = _kcacEvidenceSentence_(evidence);

@@ -89,6 +89,7 @@ assert.equal(negativeComment.comments.length, 3);
 negativeComment.comments.forEach((comment) => {
   assert.match(comment, /보완|개선|낮게 평가|긍정적으로만 해석하지 않았습니다/);
   assert.doesNotMatch(comment, /기준을 충족하는|안정적인 결과|완성도 높은 결과/);
+  assert.doesNotMatch(comment, /(?:위치이|선명도은|저하이) /);
 });
 
 const lowScorePositiveTagComment = await rpc("generateKcacComment", {
