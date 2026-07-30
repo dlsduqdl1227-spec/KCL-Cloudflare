@@ -326,6 +326,23 @@ assert.ok(
   "Manager review must enrich the blind sample with participant identity",
 );
 
+const kbcCommentColumn = reviewLists.KBC.headers.indexOf("종합코멘트");
+assert.ok(kbcCommentColumn >= 0);
+const kbcReviewEdit = await rpc(
+  "updateReviewRow",
+  "KBC",
+  reviewLists.KBC.list[0].rowIndex,
+  { [kbcCommentColumn]: "QA 검수 수정 확인" },
+  "수정완료",
+  "관리자",
+  adminActor,
+);
+assert.equal(kbcReviewEdit.success, true, kbcReviewEdit.message);
+const kbcReviewAfterEdit = await rpc("getReviewList", "KBC", adminActor);
+assert.equal(kbcReviewAfterEdit.list[0]["종합코멘트"], "QA 검수 수정 확인");
+assert.equal(kbcReviewAfterEdit.list[0].status, "수정완료");
+reviewLists.KBC = kbcReviewAfterEdit;
+
 const judgeOwnReview = await rpc("getReviewList", "IKRC", {
   judgeToken: judge.judgeToken,
   reviewScope: "own",
