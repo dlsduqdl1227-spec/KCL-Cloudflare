@@ -22,7 +22,9 @@ function leaves(value, out = []) {
   return out;
 }
 
-assert.ok(Object.keys(shared.flavor["향미 계열"]).length >= 10);
+assert.ok(Object.keys(shared.flavor).filter((key) => key !== "보완 표현").length >= 10);
+assert.ok(Array.isArray(shared.flavor["견과·코코아 계열"]));
+assert.equal(shared.flavor["향미 계열"], undefined);
 assert.ok(leaves(shared.flavor).includes("재스민"));
 assert.ok(leaves(shared.flavor).includes("다크초콜릿"));
 assert.ok(leaves(shared.mouthfeel).includes("매끄러운"));

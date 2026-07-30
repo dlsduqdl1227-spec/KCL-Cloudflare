@@ -43,7 +43,9 @@
 
     var result = {};
     if (category === "flavor") {
-      if (Object.keys(primary).length) result["향미 계열"] = primary;
+      Object.keys(primary).forEach(function(family) {
+        result[family] = primary[family];
+      });
     } else {
       var primaryFlat = [];
       Object.keys(primary).forEach(function(key) {
