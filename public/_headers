@@ -30,6 +30,12 @@
 /assets/kcl-api-shim.js
   Cache-Control: no-store
 
+/assets/kcr-sensory-tags.js
+  Cache-Control: no-store
+
+/assets/kcr-sensory-comments.js
+  Cache-Control: no-store
+
 /assets/KCL_Registry_Import_Template.xlsx
   Cache-Control: no-store
 
