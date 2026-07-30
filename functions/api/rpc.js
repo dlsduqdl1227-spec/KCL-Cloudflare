@@ -870,23 +870,10 @@ async function getAdminConsoleData(env, actorArg) {
   const actor = await getActor(env, actorArg);
   if (!actor || (!hasAdmin(actor) && !hasTeamLead(actor))) return { success: false, message: '관리 권한이 없습니다.' };
   const cfg = await getConfig(env);
-  const rows = await env.DB.prepare('SELECT * FROM operators ORDER BY id').all();
   const visibleConfigs = hasAdmin(actor) ? cfg.configs : filterConfigsForActor_(cfg.configs, actor);
-  const visibleRows = hasAdmin(actor) ? (rows.results || []) : (rows.results || []).filter(r => operatorRowVisibleToActor_(actor, r));
   return {
     success: true,
-    configs: visibleConfigs,
-    accounts: visibleRows.map(r => ({
-      rowIndex: r.id,
-      accountType: r.account_type,
-      type: r.account_type,
-      name: r.name,
-      affiliation: r.affiliation || '',
-      phone: r.phone || '',
-      access: r.access || '',
-      teamGroup: r.team_group || '',
-      role: r.role || ''
-    }))
+    configs: visibleConfigs
   };
 }
 

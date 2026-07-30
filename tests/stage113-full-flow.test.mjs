@@ -156,6 +156,14 @@ const adminLogin = await rpc("adminLogin", "01099990000", "qa-password", "5061")
 assert.equal(adminLogin.success, true, adminLogin.message);
 assert.ok(adminLogin.judgeToken);
 const adminActor = managedActor(adminLogin);
+const adminConsole = await rpc("getAdminConsoleData", adminActor);
+assert.equal(adminConsole.success, true, adminConsole.message);
+assert.equal(adminConsole.configs.length, 7);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(adminConsole, "accounts"),
+  false,
+  "The operations console must not duplicate registry account data or return operator phone numbers",
+);
 
 for (const operator of [
   {

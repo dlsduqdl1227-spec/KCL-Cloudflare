@@ -900,8 +900,6 @@ body.kcac-score-dragging, body.kcac-score-dragging *{
 .admin-mini-title{font-size:14px;font-weight:800;margin-bottom:6px;line-height:1.4}.admin-mini-sub{font-size:12px;color:var(--text-3);line-height:1.5;margin-bottom:10px}
 .admin-form-grid{display:grid;grid-template-columns:1fr;gap:8px}.admin-form-grid input,.admin-form-grid select{margin-bottom:0}
 .admin-check-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}.admin-check-row label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2)}.admin-check-row input{width:auto;margin:0;appearance:checkbox;-webkit-appearance:checkbox}
-.admin-account-row{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:8px}.admin-account-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.admin-account-name{font-size:14px;font-weight:800}.admin-account-sub{font-size:12px;color:var(--text-3);line-height:1.5;margin-top:3px}.admin-account-actions{display:flex;gap:6px;flex-shrink:0}.admin-account-actions button{padding:7px 10px;border-radius:6px;border:1.5px solid var(--border-lt);background:transparent;color:#fff;font-size:12px;font-weight:800;cursor:pointer}.admin-account-actions button.primary{background:#fff;color:#000;border-color:#fff}
-.admin-pick-row{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}.admin-pick-btn{padding:8px 10px;border:1.5px solid var(--border-lt);border-radius:999px;background:transparent;color:var(--text-2);font-size:12px;font-weight:800;cursor:pointer;line-height:1.2}.admin-pick-btn.active{background:#fff;color:#000;border-color:#fff}.admin-pick-btn:active{transform:scale(.97);opacity:.85}.admin-filter-row{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 0 12px;padding-bottom:4px}.admin-filter-row::-webkit-scrollbar{display:none}.admin-filter-btn{flex-shrink:0;padding:9px 12px;border-radius:999px;border:1.5px solid var(--border-lt);background:transparent;color:var(--text-2);font-size:12px;font-weight:900;cursor:pointer}.admin-filter-btn.active{background:#fff;color:#000;border-color:#fff}.admin-select-help{font-size:11px;color:var(--muted);line-height:1.5;margin:6px 0 0}
 @media (min-width:720px){.admin-form-grid{grid-template-columns:repeat(2,1fr)}.admin-form-grid .wide{grid-column:1/-1}}
 
 
@@ -1215,7 +1213,7 @@ button,input,select,textarea{font-family:'Pretendard', -apple-system, BlinkMacSy
   .score-slider,.intensity-slider,.kcl-range,input[type=range]{width:100%;min-width:0;}
   .review-score-inline-input{min-width:78px;max-width:104px;}
   .selected-tags,.custom-tag-row,.mob-inline-selected-tags,.kcr-custom-tag-row,.review-smart-tags{max-width:100%;overflow-wrap:anywhere;}
-  .review-actions,.review-top-actions,.btnrow,.team-actions,.admin-account-actions{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;}
+  .review-actions,.review-top-actions,.btnrow,.team-actions{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;}
   .review-actions .btn,.review-actions .btn-outline,.review-top-actions .btn,.review-top-actions .btn-outline{width:100%;}
   .table-wrap, .ikrc-cal-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 }
@@ -1851,6 +1849,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 
     <div class="divider"></div>
     <div class="admin-footer-actions">
+      <button class="btn-outline" onclick="window.location.href='/registry/'">등록·권한 관리</button>
       <button class="btn-outline" onclick="loadAdminPanel()">관리 정보 새로고침</button>
       <button class="btn-danger" onclick="doLogout()">로그아웃</button>
     </div>
@@ -3106,11 +3105,9 @@ function displayScoreWithMax(label, value) {
 // 전역 상태
 // ══════════════════════════════════════════
 var _judge = {}, _configs = [], _selComp = null;
-var _adminConsole = { configs:[], accounts:[] };
+var _adminConsole = { configs:[] };
 var _adminPreferredSection = 'run';
 var _adminRoleOverride = {};  // 관리자 계정 임시 역할 override
-var _adminAccountFilter = 'ALL';
-var _adminAccessSelection = ['ALL'];
 var _cuppingFinalsCups = [];
 var _loginTimeout = null;
 
@@ -3160,7 +3157,7 @@ var _ktcc = {
 };
 
 var _kbcYN = {basket:'Y', dose:'Y', flush:'Y', time:'Y', clean:'Y', practical:'Y'};
-var _ikrcSamples = [], _ikrcIdx = 0, _ikrcCups = [], _ikrcStation = null;
+var _ikrcSamples = [], _ikrcIdx = 0, _ikrcStation = null;
 var _ikrcBlindState = { data:null, backPanel:'pTeam' };
 var _participantAssignments = {};
 
@@ -4490,19 +4487,6 @@ function adminSwitchSection(section) {
   });
 }
 
-function adminCompCodes_() {
-  var list = (_adminConsole && _adminConsole.configs && _adminConsole.configs.length ? _adminConsole.configs : _configs) || [];
-  var out = [];
-  list.forEach(function(c){ var code = String((c && c.code) || '').toUpperCase(); if (code && out.indexOf(code) < 0) out.push(code); });
-  ['KBC','MOB','MOC','KTCC','KCR','IKRC','KCAC'].forEach(function(code){ if (out.indexOf(code) < 0) out.push(code); });
-  return out;
-}
-function adminCompName_(code) {
-  code = String(code || '').toUpperCase();
-  var list = (_adminConsole && _adminConsole.configs) || _configs || [];
-  for (var i=0;i<list.length;i++) if (String(list[i].code || '').toUpperCase() === code) return list[i].name || code;
-  return code;
-}
 var COMP_ROUND_OPTIONS = {
   KBC:['예선','본선','결선'],
   MOC:['예선','본선','결선'],
@@ -4531,106 +4515,6 @@ function adminRoundOptionsHtml_(code, selected) {
   var rounds = competitionRounds_(code);
   if (selected && rounds.indexOf(selected) < 0) rounds.unshift(selected);
   return rounds.map(function(r){ return '<option value="' + escHtml(r) + '" ' + (r === selected ? 'selected' : '') + '>' + escHtml(r) + '</option>'; }).join('');
-}
-function adminRoleOptionsHtml_(selected, accountType) {
-  var type = String(accountType || '').toUpperCase();
-  selected = normalizeRoleLabel_(selected, type || 'JUDGE');
-  var roles;
-  if (type === 'ADMIN') roles = ['관리자'];
-  else if (type === 'TEAMLEAD' || type === 'LEADER') roles = ['팀장'];
-  else if (type === 'STAFF') roles = ['운영진'];
-  else roles = ['센서리 심사위원','테크니컬 심사위원','센서리 헤드 심사위원','테크니컬 헤드 심사위원'];
-  if (selected && roles.indexOf(selected) < 0) roles.unshift(selected);
-  return roles.map(function(r){ return '<option value="' + escHtml(r) + '" ' + (r === selected ? 'selected' : '') + '>' + escHtml(r) + '</option>'; }).join('');
-}
-function adminDefaultRoleForType_(accountType) {
-  var type = String(accountType || '').toUpperCase();
-  if (type === 'ADMIN') return '관리자';
-  if (type === 'TEAMLEAD' || type === 'LEADER') return '팀장';
-  if (type === 'STAFF') return '운영진';
-  return '센서리 심사위원';
-}
-function adminSyncAccountRoleOptions_() {
-  var typeEl = document.getElementById('admin-account-type');
-  var roleEl = document.getElementById('admin-account-role');
-  if (!typeEl || !roleEl) return;
-  var current = roleEl.value || '';
-  var type = typeEl.value;
-  var normalized = normalizeRoleLabel_(current, type);
-  var defaultRole = adminDefaultRoleForType_(type);
-  roleEl.innerHTML = adminRoleOptionsHtml_(normalized || defaultRole, type);
-}
-function adminTeamOptionsHtml_(selected) {
-  selected = normalizeTeamLabel_(selected);
-  var teams = [''];
-  for (var i = 1; i <= 12; i++) teams.push(i + '팀');
-  if (selected && teams.indexOf(selected) < 0) teams.unshift(selected);
-  return teams.map(function(t){ var label = t || '팀구분 없음'; return '<option value="' + escHtml(t) + '" ' + (t === selected ? 'selected' : '') + '>' + escHtml(label) + '</option>'; }).join('');
-}
-function adminSetAccessSelection_(value) {
-  var str = String(value || '').trim();
-  if (!str) _adminAccessSelection = [];
-  else if (str.toUpperCase() === 'ALL') _adminAccessSelection = ['ALL'];
-  else _adminAccessSelection = str.split(',').map(function(v){ return String(v || '').trim().toUpperCase(); }).filter(Boolean);
-  if (_adminAccessSelection.length === 0) _adminAccessSelection = [];
-  adminRenderAccessPickers_();
-}
-function adminToggleAccess_(code) {
-  code = String(code || '').toUpperCase();
-  if (!code) return;
-  if (code === 'ALL') {
-    _adminAccessSelection = ['ALL'];
-  } else {
-    _adminAccessSelection = (_adminAccessSelection || []).filter(function(v){ return v !== 'ALL'; });
-    var idx = _adminAccessSelection.indexOf(code);
-    if (idx >= 0) _adminAccessSelection.splice(idx, 1); else _adminAccessSelection.push(code);
-  }
-  var hidden = document.getElementById('admin-account-access');
-  if (hidden) hidden.value = (_adminAccessSelection.indexOf('ALL') >= 0 ? 'ALL' : _adminAccessSelection.join(','));
-  adminRenderAccessPickers_();
-}
-function adminRenderAccessPickers_() {
-  var wrap = document.getElementById('admin-account-access-picks');
-  var hidden = document.getElementById('admin-account-access');
-  if (!wrap) return;
-  var selected = _adminAccessSelection || [];
-  if (hidden) hidden.value = selected.indexOf('ALL') >= 0 ? 'ALL' : selected.join(',');
-  var codes = ['ALL'].concat(adminCompCodes_());
-  wrap.innerHTML = codes.map(function(code){
-    var on = selected.indexOf(code) >= 0;
-    var label = code === 'ALL' ? '전체' : code;
-    return '<button type="button" class="admin-pick-btn ' + (on ? 'active' : '') + '" data-access-code="' + escHtml(code) + '">' + escHtml(label) + '</button>';
-  }).join('');
-  Array.prototype.forEach.call(wrap.querySelectorAll('[data-access-code]'), function(btn){
-    btn.onclick = function(){ adminToggleAccess_(this.getAttribute('data-access-code')); };
-  });
-}
-function adminRenderAccountFilter_() {
-  var wrap = document.getElementById('admin-account-filter');
-  if (!wrap) return;
-  var codes = ['ALL'].concat(adminCompCodes_());
-  wrap.innerHTML = codes.map(function(code){
-    var label = code === 'ALL' ? '전체' : code;
-    return '<button type="button" class="admin-filter-btn ' + (_adminAccountFilter === code ? 'active' : '') + '" data-filter-code="' + escHtml(code) + '">' + escHtml(label) + '</button>';
-  }).join('');
-  Array.prototype.forEach.call(wrap.querySelectorAll('[data-filter-code]'), function(btn){
-    btn.onclick = function(){ _adminAccountFilter = String(this.getAttribute('data-filter-code') || 'ALL').toUpperCase(); adminRenderAccountList_(); };
-  });
-}
-function adminAccountMatchesFilter_(a) {
-  var f = String(_adminAccountFilter || 'ALL').toUpperCase();
-  if (f === 'ALL') return true;
-  var access = String((a && a.access) || '').toUpperCase();
-  if (access === 'ALL') return true;
-  return access.split(',').map(function(v){ return String(v || '').trim().toUpperCase(); }).indexOf(f) >= 0;
-}
-function adminSetupAccountSelects_() {
-  var role = document.getElementById('admin-account-role');
-  var team = document.getElementById('admin-account-team');
-  if (role && !role.options.length) role.innerHTML = adminRoleOptionsHtml_('센서리 심사위원', 'JUDGE');
-  if (team && !team.options.length) team.innerHTML = adminTeamOptionsHtml_('');
-  adminRenderAccessPickers_();
-  adminRenderAccountFilter_();
 }
 function setAdminRoleOverride_(code, role) {
   if (!isAdminRole()) return;
@@ -4871,92 +4755,6 @@ function adminSaveCompetitionConfig(cfg) {
   }).withFailureHandler(function(err){ hideOverlay(); toast('저장 실패: ' + ((err && err.message) || err || ''), true); })
     .updateCompetitionAdminSettings(payload, adminActorPayload_());
 }
-function adminClearAccountForm() {
-  ['row','type','name','phone','affil'].forEach(function(k){
-    var el = document.getElementById('admin-account-' + k);
-    if (!el) return;
-    if (k === 'type') el.value = 'JUDGE'; else el.value = '';
-  });
-  var role = document.getElementById('admin-account-role'); if (role) role.innerHTML = adminRoleOptionsHtml_('센서리 심사위원', 'JUDGE');
-  var team = document.getElementById('admin-account-team'); if (team) team.innerHTML = adminTeamOptionsHtml_('');
-  _adminAccessSelection = ['ALL'];
-  var hidden = document.getElementById('admin-account-access'); if (hidden) hidden.value = 'ALL';
-  adminRenderAccessPickers_();
-}
-function adminAccountLabel_(a) {
-  var type = String(a.accountType || '').toUpperCase();
-  return normalizeRoleLabel_((a && a.role) || '', type) || '센서리 심사위원';
-}
-function adminRenderAccountList_() {
-  var wrap = document.getElementById('admin-account-list');
-  if (!wrap) return;
-  adminRenderAccountFilter_();
-  var all = _adminConsole.accounts || [];
-  var list = all.filter(adminAccountMatchesFilter_);
-  wrap.innerHTML = '';
-  if (!all.length) { wrap.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:14px">등록된 운영 계정이 없습니다</p>'; return; }
-  if (!list.length) { wrap.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:14px">선택한 대회에 등록된 계정이 없습니다</p>'; return; }
-  list.forEach(function(a){
-    var teamLabel = normalizeTeamLabel_(a.teamGroup || '');
-    var div = document.createElement('div');
-    div.className = 'admin-account-row';
-    div.innerHTML = '<div class="admin-account-head"><div>' +
-      '<div class="admin-account-name">' + escHtml(a.name || '-') + ' <span class="role-mode-badge">' + escHtml(adminAccountLabel_(a)) + '</span></div>' +
-      '<div class="admin-account-sub">' + escHtml(a.phone || '-') + ' · ' + escHtml(a.affiliation || '소속 없음') + '<br>담당대회: ' + escHtml(a.access || '-') + ' · 팀구분: ' + escHtml(teamLabel || '-') + '</div>' +
-      '</div><div class="admin-account-actions"><button class="primary" data-edit>수정</button><button data-del>삭제</button></div></div>';
-    div.querySelector('[data-edit]').onclick = function(){ adminEditAccount(a); adminSwitchSection('accounts'); };
-    div.querySelector('[data-del]').onclick = function(){ adminDeleteAccount(a); };
-    wrap.appendChild(div);
-  });
-}
-function adminEditAccount(a) {
-  document.getElementById('admin-account-row').value = a.rowIndex || '';
-  var rawAccountType = String(a.accountType || 'JUDGE').toUpperCase();
-  var normalizedRoleForEdit = normalizeRoleLabel_(a.role || '', rawAccountType);
-  var accountType = rawAccountType === 'ADMIN' ? 'ADMIN' : (rawAccountType === 'TEAMLEAD' ? 'TEAMLEAD' : ((rawAccountType === 'STAFF' || normalizedRoleForEdit === '운영진') ? 'STAFF' : 'JUDGE'));
-  document.getElementById('admin-account-type').value = accountType;
-  var roleSel = document.getElementById('admin-account-role'); if (roleSel) roleSel.innerHTML = adminRoleOptionsHtml_(normalizeRoleLabel_(a.role || '', accountType) || adminDefaultRoleForType_(accountType), accountType);
-  document.getElementById('admin-account-name').value = a.name || '';
-  document.getElementById('admin-account-phone').value = a.phone || '';
-  document.getElementById('admin-account-affil').value = a.affiliation || '';
-  var teamSel = document.getElementById('admin-account-team'); if (teamSel) teamSel.innerHTML = adminTeamOptionsHtml_(a.teamGroup || '');
-  adminSetAccessSelection_(a.access || 'ALL');
-  var roleInp = document.getElementById('admin-account-role'); if (roleInp) roleInp.focus();
-}
-function adminSaveAccount() {
-  var accountType = document.getElementById('admin-account-type').value;
-  var payload = {
-    rowIndex: document.getElementById('admin-account-row').value,
-    accountType: accountType,
-    role: normalizeRoleLabel_(document.getElementById('admin-account-role').value, accountType),
-    name: document.getElementById('admin-account-name').value,
-    phone: document.getElementById('admin-account-phone').value,
-    affiliation: document.getElementById('admin-account-affil').value,
-    access: document.getElementById('admin-account-access').value || 'ALL',
-    teamGroup: normalizeTeamLabel_(document.getElementById('admin-account-team').value)
-  };
-  showOverlay();
-  google.script.run.withSuccessHandler(function(res){
-    hideOverlay(); toast((res && res.message) || (res && res.success ? '저장 완료' : '저장 실패'), !(res && res.success));
-    if (res && res.success) adminClearAccountForm();
-    _adminPreferredSection = 'accounts'; loadAdminPanel();
-  }).withFailureHandler(function(err){ hideOverlay(); toast('저장 실패: ' + ((err && err.message) || err || ''), true); })
-    .upsertOperatorAccount(payload, adminActorPayload_());
-}
-function adminDeleteAccount(a) {
-  if (!confirm((a.name || '해당 계정') + ' 권한을 삭제할까요?')) return;
-  showOverlay();
-  google.script.run.withSuccessHandler(function(res){
-    hideOverlay(); toast((res && res.message) || (res && res.success ? '삭제 완료' : '삭제 실패'), !(res && res.success));
-    _adminPreferredSection = 'accounts'; loadAdminPanel();
-  }).withFailureHandler(function(err){ hideOverlay(); toast('삭제 실패: ' + ((err && err.message) || err || ''), true); })
-    .deleteOperatorAccount(a.rowIndex, adminActorPayload_());
-}
-
-function adminCleanupSheetTabs() {
-  toast('Cloudflare D1 기준으로 관리 중입니다. 별도 정리 작업은 필요하지 않습니다.');
-}
-
 function loadAdminPanel() {
   document.getElementById('admin-sub').innerHTML = judgeIdentityHtml('관리자', 'badge-관리자');
   showOverlay();
@@ -4980,12 +4778,10 @@ function loadAdminPanel() {
       }).refreshAdminActor(adminActorPayload_());
       return;
     }
-    _adminConsole = { configs: res.configs || [], accounts: res.accounts || [] };
+    _adminConsole = { configs: res.configs || [] };
     _configs = res.configs || [];
-    adminSetupAccountSelects_();
     adminRenderRunCards_();
     adminRenderConfigList_();
-    adminRenderAccountList_();
     showPanel('pAdmin');
     adminSwitchSection(_adminPreferredSection || 'run');
   }).withFailureHandler(function(err){ hideOverlay(); toast('관리 정보를 불러오지 못했습니다: ' + ((err && err.message) || err || ''), true); showPanel('pAdmin'); })
@@ -7921,7 +7717,15 @@ function renderReviewTopActionsV4_() {
   var top = document.getElementById('review-top-actions');
   if (!top) return;
   var statusText = (_reviewState.current && (_reviewState.current.status || _reviewState.current['검수상태'])) || '미검수';
-  top.innerHTML = '<div id="review-autosave-state" class="review-autosaved" style="font-size:11px;color:var(--text-3);text-align:center;line-height:1.5">현재 상태: ' + escHtml(statusText) + ' · 수정 내용은 자동 저장됩니다.</div>';
+  var state = document.getElementById('review-autosave-state');
+  if (!state) {
+    state = document.createElement('div');
+    state.id = 'review-autosave-state';
+    top.appendChild(state);
+  }
+  state.className = 'review-autosaved';
+  state.style.cssText = 'font-size:11px;color:var(--text-3);text-align:center;line-height:1.5';
+  state.textContent = '현재 상태: ' + statusText + ' · 수정 내용은 자동 저장됩니다.';
 }
 function generateReviewOverallComment(commentIdx) {
   var code = reviewCommentGeneratorCode_();
@@ -13905,7 +13709,6 @@ function showIkrcSetup() {
   }
   var headActions = document.getElementById('ikrcHeadCalActions');
   if (headActions) headActions.style.display = isCal ? 'block' : 'none';
-  _ikrcCups = [];
   _ikrcStation = null;
   renderIkrcStationChoices_();
   showPanel('pIkrcSetup');
@@ -13935,59 +13738,12 @@ function startIkrcStation_(stationId) {
   initIkrcSamples(ikrcStationCups_(station), _ikrcStation);
 }
 
-function switchIkrcTab(tab) {
-  ['range','single'].forEach(function(t) {
-    document.getElementById('ikrcTab_' + t).classList.toggle('active', t === tab);
-    document.getElementById('ikrcSection_' + t).classList.toggle('active', t === tab);
-  });
-}
-
-function addIkrcCup() {
-  var input = document.getElementById('ikrcCupInput');
-  var val = normalizeCupId_(input.value);
-  if (!val) { toast('올바른 컵 번호를 입력하세요. 예: A-1', true); return; }
-  if (_ikrcCups.indexOf(val) > -1) { toast('이미 추가된 컵 번호입니다', true); input.value=''; return; }
-  _ikrcCups.push(val);
-  _ikrcCups.sort(compareCupIds_);
-  input.value = '';
-  renderIkrcCupList();
-  input.focus();
-}
-
-function removeIkrcCup(num) {
-  num = normalizeCupId_(num);
-  var idx = _ikrcCups.indexOf(num);
-  if (idx > -1) { _ikrcCups.splice(idx, 1); renderIkrcCupList(); }
-}
-
-function renderIkrcCupList() {
-  var list = document.getElementById('ikrcCupList');
-  var count = document.getElementById('ikrcCupCount');
-  if (!list || !count) return;
-  count.textContent = '선택된 컵: ' + _ikrcCups.length + '개';
-  if (_ikrcCups.length === 0) {
-    list.innerHTML = '<span class="finals-empty">컵 번호를 추가하세요</span>';
+function initIkrcSamples(cupNumbers, station) {
+  if (!station || !station.id || !Array.isArray(cupNumbers) || !cupNumbers.length) {
+    toast('운영팀장이 등록한 IKRC 스테이션을 먼저 선택해주세요.', true);
     return;
   }
-  list.innerHTML = _ikrcCups.map(function(c) {
-    return '<div class="finals-cup-tag">Cup ' + escHtml(c) + '<button class="remove-btn" onclick="removeIkrcCup(\'' + escapeJsString_(c) + '\')">×</button></div>';
-  }).join('');
-}
-
-function startIkrcRange() {
-  var range = buildCupRange_(document.getElementById('ikrcStartCup').value, document.getElementById('ikrcEndCup').value);
-  if (!range.success) { toast(range.message, true); return; }
-  initIkrcSamples(range.cups);
-}
-
-function startIkrcSingle() {
-  if (_ikrcCups.length === 0) { toast('컵 번호를 1개 이상 추가하세요', true); return; }
-  initIkrcSamples(_ikrcCups.slice());
-}
-
-function initIkrcSamples(cupNumbers, station) {
-  cupNumbers = (cupNumbers && cupNumbers.length) ? cupNumbers : buildCupRange_('A-1','A-10').cups;
-  if (station) _ikrcStation = Object.assign({}, station);
+  _ikrcStation = Object.assign({}, station);
   _ikrcSamples = []; _ikrcIdx = 0; _ikrcCurrentAttr = 'flavor';
   resetEvaluationDisqualification_('IKRC');
   cupNumbers.forEach(function(cupNo) { _ikrcSamples.push(makeIkrcSampleData(cupNo)); });
@@ -14599,7 +14355,7 @@ function ikrcSubmitAll() {
       hideOverlay();
       if (res.success && Number(res.inserted || 0) === _ikrcSamples.length) {
         kclClearActiveEvalDraftAfterSubmit({competitionCode:'IKRC'});
-        _ikrcSamples = []; _ikrcCups = []; _ikrcStation = null;
+        _ikrcSamples = []; _ikrcStation = null;
         toast('스테이션 전체 ' + Number(res.inserted || 0) + '건 제출 완료');
         setTimeout(function(){ hideEval(); showPanel(adminHomePanel_()); }, 1000);
       }
