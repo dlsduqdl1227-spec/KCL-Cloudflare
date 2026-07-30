@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const assessment = fs.readFileSync(path.join(root, "public", "assessment", "index.html"), "utf8");
 const rpc = fs.readFileSync(path.join(root, "functions", "api", "rpc.js"), "utf8");
+const sharedSensoryTags = fs.readFileSync(path.join(root, "public", "assets", "shared-sensory-tags.js"), "utf8");
 
 function extractFunction(source, name) {
   const marker = `function ${name}(`;
@@ -79,11 +80,10 @@ assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /normal\.conc
 assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /headCount/);
 assert.match(extractFunction(rpc, "rowToReviewItem"), /스테이션ID/);
 
-const requestedAcidityTags = ["샤프", "마일드", "쥬시", "브라이트", "인텐스", "플랫", "크리스피", "Sour", "Harsh", "Delicate"];
-const acidityMatch = assessment.match(/acidity:\[([^\]]+)\]/);
-assert.ok(acidityMatch, "IKRC Acidity tag list not found");
-const acidityTags = vm.runInNewContext(`[${acidityMatch[1]}]`);
-assert.deepEqual(Array.from(acidityTags), requestedAcidityTags);
+const unifiedAcidityTags = ["선명한", "부드러운", "과즙감 있는", "밝은", "강렬한", "평평한", "산뜻한", "신맛이 도드라진", "거친", "섬세한"];
+unifiedAcidityTags.forEach((tag) => assert.match(sharedSensoryTags, new RegExp(`["']${tag}["']`)));
+assert.match(assessment, /acidity:\s*KCL_SENSORY_SMART_TAGS\.ikrcAcidity/);
+assert.doesNotMatch(sharedSensoryTags, /["'](?:Sour|Harsh|Delicate)["']/);
 
 assert.match(assessment, /data-station-id/);
 assert.match(extractFunction(assessment, "configSelectableOptionsPayload_"), /id:stationId, label:stationLabel/);

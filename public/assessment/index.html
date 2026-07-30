@@ -349,62 +349,6 @@ input[type=range].kcl-range,
   -webkit-user-select:none;
   cursor:pointer;
 }
-/* KCAC 전용 부드러운 점수 조절: native range 대신 pointer 기반 커스텀 슬라이더 사용 */
-.kcac-smooth-score{
-  position:relative;
-  width:100%;
-  padding:18px 0 8px;
-  touch-action:none;
-  -ms-touch-action:none;
-  user-select:none;
-  -webkit-user-select:none;
-  contain:layout paint;
-}
-.kcac-smooth-track{
-  position:relative;
-  height:16px;
-  border-radius:999px;
-  background:#2a2a2a;
-  overflow:visible;
-  cursor:pointer;
-  touch-action:none;
-  -ms-touch-action:none;
-}
-.kcac-smooth-fill{
-  position:absolute;
-  left:0;top:0;height:100%;
-  width:var(--kcac-pct,60%);
-  border-radius:999px;
-  background:#fff;
-  pointer-events:none;
-  transform:translateZ(0);
-}
-.kcac-smooth-thumb{
-  position:absolute;
-  left:var(--kcac-pct,60%);
-  top:50%;
-  width:42px;height:42px;
-  margin-left:-21px;margin-top:-21px;
-  border-radius:50%;
-  background:#fff;
-  border:3px solid #000;
-  box-shadow:0 3px 12px rgba(0,0,0,.55);
-  pointer-events:none;
-  transform:translateZ(0);
-  will-change:left;
-}
-.kcac-smooth-score.dragging .kcac-smooth-thumb{
-  width:48px;height:48px;margin-left:-24px;margin-top:-24px;
-  box-shadow:0 5px 18px rgba(0,0,0,.65);
-}
-body.kcac-score-dragging, body.kcac-score-dragging *{
-  -webkit-user-select:none!important;
-  user-select:none!important;
-}
-#kcac-attrs .score-row{
-  contain:layout paint;
-  transform:translateZ(0);
-}
 #kcac-final-sub{min-height:34px;line-height:1.45}
 .kcac-rule-panel{
   border:1px solid var(--border-lt);
@@ -504,7 +448,6 @@ body.kcac-score-dragging, body.kcac-score-dragging *{
 .score-slider::-webkit-slider-thumb{touch-action:pan-y!important}
 .score-row input[type=range].kcl-range::-moz-range-thumb,
 .score-slider::-moz-range-thumb{touch-action:pan-y!important}
-.kcac-smooth-score,.kcac-smooth-score *{touch-action:none!important;-ms-touch-action:none!important}
 .score-labels{display:flex;justify-content:space-between;color:var(--muted);
   font-size:11px;margin-bottom:12px;padding:0 2px}
 
@@ -1739,6 +1682,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 </style>
 <script src="/assets/kcr-sensory-tags.js?v=stage111"></script>
 <script src="/assets/kcr-sensory-comments.js?v=stage111"></script>
+<script src="/assets/shared-sensory-tags.js?v=stage115"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js"></script>
 </head>
@@ -2776,69 +2720,26 @@ function kcacGetDesc(v) {
 }
 
 var SMART_TAGS = {
-  flavor:{
-    '꽃향':{'홍차':['홍차'],'꽃향':['캐모마일','장미','자스민']},
-    '과일같은':{'베리':['블랙베리','스트로베리','블루베리','크랜베리'],'말린과일':['건포도','말린자두'],'기타과일':['코코넛','체리','석류','파인애플','포도','사과','복숭아','배'],'감귤류':['자몽','오렌지','레몬','라임']},
-    '달콤한':{'달콤한':['브라운슈거','바닐라','메이플시럽','캐러멜','꿀']},
-    '발효된':{'발효된':['와인같은','위스키','발효된','과숙한']},
-    '채소같은':{'채소같은':['덜익은','풋내','채소같은','건초같은','허브같은']},
-    '구운':{'구운':['곡류','탄듯한','담배같은','맥아','곡물'],'연기':['연기같은','재같은','매캐한']},
-    '향신료':{'향신료':['정향','시나몬','육두구','아니스','후추']},
-    '견과류':{'견과류':['아몬드','헤이즐넛','땅콩']},
-    '코코아':{'코코아':['다크초콜릿','초콜릿','카카오']},
-    '기타':{'기타':['나무같은','곰팡이','종이','화학적인','흙','오래된']}
-  },
-  aftertaste:{
-    '꽃향':{'홍차':['홍차'],'꽃향':['캐모마일','장미','자스민']},
-    '과일같은':{'베리':['블랙베리','스트로베리','크랜베리'],'감귤류':['자몽','오렌지','레몬','라임'],'기타과일':['체리','사과','복숭아','포도']},
-    '달콤한':{'달콤한':['브라운슈거','바닐라','캐러멜','꿀']},
-    '발효된':{'발효된':['와인같은','위스키']},
-    '구운':{'구운':['곡류','탄듯한','맥아'],'연기':['연기같은']},
-    '향신료':{'향신료':['정향','시나몬','후추']},
-    '견과류':{'견과류':['아몬드','헤이즐넛','땅콩']},
-    '코코아':{'코코아':['다크초콜릿','초콜릿','카카오']},
-    '기타':{'기타':['나무같은','흙']}
-  },
-  acidity:['샤프','마일드','쥬시','브라이트','인텐스','플랫','크리스피','Sour','Harsh','Delicate'],
-  body:{
-    '질감':['부드러운','벨벳같은','매끄러운','실키한','시럽같은','클린한','크리미한','거친','텁텁한','금속성','기름진','입안이마르는','드라이']
-  },
-  sweetness:{
-    '과일같은':{'베리':['블랙베리','스트로베리'],'감귤류':['자몽','오렌지','레몬'],'기타과일':['체리','사과','복숭아','포도']},
-    '달콤한':{'달콤한':['브라운슈거','바닐라','메이플시럽','캐러멜','꿀','황설탕']},
-    '구운':{'구운':['곡류','맥아','곡물']},
-    '견과류':{'견과류':['아몬드','헤이즐넛','땅콩']},
-    '코코아':{'코코아':['다크초콜릿','초콜릿','카카오']},
-    '향신료':{'향신료':['정향','시나몬','육두구']}
-  }
+  flavor: KCL_SENSORY_SMART_TAGS.flavor,
+  aftertaste: KCL_SENSORY_SMART_TAGS.aftertaste,
+  acidity: KCL_SENSORY_SMART_TAGS.acidity,
+  body: KCL_SENSORY_SMART_TAGS.mouthfeel,
+  sweetness: KCL_SENSORY_SMART_TAGS.sweetness
 };
 
-var BODY_CONFLICTS = {};
-(function() {
-  var soft = ['부드러운','벨벳같은','매끄러운','실키한','크리미한'];
-  var rough = ['거친','텁텁한'];
-  soft.forEach(function(t){ BODY_CONFLICTS[t] = (BODY_CONFLICTS[t]||[]).concat(rough,['금속성']); });
-  rough.forEach(function(t){ BODY_CONFLICTS[t] = (BODY_CONFLICTS[t]||[]).concat(soft,['클린한']); });
-  BODY_CONFLICTS['금속성'] = soft.concat(['클린한']);
-  BODY_CONFLICTS['클린한'] = ['텁텁한','기름진','금속성'];
-  ['시럽같은','기름진'].forEach(function(t){ BODY_CONFLICTS[t] = (BODY_CONFLICTS[t]||[]).concat(['드라이','입안이마르는','클린한']); });
-  ['드라이','입안이마르는'].forEach(function(t){ BODY_CONFLICTS[t] = (BODY_CONFLICTS[t]||[]).concat(['시럽같은','기름진']); });
-})();
+var BODY_CONFLICTS = KCL_SENSORY_SMART_TAGS.mouthfeelConflicts;
 
 var MAX_TAGS = 5;
 
-var BODY_SMART_TAG_GROUPS = {
-  '긍정':['부드러운','벨벳같은','매끄러운','실키한','시럽같은','클린한','크리미한'],
-  '보완':['거친','텁텁한','금속성','기름진','입안이마르는','드라이']
-};
+var BODY_SMART_TAG_GROUPS = KCL_SENSORY_SMART_TAGS.mouthfeel;
 
 function smartTagIsToneGroup_(label) {
-  return /^(긍정|강점|우수|보완|개선|부정|주의|불균형|결점)$/i.test(String(label || '').trim());
+  return /^(긍정|강점|우수|향미\s*계열|주요\s*표현|보완\s*표현|보완|개선|부정|주의|불균형|결점)$/i.test(String(label || '').trim());
 }
 function smartTagToneClass_(label) {
   label = String(label || '');
-  if (/긍정|강점|우수/i.test(label)) return 'positive';
-  if (/보완|개선|부정|주의|불균형|결점/i.test(label)) return 'refine';
+  if (/긍정|강점|우수|향미\s*계열|주요\s*표현/i.test(label)) return 'positive';
+  if (/보완\s*표현|보완|개선|부정|주의|불균형|결점/i.test(label)) return 'refine';
   return '';
 }
 function smartTagGroupLabelHtml_(label) {
@@ -7541,6 +7442,7 @@ function reviewBuildKcacCommentPayload_() {
     purpose: reviewTextByNames_(['잔용도','Purpose']) || '',
     scores: scores,
     smartTags: smartTags,
+    smartTagPolarity: kcacSmartTagPolarityFromPayload_(type, smartTags),
     penalty: reviewNumberByPatterns_([/^감점$|Penalty|시간감점|리프수감점/i], 0),
     subtotal: subtotal
   };
@@ -9760,14 +9662,8 @@ var KCAC_SMART_TAGS = {
     }
   },
   finalSensory: {
-    '맛균형': {
-      '긍정':['커피와 우유 조화 확인','단맛 확인','풍미 연결 확인'],
-      '보완':['커피 맛 우세','우유 맛 우세','쓴맛 과다','후미 불균형','평가 불가']
-    },
-    '질감': {
-      '긍정':['스팀 질감 균일','크리미함 확인','밀도감 확인','마무리 질감 깔끔'],
-      '보완':['스팀 질감 거침','질감 얇음','입안 촉감 거침','품질 불량']
-    },
+    '맛균형': KCL_SENSORY_SMART_TAGS.milkTasteBalance,
+    '질감': KCL_SENSORY_SMART_TAGS.mouthfeel,
     '프레젠': {
       '긍정':['우유 특성 설명 포함','풍미 표현 포함','조화 의도 설명','시간 내 설명 완료'],
       '보완':['설명 누락','논리 연결 부족','발표 흐름 중단']
@@ -10337,142 +10233,7 @@ function onKcacCommentInput() {
 
 function buildKcacScoreSlider_(key, value) {
   var score = quantizeScoreStep_(value, 0.2, 0, 5);
-  var pct = Math.max(0, Math.min(100, (score / 5) * 100));
-  return '<div class="kcac-smooth-score" data-key="' + escHtml(key) + '" data-value="' + fmtFixedScore_(score,2) + '" style="--kcac-pct:' + pct + '%" onpointerdown="kcacPointerScoreStart(event,this)" ontouchstart="kcacTouchScoreStart(event,this)">' +
-    '<div class="kcac-smooth-track"><div class="kcac-smooth-fill"></div><div class="kcac-smooth-thumb"></div></div>' +
-    '<input type="hidden" id="kcac-score-hidden-' + escHtml(key) + '" value="' + fmtFixedScore_(score,2) + '">' +
-    '</div>';
-}
-
-function kcacScoreEventClientX_(e) {
-  if (e && e.touches && e.touches.length) return e.touches[0].clientX;
-  if (e && e.changedTouches && e.changedTouches.length) return e.changedTouches[0].clientX;
-  return e ? e.clientX : 0;
-}
-
-function kcacScoreFromClientX_(el, clientX) {
-  var track = el && el.querySelector ? el.querySelector('.kcac-smooth-track') : null;
-  var rect = track ? track.getBoundingClientRect() : (el ? el.getBoundingClientRect() : {left:0,width:1});
-  var width = rect.width || 1;
-  var raw = ((clientX - rect.left) / width) * 5;
-  raw = Math.max(0, Math.min(5, raw));
-  return raw;
-}
-
-function kcacSetScoreSliderUI_(el, rawValue, snapValue, finalize) {
-  if (!el) return;
-  var visual = finalize ? snapValue : rawValue;
-  var pct = Math.max(0, Math.min(100, (visual / 5) * 100));
-  el.style.setProperty('--kcac-pct', pct + '%');
-  el.setAttribute('data-value', fmtFixedScore_(snapValue,2));
-  var hidden = el.querySelector('input[type=hidden]');
-  if (hidden) hidden.value = fmtFixedScore_(snapValue,2);
-}
-
-function kcacApplyScoreFromRaw_(el, rawValue, finalize) {
-  if (!el) return;
-  var key = el.getAttribute('data-key');
-  var j = _kcac.jars[_kcac.currentIdx];
-  if (!j || !key) return;
-  var snapped = quantizeScoreStep_(rawValue, 0.2, 0, 5);
-  kcacSetScoreSliderUI_(el, rawValue, snapped, !!finalize);
-  var changed = j.scores[key] !== snapped;
-  if (changed) {
-    j.scores[key] = snapped;
-    var valEl = document.getElementById('kcac-v-' + key);
-    var descEl = document.getElementById('kcac-d-' + key);
-    if (valEl) valEl.textContent = fmtScore(snapped,2);
-    if (descEl) descEl.textContent = kcacGetDesc(snapped);
-  }
-  if (changed || finalize) scheduleKcacFinalUpdate_();
-}
-
-function kcacSetScoreDragging_(active) {
-  document.body.classList.toggle('kcac-score-dragging', !!active);
-  var content = document.querySelector('#evalKcac .eval-content');
-  if (content) {
-    if (active) {
-      _kcac.prevContentOverscroll = content.style.overscrollBehavior;
-      content.style.overscrollBehavior = 'none';
-    } else {
-      content.style.overscrollBehavior = _kcac.prevContentOverscroll || '';
-    }
-  }
-}
-
-function kcacPointerScoreStart(e, el) {
-  if (!el) return;
-  if (e && e.preventDefault) e.preventDefault();
-  el.classList.add('dragging');
-  _kcac.scoreDrag = { el: el, pointerId: e && e.pointerId, lastRaw: kcacScoreFromClientX_(el, kcacScoreEventClientX_(e)) };
-  kcacSetScoreDragging_(true);
-  try { if (el.setPointerCapture && e && e.pointerId != null) el.setPointerCapture(e.pointerId); } catch(x) {}
-  kcacApplyScoreFromRaw_(el, _kcac.scoreDrag.lastRaw, false);
-  window.addEventListener('pointermove', kcacPointerScoreMove_, {passive:false});
-  window.addEventListener('pointerup', kcacPointerScoreEnd_, {passive:false});
-  window.addEventListener('pointercancel', kcacPointerScoreEnd_, {passive:false});
-}
-
-function kcacPointerScoreMove_(e) {
-  var d = _kcac.scoreDrag;
-  if (!d || !d.el) return;
-  if (e && e.preventDefault) e.preventDefault();
-  d.lastRaw = kcacScoreFromClientX_(d.el, kcacScoreEventClientX_(e));
-  kcacApplyScoreFromRaw_(d.el, d.lastRaw, false);
-}
-
-function kcacPointerScoreEnd_(e) {
-  var d = _kcac.scoreDrag;
-  if (!d || !d.el) return;
-  if (e && e.preventDefault) e.preventDefault();
-  d.el.classList.remove('dragging');
-  var raw = (typeof d.lastRaw === 'number') ? d.lastRaw : kcacScoreFromClientX_(d.el, kcacScoreEventClientX_(e));
-  kcacApplyScoreFromRaw_(d.el, raw, true);
-  try { if (d.el.releasePointerCapture && d.pointerId != null) d.el.releasePointerCapture(d.pointerId); } catch(x) {}
-  _kcac.scoreDrag = null;
-  kcacSetScoreDragging_(false);
-  updateKcacFinal();
-  scheduleKcacCupNav();
-  window.removeEventListener('pointermove', kcacPointerScoreMove_);
-  window.removeEventListener('pointerup', kcacPointerScoreEnd_);
-  window.removeEventListener('pointercancel', kcacPointerScoreEnd_);
-}
-
-function kcacTouchScoreStart(e, el) {
-  if (!el) return;
-  if (window.PointerEvent) return; // pointer 이벤트가 있으면 중복 실행하지 않음
-  if (e && e.preventDefault) e.preventDefault();
-  el.classList.add('dragging');
-  _kcac.scoreDrag = { el: el, lastRaw: kcacScoreFromClientX_(el, kcacScoreEventClientX_(e)) };
-  kcacSetScoreDragging_(true);
-  kcacApplyScoreFromRaw_(el, _kcac.scoreDrag.lastRaw, false);
-  window.addEventListener('touchmove', kcacTouchScoreMove_, {passive:false});
-  window.addEventListener('touchend', kcacTouchScoreEnd_, {passive:false});
-  window.addEventListener('touchcancel', kcacTouchScoreEnd_, {passive:false});
-}
-
-function kcacTouchScoreMove_(e) {
-  var d = _kcac.scoreDrag;
-  if (!d || !d.el) return;
-  if (e && e.preventDefault) e.preventDefault();
-  d.lastRaw = kcacScoreFromClientX_(d.el, kcacScoreEventClientX_(e));
-  kcacApplyScoreFromRaw_(d.el, d.lastRaw, false);
-}
-
-function kcacTouchScoreEnd_(e) {
-  var d = _kcac.scoreDrag;
-  if (!d || !d.el) return;
-  if (e && e.preventDefault) e.preventDefault();
-  d.el.classList.remove('dragging');
-  var raw = (typeof d.lastRaw === 'number') ? d.lastRaw : kcacScoreFromClientX_(d.el, kcacScoreEventClientX_(e));
-  kcacApplyScoreFromRaw_(d.el, raw, true);
-  _kcac.scoreDrag = null;
-  kcacSetScoreDragging_(false);
-  updateKcacFinal();
-  scheduleKcacCupNav();
-  window.removeEventListener('touchmove', kcacTouchScoreMove_);
-  window.removeEventListener('touchend', kcacTouchScoreEnd_);
-  window.removeEventListener('touchcancel', kcacTouchScoreEnd_);
+  return '<input type="range" class="score-slider" min="0" max="5" step="0.01" data-score-step="0.2" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this)" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this)">';
 }
 
 function onKcacScore(key, val, finalize, el) {
@@ -11201,6 +10962,45 @@ function kcacSmartTagPayload_(j) {
   return out;
 }
 
+function kcacAttrKeyFromName_(name) {
+  name = String(name || '');
+  var all = KCAC_QUAL_ATTRS.concat(KCAC_FINAL_PATTERN_ATTRS).concat(KCAC_FINAL_SENSORY_ATTRS);
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].key === name || all[i].name === name) return all[i].key;
+  }
+  return name;
+}
+
+function kcacSmartTagPolarityFromPayload_(type, smartTags) {
+  var group = type === 'final-pattern' ? 'finalPattern' : (type === 'final-sensory' ? 'finalSensory' : 'qual');
+  var result = { positive:[], refinement:[], custom:[] };
+  Object.keys(smartTags || {}).forEach(function(name){
+    var key = kcacAttrKeyFromName_(name);
+    var data = (KCAC_SMART_TAGS[group] && KCAC_SMART_TAGS[group][key]) || {};
+    var positive = [], refinement = [];
+    Object.keys(data || {}).forEach(function(groupLabel){
+      var labels = smartTagCollectDataLabels_(data[groupLabel], []);
+      if (/긍정|주요\s*표현|향미\s*계열|강점|우수/i.test(groupLabel)) positive = positive.concat(labels);
+      if (/보완|개선|부정|주의|불균형|결점/i.test(groupLabel)) refinement = refinement.concat(labels);
+    });
+    (smartTags[name] || []).forEach(function(tag){
+      var leaf = smartTagLeaf_(tag);
+      var text = key + ': ' + leaf;
+      if (positive.indexOf(leaf) > -1) result.positive.push(text);
+      else if (refinement.indexOf(leaf) > -1) result.refinement.push(text);
+      else result.custom.push(text);
+    });
+  });
+  result.positive = smartTagDedupeList_(result.positive);
+  result.refinement = smartTagDedupeList_(result.refinement);
+  result.custom = smartTagDedupeList_(result.custom);
+  return result;
+}
+
+function kcacSmartTagPolarityPayload_(j) {
+  return kcacSmartTagPolarityFromPayload_((j && j.type) || 'qual', kcacSmartTagPayload_(j));
+}
+
 function kcacSmartTagHeader_(j, key) {
   var type = j && j.type;
   if (type === 'qual') {
@@ -11274,6 +11074,7 @@ function generateKcacComment() {
       purpose: j.purpose,
       scores: j.scores,
       smartTags: kcacSmartTagPayload_(j),
+      smartTagPolarity: kcacSmartTagPolarityPayload_(j),
       penalty: _kcac.penalty,
       subtotal: sub
     });
@@ -11492,7 +11293,7 @@ function isMobileKeyboardField_(el) {
 }
 function isEvaluationActionTarget_(target) {
   if (!target || !target.closest) return false;
-  var control = target.closest('button,[role="button"],input[type="range"],input[type="checkbox"],input[type="radio"],.kcac-smooth-score');
+  var control = target.closest('button,[role="button"],input[type="range"],input[type="checkbox"],input[type="radio"]');
   return !!(control && control.closest('.eval-wrap.active,#pReviewEdit.active'));
 }
 function dismissMobileKeyboardBeforeAction_(e) {
@@ -11751,33 +11552,15 @@ var KBC_SMART_TAGS = {
     }
   },
   espresso:{
-    'Espresso Taste & Design':{
-      '긍정':['설명과 맛 일치','의도 구현','맛의 퀄리티 우수','구조 명확','밸런스 좋음','단맛 표현 우수','산미 표현 우수','후미 설계 우수'],
-      '보완':['의도 설명 보완','설명과 맛 불일치','균형 보완']
-    },
-    'Espresso Clean Cup':{
-      '긍정':['클린하다','투명함','명확함','후미 깔끔','결점 없음'],
-      '보완':['탁함','떫음','불명확']
-    },
-    'Espresso Mouthfeel':{
-      '긍정':['무게감 좋음','바디감 좋음','코팅감 좋음','질감 명확','목넘김 부드러움','촉감 표현 일치'],
-      '보완':['무게감 부족','질감 거침','건조함','촉감 설명 부족']
-    },
+    'Espresso Taste & Design':KCL_SENSORY_SMART_TAGS.tasteDesign,
+    'Espresso Clean Cup':KCL_SENSORY_SMART_TAGS.cleanCup,
+    'Espresso Mouthfeel':KCL_SENSORY_SMART_TAGS.mouthfeel,
     'Espresso Flavor':SMART_TAGS.flavor
   },
   signature:{
-    'Signature Taste & Design':{
-      '긍정':['설명과 맛 일치','의도 구현','맛의 퀄리티 우수','구성 명확','창의성 우수','재료 조화','커피와 연결성'],
-      '보완':['의도 설명 보완','설명과 맛 불일치','균형 보완']
-    },
-    'Signature Clean Cup':{
-      '긍정':['클린하다','투명함','명확함','후미 깔끔','결점 없음'],
-      '보완':['재료 충돌','탁함','떫음','불명확']
-    },
-    'Signature Mouthfeel':{
-      '긍정':['무게감 좋음','바디감 좋음','코팅감 좋음','질감 명확','목넘김 부드러움','촉감 표현 일치'],
-      '보완':['무게감 부족','질감 거침','건조함','촉감 설명 부족']
-    },
+    'Signature Taste & Design':KCL_SENSORY_SMART_TAGS.tasteDesign,
+    'Signature Clean Cup':KCL_SENSORY_SMART_TAGS.cleanCup,
+    'Signature Mouthfeel':KCL_SENSORY_SMART_TAGS.mouthfeel,
     'Signature Flavor':SMART_TAGS.flavor
   },
   operation:{
@@ -12306,14 +12089,8 @@ var MOB_SMART_TAGS = {
   brewing:{
     'Sweetness':SMART_TAGS.sweetness,
     'Flavor':SMART_TAGS.flavor,
-    'Balance':{
-      '긍정':['균형 좋음','단맛·산미 조화','향미 흐름 안정','후미 균형'],
-      '보완':['산미 우세','단맛 우세','쓴맛 우세','조화 부족']
-    },
-    'Clean Cup':{
-      '긍정':['깨끗함','투명함','후미 깔끔','결점 없음'],
-      '보완':['탁함','떫음','종이향','발효취','탄맛']
-    },
+    'Balance':KCL_SENSORY_SMART_TAGS.balance,
+    'Clean Cup':KCL_SENSORY_SMART_TAGS.cleanCup,
     'Mouthfeel':BODY_SMART_TAG_GROUPS,
     'Professionalism':{
       '긍정':['설명 명확','콘셉트 전달','응대 안정','자신감'],
@@ -12326,10 +12103,7 @@ var MOB_SMART_TAGS = {
       '보완':['구성 복잡','사용성 보완']
     },
     'Creative Flavor':SMART_TAGS.flavor,
-    'Creative Balance':{
-      '긍정':['단맛 균형','산미 균형','재료 조화','향미 조화'],
-      '보완':['향미 충돌','단맛 과함','산미 과함','균형 보완']
-    },
+    'Creative Balance':KCL_SENSORY_SMART_TAGS.balance,
     'Creative Mouthfeel':BODY_SMART_TAG_GROUPS,
     'Professionalism & Originality':{
       '긍정':['독창성','전문성','재현성','스토리텔링'],
@@ -13453,12 +13227,9 @@ var IKRC_ATTRS = [
 var IKRC_SMART_TAGS = {
   flavor: SMART_TAGS.flavor,
   sweetness: SMART_TAGS.sweetness,
-  acidity: SMART_TAGS.acidity,
+  acidity: KCL_SENSORY_SMART_TAGS.ikrcAcidity,
   mouthfeel: BODY_SMART_TAG_GROUPS,
-  cleanCup: {
-    '긍정':['깨끗한','투명한','선명한','정돈된','일관된'],
-    '보완':['흐린','탁한','거친','페놀릭','종이','먼지','곰팡이','발효취','탄맛','떫은']
-  }
+  cleanCup: KCL_SENSORY_SMART_TAGS.cleanCup
 };
 var _ikrcCurrentAttr = 'flavor';
 var _ikrcSeedFinalists = [];

@@ -4274,6 +4274,7 @@ function _joinWithComma(list, fallback='') {
 function _cleanTagText_(v) {
   let s = safeStr(v);
   if (!s) return '';
+  if (s.includes('>')) s = s.split('>').pop().trim();
   return s
     .replace(/채소같은/g, '채소 같은')
     .replace(/과일같은/g, '과일 같은')
@@ -4427,6 +4428,50 @@ function generateKbcComment(payload) {
   ]);
 }
 
+function _kcacTagEvidence_(payload) {
+  payload = payload || {};
+  const explicit = payload.smartTagPolarity || {};
+  let positive = _tags(explicit.positive, 8).map(_cleanTagText_).filter(Boolean);
+  let refinement = _tags(explicit.refinement, 8).map(_cleanTagText_).filter(Boolean);
+  const custom = _tags(explicit.custom, 8).map(_cleanTagText_).filter(Boolean);
+
+  if (!positive.length && !refinement.length) {
+    _flatTagList_(payload.smartTags || {}, 20).forEach(tag => {
+      if (/보완|부족|불균형|비대칭|이탈|흐림|탁함|거침|낮음|끊김|번짐|불명확|과도|과대|과소|지연|미흡|미구현|불안정|결함|충돌|떫|탄\s*맛|쓴맛|드라이|수렴|오염|누락|실패|약함/i.test(tag)) {
+        refinement.push(tag);
+      } else if (/긍정|우수|안정|조화|선명|명확|깔끔|유지|균일|완성|크리미|실키|부드러|정돈|깨끗|충족/i.test(tag)) {
+        positive.push(tag);
+      }
+    });
+  }
+
+  positive = Array.from(new Set(positive)).slice(0, 5);
+  refinement = Array.from(new Set(refinement)).slice(0, 5);
+  return { positive, refinement, custom };
+}
+function _kcacTone_(average, evidence) {
+  const avg = _num(average);
+  const positiveCount = (evidence.positive || []).length;
+  const refinementCount = (evidence.refinement || []).length;
+  if (avg < 1.8) return '개선이 필요한';
+  if (avg < 2.6) return '보완이 필요한';
+  if (refinementCount > 0 && refinementCount >= positiveCount) return '보완 여지가 있는';
+  if (avg < 3.4 || refinementCount > positiveCount) return '강점과 보완점이 함께 확인되는';
+  if (avg < 4.0) return '안정적인';
+  if (avg < 4.6) return '뚜렷하고 완성도 높은';
+  return '매우 선명하고 완성도 높은';
+}
+function _kcacEvidenceSentence_(evidence) {
+  const positive = _joinWithComma((evidence.positive || []).slice(0, 3));
+  const refinement = _joinWithComma((evidence.refinement || []).slice(0, 3));
+  const custom = _joinWithComma((evidence.custom || []).slice(0, 2));
+  if (positive && refinement) return `강점 관찰로 ${positive}, 보완 관찰로 ${refinement}이 기록되었습니다.`;
+  if (refinement) return `보완 관찰로 ${refinement}이 기록되어 긍정적으로만 해석하지 않았습니다.`;
+  if (positive) return `강점 관찰로 ${positive}이 기록되었습니다.`;
+  if (custom) return `추가 관찰로 ${custom}이 기록되었습니다.`;
+  return '선택된 스마트태그가 없어 점수 흐름을 중심으로 해석했습니다.';
+}
+
 function generateKcacComment(payload) {
   payload = payload || {};
   const scores = payload.scores || {};
@@ -4437,23 +4482,25 @@ function generateKcacComment(payload) {
   const milk = [safeStr(payload.milkType), safeStr(payload.milkProduct)].filter(Boolean).join(' ');
   const scoreItems = Object.keys(scores).map(k => ({name:k, score:scores[k]}));
   const avg = _avg(scoreItems.map(x=>x.score));
-  const tagText = _tagSummary_(smartTags, '패턴과 표면, 위치 관련 특성');
   const isSensory = /sensory|맛|질감/i.test(type);
   const hl = _lowHighScore(scoreItems);
   const high = hl.high ? _areaKorean_(hl.high.name) : '';
   const low = hl.low && hl.low !== hl.high ? _areaKorean_(hl.low.name) : '';
   const balance = high && low ? `${high}이 가장 두드러졌고, ${low}은 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 기록되었습니다.';
+  const evidence = _kcacTagEvidence_({ smartTags, smartTagPolarity:payload.smartTagPolarity });
+  const tone = _kcacTone_(avg, evidence);
+  const evidenceText = _kcacEvidenceSentence_(evidence);
   if (isSensory) {
     return _optionSet([
-      `${label}은 ${milk ? milk + ' 조건에서 ' : ''}맛의 균형, 질감, 프레젠테이션의 연결성을 중심으로 평가되었습니다. 음료의 인상이 하나의 경험으로 이어지는지 여부가 주요 판단 기준으로 작용했으며, ${tagText}이 기록되었습니다.`,
-      `센서리 관점에서는 맛의 균형과 촉감, 전달 방식이 함께 읽혔습니다. 전체 인상은 ${_toneByScore_(avg, 5)} 수준으로 확인되며, ${balance}`,
-      `종합 평가는 맛의 중심축, 질감의 지속성, 프레젠테이션 전달 방식이 실제 음용 인상과 어떻게 연결되었는지를 반영합니다.`
+      `${label}은 ${milk ? milk + ' 조건에서 ' : ''}맛의 균형과 질감을 중심으로 평가되었습니다. 전체 인상은 ${tone} 수준입니다. ${evidenceText}`,
+      `센서리 관점에서는 맛의 균형과 촉감의 연결성을 확인했습니다. ${balance} ${evidenceText}`,
+      `평균 ${_fmt(avg)}점의 항목 점수와 선택된 관찰 근거를 함께 반영하면 ${tone} 결과입니다. ${evidenceText}`
     ]);
   }
   return _optionSet([
-    `${label}은 ${milk ? milk + ' 조건에서 ' : ''}${pattern}의 완성도, 표면 품질, 위치와 비율을 중심으로 평가되었습니다. ${tagText}을 기준으로 볼 때 전체적인 시각 완성도는 ${_toneByScore_(avg, 5)} 편입니다.`,
-    `패턴 평가는 중심축, 대칭, 리프 간격, 라인의 선명도와 표면 정리감을 기준으로 진행되었습니다. ${balance}`,
-    `종합 평가는 패턴 대비, 표면 질감, 중심 위치, 재현성이 실제 제출물에서 어떻게 드러났는지를 반영합니다.`
+    `${label}은 ${milk ? milk + ' 조건에서 ' : ''}${pattern}의 완성도, 표면 품질, 위치와 비율을 중심으로 평가되었습니다. 전체적인 시각 완성도는 ${tone} 편입니다. ${evidenceText}`,
+    `패턴 평가는 중심축, 대칭, 리프 간격, 라인의 선명도와 표면 정리감을 기준으로 진행되었습니다. ${balance} ${evidenceText}`,
+    `평균 ${_fmt(avg)}점의 항목 점수와 선택된 관찰 근거를 함께 반영하면 ${tone} 결과입니다. ${evidenceText}`
   ]);
 }
 
