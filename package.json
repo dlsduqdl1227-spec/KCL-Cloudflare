@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/stage107-safety.test.mjs && node tests/kcr-sensory-tags.test.mjs && node tests/stage112-ikrc-operations.test.mjs && node --test tests/stage113-full-flow.test.mjs && node tests/stage114-feature-integrity.test.mjs && node tests/stage115-sensory-consistency.test.mjs && node tests/stage116-smart-tag-layout.test.mjs",
+    "test": "node tests/stage107-safety.test.mjs && node tests/kcr-sensory-tags.test.mjs && node tests/stage112-ikrc-operations.test.mjs && node --test tests/stage113-full-flow.test.mjs && node tests/stage114-feature-integrity.test.mjs && node tests/stage115-sensory-consistency.test.mjs && node tests/stage116-smart-tag-layout.test.mjs && node tests/stage117-single-open-smart-tags.test.mjs",
     "dev": "wrangler pages dev public --compatibility-date=2025-08-01",
     "deploy": "wrangler pages deploy public",
     "d1:create": "wrangler d1 create kcl-cloudflare",

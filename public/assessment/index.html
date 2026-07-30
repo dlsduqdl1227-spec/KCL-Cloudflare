@@ -2776,6 +2776,21 @@ function smartTagHasSelectableFamilies_(data) {
     return !smartTagIsToneGroup_(key);
   }));
 }
+function smartTagOpenBranchState_(store, key) {
+  return (store && store[key]) || {primaryIndex:-1, secondaryIndex:-1};
+}
+function smartTagSetOpenBranchState_(store, key, primaryIndex, secondaryIndex) {
+  if (!store) return;
+  store[key] = {
+    primaryIndex:Number(primaryIndex),
+    secondaryIndex:secondaryIndex === undefined ? -1 : Number(secondaryIndex)
+  };
+}
+function smartTagBranchIsOpen_(store, key, primaryIndex, secondaryIndex) {
+  var state = smartTagOpenBranchState_(store, key);
+  if (state.primaryIndex !== Number(primaryIndex)) return false;
+  return secondaryIndex === undefined || state.secondaryIndex === Number(secondaryIndex);
+}
 function smartTagLeaf_(tag) {
   var parts = String(tag || '').split('>');
   return (parts[parts.length - 1] || tag || '').trim();
@@ -3063,6 +3078,7 @@ var _kcac = {
   isBlindPrelim: false,
   submissionUrl: ''
 };
+var _kcacOpenSmartTagBranches = {};
 var KCAC_PERSISTED_SNAPSHOT_LIMIT = 1;
 var KCAC_FULL_IMAGE_MAX_BYTES = 120 * 1024;
 var KCAC_THUMB_IMAGE_MAX_BYTES = 18 * 1024;
@@ -6825,14 +6841,16 @@ function reviewSmartTagBranchSelected_(meta, selected, primary, secondaryData) {
     return reviewSmartTagSecondaryBranchSelected_(meta, selected, primary, secondary, secondaryData[secondary] || []);
   });
 }
+var _reviewOpenSmartTagBranches = {};
 function reviewHierarchicalSmartTagButtonsHtml_(idx, meta, selected, disabled) {
   var data = meta && meta.data;
   if (!data || Array.isArray(data)) return '';
+  var openKey = String(idx);
   var primaryKeys = Object.keys(data);
   var html = '<div class="category-primary">';
   primaryKeys.forEach(function(primary, pi){
     var secondaryData = data[primary];
-    var primaryOpen = reviewSmartTagBranchSelected_(meta, selected, primary, secondaryData);
+    var primaryOpen = smartTagBranchIsOpen_(_reviewOpenSmartTagBranches, openKey, pi);
     var primarySelectable = !smartTagIsToneGroup_(primary);
     var primaryValue = primarySelectable ? reviewSmartTagValue_(meta, primary, '', '', 'primary') : '';
     var action = 'toggleReviewSmartTagPrimary(' + idx + ',' + pi + ',\'' + escapeJsString_(primaryValue) + '\',' + primarySelectable + ',this)';
@@ -6844,7 +6862,7 @@ function reviewHierarchicalSmartTagButtonsHtml_(idx, meta, selected, disabled) {
   primaryKeys.forEach(function(primary, pi){
     var secondaryData = data[primary];
     var primaryTone = smartTagIsToneGroup_(primary);
-    var primaryOpen = reviewSmartTagBranchSelected_(meta, selected, primary, secondaryData);
+    var primaryOpen = smartTagBranchIsOpen_(_reviewOpenSmartTagBranches, openKey, pi);
     html += '<div class="category-secondary' + (primaryOpen ? ' active' : '') + '" id="review-smart-secondary-' + idx + '-' + pi + '">';
     if (Array.isArray(secondaryData)) {
       secondaryData.forEach(function(tag){
@@ -6855,7 +6873,7 @@ function reviewHierarchicalSmartTagButtonsHtml_(idx, meta, selected, disabled) {
       Object.keys(secondaryData || {}).forEach(function(secondary, si){
         var tags = secondaryData[secondary] || [];
         var secondaryTone = smartTagIsToneGroup_(secondary);
-        var secondaryOpen = reviewSmartTagSecondaryBranchSelected_(meta, selected, primary, secondary, tags);
+        var secondaryOpen = primaryOpen && smartTagBranchIsOpen_(_reviewOpenSmartTagBranches, openKey, pi, si);
         var secondarySelectable = !primaryTone && !secondaryTone;
         var secondaryValue = secondarySelectable ? reviewSmartTagValue_(meta, primary, secondary, '', 'secondary') : '';
         var action = 'toggleReviewSmartTagSecondary(' + idx + ',' + pi + ',' + si + ',\'' + escapeJsString_(secondaryValue) + '\',' + secondarySelectable + ',this)';
@@ -7085,6 +7103,7 @@ function reviewToggleSmartTagBranch_(idx, tag, branchData, ancestors, valueMode)
   return true;
 }
 function toggleReviewSmartTagPrimary(idx, primaryIndex, tag, selectTag, button) {
+  smartTagSetOpenBranchState_(_reviewOpenSmartTagBranches, String(idx), primaryIndex, -1);
   var root = document.getElementById('review-smart-tags-' + idx);
   if (!root) return;
   var targetId = 'review-smart-secondary-' + idx + '-' + primaryIndex;
@@ -7103,6 +7122,7 @@ function toggleReviewSmartTagPrimary(idx, primaryIndex, tag, selectTag, button) 
   }
 }
 function toggleReviewSmartTagSecondary(idx, primaryIndex, secondaryIndex, tag, selectTag, button) {
+  smartTagSetOpenBranchState_(_reviewOpenSmartTagBranches, String(idx), primaryIndex, secondaryIndex);
   var root = document.getElementById('review-smart-tags-' + idx);
   if (!root) return;
   var targetId = 'review-smart-tertiary-' + idx + '-' + primaryIndex + '-' + secondaryIndex;
@@ -8060,6 +8080,8 @@ function openReviewEdit(item) {
     return;
   }
   _reviewState.current = item;
+  _reviewOpenSmartTagBranches = {};
+  _reviewKcrOpenFamilies = {};
   var reviewPanel = document.getElementById('pReviewEdit');
   if (reviewPanel) reviewPanel.classList.toggle('ikrc-review-mode', String(_reviewState.code || '').toUpperCase() === 'IKRC');
   document.getElementById('review-edit-title').textContent = (_reviewState.name || _reviewState.code) + ' 검수 상세';
@@ -9726,6 +9748,7 @@ function startKcac() {
   document.getElementById('kcac-sub').textContent = judgeLineText() + '  ' + roundName;
 
   _kcac.jars = [];
+  _kcacOpenSmartTagBranches = {};
   _kcac.currentIdx = 0;
   _kcac.penalty = 0;
   _kcac.roundName = roundName;
@@ -9955,6 +9978,9 @@ function kcacSmartTagButtonsId_(key) {
 function kcacSmartTagCustomId_(key) {
   return 'kcac-smart-custom-' + kcacSmartTagIdKey_(key);
 }
+function kcacOpenSmartTagKey_(key) {
+  return String((_kcac && _kcac.currentIdx) || 0) + '::' + String(key || '');
+}
 
 function kcacSelectedSmartTags_(j, key) {
   if (!j.smartTags) j.smartTags = {};
@@ -9985,17 +10011,18 @@ function kcacSmartTagButtonsHtml_(j, key) {
   }
   if (!tags || typeof tags !== 'object') return '';
   var groupKeys = Object.keys(tags);
+  var openKey = kcacOpenSmartTagKey_(key);
   var html = '<div class="category-primary">';
   groupKeys.forEach(function(groupLabel, groupIndex) {
     var list = Array.isArray(tags[groupLabel]) ? tags[groupLabel] : [];
-    var branchOpen = smartTagDataHasSelected_(selected, list);
+    var branchOpen = smartTagBranchIsOpen_(_kcacOpenSmartTagBranches, openKey, groupIndex);
     html += '<div class="cat-btn-p smart-tag-nav-only' + (branchOpen ? ' branch-open' : '') + '" onclick="toggleKcacSmartTagGroup_(\'' + escapeJsString_(key) + '\',' + groupIndex + ',this)">' + escHtml(groupLabel) + '</div>';
   });
   html += '</div>';
   groupKeys.forEach(function(groupLabel, groupIndex) {
     var list = Array.isArray(tags[groupLabel]) ? tags[groupLabel] : [];
     if (!list.length) return;
-    var branchOpen = smartTagDataHasSelected_(selected, list);
+    var branchOpen = smartTagBranchIsOpen_(_kcacOpenSmartTagBranches, openKey, groupIndex);
     html += '<div class="category-secondary' + (branchOpen ? ' active' : '') + '" id="kcac-smart-secondary-' + kcacSmartTagIdKey_(key) + '-' + groupIndex + '">';
     html += list.map(btn).join('');
     html += '</div>';
@@ -10025,6 +10052,7 @@ function refreshKcacSmartTagSection_(key) {
 }
 
 function toggleKcacSmartTagGroup_(key, groupIndex, button) {
+  smartTagSetOpenBranchState_(_kcacOpenSmartTagBranches, kcacOpenSmartTagKey_(key), groupIndex, -1);
   var root = document.getElementById(kcacSmartTagButtonsId_(key));
   if (!root) return;
   var targetId = 'kcac-smart-secondary-' + kcacSmartTagIdKey_(key) + '-' + groupIndex;
@@ -11619,6 +11647,7 @@ var KBC_SMART_TAGS = {
   }
 };
 var _kbcTags = kbcCreateTagState_();
+var _kbcOpenSmartTagBranches = {};
 
 function kbcIsMainRound_() {
   var round = String((_selComp && _selComp.currentRound) || '');
@@ -11692,6 +11721,9 @@ function kbcInlineTagButtonsId_(group, category) {
 function kbcInlineCustomTagId_(group, category) {
   return 'kbc-inline-custom-tag-' + group + '-' + kbcCategoryId_(category);
 }
+function kbcOpenSmartTagKey_(group, category) {
+  return String(group || '') + '::' + String(category || '');
+}
 function kbcSelectedTagsHtml_(group, category) {
   var selected = kbcCategoryTags_(group, category);
   if (!selected.length) return '<span class="mob-empty-tag">선택 없음</span>';
@@ -11719,10 +11751,11 @@ function kbcTagButtonsHtml_(group, category) {
   if (Array.isArray(data)) {
     return data.map(function(tag){ return kbcTagButtonHtml_(group, category, tag, tag, 'cat-btn-s', selected); }).join('');
   }
+  var openKey = kbcOpenSmartTagKey_(group, category);
   var html = '<div class="category-primary">';
   var primaryKeys = Object.keys(data);
   primaryKeys.forEach(function(primary, pi){
-    var primaryOpen = smartTagPathBranchSelected_(selected, primary, data[primary]);
+    var primaryOpen = smartTagBranchIsOpen_(_kbcOpenSmartTagBranches, openKey, pi);
     var primarySelectable = !smartTagIsToneGroup_(primary);
     var primaryValue = primarySelectable ? kbcTagPath_(primary, '', '') : '';
     var action = 'toggleKbcInlinePrimary(\'' + group + '\',\'' + escapeJsString_(category) + '\',' + pi + ',\'' + escapeJsString_(primaryValue) + '\',' + primarySelectable + ',this)';
@@ -11731,7 +11764,7 @@ function kbcTagButtonsHtml_(group, category) {
   html += '</div>';
   primaryKeys.forEach(function(p, pi){
     var secondaryData = data[p];
-    var primaryOpen = smartTagPathBranchSelected_(selected, p, secondaryData);
+    var primaryOpen = smartTagBranchIsOpen_(_kbcOpenSmartTagBranches, openKey, pi);
     html += '<div class="category-secondary' + (primaryOpen ? ' active' : '') + '" id="kbc-tag-secondary-' + group + '-' + kbcCategoryId_(category) + '-' + pi + '">';
     if (Array.isArray(secondaryData)) {
       secondaryData.forEach(function(tag){
@@ -11742,7 +11775,7 @@ function kbcTagButtonsHtml_(group, category) {
       Object.keys(secondaryData).forEach(function(secondary, si){
         var secondaryIsTone = smartTagIsToneGroup_(secondary);
         var secondaryValue = kbcTagPath_(p, secondary, '');
-        var secondaryOpen = smartTagPathSecondarySelected_(selected, p, secondary, secondaryData[secondary] || []);
+        var secondaryOpen = primaryOpen && smartTagBranchIsOpen_(_kbcOpenSmartTagBranches, openKey, pi, si);
         var secondarySelectable = !smartTagIsToneGroup_(p) && !secondaryIsTone;
         var action = 'toggleKbcInlineSecondary(\'' + group + '\',\'' + escapeJsString_(category) + '\',' + pi + ',' + si + ',\'' + escapeJsString_(secondaryValue) + '\',' + secondarySelectable + ',this)';
         html += kbcTagBranchButtonHtml_(secondary, secondaryValue, 'cat-btn-s', selected, action, secondaryOpen, !secondarySelectable);
@@ -11805,6 +11838,7 @@ function kbcToggleTagValue_(group, category, tag) {
   return true;
 }
 function kbcOpenInlinePrimary_(group, category, primaryIndex, button) {
+  smartTagSetOpenBranchState_(_kbcOpenSmartTagBranches, kbcOpenSmartTagKey_(group, category), primaryIndex, -1);
   var root = document.getElementById(kbcInlineTagButtonsId_(group, category));
   if (!root) return;
   var targetId = 'kbc-tag-secondary-' + group + '-' + kbcCategoryId_(category) + '-' + primaryIndex;
@@ -11823,6 +11857,7 @@ function toggleKbcInlineSecondary(group, category, primaryIndex, secondaryIndex,
   var root = document.getElementById(kbcInlineTagButtonsId_(group, category));
   var primaryButton = root ? root.querySelector('.category-primary > .cat-btn-p:nth-child(' + (primaryIndex + 1) + ')') : null;
   kbcOpenInlinePrimary_(group, category, primaryIndex, primaryButton);
+  smartTagSetOpenBranchState_(_kbcOpenSmartTagBranches, kbcOpenSmartTagKey_(group, category), primaryIndex, secondaryIndex);
   root = document.getElementById(kbcInlineTagButtonsId_(group, category));
   if (!root) return;
   var targetId = 'kbc-tag-tertiary-' + group + '-' + kbcCategoryId_(category) + '-' + primaryIndex + '-' + secondaryIndex;
@@ -11877,6 +11912,7 @@ function startKbc() {
   document.getElementById('kbc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + roleText();
   var isMain = kbcIsMainRound_();
   _kbcTags = kbcCreateTagState_();
+  _kbcOpenSmartTagBranches = {};
   document.getElementById('kbc-service-rows').innerHTML = kbcRenderScoreRows_(KBC_SERVICE);
   document.getElementById('kbc-sensory-rows').innerHTML = kbcRenderScoreRows_(KBC_ESPRESSO);
   document.getElementById('kbc-sig-block').style.display = isMain ? 'block' : 'none';
@@ -12162,6 +12198,7 @@ var MOB_SMART_TAGS = {
   }
 };
 var _mobTags = mobCreateTagState_();
+var _mobOpenSmartTagBranches = {};
 
 function mobCommentId_(id) { return id + '-comment'; }
 function mobCommentValue_(attr) {
@@ -12340,6 +12377,9 @@ function mobInlineTagButtonsId_(group, category) {
 function mobInlineCustomTagId_(group, category) {
   return 'mob-inline-custom-tag-' + group + '-' + mobCategoryId_(category);
 }
+function mobOpenSmartTagKey_(group, category) {
+  return String(group || '') + '::' + String(category || '');
+}
 function mobSelectedTagsHtml_(group, category, inline) {
   var selected = mobCategoryTags_(group, category);
   if (!selected.length) return inline ? '<span class="mob-empty-tag">선택 없음</span>' : '';
@@ -12371,10 +12411,11 @@ function mobTagButtonsHtml_(group, category, handlerName) {
       return mobTagButtonHtml_(group, category, tag, tag, 'cat-btn-s', selected, handler);
     }).join('');
   }
+  var openKey = mobOpenSmartTagKey_(group, category);
   var html = '<div class="category-primary">';
   var primaryKeys = Object.keys(data);
   primaryKeys.forEach(function(primary, pi){
-    var primaryOpen = smartTagPathBranchSelected_(selected, primary, data[primary]);
+    var primaryOpen = smartTagBranchIsOpen_(_mobOpenSmartTagBranches, openKey, pi);
     var primarySelectable = !smartTagIsToneGroup_(primary);
     var primaryValue = primarySelectable ? mobTagPath_(primary, '', '') : '';
     var action = 'toggleMobTagPrimary(\'' + group + '\',\'' + escapeJsString_(category) + '\',' + pi + ',\'' + escapeJsString_(primaryValue) + '\',' + primarySelectable + ',this,\'' + handler + '\')';
@@ -12383,7 +12424,7 @@ function mobTagButtonsHtml_(group, category, handlerName) {
   html += '</div>';
   primaryKeys.forEach(function(p, pi){
     var secondaryData = data[p];
-    var primaryOpen = smartTagPathBranchSelected_(selected, p, secondaryData);
+    var primaryOpen = smartTagBranchIsOpen_(_mobOpenSmartTagBranches, openKey, pi);
     html += '<div class="category-secondary' + (primaryOpen ? ' active' : '') + '" id="mob-tag-secondary-' + group + '-' + mobCategoryId_(category) + '-' + pi + '">';
     if (Array.isArray(secondaryData)) {
       secondaryData.forEach(function(tag){
@@ -12394,7 +12435,7 @@ function mobTagButtonsHtml_(group, category, handlerName) {
       Object.keys(secondaryData).forEach(function(secondary, si){
         var secondaryIsTone = smartTagIsToneGroup_(secondary);
         var secondaryValue = mobTagPath_(p, secondary, '');
-        var secondaryOpen = smartTagPathSecondarySelected_(selected, p, secondary, secondaryData[secondary] || []);
+        var secondaryOpen = primaryOpen && smartTagBranchIsOpen_(_mobOpenSmartTagBranches, openKey, pi, si);
         var secondarySelectable = !smartTagIsToneGroup_(p) && !secondaryIsTone;
         var action = 'toggleMobTagSecondary(\'' + group + '\',\'' + escapeJsString_(category) + '\',' + pi + ',' + si + ',\'' + escapeJsString_(secondaryValue) + '\',' + secondarySelectable + ',this,\'' + handler + '\')';
         html += mobTagBranchButtonHtml_(secondary, secondaryValue, 'cat-btn-s', selected, action, secondaryOpen, !secondarySelectable);
@@ -12462,6 +12503,7 @@ function mobToggleTagValue_(group, category, tag) {
   return true;
 }
 function mobOpenTagPrimary_(group, category, primaryIndex, button) {
+  smartTagSetOpenBranchState_(_mobOpenSmartTagBranches, mobOpenSmartTagKey_(group, category), primaryIndex, -1);
   var root = document.getElementById(mobInlineTagButtonsId_(group, category));
   if (!root) return;
   var targetId = 'mob-tag-secondary-' + group + '-' + mobCategoryId_(category) + '-' + primaryIndex;
@@ -12480,6 +12522,7 @@ function toggleMobTagSecondary(group, category, primaryIndex, secondaryIndex, ta
   var root = document.getElementById(mobInlineTagButtonsId_(group, category));
   var primaryButton = root ? root.querySelector('.category-primary > .cat-btn-p:nth-child(' + (primaryIndex + 1) + ')') : null;
   mobOpenTagPrimary_(group, category, primaryIndex, primaryButton);
+  smartTagSetOpenBranchState_(_mobOpenSmartTagBranches, mobOpenSmartTagKey_(group, category), primaryIndex, secondaryIndex);
   root = document.getElementById(mobInlineTagButtonsId_(group, category));
   if (!root) return;
   var targetId = 'mob-tag-tertiary-' + group + '-' + mobCategoryId_(category) + '-' + primaryIndex + '-' + secondaryIndex;
@@ -12617,6 +12660,7 @@ function startMob() {
   document.getElementById('mob-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + mobRoleText_() + (isMobCalibrationMode_() ? ' · ' + mobCalibrationLabel_() + '(순위 제외)' : '');
 
   _mobTags = mobCreateTagState_();
+  _mobOpenSmartTagBranches = {};
   document.getElementById('mob-tech-rows').innerHTML = MOB_TECH.map(function(a){
     return makeScoreRow(a.id, a.name, '', 1, 5, 0.2, 3, mobGetDesc, 'calcMobTotal()', mobCommentId_(a.id), a.name + ' 코멘트', renderMobInlineTagSection_(a));
   }).join('');
@@ -15782,6 +15826,7 @@ function kclRestoreDraftForCode_(code, draft) {
     }
     if (code === 'KCAC' && draft.state.kcac) {
       _kcac = draft.state.kcac;
+      _kcacOpenSmartTagBranches = {};
       if (!_kcac.dragStart) _kcac.dragStart = {x:0,y:0,rx:0,ry:0};
       if (typeof renderKcacCupNav === 'function') renderKcacCupNav();
       if (typeof loadKcacJar === 'function') loadKcacJar(Number(_kcac.currentIdx) || 0);
