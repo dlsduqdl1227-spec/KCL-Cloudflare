@@ -7388,7 +7388,6 @@ function reviewCommentAttrText_(attr) {
 function reviewBuildKcrCommentPayload_() {
   function labels(ids) { return typeof KcrSensoryTags === 'undefined' ? ids : KcrSensoryTags.labels(ids); }
   return {
-    cupNumber: reviewFieldValueByIndex_(reviewFindHeaderIndex_([/컵번호|Cup/i])),
     process: reviewFieldValueByIndex_(reviewFindHeaderIndex_([/프로세스|Process/i])),
     flavor: reviewKcrScoreValue_('flavor'),
     flavorIntensity: reviewKcrIntensityValue_('flavor', 4),
@@ -7401,6 +7400,7 @@ function reviewBuildKcrCommentPayload_() {
     mouthfeel: reviewKcrScoreValue_('mouthfeel'),
     mouthfeelIntensity: reviewKcrIntensityValue_('mouthfeel', 4),
     overall: reviewKcrScoreValue_('overall'),
+    attributeComments: reviewKcrManualAttributeComments_().join(' / '),
     tags: {
       flavor: labels(reviewKcrTagsValue_('flavor')),
       aftertaste: labels(reviewKcrTagsValue_('aftertaste').concat(reviewKcrAftertasteFlavorTagsValue_())),
@@ -7409,6 +7409,28 @@ function reviewBuildKcrCommentPayload_() {
       mouthfeel: labels(reviewKcrTagsValue_('mouthfeel'))
     }
   };
+}
+function reviewKcrManualAttributeComments_() {
+  var defs = [
+    {key:'Flavor', label:'플레이버'},
+    {key:'Aftertaste', label:'에프터테이스트'},
+    {key:'Acidity', label:'산미'},
+    {key:'Sweetness', label:'단맛'},
+    {key:'Mouthfeel', label:'마우스필'}
+  ];
+  return defs.map(function(def) {
+    var text = reviewTextByNames_([def.key + ' 코멘트']).trim();
+    if (!text) return '';
+    var rawState = reviewTextByNames_([def.key + ' 자동생성상태']).trim();
+    if (rawState) {
+      try {
+        var state = JSON.parse(rawState);
+        var generated = String(state.generatedComment || '').trim();
+        if (!state.commentTouched && text === generated) return '';
+      } catch (ignore) {}
+    }
+    return def.label + ': ' + text;
+  }).filter(function(text) { return !!text; });
 }
 function reviewBuildKbcCommentPayload_() {
   var round = reviewRoundLabel_();
@@ -9382,6 +9404,16 @@ function resetKcrSensoryComment(attr) {
   c.sensoryComments[attr] = KcrSensoryComments.resetState(kcrCommentState_(c, attr), attr, c[kcrTagIdsKey_(attr)] || [], kcrCommentOptions_(c, attr));
   renderCuppingAttrCard();
 }
+function kcrManualAttributeComments_(c) {
+  var labels = {
+    flavor:'플레이버', aftertaste:'에프터테이스트', acidity:'산미',
+    sweetness:'단맛', mouthfeel:'마우스필'
+  };
+  return ['flavor','aftertaste','acidity','sweetness','mouthfeel'].map(function(attr) {
+    var text = KcrSensoryComments.manualComment(kcrCommentState_(c, attr));
+    return text ? (labels[attr] + ': ' + text) : '';
+  }).filter(function(text) { return !!text; });
+}
 
 function renderCuppingAttrCard() {
   var c = _cupping.cups[_cupping.currentIdx];
@@ -9528,13 +9560,13 @@ function generateCuppingComment() {
       area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>';
     })
     .generateCuppingComment({
-      cupNumber:c.cupNumber,
       flavor:c.flavor, flavorIntensity:c.flavorIntensity,
       aftertaste:c.aftertaste, aftertastePersistence:c.aftertastePersistence,
       acidity:c.acidity, acidityIntensity:c.acidityIntensity,
       sweetness:c.sweetness, sweetnessIntensity:c.sweetnessIntensity,
       mouthfeel:c.mouthfeel, mouthfeelIntensity:c.mouthfeelIntensity,
       overall:c.overall,
+      attributeComments:kcrManualAttributeComments_(c).join(' / '),
       tags:{
         flavor:KcrSensoryTags.labels(c.flavorTagIds||[]),
         aftertaste:KcrSensoryTags.labels((c.aftertasteTagIds||[]).concat(c.aftertasteFlavorTagIds||[])),

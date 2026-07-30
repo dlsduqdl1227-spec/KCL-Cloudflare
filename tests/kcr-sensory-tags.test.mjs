@@ -88,6 +88,8 @@ assert.equal(protectedState.customComment, "심사위원이 직접 수정한 코
 const resetState = comments.resetState(protectedState, "flavor", [flavorIds[1]], {});
 assert.equal(resetState.commentTouched, false);
 assert.match(resetState.customComment, new RegExp(api.get(flavorIds[1]).labelKo));
+assert.equal(comments.manualComment(protectedState), "심사위원이 직접 수정한 코멘트");
+assert.equal(comments.manualComment(resetState), "", "Untouched auto comments must not be duplicated in the overall comment");
 assert.equal(comments.generateFlavorComment([]), "");
 assert.equal(
   comments.generateFlavorComment(["flavor_floral_jasmine", "flavor_stone_fruit_peach", "flavor_tea_black_tea"]),
@@ -141,6 +143,26 @@ assert.ok(kcrMarkup.indexOf("sweetness") < kcrMarkup.indexOf("mouthfeel"));
 assert.match(assessment, /result\.selected/);
 assert.doesNotMatch(assessment, /result\.ids/);
 assert.match(assessment, /KcrSensoryTags\.labels\(c\.flavorTagIds/);
+assert.match(extractFunction(assessment, "generateCuppingComment"), /attributeComments\s*:\s*kcrManualAttributeComments_\(c\)/);
+assert.doesNotMatch(extractFunction(assessment, "generateCuppingComment"), /cupNumber\s*:/);
+assert.match(extractFunction(assessment, "reviewBuildKcrCommentPayload_"), /attributeComments\s*:\s*reviewKcrManualAttributeComments_/);
+assert.doesNotMatch(extractFunction(assessment, "reviewBuildKcrCommentPayload_"), /cupNumber\s*:/);
+const reviewCommentValues = {
+  "Flavor 코멘트":"오렌지가 연상되는 향미입니다.",
+  "Flavor 자동생성상태":JSON.stringify({ generatedComment:"오렌지가 연상되는 향미입니다.", commentTouched:false }),
+  "Acidity 코멘트":"식으면서 산미가 더 밝아짐",
+  "Acidity 자동생성상태":JSON.stringify({ generatedComment:"밝은 산미입니다.", commentTouched:true }),
+  "Mouthfeel 코멘트":"질감이 조금 거칠게 남음",
+};
+const reviewManualContext = {
+  reviewTextByNames_: (names) => reviewCommentValues[names[0]] || "",
+};
+vm.createContext(reviewManualContext);
+vm.runInContext(extractFunction(assessment, "reviewKcrManualAttributeComments_"), reviewManualContext);
+assert.deepEqual(Array.from(reviewManualContext.reviewKcrManualAttributeComments_()), [
+  "산미: 식으면서 산미가 더 밝아짐",
+  "마우스필: 질감이 조금 거칠게 남음",
+]);
 assert.match(extractFunction(assessment, "reviewKcrTotalInfo_"), /reviewKcrScoreValue_\('mouthfeel'\)/);
 assert.doesNotMatch(extractFunction(assessment, "reviewKcrTotalInfo_"), /reviewKcrScoreValue_\('body'\)/);
 assert.match(extractFunction(assessment, "canReviewEditDetails"), /c === 'KCR' && isTeamLeaderForCode_\(c\)/);
@@ -150,5 +172,25 @@ assert.match(extractFunction(rpc, "aggregateRankingGroup_"), /Overall\(오버롤
 assert.match(debriefing, /Mouthfeel\(마우스필\)/);
 assert.match(debriefing, /kcrPublicTagLabels_/);
 assert.match(extractFunction(debriefing, "buildCommentBox"), /자동생성상태/);
+
+const rpcCommentContext = {};
+vm.createContext(rpcCommentContext);
+for (const name of [
+  "safeStr", "_num", "_avg", "_result", "_scoreItems", "_lowHighScore",
+  "_joinWithComma", "_cleanTagText_", "_tagList_", "_tagPhrase_",
+  "_briefComments", "_areaKorean_", "_optionSet", "generateCuppingComment",
+]) vm.runInContext(extractFunction(rpc, name), rpcCommentContext);
+const overallResult = rpcCommentContext.generateCuppingComment({
+  cupNumber:"1",
+  flavor:4.2, aftertaste:3.8, acidity:4.0, sweetness:4.4, mouthfeel:3.6, overall:4.0,
+  tags:{ flavor:["오렌지"], aftertaste:["깔끔한"], acidity:["밝은"], sweetness:["꿀 같은"], mouthfeel:["실키한"] },
+  attributeComments:"플레이버: 오렌지 껍질 향이 선명함 / 산미: 식으면서 밝아짐",
+});
+assert.equal(overallResult.comments.length, 3);
+for (const text of overallResult.comments) {
+  assert.match(text, /오렌지 껍질 향이 선명함/);
+  assert.match(text, /식으면서 밝아짐/);
+  assert.doesNotMatch(text, /1번\s*컵|해당\s*컵은/);
+}
 
 process.stdout.write("KCR sensory tag tests passed.\n");

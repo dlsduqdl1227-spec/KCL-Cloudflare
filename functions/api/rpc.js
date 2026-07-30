@@ -4354,7 +4354,6 @@ function _optionSet(lines) {
 function generateCuppingComment(payload) {
   payload = payload || {};
   const tags = payload.tags || {};
-  const cupNo = safeStr(payload.cupNumber || payload.cupNo || '');
   const process = safeStr(payload.process || '');
   const items = [
     {name:'Flavor', score:payload.flavor},
@@ -4374,13 +4373,14 @@ function generateCuppingComment(payload) {
   const high = hl.high ? _areaKorean_(hl.high.name) : '';
   const low = hl.low && hl.low !== hl.high ? _areaKorean_(hl.low.name) : '';
   const tone = avg >= 4 ? '향미 표현이 선명하게 드러난 컵' : (avg >= 3 ? '기본 향미 구조가 확인되는 컵' : '향미 구조의 불안정성이 함께 확인된 컵');
-  const prefix = cupNo ? `${cupNo}번 컵은 ` : '해당 컵은 ';
   const processText = process ? `${process} 프로세스의 특성이 반영되어 ` : '';
   const axis = high && low ? `${high}이 가장 두드러졌고, ${low}은 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 나타났습니다.';
+  const comments = _briefComments(payload.attributeComments, 5);
+  const manualText = comments.length ? `직접 입력 코멘트에는 ${comments.join(' / ')} 내용이 기록되었습니다.` : '';
   return _optionSet([
-    `${prefix}${processText}${flavor} 인상을 중심으로 첫 향미가 형성됩니다. 이후 ${after}의 흐름과 ${acidity}의 산미 구조, ${sweet}의 단맛, ${mouthfeel}의 마우스필이 연결됩니다. 전체적으로 ${tone}으로 평가됩니다.`,
-    `${prefix}${flavor} 계열의 향미가 주요 인상으로 기록되었고, 에프터테이스트는 ${after} 방향으로 이어졌습니다. 산미는 ${acidity}, 단맛은 ${sweet}, 마우스필은 ${mouthfeel} 특성으로 나타나 전체 컵의 구조를 구성했습니다. ${axis}`,
-    `${prefix}플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성을 기준으로 평가했습니다. 현재 기록된 감각 단서는 ${flavor}, ${after}, ${sweet}이며, 종합 평가는 각 항목의 균형과 오버롤 인상에 따라 형성되었습니다.`
+    `${processText}${flavor} 인상을 중심으로 첫 향미가 형성됩니다. 이후 ${after}의 흐름과 ${acidity}의 산미 구조, ${sweet}의 단맛, ${mouthfeel}의 마우스필이 연결됩니다. 전체적으로 ${tone}으로 평가됩니다. ${manualText}`,
+    `${flavor} 계열의 향미가 주요 인상으로 기록되었고, 에프터테이스트는 ${after} 방향으로 이어졌습니다. 산미는 ${acidity}, 단맛은 ${sweet}, 마우스필은 ${mouthfeel} 특성으로 나타나 전체 컵의 구조를 구성했습니다. ${axis} ${manualText}`,
+    `플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성을 기준으로 평가했습니다. 현재 기록된 감각 단서는 ${flavor}, ${after}, ${sweet}이며, 종합 평가는 각 항목의 균형과 오버롤 인상에 따라 형성되었습니다. ${manualText}`
   ]);
 }
 

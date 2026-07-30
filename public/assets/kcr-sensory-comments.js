@@ -162,6 +162,11 @@
     return next;
   }
 
+  function manualComment(state) {
+    var current = createState(state);
+    return current.commentTouched ? current.customComment.trim() : "";
+  }
+
   global.KcrSensoryComments = {
     generate: generate,
     generateFlavorComment: generateFlavorComment,
@@ -172,6 +177,7 @@
     createState: createState,
     syncState: syncState,
     editState: editState,
-    resetState: resetState
+    resetState: resetState,
+    manualComment: manualComment
   };
 })(typeof window !== "undefined" ? window : globalThis);
