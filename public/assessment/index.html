@@ -1845,7 +1845,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <span class="cup-btn-num">검수 목록</span>
       <span class="cup-btn-score" id="review-nav-summary">대기 -</span>
     </button>
-    <button class="submit-btn-nav" id="review-back-btn">뒤로가기</button>
+    <button type="button" id="review-back-btn" hidden aria-hidden="true" tabindex="-1">뒤로가기</button>
   </div>
   <div class="eval-content">
     <div class="eval-hero-logo" id="review-logo"></div>
@@ -1872,10 +1872,6 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     </button>
     <button class="submit-btn-nav" id="review-edit-save-only" onclick="saveReviewEdit(false)">수정완료</button>
     <button class="submit-btn-nav" id="review-edit-save-complete" onclick="saveReviewEdit(true)">검수완료</button>
-    <button type="button" class="cup-btn" onclick="backToReviewList()">
-      <span class="cup-btn-num">목록</span>
-      <span class="cup-btn-score">돌아가기</span>
-    </button>
   </div>
   <div class="eval-content">
     <div class="eval-hero-logo" id="review-edit-logo"></div>
@@ -1889,7 +1885,6 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <button class="submit-btn-nav complete-primary" type="button" onclick="saveReviewEdit(true)">검수완료</button>
     </div>
     <button class="btn-danger" id="review-edit-delete" style="display:none" onclick="deleteReviewCurrent()">이 제출 데이터 삭제</button>
-    <button class="btn-outline" onclick="backToReviewList()">목록으로</button>
     <button class="btn-outline" id="review-edit-enable" style="display:none" onclick="enableReviewEdit()">수정하기</button>
   </div>
 </div>
@@ -1918,7 +1913,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 
   <div id="ranking-list"></div>
   <div class="divider"></div>
-  <button class="btn-outline" id="ranking-back-btn">뒤로가기</button>
+  <button type="button" id="ranking-back-btn" hidden aria-hidden="true" tabindex="-1">뒤로가기</button>
 </div>
 
 

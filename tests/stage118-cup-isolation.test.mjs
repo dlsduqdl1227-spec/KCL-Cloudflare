@@ -47,6 +47,17 @@ assert.equal(
 assert.doesNotMatch(assessment, /mobile-context-back/);
 assert.match(pageMarkup, />← 뒤로가기<\/button>/);
 assert.match(pageMarkup, /goRootHome_\(\)/, "홈 버튼은 뒤로가기와 별도 목적이므로 유지해야 합니다.");
+assert.match(pageMarkup, /id="review-back-btn" hidden aria-hidden="true"/);
+assert.match(pageMarkup, /id="ranking-back-btn" hidden aria-hidden="true"/);
+const reviewEditMarkup = pageMarkup.slice(
+  pageMarkup.indexOf('<div id="pReviewEdit"'),
+  pageMarkup.indexOf("<!-- 4-2: 순위 -->"),
+);
+assert.doesNotMatch(
+  reviewEditMarkup,
+  /onclick="backToReviewList\(\)"/,
+  "검수 상세에는 공통 뒤로가기와 같은 목록 이동 버튼을 중복 표시하면 안 됩니다.",
+);
 
 const stateContext = {
   KcrSensoryComments: { createState: () => ({ autoComment: "", customComment: "", commentTouched: false }) },
