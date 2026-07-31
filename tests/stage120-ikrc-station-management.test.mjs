@@ -44,6 +44,15 @@ assert.match(blindPanel, /id="ikrc-blind-ikrc-stations-IKRC"/);
 assert.match(blindPanel, />\+ 스테이션 추가</);
 assert.match(blindPanel, /saveIkrcBlindStationSettings_\(\)/);
 assert.match(blindPanel, />스테이션 설정 저장</);
+assert.match(blindPanel, /class="ikrc-station-actions"/);
+assert.match(blindPanel, /class="ikrc-station-save"/);
+assert.doesNotMatch(blindPanel, /class="admin-comp-actions" style="margin-bottom:16px"/);
+
+assert.match(assessment, /\.ikrc-station-config-row input\{height:52px/);
+assert.match(assessment, /\.ikrc-station-remove\{[^}]*height:52px/);
+assert.match(assessment, /\.ikrc-station-actions button\{[^}]*min-height:52px/);
+assert.match(assessment, /\.ikrc-station-actions \.ikrc-station-save\{background:#fff!important;color:#000!important/);
+assert.match(assessment, /@media\(max-width:460px\)\{\.ikrc-station-actions\{grid-template-columns:1fr\}\}/);
 
 const rowSource = functionSource(assessment, "ikrcStationConfigRowHtml_");
 assert.match(rowSource, />삭제<\/button>/);

@@ -1496,13 +1496,19 @@ body.kcl-admin-scroll-mode{height:100dvh!important;min-height:100dvh!important;o
 .ikrc-station-btn:active{background:#fff;color:#000}.ikrc-station-btn:active span{color:#444}
 #pReviewEdit.ikrc-review-mode .review-eval-like-tabs{position:static!important;top:auto!important;z-index:auto!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important}
 #pReviewEdit.ikrc-review-mode .review-group-tabs{margin-top:8px!important}
-.ikrc-station-config-list{display:grid;gap:8px;margin:10px 0}
-.ikrc-station-config-row{display:grid;grid-template-columns:minmax(82px,.8fr) minmax(76px,1fr) minmax(70px,.7fr) minmax(70px,.7fr) 68px;gap:8px;align-items:end;padding:10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.025)}
-.ikrc-station-config-row label{display:grid;gap:5px;font-size:11px;color:var(--text-3)}
-.ikrc-station-config-row input{margin:0!important;min-width:0!important}
-.ikrc-station-row-title{align-self:center;font-size:13px;font-weight:800;color:var(--text-2)}
-.ikrc-station-remove{width:68px!important;min-width:68px!important;height:42px!important;margin:0!important;padding:0 10px!important;border-radius:8px!important;font-size:12px!important;font-weight:800!important}
-.ikrc-station-add{width:auto!important;margin:4px 0 0!important;padding:10px 14px!important}
+.ikrc-station-config-list{display:grid;gap:10px;margin:10px 0}
+.ikrc-station-config-row{display:grid;grid-template-columns:minmax(88px,.8fr) minmax(116px,1.2fr) minmax(76px,.75fr) minmax(76px,.75fr) 72px;gap:10px;align-items:end;padding:12px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.025)}
+.ikrc-station-config-row label{display:grid;gap:6px;min-width:0;font-size:11px;color:var(--text-3)}
+.ikrc-station-config-row input{height:52px;margin:0!important;padding:0 14px!important;min-width:0!important}
+.ikrc-station-row-title{display:flex;align-items:center;min-height:52px;font-size:13px;font-weight:900;color:var(--text)}
+.ikrc-station-remove{width:72px!important;min-width:72px!important;height:52px!important;margin:0!important;padding:0 10px!important;border-radius:10px!important;font-size:12px!important;font-weight:900!important;color:#ffb7b7!important;border-color:rgba(255,125,125,.34)!important;background:rgba(255,90,90,.055)!important}
+.ikrc-station-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;width:100%;margin:0 0 18px}
+.ikrc-station-actions button{width:100%!important;min-width:0!important;min-height:52px!important;margin:0!important;padding:0 14px!important;border-radius:10px!important;font-size:13px!important;font-weight:900!important}
+.ikrc-station-actions .ikrc-station-add{background:transparent!important;color:var(--text)!important;border:1.5px solid var(--border-lt)!important}
+.ikrc-station-actions .ikrc-station-save{background:#fff!important;color:#000!important;border:1.5px solid #fff!important}
+.ikrc-station-divider{margin:18px 0!important}
+#pIkrcBlindManager .ikrc-station-config-list{margin:0 0 10px}
+#pIkrcBlindManager .ikrc-blind-refresh{min-height:48px;margin:0 0 12px}
 .ikrc-blind-station{margin:0 0 14px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
 .ikrc-blind-station-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px}
 .ikrc-blind-station-title{font-size:16px;font-weight:900;color:var(--text)}
@@ -1513,7 +1519,14 @@ body.kcl-admin-scroll-mode{height:100dvh!important;min-height:100dvh!important;o
 .ikrc-blind-map-row select{margin:0!important;min-width:0!important}
 .ikrc-blind-summary{margin:10px 0 14px;padding:11px;border:1px solid var(--border);border-radius:8px;color:var(--text-3);font-size:12px;line-height:1.55}
 @media(max-width:520px){.ikrc-station-grid{grid-template-columns:1fr}.ikrc-station-btn{min-height:96px}}
-@media(max-width:620px){.ikrc-station-config-row{grid-template-columns:1fr 1fr}.ikrc-station-row-title{grid-column:1/-1}.ikrc-station-remove{grid-column:2;justify-self:end}.ikrc-blind-map-row{grid-template-columns:64px minmax(0,1fr)}}
+@media(max-width:620px){
+  .ikrc-station-config-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+  .ikrc-station-row-title{grid-column:1/-1;min-height:auto}
+  .ikrc-station-config-row label:nth-of-type(1){grid-column:1/-1}
+  .ikrc-station-remove{grid-column:1/-1;width:100%!important;min-width:0!important}
+  .ikrc-blind-map-row{grid-template-columns:64px minmax(0,1fr)}
+}
+@media(max-width:460px){.ikrc-station-actions{grid-template-columns:1fr}}
 
 
 
@@ -2317,13 +2330,13 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     스테이션을 추가하거나 삭제한 뒤 반드시 <b>스테이션 설정 저장</b>을 눌러주세요. 삭제해도 기존 평가점수와 백업 데이터는 지워지지 않습니다.
   </div>
   <div class="ikrc-station-config-list" id="ikrc-blind-ikrc-stations-IKRC"></div>
-  <div class="admin-comp-actions" style="margin-bottom:16px">
-    <button class="btn-outline ikrc-station-add" type="button" onclick="ikrcAddStationConfigRow_('ikrc-blind','IKRC')">+ 스테이션 추가</button>
-    <button class="btn" id="ikrc-blind-station-save" type="button" onclick="saveIkrcBlindStationSettings_()">스테이션 설정 저장</button>
+  <div class="ikrc-station-actions">
+    <button class="ikrc-station-add" type="button" onclick="ikrcAddStationConfigRow_('ikrc-blind','IKRC')">+ 스테이션 추가</button>
+    <button class="ikrc-station-save" id="ikrc-blind-station-save" type="button" onclick="saveIkrcBlindStationSettings_()">스테이션 설정 저장</button>
   </div>
-  <div class="divider"></div>
+  <div class="divider ikrc-station-divider"></div>
   <div class="section-label">선수 블라인드 배정</div>
-  <button class="btn-outline" type="button" onclick="loadIkrcBlindAssignments_()">배정 새로고침</button>
+  <button class="btn-outline ikrc-blind-refresh" type="button" onclick="loadIkrcBlindAssignments_()">배정 새로고침</button>
   <div class="ikrc-blind-summary" id="ikrc-blind-summary">블라인드 배정을 불러오는 중입니다.</div>
   <div id="ikrc-blind-map"></div>
   <button class="btn" id="ikrc-blind-save" type="button" onclick="saveIkrcBlindAssignments_()">블라인드 배정 저장</button>
