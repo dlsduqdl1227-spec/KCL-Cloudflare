@@ -102,7 +102,12 @@ assert.match(extractFunction(assessment, "deliverWorkbook_"), /application\/vnd\
 assert.match(extractFunction(assessment, "deliverBlob_"), /fileDeliveryModal/);
 assert.ok(fs.existsSync(path.join(root, "public", "assets", "vendor", "xlsx.full.min.js")));
 
-assert.match(assessment, /class="mobile-context-back"/);
+assert.equal(
+  (assessment.match(/onclick="return goBackContext_\(\)"/g) || []).length,
+  1,
+  "이전과 뒤로가기는 공통 버튼 한 개로 제공해야 합니다.",
+);
+assert.doesNotMatch(assessment, /mobile-context-back/);
 assert.match(extractFunction(assessment, "installBrowserBackGuard_"), /goBackContext_\(\)/);
 assert.match(assessment, /등록 참여인원 수 자체에는 별도 제한이 없으며/);
 

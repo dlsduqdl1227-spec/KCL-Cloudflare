@@ -177,6 +177,15 @@ for (const operator of [
   },
   {
     accountType: "JUDGE",
+    name: "QA 센서리2",
+    phone: "01011110004",
+    affiliation: "QA",
+    access: "ALL",
+    teamGroup: "QA팀",
+    role: "센서리 심사위원",
+  },
+  {
+    accountType: "JUDGE",
     name: "QA 헤드",
     phone: "01011110002",
     affiliation: "QA",
@@ -199,9 +208,10 @@ for (const operator of [
 }
 
 const judge = await rpc("judgeLogin", "QA 센서리", "01011110001");
+const judge2 = await rpc("judgeLogin", "QA 센서리2", "01011110004");
 const head = await rpc("judgeLogin", "QA 헤드", "01011110002");
 const lead = await rpc("judgeLogin", "QA 대회팀장", "01011110003");
-for (const login of [judge, head, lead]) {
+for (const login of [judge, judge2, head, lead]) {
   assert.equal(login.success, true, login.message);
   assert.ok(login.judgeToken);
 }
@@ -304,6 +314,27 @@ for (const [code, payload, signature] of [
   else assert.equal(submitted.inserted, 1);
 }
 
+const secondJudgeSameKcrCup = await rpc(
+  "submitScores",
+  genericPayload(judge2, "KCR", "KCR-1", 66, [
+    { data: ["KCR-1", "Washed"], extraFields: { Total: 66 } },
+  ]),
+);
+assert.equal(secondJudgeSameKcrCup.success, true, JSON.stringify(secondJudgeSameKcrCup));
+assert.equal(secondJudgeSameKcrCup.inserted, 1);
+const independentKcrRows = testDb.raw
+  .prepare("SELECT judge_name, unit, total_score FROM scores WHERE competition_code='KCR' ORDER BY judge_name, unit")
+  .all();
+assert.deepEqual(
+  independentKcrRows.map((row) => [row.judge_name, row.unit, row.total_score]),
+  [
+    ["QA 센서리", "KCR-1", 70],
+    ["QA 센서리", "KCR-2", 72],
+    ["QA 센서리2", "KCR-1", 66],
+  ],
+  "같은 컵의 심사위원별 평가와 같은 심사위원의 컵별 평가는 각각 독립 행으로 저장되어야 합니다.",
+);
+
 const duplicateKbc = await rpc("submitScores", genericPayload(judge, "KBC", "KBC-1", 81));
 assert.equal(duplicateKbc.success, false);
 assert.ok(duplicateKbc.duplicateId);
@@ -311,7 +342,7 @@ assert.ok(duplicateKbc.duplicateId);
 const reviewExpectedMinimums = {
   KBC: 1,
   KCAC: 2,
-  KCR: 2,
+  KCR: 3,
   MOB: 1,
   MOC: 1,
   KTCC: 1,

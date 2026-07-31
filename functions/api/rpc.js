@@ -2511,7 +2511,21 @@ async function submitScores(env, payload, signature, request = null) {
   // KCAC는 여러 잔이 한 선수의 한 세트 점수라서 한 제출로 유지합니다.
   const shouldSplit = ['KCR','IKRC'].includes(initial.code) && rows.length > 1;
   const payloads = shouldSplit
-    ? rows.map((row, idx) => Object.assign({}, basePayload, { rows: [row], originalRowCount: rows.length, originalRowIndex: idx + 1 }))
+    ? rows.map((row, idx) => {
+        const one = Object.assign({}, basePayload, {
+          rows: [row],
+          originalRowCount: rows.length,
+          originalRowIndex: idx + 1
+        });
+        // 여러 컵/샘플을 분리할 때 제출 전체의 대표값이 개별 행 값을 덮어쓰면 안 됩니다.
+        // 컵 번호·참가자명·총점은 각 row에서 다시 추론하고 계산합니다.
+        [
+          'unit','cupNo','cupNumber','participantNo','participantNumber','teamNo','targetNo','number',
+          'participantName','playerName','teamName',
+          'totalScore','total','finalScore','subtotalScore','subtotal','computedTotalScore'
+        ].forEach(key => { delete one[key]; });
+        return one;
+      })
     : [basePayload];
   let inserted = 0, skipped = 0;
   const atomicInsertStatements = [];
