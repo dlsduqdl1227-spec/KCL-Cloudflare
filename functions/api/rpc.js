@@ -430,6 +430,7 @@ async function dispatch(action, args, env, request) {
     getRegistrationTemplates: () => getRegistrationTemplates(),
     getParticipantAssignments: () => getParticipantAssignments(env, args[0], args[1]),
     getIkrcBlindAssignments: () => getIkrcBlindAssignments(env, args[0]),
+    saveIkrcStationSettings: () => saveIkrcStationSettings(env, args[0], args[1]),
     saveIkrcBlindAssignments: () => saveIkrcBlindAssignments(env, args[0], args[1]),
     submitScores: () => submitScores(env, args[0], null, request),
     submitWithSignature: () => submitScores(env, args[0], args[1] || (args[0] && (args[0].signatureBase64 || args[0].signatureData || args[0].signature)), request),
@@ -1561,6 +1562,58 @@ async function getIkrcBlindAssignments(env, actorArg) {
     participants,
     assignedCount:participants.filter(item => item.currentUnit && item.validUnit).length,
     unassignedCount:participants.filter(item => !item.currentUnit || !item.validUnit).length
+  };
+}
+async function saveIkrcStationSettings(env, payload, actorArg) {
+  const auth = await requireManageActorForCode_(env, actorArg, 'IKRC', 'IKRC 스테이션 설정 저장은 관리자 또는 IKRC 대회팀장만 가능합니다.');
+  if (!auth.ok) return auth.res;
+  const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind('IKRC').first();
+  if (!cfg) return { success:false, message:'IKRC 대회 설정을 찾을 수 없습니다.' };
+  const round = normalizeRoundForCompetition_('IKRC', cfg.current_round || '예선');
+  const requestedRound = normalizeRoundForCompetition_('IKRC', payload && payload.currentRound || round);
+  if (requestedRound !== round) return { success:false, message:'IKRC 진행 라운드가 변경되었습니다. 스테이션 화면을 새로 열어주세요.' };
+  const normalized = normalizeIkrcStationListServer_(payload && payload.stations, true);
+  if (!normalized.ok) return { success:false, message:normalized.message };
+
+  const currentOptions = parseJson(cfg.option_settings, {});
+  const currentRaw = currentOptions.ikrcStations && typeof currentOptions.ikrcStations === 'object' ? currentOptions.ikrcStations : {};
+  const roundKey = ikrcStationRoundKeyServer_(round);
+  const byRound = Object.assign({}, currentRaw.byRound && typeof currentRaw.byRound === 'object' ? currentRaw.byRound : {});
+  byRound[roundKey] = normalized.list;
+  const candidate = Object.assign({}, currentRaw, {
+    byRound,
+    stations:normalized.list,
+    station1Prefix:normalized.list[0] ? normalized.list[0].prefix : 'A',
+    station2Prefix:normalized.list[1] ? normalized.list[1].prefix : 'B'
+  });
+  const checked = validateIkrcStationOptionSettings_(candidate, round);
+  if (!checked.ok) return { success:false, message:checked.message };
+
+  const before = ikrcStationSettingsServer_(cfg, round);
+  const stationChanged = ikrcStationFingerprintServer_(before) !== ikrcStationFingerprintServer_(checked.list);
+  const scoreCountRow = await env.DB.prepare('SELECT COUNT(*) AS n FROM scores WHERE competition_code=? AND round=?').bind('IKRC', round).first();
+  const preservedScoreCount = Number(scoreCountRow && scoreCountRow.n || 0);
+  const field = ikrcAssignmentFieldForRound_(round);
+  const participantRows = await env.DB.prepare(`SELECT ${field} AS unit FROM participants WHERE competition_code=?`).bind('IKRC').all();
+  const allowedUnits = new Set(ikrcUnitsForStationsServer_(checked.list).map(item => item.unit));
+  const invalidAssignmentCount = (participantRows.results || []).filter(row => safeStr(row.unit) && !allowedUnits.has(safeStr(row.unit).toUpperCase().replace(/\s+/g, ''))).length;
+
+  if (stationChanged) {
+    const nextOptions = Object.assign({}, currentOptions, { ikrcStations:checked.settings });
+    await env.DB.prepare('UPDATE competitions SET option_settings=?, updated_at=? WHERE code=?')
+      .bind(JSON.stringify(nextOptions), nowIso(), 'IKRC').run();
+  }
+  let message = stationChanged ? `IKRC ${round} 스테이션 설정 저장 완료` : '변경된 IKRC 스테이션 설정이 없습니다.';
+  if (stationChanged && preservedScoreCount) message += `. 기존 평가 ${preservedScoreCount}건은 삭제하지 않고 보존했습니다`;
+  if (invalidAssignmentCount) message += `. 현재 범위를 벗어난 선수 배정 ${invalidAssignmentCount}명은 미배정으로 표시됩니다`;
+  return {
+    success:true,
+    message,
+    currentRound:round,
+    stations:checked.list,
+    stationChanged,
+    preservedScoreCount,
+    invalidAssignmentCount
   };
 }
 async function saveIkrcBlindAssignments(env, payload, actorArg) {

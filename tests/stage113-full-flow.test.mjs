@@ -264,15 +264,12 @@ assert.equal(duplicateX.success, false);
 assert.ok(duplicateX.duplicateId);
 
 const addedStationSave = await rpc(
-  "updateCompetitionAdminSettings",
+  "saveIkrcStationSettings",
   {
-    code: "IKRC",
     currentRound: "예선",
-    isActive: true,
-    debriefing: true,
-    optionSettings: stationSettings([station1, station2, station3]),
+    stations: [station1, station2, station3],
   },
-  adminActor,
+  leadActor,
 );
 assert.equal(addedStationSave.success, true, addedStationSave.message);
 assert.equal(addedStationSave.preservedScoreCount, 14);
@@ -444,15 +441,12 @@ assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "stati
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station3"));
 
 const removeStations = await rpc(
-  "updateCompetitionAdminSettings",
+  "saveIkrcStationSettings",
   {
-    code: "IKRC",
     currentRound: "예선",
-    isActive: true,
-    debriefing: true,
-    optionSettings: stationSettings([station2]),
+    stations: [station2],
   },
-  adminActor,
+  leadActor,
 );
 assert.equal(removeStations.success, true, removeStations.message);
 assert.equal(removeStations.stationChanged, true);

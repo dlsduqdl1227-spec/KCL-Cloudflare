@@ -1497,11 +1497,11 @@ body.kcl-admin-scroll-mode{height:100dvh!important;min-height:100dvh!important;o
 #pReviewEdit.ikrc-review-mode .review-eval-like-tabs{position:static!important;top:auto!important;z-index:auto!important;background:transparent!important;backdrop-filter:none!important;box-shadow:none!important}
 #pReviewEdit.ikrc-review-mode .review-group-tabs{margin-top:8px!important}
 .ikrc-station-config-list{display:grid;gap:8px;margin:10px 0}
-.ikrc-station-config-row{display:grid;grid-template-columns:minmax(82px,.8fr) minmax(76px,1fr) minmax(70px,.7fr) minmax(70px,.7fr) 42px;gap:8px;align-items:end;padding:10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.025)}
+.ikrc-station-config-row{display:grid;grid-template-columns:minmax(82px,.8fr) minmax(76px,1fr) minmax(70px,.7fr) minmax(70px,.7fr) 68px;gap:8px;align-items:end;padding:10px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.025)}
 .ikrc-station-config-row label{display:grid;gap:5px;font-size:11px;color:var(--text-3)}
 .ikrc-station-config-row input{margin:0!important;min-width:0!important}
 .ikrc-station-row-title{align-self:center;font-size:13px;font-weight:800;color:var(--text-2)}
-.ikrc-station-remove{width:42px!important;min-width:42px!important;height:42px!important;margin:0!important;padding:0!important;border-radius:8px!important;font-size:20px!important}
+.ikrc-station-remove{width:68px!important;min-width:68px!important;height:42px!important;margin:0!important;padding:0 10px!important;border-radius:8px!important;font-size:12px!important;font-weight:800!important}
 .ikrc-station-add{width:auto!important;margin:4px 0 0!important;padding:10px 14px!important}
 .ikrc-blind-station{margin:0 0 14px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
 .ikrc-blind-station-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px}
@@ -2310,8 +2310,19 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <h2 style="margin-top:8px">IKRC 스테이션·블라인드 배정</h2>
   <p style="text-align:center;color:var(--text-3);margin-bottom:18px;font-size:14px" id="ikrc-blind-sub"></p>
   <div class="review-edit-help" style="margin-bottom:14px">
-    이 화면은 관리자와 IKRC 대회팀장만 볼 수 있습니다. 각 코드에 연결된 선수명은 일반 심사위원에게 공개되지 않습니다. 스테이션 범위를 바꾼 경우 먼저 운영 설정을 저장한 뒤 새로고침하세요.
+    이 화면은 관리자와 IKRC 대회팀장만 볼 수 있습니다. 각 코드에 연결된 선수명은 일반 심사위원에게 공개되지 않습니다.
   </div>
+  <div class="section-label">스테이션 관리</div>
+  <div class="review-edit-help" style="margin-bottom:10px">
+    스테이션을 추가하거나 삭제한 뒤 반드시 <b>스테이션 설정 저장</b>을 눌러주세요. 삭제해도 기존 평가점수와 백업 데이터는 지워지지 않습니다.
+  </div>
+  <div class="ikrc-station-config-list" id="ikrc-blind-ikrc-stations-IKRC"></div>
+  <div class="admin-comp-actions" style="margin-bottom:16px">
+    <button class="btn-outline ikrc-station-add" type="button" onclick="ikrcAddStationConfigRow_('ikrc-blind','IKRC')">+ 스테이션 추가</button>
+    <button class="btn" id="ikrc-blind-station-save" type="button" onclick="saveIkrcBlindStationSettings_()">스테이션 설정 저장</button>
+  </div>
+  <div class="divider"></div>
+  <div class="section-label">선수 블라인드 배정</div>
   <button class="btn-outline" type="button" onclick="loadIkrcBlindAssignments_()">배정 새로고침</button>
   <div class="ikrc-blind-summary" id="ikrc-blind-summary">블라인드 배정을 불러오는 중입니다.</div>
   <div id="ikrc-blind-map"></div>
@@ -3479,7 +3490,7 @@ function ikrcStationConfigRowHtml_(station, index) {
     '<label>코드<input type="text" maxlength="8" autocapitalize="characters" data-field="prefix" value="' + escHtml(stationPrefix) + '" placeholder="' + escHtml(ikrcDefaultStationPrefix_(index)) + '"></label>' +
     '<label>시작 번호<input type="number" min="1" max="99" inputmode="numeric" data-field="start" value="' + start + '"></label>' +
     '<label>끝 번호<input type="number" min="1" max="99" inputmode="numeric" data-field="end" value="' + end + '"></label>' +
-    '<button type="button" class="btn-danger ikrc-station-remove" title="스테이션 삭제" aria-label="스테이션 삭제" onclick="ikrcRemoveStationConfigRow_(this)">×</button>' +
+    '<button type="button" class="btn-danger ikrc-station-remove" title="스테이션 삭제" aria-label="' + escHtml(stationLabel) + ' 삭제" onclick="ikrcRemoveStationConfigRow_(this)">삭제</button>' +
   '</div>';
 }
 function ikrcRenumberStationConfigRows_(container) {
@@ -3505,8 +3516,15 @@ function ikrcAddStationConfigRow_(prefix, code) {
   if (!container) return;
   var count = container.querySelectorAll('[data-ikrc-station-row]').length;
   if (count >= 12) { toast('IKRC 스테이션은 최대 12개까지 등록할 수 있습니다.', true); return; }
+  var usedPrefixes = {};
+  Array.prototype.forEach.call(container.querySelectorAll('[data-ikrc-station-row] [data-field="prefix"]'), function(input){
+    var value = ikrcStationPrefix_(input && input.value, '');
+    if (value) usedPrefixes[value] = true;
+  });
+  var prefixIndex = 0;
+  while (usedPrefixes[ikrcDefaultStationPrefix_(prefixIndex)] && prefixIndex < 100) prefixIndex++;
   var nextNo = ikrcNextStationNumber_(container);
-  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({id:'station' + nextNo,label:'스테이션 ' + nextNo,prefix:ikrcDefaultStationPrefix_(count),start:1,end:10}, count));
+  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({id:'station' + nextNo,label:'스테이션 ' + nextNo,prefix:ikrcDefaultStationPrefix_(prefixIndex),start:1,end:10}, count));
   ikrcRenumberStationConfigRows_(container);
 }
 function ikrcRemoveStationConfigRow_(button) {
@@ -4483,9 +4501,11 @@ function loadIkrcBlindAssignments_() {
   var summary = document.getElementById('ikrc-blind-summary');
   var map = document.getElementById('ikrc-blind-map');
   var save = document.getElementById('ikrc-blind-save');
+  var stationSave = document.getElementById('ikrc-blind-station-save');
   if (summary) summary.textContent = '블라인드 배정을 불러오는 중입니다.';
   if (map) map.innerHTML = '';
   if (save) save.disabled = true;
+  if (stationSave) stationSave.disabled = true;
   showOverlay();
   google.script.run.withSuccessHandler(function(res){
     hideOverlay();
@@ -4506,6 +4526,10 @@ function renderIkrcBlindAssignments_(data) {
   var participants = Array.isArray(data.participants) ? data.participants : [];
   var stations = Array.isArray(data.stations) ? data.stations : [];
   var units = Array.isArray(data.units) ? data.units : [];
+  var stationConfig = document.getElementById('ikrc-blind-ikrc-stations-IKRC');
+  if (stationConfig) stationConfig.innerHTML = stations.map(function(station, index){ return ikrcStationConfigRowHtml_(station, index); }).join('');
+  var stationSave = document.getElementById('ikrc-blind-station-save');
+  if (stationSave) stationSave.disabled = false;
   var selectedByUnit = {};
   participants.forEach(function(player){ if (player.currentUnit && player.validUnit) selectedByUnit[player.currentUnit] = Number(player.participantId); });
   if (!map) return;
@@ -4534,6 +4558,37 @@ function renderIkrcBlindAssignments_(data) {
   }).join('');
   var save = document.getElementById('ikrc-blind-save'); if (save) save.disabled = false;
   ikrcUpdateBlindSummary_();
+}
+function saveIkrcBlindStationSettings_() {
+  var data = _ikrcBlindState && _ikrcBlindState.data;
+  if (!data || !Array.isArray(data.stations)) { toast('스테이션 설정을 다시 불러와주세요.', true); return; }
+  var parsed = configSelectableOptionsPayload_('IKRC', 'ikrc-blind', {
+    currentRound:data.currentRound,
+    optionSettings:{ikrcStations:{stations:data.stations}}
+  });
+  if (parsed === false) return;
+  var stations = parsed && parsed.ikrcStations && parsed.ikrcStations.stations || [];
+  var allowedUnits = {};
+  stations.forEach(function(station){
+    for (var no=Number(station.start); no<=Number(station.end); no++) allowedUnits[String(station.prefix) + '-' + no] = true;
+  });
+  var affected = (data.participants || []).filter(function(player){
+    return player.currentUnit && !allowedUnits[String(player.currentUnit).toUpperCase()];
+  }).length;
+  var message = 'IKRC ' + (data.currentRound || '') + ' 스테이션 설정을 저장할까요?\n' +
+    '현재 ' + data.stations.length + '개 → 변경 후 ' + stations.length + '개\n' +
+    '기존 평가점수와 백업 데이터는 삭제되지 않습니다.';
+  if (affected) message += '\n\n주의: 새 범위에서 벗어나는 선수 배정 ' + affected + '명은 미배정으로 표시됩니다.';
+  if (!confirm(message)) return;
+  showOverlay();
+  google.script.run.withSuccessHandler(function(res){
+    hideOverlay();
+    toast((res && res.message) || (res && res.success ? '스테이션 설정 저장 완료' : '스테이션 설정 저장 실패'), !(res && res.success));
+    if (res && res.success) loadIkrcBlindAssignments_();
+  }).withFailureHandler(function(err){
+    hideOverlay();
+    toast('스테이션 설정 저장 실패: ' + ((err && err.message) || err || ''), true);
+  }).saveIkrcStationSettings({currentRound:data.currentRound, stations:stations}, adminActorPayload_());
 }
 function ikrcBlindAssignmentChanged_(select) {
   if (!select || !select.value) { ikrcUpdateBlindSummary_(); return; }
