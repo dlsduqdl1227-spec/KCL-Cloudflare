@@ -366,6 +366,10 @@ assert.equal(
   "Overall calibration must merge every original team into one calibration team",
 );
 
+const mobReviewComment = "향미의 연결성과 밸런스를 확인한 MOB 전체 종합 코멘트";
+const mobReviewPayload = genericPayload(judge, "MOB", "MOB-1", 55);
+mobReviewPayload.rows[0].extraFields["종합코멘트"] = mobReviewComment;
+
 for (const [code, payload, signature] of [
   ["KBC", genericPayload(judge, "KBC", "KBC-1", 81), ""],
   [
@@ -381,7 +385,7 @@ for (const [code, payload, signature] of [
     kcrStationPayload(judge, kcrStation1, [70, 72]),
     "",
   ],
-  ["MOB", genericPayload(judge, "MOB", "MOB-1", 55), ""],
+  ["MOB", mobReviewPayload, ""],
   ["MOC", genericPayload(judge, "MOC", "MOC-1", 5), "data:image/png;base64,UUE="],
   ["KTCC", genericPayload(judge, "KTCC", "KTCC-1", 8), "data:image/png;base64,UUE="],
 ]) {
@@ -459,6 +463,7 @@ for (const [code, minimum] of Object.entries(reviewExpectedMinimums)) {
 }
 assert.equal(reviewLists.IKRC.list.length, 16, "IKRC head official scores must be included in the normal review list");
 assert.equal(reviewLists.KCR.list.length, 4, "KCR station/all calibration rows must stay out of official competition review");
+assert.equal(reviewLists.MOB.list[0]["종합코멘트"], mobReviewComment, "MOB review must expose the submitted overall comment verbatim");
 assert.ok(reviewLists.IKRC.list.some((item) => item.judgeName === "QA 헤드" || item["심사위원명"] === "QA 헤드"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "X-1"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "Y-2"));

@@ -1165,6 +1165,7 @@ button,input,select,textarea{font-family:'Pretendard', -apple-system, BlinkMacSy
 .review-comment-center{background:rgba(255,255,255,.05);border:1.5px solid var(--border-lt);border-radius:15px;padding:14px;margin:0 0 16px}
 .review-comment-center .review-overall-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
 .review-comment-center textarea{min-height:138px;margin:10px 0 0}
+.review-comment-center textarea[readonly]{color:var(--text);background:rgba(255,255,255,.035);border-color:var(--border);cursor:text;opacity:1}
 .review-comment-center .btn-gen-comment{margin:0;white-space:nowrap;min-width:132px}
 .review-comment-insights{background:rgba(0,0,0,.22);border:1px solid var(--border);border-radius:10px;padding:11px;margin:10px 0 8px}
 .review-comment-insights-title{font-size:12px;font-weight:900;color:#fff;margin-bottom:7px;letter-spacing:.2px}
@@ -7996,8 +7997,10 @@ function reviewSetFieldValueByIndex_(idx, value) {
   });
 }
 function ensureReviewOverallCard_() {
+  var currentCode = String((_reviewState && _reviewState.code) || '').toUpperCase();
   var code = reviewCommentGeneratorCode_();
-  if (!code) return;
+  var isMobManualComment = currentCode === 'MOB';
+  if (!code && !isMobManualComment) return;
   var idx = reviewOverallCommentIndex_();
   if (idx < 0) return;
   var wrap = document.getElementById('review-edit-fields');
@@ -8006,21 +8009,25 @@ function ensureReviewOverallCard_() {
   var h = (_reviewState.headers || [])[idx] || '종합코멘트';
   var item = _reviewState.current || {};
   var val = item[h] != null ? item[h] : (item['_col' + idx] || '');
-  var editable = canReviewEditDetails();
+  var editable = !isMobManualComment && canReviewEditDetails();
   var card = document.createElement('div');
   card.className = 'review-comment-center';
   card.id = 'review-overall-card';
+  var title = isMobManualComment ? 'MOB 전체 종합 코멘트' : '전체 코멘트';
+  var sub = isMobManualComment ? '심사위원이 제출한 수기 원문입니다. 검수 화면에서는 확인만 할 수 있습니다.' : '항목별 코멘트가 없을 경우 이 영역의 전체 코멘트만 저장·반영됩니다.';
+  var generateButton = isMobManualComment ? '' : '<button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">초안 생성</button>';
+  var insights = isMobManualComment ? '' : '<div id="review-comment-insights-wrap"></div><div class="gen-comment-area" id="review-gen-comment-area-' + idx + '"></div>';
+  var inputHandlers = isMobManualComment ? ' readonly aria-readonly="true"' : ' oninput="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave()" onblur="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave(true)"' + (!editable ? ' disabled' : '');
   card.innerHTML =
     '<div class="review-overall-head">' +
-      '<div><div class="review-overall-title">전체 코멘트</div>' +
-      '<div class="review-overall-sub">항목별 코멘트가 없을 경우 이 영역의 전체 코멘트만 저장·반영됩니다.</div></div>' +
-      '<button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">초안 생성</button>' +
+      '<div><div class="review-overall-title">' + title + '</div>' +
+      '<div class="review-overall-sub">' + sub + '</div></div>' +
+      generateButton +
     '</div>' +
-    '<div id="review-comment-insights-wrap"></div>' +
-    '<div class="gen-comment-area" id="review-gen-comment-area-' + idx + '"></div>' +
-    '<textarea data-col="' + idx + '" placeholder="최종 종합 코멘트를 입력하세요" oninput="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave()" onblur="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave(true)"' + (!editable ? ' disabled' : '') + '>' + escHtml(String(val || '')) + '</textarea>';
+    insights +
+    '<textarea data-col="' + idx + '" placeholder="' + (isMobManualComment ? '제출된 MOB 전체 종합 코멘트가 없습니다.' : '최종 종합 코멘트를 입력하세요') + '"' + inputHandlers + '>' + escHtml(String(val || '')) + '</textarea>';
   wrap.insertBefore(card, wrap.firstChild);
-  updateReviewOverallInsights_();
+  if (!isMobManualComment) updateReviewOverallInsights_();
 }
 function renderReviewTopActionsV4_() {
   var top = document.getElementById('review-top-actions');
