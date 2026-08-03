@@ -2262,10 +2262,8 @@ function scoreBackupCategoryForItem_(code, item) {
   code = safeStr(code).toUpperCase();
   const mode = firstNonEmpty([item && item['모드'], item && item.mode, item && item.evalMode]);
   const status = firstNonEmpty([item && item['검수상태'], item && item.status, item && item.reviewStatus]);
-  const role = firstNonEmpty([item && item['역할'], item && item.role, item && item['심사위원역할'], item && item.judgeRole, item && item['Judge Role']]);
   if (isCalibrationMode_(mode)) return { category: '켈리브레이션', reason: '켈리브레이션 모드' };
   if (isCalibrationMode_(status)) return { category: '켈리브레이션', reason: '켈리브레이션 검수상태' };
-  if (code === 'MOB' && isHeadRole_(role)) return { category: '켈리브레이션', reason: '헤드 심사위원 켈리브레이션' };
   return { category: '실제평가', reason: '' };
 }
 function scoreBackupExclusionReason_(code, item, categoryInfo) {
@@ -2603,9 +2601,11 @@ async function submitScores(env, payload, signature, request = null) {
       onePayload.judgeRole = actorRole;
       onePayload.role = actorRole;
     }
-    if (actorTeam) {
-      onePayload.team = actorTeam;
-      onePayload.teamGroup = actorTeam;
+    const evaluationCategory = scoreEvaluationCategoryKey_(onePayload.mode || onePayload.evalMode || initial.mode);
+    const securedTeam = evaluationCategory === 'calibration:all' ? '전체 켈리브레이션팀' : actorTeam;
+    if (securedTeam) {
+      onePayload.team = securedTeam;
+      onePayload.teamGroup = securedTeam;
     }
     onePayload.actorType = auth.actor && (auth.actor.type || auth.actor.accountType) || '';
     if (onePayload.judge && typeof onePayload.judge === 'object') {
@@ -2645,10 +2645,10 @@ async function submitScores(env, payload, signature, request = null) {
     if (x.code === 'IKRC') {
       const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
         .bind(x.code, x.round, x.role, x.unit).all();
-      const submittedAsCalibration = isCalibrationMode_(x.mode);
+      const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
       const existingSameCategory = (existingRows.results || []).find(existing =>
         scoreOwnedByActor_(existing, auth.actor) &&
-        isCalibrationMode_(existing.mode) === submittedAsCalibration
+        scoreEvaluationCategoryKey_(existing.mode) === submittedCategory
       );
       if (existingSameCategory) {
         return {
@@ -2662,11 +2662,11 @@ async function submitScores(env, payload, signature, request = null) {
       const processKey = kcrProcessKeyFromPayload_(onePayload);
       const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
         .bind(x.code, x.round, x.role, x.unit).all();
-      const submittedAsCalibration = isCalibrationMode_(x.mode) || isHeadRole_(x.role);
+      const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
       const existingSameCategory = (existingRows.results || []).find(existing => {
         const existingPayload = parseJson(existing.payload_json, {});
         return scoreOwnedByActor_(existing, auth.actor)
-          && (isCalibrationMode_(existing.mode) || isHeadRole_(existing.role)) === submittedAsCalibration
+          && scoreEvaluationCategoryKey_(existing.mode) === submittedCategory
           && kcrProcessKeyFromPayload_(existingPayload) === processKey;
       });
       if (existingSameCategory) {
@@ -2680,7 +2680,8 @@ async function submitScores(env, payload, signature, request = null) {
     if (x.code === 'KBC') {
       const existingKbcRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=?`)
         .bind(x.code, x.round, x.role, x.unit).all();
-      const existingKbc = (existingKbcRows.results || []).find(row => scoreOwnedByActor_(row, auth.actor));
+      const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
+      const existingKbc = (existingKbcRows.results || []).find(row => scoreOwnedByActor_(row, auth.actor) && scoreEvaluationCategoryKey_(row.mode) === submittedCategory);
       if (existingKbc && existingKbc.id) {
         return { success: false, message: '이미 제출된 KBC 평가입니다. 같은 심사위원의 같은 참가자 평가는 검수 화면에서 수정해주세요.', duplicateId: existingKbc.id };
       }
@@ -2690,7 +2691,7 @@ async function submitScores(env, payload, signature, request = null) {
         .bind(x.code, x.round, x.judgeName, x.unit, payloadJson, duplicateCutoff).first();
       if (dup && dup.id) { skipped++; continue; }
     }
-    const initialReviewStatus = (isCalibrationMode_(x.mode) || (x.code === 'MOB' && isHeadRole_(x.role))) ? '켈리브레이션' : '미검수';
+    const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : '미검수';
     const insertStatement = env.DB.prepare(`INSERT INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(nowIso(), x.code, x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
@@ -2725,9 +2726,8 @@ async function getReviewList(env, competitionCode, actorArg) {
     const pIdx = indexParticipantIdentities_(pRows.results || [], code);
     list = list.map(item => enrichReviewItemWithParticipant_(item, lookupParticipantIdentity_(pIdx, item.round || item['라운드'] || (cfg && cfg.current_round), itemNumber_(item) || item.unit), code));
   }
-  // 명시적인 켈리브레이션 데이터만 일반 검수에서 분리한다. IKRC 헤드의 공식 평가는 일반 검수·순위에 포함한다.
-  if (code === 'MOB') list = list.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role));
-  if (code === 'IKRC') list = list.filter(item => !isCalibrationMode_(item['모드'] || item.mode));
+  // 명시적인 켈리브레이션 데이터는 공식 검수에서 분리한다. 역할만으로는 켈리브레이션을 추론하지 않는다.
+  if (['KCR','KCAC','KBC','MOB','IKRC'].includes(code)) list = list.filter(item => !isCalibrationMode_(item['모드'] || item.mode));
   let supersededCount = 0;
   if (code === 'IKRC') {
     const latest = latestIkrcReviewItems_(list);
@@ -2928,7 +2928,10 @@ function latestCalibrationRowsByJudge_(rows) {
     return calibrationSortValue_(a).localeCompare(calibrationSortValue_(b));
   });
 }
-function canonicalCalibrationScopeTeam_() { return 'ALL'; }
+function canonicalCalibrationScopeTeam_(team) {
+  const t = safeStr(team);
+  return t ? ('TEAM:' + t.replace(/\s+/g, '_').slice(0, 64)) : 'ALL';
+}
 function mobCalNumberFromItem_(item) {
   return safeStr(item.unit || item['참가자번호'] || item['참가자 번호'] || item['선수번호'] || item['번호'] || item['컵번호']);
 }
@@ -2981,7 +2984,7 @@ function mobScoreObjectFromItem_(item) {
     comment: firstNonEmpty([item['종합코멘트'], item['전체 코멘트'], item['평가메모'], item['평가의견'], item['심사평'], item.comment, item['Comment']]),
     submittedAt: item.submittedAt || item['제출시간'] || '',
     reviewStatus: item.status || item['검수상태'] || '',
-    isHeadCalibration: isCalibrationMode_(item['모드'] || item.mode) || isHeadRole_(item['역할'] || item.role),
+    isHeadCalibration: isHeadRole_(item['역할'] || item.role),
     pre,
     service,
     post,
@@ -3022,9 +3025,13 @@ async function mobCalibrationRows_(env, requestedTeam, roleText, actorArg) {
     if (currentRound && safeStr(item.round || item['라운드']) && safeStr(item.round || item['라운드']) !== currentRound) return false;
     const roleCat = mobRoleCategoryServer_(item['역할'] || item.role);
     if (roleCat !== category) return false;
-    // Stage72: 켈리브레이션 표준편차는 로그인한 헤드 심사위원의 평가팀명이 아니라
-    // 동일 참가자·동일 라운드·동일 역할 카테고리 전체 일반 심사위원 제출값으로 계산한다.
-    // 팀명으로 필터링하면 Head A/센서리1팀/테크니컬팀처럼 등록명이 다른 헤드마다 결과가 달라질 수 있다.
+    const mode = safeStr(item['모드'] || item.mode);
+    if (!isCalibrationMode_(mode)) return false;
+    if (requestedTeam) {
+      if (!/팀별/.test(mode)) return false;
+      const rowTeam = safeStr(item['팀'] || item.team || item['평가팀']);
+      if (!rowTeam || !mobTeamMatchesServer_(requestedTeam, rowTeam)) return false;
+    } else if (/팀별/.test(mode)) return false;
     return true;
   });
   return { auth, category, currentRound, rows, label: mobCategoryLabelServer_(category) };
@@ -3032,18 +3039,19 @@ async function mobCalibrationRows_(env, requestedTeam, roleText, actorArg) {
 async function getMobCalibrationParticipantNumbers(env, requestedTeam, roleText, actorArg) {
   const data = await mobCalibrationRows_(env, requestedTeam, roleText, actorArg);
   if (data.error) return data.error;
-  const normal = latestCalibrationRowsByJudge_(data.rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role)));
-  if (!normal.length) return [];
+  const visible = latestCalibrationRowsByJudge_(data.rows);
+  if (!visible.length) return [];
   const checksRaw = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('MOB_CALIBRATION_CHECK').all();
   const checks = new Map();
   (checksRaw.results || []).forEach(r => checks.set(r.token, parseJson(r.payload_json, {})));
   const by = new Map();
-  normal.forEach(item => {
+  visible.forEach(item => {
     const no = mobCalNumberFromItem_(item);
-    const token = mobCalCheckToken_(canonicalCalibrationScopeTeam_(), data.category, no, data.currentRound);
-    const legacyToken = mobCalCheckToken_(requestedTeam, data.category, no, data.currentRound);
-    const cur = by.get(no) || { participantNo:no, checked:false, judgeCount:0, latestSubmittedAt:'', checkedAt:'', checkerName:'', categoryLabel:data.label };
-    cur.judgeCount += 1;
+    const token = mobCalCheckToken_(canonicalCalibrationScopeTeam_(requestedTeam), data.category, no, data.currentRound);
+    const legacyToken = mobCalCheckToken_(requestedTeam ? 'ALL' : requestedTeam, data.category, no, data.currentRound);
+    const cur = by.get(no) || { participantNo:no, checked:false, judgeCount:0, headCount:0, latestSubmittedAt:'', checkedAt:'', checkerName:'', categoryLabel:data.label };
+    if (isHeadRole_(item['역할'] || item.role)) cur.headCount += 1;
+    else cur.judgeCount += 1;
     const submittedAt = safeStr(item.submittedAt || item['제출시간']);
     if (submittedAt && (!cur.latestSubmittedAt || submittedAt > cur.latestSubmittedAt)) cur.latestSubmittedAt = submittedAt;
     const check = checks.get(token) || checks.get(legacyToken);
@@ -3059,8 +3067,8 @@ async function getMobCalibrationResultsByParticipant(env, participantNo, request
   const no = safeStr(participantNo);
   if (!no) return [];
   const targetRows = data.rows.filter(item => mobCalNumberFromItem_(item) === no);
-  const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role)));
-  const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isCalibrationMode_(item['모드'] || item.mode) || isHeadRole_(item['역할'] || item.role)));
+  const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isHeadRole_(item['역할'] || item.role)));
+  const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isHeadRole_(item['역할'] || item.role)));
   return normal.concat(heads).map(mobScoreObjectFromItem_).sort((a,b) => Number(a.isHeadCalibration) - Number(b.isHeadCalibration) || safeStr(a.judgeName).localeCompare(safeStr(b.judgeName), 'ko'));
 }
 async function markMobCalibrationChecked(env, participantNo, requestedTeam, checkerName, roleText, actorArg) {
@@ -3068,8 +3076,9 @@ async function markMobCalibrationChecked(env, participantNo, requestedTeam, chec
   if (data.error) return data.error;
   const no = safeStr(participantNo);
   if (!no) return { success:false, message:'참가자 번호가 없습니다.' };
-  const token = mobCalCheckToken_(canonicalCalibrationScopeTeam_(), data.category, no, data.currentRound);
-  const payload = { competitionCode:'MOB', participantNo:no, team:safeStr(requestedTeam), scopeTeam:canonicalCalibrationScopeTeam_(), category:data.category, role:safeStr(roleText), checkerName:safeStr(checkerName), checkedAt:nowIso(), round:data.currentRound };
+  const scopeTeam = canonicalCalibrationScopeTeam_(requestedTeam);
+  const token = mobCalCheckToken_(scopeTeam, data.category, no, data.currentRound);
+  const payload = { competitionCode:'MOB', participantNo:no, team:safeStr(requestedTeam), scopeTeam, category:data.category, role:safeStr(roleText), checkerName:safeStr(checkerName), checkedAt:nowIso(), round:data.currentRound };
   await env.DB.prepare('INSERT OR REPLACE INTO sessions (token, kind, payload_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
     .bind(token, 'MOB_CALIBRATION_CHECK', JSON.stringify(payload), '2035-12-31T23:59:59.000Z', nowIso()).run();
   return { success:true, message:'검수완료 처리되었습니다.', participantNo:no, checkedAt:payload.checkedAt };
@@ -3119,7 +3128,7 @@ function ikrcScoreObjectFromItem_(item) {
     mouthfeel: itemScore_(item, ['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','Mouthfeel']),
     comment: extraComment,
     submittedAt: item.submittedAt || item['제출시간'] || '',
-    isHeadCalibration: isCalibrationMode_(item['모드'] || item.mode)
+    isHeadCalibration: isHeadRole_(item['역할'] || item.role)
   };
 }
 function ikrcSensoryBaseScoreFromItem_(item) {
@@ -3154,10 +3163,13 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
     const no = ikrcSampleNoFromItem_(item);
     if (!no) return false;
     if (currentRound && safeStr(item.round || item['라운드']) && safeStr(item.round || item['라운드']) !== currentRound) return false;
+    const mode = safeStr(item['모드'] || item.mode);
+    if (!isCalibrationMode_(mode)) return false;
     if (scope.scope === 'team') {
+      if (!/팀별/.test(mode)) return false;
       const rowTeam = safeStr(item['팀'] || item.team || item['평가팀']);
       if (!rowTeam || !mobTeamMatchesServer_(scope.team, rowTeam)) return false;
-    }
+    } else if (/팀별/.test(mode)) return false;
     return true;
   });
   return { auth, currentRound, rows, scope, checkerKey };
@@ -3165,8 +3177,8 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
 async function getIkrcCalibrationCupNumbers(env, requestedScope, actorArg) {
   const data = await ikrcCalibrationRows_(env, requestedScope, actorArg);
   if (data.error) return data.error;
-  const normal = latestCalibrationRowsByJudge_(data.rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode)));
-  const heads = latestCalibrationRowsByJudge_(data.rows.filter(item => isCalibrationMode_(item['모드'] || item.mode)));
+  const normal = latestCalibrationRowsByJudge_(data.rows.filter(item => !isHeadRole_(item['역할'] || item.role)));
+  const heads = latestCalibrationRowsByJudge_(data.rows.filter(item => isHeadRole_(item['역할'] || item.role)));
   const visibleRows = normal.concat(heads);
   if (!visibleRows.length) return [];
   const checksRaw = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('IKRC_CALIBRATION_CHECK').all();
@@ -3177,7 +3189,7 @@ async function getIkrcCalibrationCupNumbers(env, requestedScope, actorArg) {
     const sampleNo = ikrcSampleNoFromItem_(item);
     const token = ikrcCalCheckToken_(data.scope.key, sampleNo, data.currentRound, data.checkerKey);
     const cur = by.get(sampleNo) || { sampleNo, checked:false, judgeCount:0, headCount:0, latestSubmittedAt:'', checkedAt:'', checkerName:'' };
-    if (isCalibrationMode_(item['모드'] || item.mode)) cur.headCount += 1;
+    if (isHeadRole_(item['역할'] || item.role)) cur.headCount += 1;
     else cur.judgeCount += 1;
     const submittedAt = safeStr(item.submittedAt || item['제출시간']);
     if (submittedAt && (!cur.latestSubmittedAt || submittedAt > cur.latestSubmittedAt)) cur.latestSubmittedAt = submittedAt;
@@ -3196,8 +3208,8 @@ async function getIkrcCalibrationResultsByCup(env, sampleNo, requestedScope, act
   const no = safeStr(sampleNo);
   if (!no) return [];
   const targetRows = data.rows.filter(item => ikrcSampleNoFromItem_(item) === no);
-  const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isCalibrationMode_(item['모드'] || item.mode)));
-  const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isCalibrationMode_(item['모드'] || item.mode)));
+  const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isHeadRole_(item['역할'] || item.role)));
+  const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isHeadRole_(item['역할'] || item.role)));
   return normal.concat(heads).map(ikrcScoreObjectFromItem_).sort((a,b) => Number(a.isHeadCalibration) - Number(b.isHeadCalibration) || safeStr(a.judgeName).localeCompare(safeStr(b.judgeName), 'ko'));
 }
 async function markIkrcCalibrationChecked(env, sampleNo, requestedScope, checkerName, roleText, actorArg) {
@@ -3301,6 +3313,13 @@ async function updateIkrcSeedToCupResult(env, target, bonus, memo, actorArg) {
 }
 
 function isCalibrationMode_(v) { return /켈리브레이션|캘리브레이션|calibration|calib/i.test(safeStr(v)); }
+function scoreEvaluationCategoryKey_(v) {
+  const mode = safeStr(v);
+  if (!isCalibrationMode_(mode)) return 'competition';
+  if (/팀별/.test(mode)) return 'calibration:team';
+  if (/전체/.test(mode)) return 'calibration:all';
+  return 'calibration:legacy';
+}
 function isHeadRole_(v) { return /헤드|head/i.test(safeStr(v)); }
 function itemNumber_(item) { return safeStr(item.unit || item['참가자번호'] || item['참가자 번호'] || item['팀번호'] || item['컵번호'] || item['샘플번호']); }
 function itemScore_(item, keys) { const n = firstNumberFromKeys_(item, keys || []); return n === null ? 0 : n; }
@@ -3391,7 +3410,6 @@ function shouldCountItemInRanking_(code, item) {
   if (!item) return false;
   if (rankingExcludedByReviewStatus_(item['검수상태'] || item.status)) return false;
   if (isCalibrationMode_(item['모드'] || item.mode)) return false;
-  if (code === 'MOB' && isHeadRole_(firstNonEmpty([item['역할'], item.role, item['심사위원역할'], item.judgeRole, item['Judge Role']]))) return false;
   return true;
 }
 function tieInfoForItem_(code, item, round) {

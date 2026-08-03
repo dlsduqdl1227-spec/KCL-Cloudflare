@@ -136,6 +136,12 @@ function ikrcPayload(login, stationInfo, mode = "judge") {
   };
 }
 
+function ikrcCalibrationPayload(login, stationInfo, scope) {
+  const payload = ikrcPayload(login, stationInfo, scope === "team" ? "IKRC 팀별 켈리브레이션" : "IKRC 전체 켈리브레이션");
+  payload.team = scope === "team" ? (login.teamGroup || "") : "전체 켈리브레이션팀";
+  return payload;
+}
+
 function genericPayload(login, code, unit, score, rows = null) {
   return {
     competitionCode: code,
@@ -291,6 +297,25 @@ assert.equal(
   16,
 );
 
+for (const [login, stationInfo, scope] of [
+  [judge, station1, "all"], [judge, station2, "all"], [judge, station3, "all"],
+  [head, station2, "all"], [head2, station2, "all"],
+  [judge, station1, "team"], [judge, station2, "team"], [judge, station3, "team"],
+  [head, station2, "team"], [head2, station2, "team"],
+]) {
+  const submitted = await rpc("submitScores", ikrcCalibrationPayload(login, stationInfo, scope));
+  assert.equal(submitted.success, true, `${login.name} ${scope} calibration: ${submitted.message}`);
+}
+assert.equal(
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
+  60,
+);
+assert.equal(
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC' AND mode LIKE '%전체 켈리브레이션%' AND team='전체 켈리브레이션팀'").get().n,
+  22,
+  "Overall calibration must merge every original team into one calibration team",
+);
+
 for (const [code, payload, signature] of [
   ["KBC", genericPayload(judge, "KBC", "KBC-1", 81), ""],
   [
@@ -407,20 +432,21 @@ const calibrationBeforeCheck = await rpc("getIkrcCalibrationCupNumbers", allScop
 });
 assert.equal(calibrationBeforeCheck.length, 10);
 const z1Before = calibrationBeforeCheck.find((item) => item.sampleNo === "Z-1");
-assert.equal(z1Before.judgeCount, 2);
-assert.equal(z1Before.headCount, 0);
+assert.equal(z1Before.judgeCount, 1);
+assert.equal(z1Before.headCount, 2);
 assert.equal(z1Before.checked, false);
 
 const calibrationDetail = await rpc("getIkrcCalibrationResultsByCup", "Z-1", allScope, {
   judgeToken: head.judgeToken,
 });
-assert.equal(calibrationDetail.length, 2);
-assert.equal(calibrationDetail.filter((item) => item.isHeadCalibration).length, 0);
+assert.equal(calibrationDetail.length, 3);
+assert.equal(calibrationDetail.filter((item) => item.isHeadCalibration).length, 2);
 
 const teamCalibration = await rpc("getIkrcCalibrationCupNumbers", teamScope, { judgeToken: head.judgeToken });
 assert.equal(teamCalibration.length, 10);
 const otherTeamCalibration = await rpc("getIkrcCalibrationCupNumbers", otherTeamScope, { judgeToken: head2.judgeToken });
-assert.equal(otherTeamCalibration.length, 0, "Team calibration must not mix another team's scores");
+assert.equal(otherTeamCalibration.length, 6, "Team calibration must use only its initially assigned team");
+assert.ok(otherTeamCalibration.every((item) => String(item.sampleNo).startsWith("Z-")));
 
 const checked = await rpc(
   "markIkrcCalibrationChecked",
@@ -461,8 +487,8 @@ for (const [code, review] of Object.entries(reviewLists)) {
 
 const backupBeforeDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
 assert.equal(backupBeforeDelete.success, true, backupBeforeDelete.message);
-assert.equal(backupBeforeDelete.rows.length, 16);
-assert.equal(backupBeforeDelete.calibrationRows.length, 0);
+assert.equal(backupBeforeDelete.rows.length, 60);
+assert.equal(backupBeforeDelete.calibrationRows.length, 44);
 assert.equal(backupBeforeDelete.competitionRows.length, 16);
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station1"));
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station3"));
@@ -477,10 +503,10 @@ const removeStations = await rpc(
 );
 assert.equal(removeStations.success, true, removeStations.message);
 assert.equal(removeStations.stationChanged, true);
-assert.equal(removeStations.preservedScoreCount, 16);
+assert.equal(removeStations.preservedScoreCount, 60);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  16,
+  60,
 );
 
 const configAfterDelete = await rpc("getConfig");
@@ -495,7 +521,7 @@ const oldStationSubmit = await rpc("submitScores", ikrcPayload(judge, station1))
 assert.equal(oldStationSubmit.success, false);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  16,
+  60,
 );
 
 const reviewAfterStationDelete = await rpc("getReviewList", "IKRC", adminActor);
@@ -523,11 +549,11 @@ const adminDelete = await rpc(
 assert.equal(adminDelete.success, true, adminDelete.message);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  15,
+  59,
 );
 
 const backupAfterDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
-assert.equal(backupAfterDelete.rows.length, 15);
+assert.equal(backupAfterDelete.rows.length, 59);
 assert.ok(backupAfterDelete.rows.some((row) => row["스테이션ID"] === "station3"));
 
 const storedPayloads = testDb.raw
