@@ -4611,36 +4611,161 @@ function _optionSet(lines, variationKey='') {
   }));
 }
 
+function _sensoryOptionSet_(lines, variationKey='') {
+  const uniq = [];
+  (lines || []).forEach(line => {
+    const text = safeStr(line).replace(/\s+/g, ' ').replace(/\.\./g, '.').replace(/\s+([,.])/g, '$1').trim();
+    if (text && !uniq.includes(text)) uniq.push(text);
+  });
+  if (uniq.length < 2 || !variationKey) return _result(uniq);
+  const hash = _commentHash_(variationKey);
+  const firstIndex = hash % uniq.length;
+  const step = 1 + ((hash >>> 5) % (uniq.length - 1));
+  const secondIndex = (firstIndex + step) % uniq.length;
+  return _result([uniq[firstIndex], uniq[secondIndex]]);
+}
+
 function generateCuppingComment(payload) {
   payload = payload || {};
   const tags = payload.tags || {};
-  const process = safeStr(payload.process || '');
-  const items = [
+  const sensoryItems = [
     {name:'Flavor', score:payload.flavor},
     {name:'Aftertaste', score:payload.aftertaste},
     {name:'Acidity', score:payload.acidity},
     {name:'Sweetness', score:payload.sweetness},
-    {name:'Mouthfeel', score:payload.mouthfeel},
-    {name:'Overall', score:payload.overall}
+    {name:'Mouthfeel', score:payload.mouthfeel}
   ];
-  const flavor = _tagPhrase_(tags, 'flavor', '주요 향미');
-  const after = _tagPhrase_(tags, 'aftertaste', '여운');
-  const acidity = _tagPhrase_(tags, 'acidity', '산미');
-  const sweet = _tagPhrase_(tags, 'sweetness', '단맛');
-  const mouthfeel = _tagPhrase_(tags, 'mouthfeel', '마우스필');
-  const avg = _avg(items.map(x=>x.score));
-  const hl = _lowHighScore(items);
+  const flavorTags = _tagList_(tags, 'flavor', 3);
+  const aftertasteTags = _tagList_(tags, 'aftertaste', 3);
+  const acidityTags = _tagList_(tags, 'acidity', 3);
+  const sweetnessTags = _tagList_(tags, 'sweetness', 3);
+  const mouthfeelTags = _tagList_(tags, 'mouthfeel', 3);
+
+  function intensityAdjective(value) {
+    const labels = {1:'매우 약한', 2:'약한', 3:'다소 약한', 4:'중간', 5:'다소 강한', 6:'강한', 7:'매우 강한'};
+    return labels[parseInt(value, 10)] || '';
+  }
+  function qualityLevel(score) {
+    const value = _num(score);
+    if (value >= 4.2) return 0;
+    if (value >= 3.6) return 1;
+    if (value >= 3.0) return 2;
+    if (value >= 2.4) return 3;
+    return 4;
+  }
+  function qualityText(kind, score) {
+    const phrases = {
+      flavor:[
+        '향미의 구분과 선명도가 높습니다',
+        '향미가 비교적 명확하게 구분됩니다',
+        '주요 향미는 확인되지만 세부 구분은 다소 흐립니다',
+        '향미의 선명도가 다소 낮게 나타납니다',
+        '향미가 명확하게 구분되지 않습니다'
+      ],
+      aftertaste:[
+        '마무리가 깨끗하고 안정적입니다',
+        '여운과 마무리가 비교적 자연스럽습니다',
+        '마무리의 정돈감은 다소 부족합니다',
+        '연결과 마무리가 다소 거칠게 나타납니다',
+        '지속성과 마무리의 완성도가 충분히 형성되지 않았습니다'
+      ],
+      acidity:[
+        '단맛과 향미 사이에서 조화롭게 연결됩니다',
+        '컵의 구조 안에서 비교적 안정적으로 연결됩니다',
+        '기본 구조는 확인되지만 다른 요소와의 연결은 다소 약합니다',
+        '다른 요소와의 조화가 약하게 나타납니다',
+        '산미의 질과 연결성이 충분히 형성되지 않았습니다'
+      ],
+      sweetness:[
+        '향미를 안정적으로 받치며 지속성도 좋습니다',
+        '향미를 비교적 안정적으로 뒷받침합니다',
+        '향미를 받치는 힘은 크지 않습니다',
+        '선명도와 지속성이 다소 낮습니다',
+        '존재감과 지속성이 충분하지 않습니다'
+      ],
+      mouthfeel:[
+        '질감의 밀도와 정돈감이 좋습니다',
+        '질감이 비교적 매끄럽고 안정적입니다',
+        '기본 촉감은 확인되지만 질감의 세부 정돈은 다소 부족합니다',
+        '질감의 균일성과 정돈감이 다소 낮습니다',
+        '질감이 거칠거나 비어 있는 인상으로 남습니다'
+      ]
+    };
+    return phrases[kind][qualityLevel(score)];
+  }
+  function joinSensoryTags(list) {
+    const values = (list || []).filter(Boolean);
+    if (values.length < 2) return values[0] || '';
+    const beforeLast = values.slice(0, -1).join(', ');
+    const code = beforeLast.charCodeAt(beforeLast.length - 1);
+    const hasBatchim = code >= 0xAC00 && code <= 0xD7A3 && ((code - 0xAC00) % 28) !== 0;
+    return beforeLast + (hasBatchim ? '과 ' : '와 ') + values[values.length - 1];
+  }
+  function nounFromTags(list, suffix, fallback, usePossessive) {
+    if (!list.length) return fallback;
+    const labels = joinSensoryTags(list);
+    return usePossessive ? `${labels}의 ${suffix}` : `${labels} ${suffix}`;
+  }
+  function subject(text) { return text + _subjectParticle_(text); }
+  function topic(text) { return text + _topicParticle_(text); }
+  function observationSentences(text) {
+    return _briefComments(text, 3).map(entry => {
+      let sentence = safeStr(entry).replace(/^[^:：]{1,24}[:：]\s*/, '').replace(/[.!?]+$/, '').trim();
+      if (!sentence) return '';
+      sentence = sentence
+        .replace(/남음$/, '남습니다')
+        .replace(/됨$/, '됩니다')
+        .replace(/함$/, '합니다')
+        .replace(/짐$/, '집니다')
+        .replace(/음$/, '습니다');
+      if (!/(?:습니다|됩니다|합니다|집니다|입니다|다)$/.test(sentence)) sentence += '입니다';
+      return sentence + '.';
+    }).filter(Boolean).join(' ');
+  }
+
+  const flavorNoun = nounFromTags(flavorTags, '향미', '주요 향미', true);
+  const acidityNoun = nounFromTags(acidityTags, '인상의 산미', '산미');
+  const sweetnessNoun = nounFromTags(sweetnessTags, '인상의 단맛', '단맛');
+  const mouthfeelNoun = nounFromTags(mouthfeelTags, '질감', '마우스필');
+  const aftertasteNoun = aftertasteTags.length ? `${aftertasteTags.join(', ')} 특성이 남는 여운` : '여운';
+  const flavorIntensity = intensityAdjective(payload.flavorIntensity);
+  const acidityIntensity = intensityAdjective(payload.acidityIntensity);
+  const sweetnessIntensity = intensityAdjective(payload.sweetnessIntensity);
+  const mouthfeelIntensity = intensityAdjective(payload.mouthfeelIntensity);
+  const aftertastePersistence = intensityAdjective(payload.aftertastePersistence);
+
+  const flavorSentence = `${topic(flavorNoun)} ${flavorIntensity ? flavorIntensity + ' 강도로 ' : ''}감지되며, ${qualityText('flavor', payload.flavor)}.`;
+  const balanceSentence = `${topic(acidityNoun)} ${acidityIntensity ? acidityIntensity + ' 강도로 ' : ''}나타나며, ${qualityText('acidity', payload.acidity)}. ${topic(sweetnessNoun)} ${sweetnessIntensity ? sweetnessIntensity + ' 강도로 ' : ''}감지되며, ${qualityText('sweetness', payload.sweetness)}.`;
+  const finishSentence = `${topic(mouthfeelNoun)} ${mouthfeelIntensity ? mouthfeelIntensity + ' 강도로 ' : ''}느껴지며, ${qualityText('mouthfeel', payload.mouthfeel)}. ${topic(aftertasteNoun)} ${aftertastePersistence ? aftertastePersistence + ' 수준으로 ' : ''}이어지고, ${qualityText('aftertaste', payload.aftertaste)}.`;
+
+  const hl = _lowHighScore(sensoryItems);
   const high = hl.high ? _areaKorean_(hl.high.name) : '';
   const low = hl.low && hl.low !== hl.high ? _areaKorean_(hl.low.name) : '';
-  const tone = avg >= 4 ? '향미 표현이 선명하게 드러난 컵' : (avg >= 3 ? '기본 향미 구조가 확인되는 컵' : '향미 구조의 불안정성이 함께 확인된 컵');
-  const processText = process ? `${process} 프로세스의 특성이 반영되어 ` : '';
-  const axis = high && low ? `${high}이 가장 두드러졌고, ${low}은 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 나타났습니다.';
-  const comments = _briefComments(payload.attributeComments, 5);
-  const manualText = comments.length ? `직접 입력 코멘트에는 ${comments.join(' / ')} 내용이 기록되었습니다.` : '';
-  return _optionSet([
-    `${processText}${flavor} 인상을 중심으로 첫 향미가 형성됩니다. 이후 ${after}의 흐름과 ${acidity}의 산미 구조, ${sweet}의 단맛, ${mouthfeel}의 마우스필이 연결됩니다. 전체적으로 ${tone}으로 평가됩니다. ${manualText}`,
-    `${flavor} 계열의 향미가 주요 인상으로 기록되었고, 에프터테이스트는 ${after} 방향으로 이어졌습니다. 산미는 ${acidity}, 단맛은 ${sweet}, 마우스필은 ${mouthfeel} 특성으로 나타나 전체 컵의 구조를 구성했습니다. ${axis} ${manualText}`,
-    `평균 ${_fmt(avg)}점의 흐름에서 플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성을 확인했습니다. 현재 기록된 감각 단서는 ${flavor}, ${after}, ${sweet}이며, 전체적으로 ${tone}입니다. ${manualText}`
+  const spread = hl.high && hl.low ? _num(hl.high.score) - _num(hl.low.score) : 0;
+  const axis = high && low && spread >= 0.4
+    ? `${high}${_topicParticle_(high)} 상대적으로 가장 안정적이고, ${low}${_topicParticle_(low)} 가장 제한적으로 평가되었습니다.`
+    : '센서리 항목 사이의 완성도 차이는 크지 않게 평가되었습니다.';
+  const overallScore = _num(payload.overall) || _avg(sensoryItems.map(item => item.score));
+  const overallText = overallScore >= 4.2
+    ? '종합하면 향미의 구분, 균형, 질감과 마무리가 선명하게 연결되는 컵입니다.'
+    : overallScore >= 3.6
+      ? '종합하면 주요 향미와 구조가 비교적 안정적으로 이어지는 컵입니다.'
+      : overallScore >= 3.0
+        ? '종합하면 기본 향미는 확인되지만 일부 요소의 선명도와 연결은 다소 약한 컵입니다.'
+        : overallScore >= 2.4
+          ? '종합하면 향미의 구분과 요소 간 균형에 보완이 필요한 컵입니다.'
+          : '종합하면 향미의 선명도와 구조적 연결이 충분히 형성되지 않은 컵입니다.';
+  const manualText = observationSentences(payload.attributeComments);
+  const evidence = manualText ? manualText + ' ' : '';
+  const firstImpression = `첫 인상에서 ${subject(flavorNoun)} ${flavorIntensity ? flavorIntensity + ' 강도로 ' : ''}드러나며, ${qualityText('flavor', payload.flavor)}.`;
+  const middleStructure = `중반부에는 ${subject(acidityNoun)} ${acidityIntensity ? acidityIntensity + ' 강도로 ' : ''}나타나고 ${subject(sweetnessNoun)} ${sweetnessIntensity ? sweetnessIntensity + ' 강도로 ' : ''}이를 받칩니다. ${topic(acidityNoun)} ${qualityText('acidity', payload.acidity)}. ${topic(sweetnessNoun)} ${qualityText('sweetness', payload.sweetness)}.`;
+  const finishStructure = `후반부에는 ${subject(mouthfeelNoun)} ${mouthfeelIntensity ? mouthfeelIntensity + ' 강도로 ' : ''}느껴지고 ${subject(aftertasteNoun)} ${aftertastePersistence ? aftertastePersistence + ' 수준으로 ' : ''}이어집니다. ${topic(mouthfeelNoun)} ${qualityText('mouthfeel', payload.mouthfeel)}. ${topic(aftertasteNoun)} ${qualityText('aftertaste', payload.aftertaste)}.`;
+
+  return _sensoryOptionSet_([
+    `${flavorSentence} ${balanceSentence} ${finishSentence} ${evidence}${axis} ${overallText}`,
+    `향미 프로파일의 중심에는 ${subject(flavorNoun)} 놓이며${flavorIntensity ? ' ' + flavorIntensity + ' 강도로' : ''} 나타납니다. ${qualityText('flavor', payload.flavor)}. ${balanceSentence} ${finishSentence} ${evidence}${axis} ${overallText}`,
+    `${firstImpression} ${middleStructure} ${finishStructure} ${evidence}${axis} ${overallText}`,
+    `향미 전개는 ${flavorNoun}에서 시작해 산미와 단맛, 질감과 여운으로 이어집니다. ${flavorSentence} ${balanceSentence} ${finishSentence} ${evidence}${axis} ${overallText}`
   ], _commentVariationKey_(payload, 'KCR'));
 }
 

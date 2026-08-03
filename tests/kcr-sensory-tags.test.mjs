@@ -205,7 +205,7 @@ for (const name of [
   "safeStr", "_num", "_avg", "_result", "_scoreItems", "_lowHighScore",
   "_joinWithComma", "_cleanTagText_", "_tagList_", "_tagPhrase_",
   "_briefComments", "_areaKorean_", "_fmt", "_commentVariationKey_",
-  "_commentHash_", "_optionSet", "generateCuppingComment",
+  "_commentHash_", "_subjectParticle_", "_topicParticle_", "_sensoryOptionSet_", "generateCuppingComment",
 ]) vm.runInContext(extractFunction(rpc, name), rpcCommentContext);
 const overallResult = rpcCommentContext.generateCuppingComment({
   cupNumber:"1",
@@ -215,9 +215,62 @@ const overallResult = rpcCommentContext.generateCuppingComment({
 });
 assert.equal(overallResult.comments.length, 2);
 for (const text of overallResult.comments) {
-  assert.match(text, /오렌지 껍질 향이 선명함/);
-  assert.match(text, /식으면서 밝아짐/);
+  assert.match(text, /오렌지 껍질 향이 선명/);
+  assert.match(text, /식으면서 밝아/);
   assert.doesNotMatch(text, /1번\s*컵|해당\s*컵은/);
+  assert.doesNotMatch(text, /점수와 표현을 대조|감각 단서와 점수를 연결|평균 .*점의 흐름|직접 입력 코멘트에는|내용이 기록되었습니다/);
+  assert.doesNotMatch(text, /산미는 산미|단맛은 단맛|마우스필은 마우스필/);
 }
+
+const screenshotLikeResult = rpcCommentContext.generateCuppingComment({
+  judgeName:"QA KCR", variationSeed:"QA KCR|KCR|Cup1",
+  flavor:3.2, flavorIntensity:4,
+  aftertaste:3.0, aftertastePersistence:4,
+  acidity:2.6, acidityIntensity:4,
+  sweetness:3.0, sweetnessIntensity:4,
+  mouthfeel:3.0, mouthfeelIntensity:4,
+  overall:3.0,
+  tags:{ flavor:["핵과류 계열", "베리 계열"], aftertaste:[], acidity:[], sweetness:[], mouthfeel:[] },
+});
+assert.equal(screenshotLikeResult.comments.length, 2);
+for (const text of screenshotLikeResult.comments) {
+  assert.match(text, /핵과류 계열/);
+  assert.match(text, /베리 계열/);
+  assert.match(text, /산미/);
+  assert.match(text, /단맛/);
+  assert.match(text, /마우스필|질감/);
+  assert.match(text, /여운|에프터테이스트/);
+  assert.match(text, /선명도|구분|연결|균형/);
+  assert.doesNotMatch(text, /확인했습니다|기록되었습니다|구성했습니다|점수와 표현|감각 단서|평균 .*점/);
+  assert.doesNotMatch(text, /산미는 산미|단맛은 단맛|마우스필은 마우스필/);
+}
+
+const lowKcrResult = rpcCommentContext.generateCuppingComment({
+  judgeName:"QA 낮은 KCR", variationSeed:"QA 낮은 KCR|KCR|Cup2",
+  flavor:1.8, flavorIntensity:3,
+  aftertaste:1.6, aftertastePersistence:2,
+  acidity:1.4, acidityIntensity:5,
+  sweetness:1.8, sweetnessIntensity:2,
+  mouthfeel:1.6, mouthfeelIntensity:4,
+  overall:1.6,
+  tags:{ flavor:["종이 같은"], aftertaste:["드라이"], acidity:["Harsh"], sweetness:["플랫"], mouthfeel:["거친"] },
+});
+assert.equal(lowKcrResult.comments.length, 2);
+assert.match(lowKcrResult.comments.join(" "), /명확하게 구분되지|충분히 형성되지|조화가 약하게|존재감과 지속성이 충분하지/);
+assert.doesNotMatch(lowKcrResult.comments.join(" "), /선명하게 연결되는 컵|매우 선명|완성도 높은 컵/);
+
+const kcrVariationPairs = new Set();
+for (let index = 1; index <= 20; index += 1) {
+  const varied = rpcCommentContext.generateCuppingComment({
+    judgeName:`KCR 심사 ${index}`, variationSeed:`KCR 심사 ${index}|KCR|Cup1`,
+    flavor:3.8, flavorIntensity:5, aftertaste:3.6, aftertastePersistence:4,
+    acidity:3.4, acidityIntensity:4, sweetness:3.8, sweetnessIntensity:5,
+    mouthfeel:3.6, mouthfeelIntensity:4, overall:3.7,
+    tags:{ flavor:["복숭아", "재스민"], aftertaste:["깔끔한"], acidity:["브라이트"], sweetness:["꿀 같은"], mouthfeel:["실키"] },
+  });
+  assert.equal(varied.comments.length, 2);
+  kcrVariationPairs.add(varied.comments.join("\n---\n"));
+}
+assert.ok(kcrVariationPairs.size >= 8, `KCR 센서리 코멘트 구성의 반복이 과도합니다: ${kcrVariationPairs.size}종`);
 
 process.stdout.write("KCR sensory tag tests passed.\n");
