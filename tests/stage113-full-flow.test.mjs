@@ -142,6 +142,35 @@ function ikrcCalibrationPayload(login, stationInfo, scope) {
   return payload;
 }
 
+function kcrStationSettings(stations) {
+  return {
+    kcrProcesses: { washed: true, natural: true, blending: true },
+    kcrStations: { byRound: { 예선: stations, 결선: stations }, stations },
+  };
+}
+
+function kcrStationPayload(login, stationInfo, scores, mode = "judge") {
+  const rows = Array.from({ length: stationInfo.end - stationInfo.start + 1 }, (_, index) => {
+    const unit = `${stationInfo.prefix}-${stationInfo.start + index}`;
+    const score = scores[index] ?? scores[0] ?? 70;
+    return { data: [unit, mode.includes("켈리브레이션") ? "켈리브레이션" : stationInfo.process], extraFields: { Total: score } };
+  });
+  return {
+    competitionCode: "KCR",
+    judgeToken: login.judgeToken,
+    judgeName: login.name,
+    judgeRole: login.role,
+    team: login.teamGroup || "",
+    mode,
+    stationId: stationInfo.id,
+    stationLabel: stationInfo.label,
+    stationPrefix: stationInfo.prefix,
+    stationProcess: stationInfo.process,
+    stationSampleCount: rows.length,
+    rows,
+  };
+}
+
 function genericPayload(login, code, unit, score, rows = null) {
   return {
     competitionCode: code,
@@ -236,6 +265,7 @@ const leadActor = managedActor(lead);
 const station1 = station("station1", "스테이션 1", "X", 1, 2);
 const station2 = station("station2", "스테이션 2", "Z", 1, 6);
 const station3 = station("station3", "스테이션 3", "Y", 1, 2);
+const kcrStation1 = { id:"kcr-station1", label:"KCR 스테이션 1", prefix:"KCR", start:1, end:2, process:"Washed" };
 
 const initialStationSave = await rpc(
   "updateCompetitionAdminSettings",
@@ -250,6 +280,26 @@ const initialStationSave = await rpc(
   adminActor,
 );
 assert.equal(initialStationSave.success, true, initialStationSave.message);
+
+const initialKcrStationSave = await rpc(
+  "updateCompetitionAdminSettings",
+  {
+    code: "KCR",
+    name: "KCR Cupping",
+    currentRound: "예선",
+    isActive: true,
+    debriefing: true,
+    optionSettings: kcrStationSettings([kcrStation1]),
+  },
+  adminActor,
+);
+assert.equal(initialKcrStationSave.success, true, initialKcrStationSave.message);
+const partialKcrPayload = kcrStationPayload(judge, kcrStation1, [70, 72]);
+partialKcrPayload.rows.pop();
+partialKcrPayload.stationSampleCount = 1;
+const partialKcrSubmit = await rpc("submitScores", partialKcrPayload);
+assert.equal(partialKcrSubmit.success, false, "KCR station submission must reject a missing cup");
+assert.match(partialKcrSubmit.message, /2개 컵이 모두 있어야/);
 
 const participantSave = await rpc(
   "upsertParticipant",
@@ -328,10 +378,7 @@ for (const [code, payload, signature] of [
   ],
   [
     "KCR",
-    genericPayload(judge, "KCR", "KCR-1", 70, [
-      { data: ["KCR-1", "Washed"], extraFields: { Total: 70 } },
-      { data: ["KCR-2", "Washed"], extraFields: { Total: 72 } },
-    ]),
+    kcrStationPayload(judge, kcrStation1, [70, 72]),
     "",
   ],
   ["MOB", genericPayload(judge, "MOB", "MOB-1", 55), ""],
@@ -348,32 +395,27 @@ for (const [code, payload, signature] of [
 
 const secondJudgeSameKcrCup = await rpc(
   "submitScores",
-  genericPayload(judge2, "KCR", "KCR-1", 66, [
-    { data: ["KCR-1", "Washed"], extraFields: { Total: 66 } },
-  ]),
+  kcrStationPayload(judge2, kcrStation1, [66, 68]),
 );
 assert.equal(secondJudgeSameKcrCup.success, true, JSON.stringify(secondJudgeSameKcrCup));
-assert.equal(secondJudgeSameKcrCup.inserted, 1);
+assert.equal(secondJudgeSameKcrCup.inserted, 2);
 
 for (const [mode, team] of [
-  ["KCR 팀별 켈리브레이션", judge.teamGroup],
+  ["KCR 스테이션 켈리브레이션", kcrStation1.label],
   ["KCR 전체 켈리브레이션", "전체 켈리브레이션팀"],
 ]) {
-  const calibrationPayload = genericPayload(judge, "KCR", "KCR-1", 64, [
-    { data: ["KCR-1", "켈리브레이션"], extraFields: { Total: 64, "종합코멘트 사용여부": "사용 안 함" } },
-  ]);
-  calibrationPayload.mode = mode;
+  const calibrationPayload = kcrStationPayload(judge, kcrStation1, [64, 65], mode);
   calibrationPayload.team = team;
   const submitted = await rpc("submitScores", calibrationPayload);
   assert.equal(submitted.success, true, `${mode}: ${submitted.message}`);
 }
 assert.equal(
-  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%팀별 켈리브레이션%'").get().n,
-  1,
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%스테이션 켈리브레이션%' AND team='KCR 스테이션 1'").get().n,
+  2,
 );
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%전체 켈리브레이션%' AND team='전체 켈리브레이션팀'").get().n,
-  1,
+  2,
   "KCR overall calibration must use the shared overall-calibration team",
 );
 const independentKcrRows = testDb.raw
@@ -385,8 +427,14 @@ assert.deepEqual(
     ["QA 센서리", "KCR-1", 70],
     ["QA 센서리", "KCR-2", 72],
     ["QA 센서리2", "KCR-1", 66],
+    ["QA 센서리2", "KCR-2", 68],
   ],
   "같은 컵의 심사위원별 평가와 같은 심사위원의 컵별 평가는 각각 독립 행으로 저장되어야 합니다.",
+);
+assert.equal(
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode NOT LIKE '%켈리브레이션%' AND team='KCR 스테이션 1'").get().n,
+  4,
+  "KCR official scores must use the selected station instead of a mutable judge team",
 );
 
 const duplicateKbc = await rpc("submitScores", genericPayload(judge, "KBC", "KBC-1", 81));
@@ -396,7 +444,7 @@ assert.ok(duplicateKbc.duplicateId);
 const reviewExpectedMinimums = {
   KBC: 1,
   KCAC: 2,
-  KCR: 3,
+  KCR: 4,
   MOB: 1,
   MOC: 1,
   KTCC: 1,
@@ -410,7 +458,7 @@ for (const [code, minimum] of Object.entries(reviewExpectedMinimums)) {
   reviewLists[code] = review;
 }
 assert.equal(reviewLists.IKRC.list.length, 16, "IKRC head official scores must be included in the normal review list");
-assert.equal(reviewLists.KCR.list.length, 3, "KCR team/all calibration rows must stay out of official competition review");
+assert.equal(reviewLists.KCR.list.length, 4, "KCR station/all calibration rows must stay out of official competition review");
 assert.ok(reviewLists.IKRC.list.some((item) => item.judgeName === "QA 헤드" || item["심사위원명"] === "QA 헤드"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "X-1"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "Y-2"));

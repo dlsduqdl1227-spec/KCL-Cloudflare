@@ -34,7 +34,7 @@ assert.match(assessment, /id="btn-calibration-team"[^>]*>팀별 켈리브레이�
 assert.ok(assessment.indexOf('id="btn-review"') < assessment.indexOf('id="btn-calibration-team"'), "Review must appear before KCR calibration entry buttons");
 assert.match(extractFunction(assessment, "evaluationTeamForSubmit_"), /전체 켈리브레이션팀/);
 assert.match(extractFunction(assessment, "goCalibration"), /setEvaluationPurpose_\('calibration', scope\)/);
-assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /켈리브레이션\(팀별\)/);
+assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /켈리브레이션\(스테이션\)/);
 assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /켈리브레이션\(전체\)/);
 assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /대회검수/);
 
@@ -95,9 +95,9 @@ assert.match(kcrSubmitSource, /자동 생성 사용 안 함 · 직접 입력/);
 assert.match(kcrSubmitSource, /종합코멘트 사용여부/);
 assert.match(rpc, /'종합코멘트 사용여부'/);
 assert.match(assessment, /data-kcr-select-actions/);
-assert.match(assessment, /data-kcr-mode="cal-team"/);
+assert.match(assessment, /data-kcr-mode="cal-station"/);
 assert.match(assessment, /data-kcr-mode="cal-all"/);
-assert.match(extractFunction(assessment, "adminRenderRunCards_"), /kcr-cal-team/);
+assert.match(extractFunction(assessment, "adminRenderRunCards_"), /kcr-cal-station/);
 assert.match(extractFunction(assessment, "adminRenderRunCards_"), /kcr-cal-all/);
 assert.match(extractFunction(assessment, "loadTeamPanel"), /kcrCalibrationButtons/);
 

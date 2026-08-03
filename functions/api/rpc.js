@@ -890,6 +890,8 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
   const nextOptions = Object.assign({}, currentOptions, payload.optionSettings && typeof payload.optionSettings === 'object' ? payload.optionSettings : {});
   let ikrcStationChanged = false;
   let preservedIkrcScoreCount = 0;
+  let kcrStationChanged = false;
+  let preservedKcrScoreCount = 0;
   if (code === 'IKRC') {
     const checked = validateIkrcStationOptionSettings_(nextOptions.ikrcStations, nextRound);
     if (!checked.ok) return { success:false, message:checked.message };
@@ -901,6 +903,18 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
       preservedIkrcScoreCount = Number(scoreCount && scoreCount.n || 0);
     }
     nextOptions.ikrcStations = checked.settings;
+  }
+  if (code === 'KCR') {
+    const checked = validateKcrStationOptionSettings_(nextOptions.kcrStations, nextRound);
+    if (!checked.ok) return { success:false, message:checked.message };
+    const currentStations = kcrStationSettingsServer_(current, nextRound);
+    const nextStations = checked.list;
+    if (kcrStationFingerprintServer_(currentStations) !== kcrStationFingerprintServer_(nextStations)) {
+      kcrStationChanged = true;
+      const scoreCount = await env.DB.prepare('SELECT COUNT(*) AS n FROM scores WHERE competition_code=? AND round=?').bind(code, nextRound).first();
+      preservedKcrScoreCount = Number(scoreCount && scoreCount.n || 0);
+    }
+    nextOptions.kcrStations = checked.settings;
   }
   await env.DB.prepare(`UPDATE competitions SET name=?, current_round=?, is_active=?, debriefing=?, option_settings=?, updated_at=? WHERE code=?`)
     .bind(
@@ -915,9 +929,11 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
     success: true,
     message: ikrcStationChanged && preservedIkrcScoreCount
       ? `저장 완료. ${nextRound} 기존 IKRC 평가 ${preservedIkrcScoreCount}건은 삭제하지 않고 제출 당시 스테이션 정보와 함께 보존했습니다.`
-      : '저장 완료',
-    stationChanged: ikrcStationChanged,
-    preservedScoreCount: preservedIkrcScoreCount
+      : (kcrStationChanged && preservedKcrScoreCount
+        ? `저장 완료. ${nextRound} 기존 KCR 평가 ${preservedKcrScoreCount}건은 삭제하지 않고 제출 당시 스테이션 정보와 함께 보존했습니다.`
+        : '저장 완료'),
+    stationChanged: ikrcStationChanged || kcrStationChanged,
+    preservedScoreCount: preservedIkrcScoreCount || preservedKcrScoreCount
   };
 }
 
@@ -2120,10 +2136,11 @@ function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0) {
   item._scoreId = r.id;
   item._payloadRowIndex = payloadRowIndex;
   item['제출시간'] = r.submitted_at || ''; item['대회코드'] = r.competition_code || code; item['라운드'] = round; item['심사위원명'] = r.judge_name || payload.judgeName || ''; item['팀'] = r.team || payload.team || payload.teamGroup || ''; item['역할'] = r.role || payload.judgeRole || payload.role || ''; item['모드'] = r.mode || payload.mode || '';
-  if (normalizedCode === 'IKRC') {
+  if (normalizedCode === 'IKRC' || normalizedCode === 'KCR') {
     if (!item['스테이션ID']) item['스테이션ID'] = payload.stationId || '';
     if (!item['스테이션']) item['스테이션'] = payload.stationLabel || '';
     if (!item['스테이션코드']) item['스테이션코드'] = payload.stationPrefix || '';
+    if (normalizedCode === 'KCR' && !item['프로세스']) item['프로세스'] = payload.stationProcess || '';
   }
   if (!item['참가자번호']) item['참가자번호'] = unit; if (!item['참가자 번호']) item['참가자 번호'] = unit; if (!item['컵번호']) item['컵번호'] = unit; if (!item['샘플번호']) item['샘플번호'] = unit; if (!item['팀번호']) item['팀번호'] = unit;
   if (!item['선수명']) item['선수명'] = participantName; if (!item['참가자명']) item['참가자명'] = participantName; if (!item['팀명'] && code === 'KTCC') item['팀명'] = participantName;
@@ -2466,9 +2483,11 @@ function ikrcDefaultStationPrefixServer_(index) {
   index = Math.max(0, Number(index) || 0);
   return index < alphabet.length ? alphabet.charAt(index) : `S${index + 1}`;
 }
-function normalizeIkrcStationListServer_(source, strict=false) {
-  if (!Array.isArray(source) || !source.length) return { ok:false, message:'IKRC 스테이션을 1개 이상 등록해주세요.', list:[] };
-  if (source.length > 12) return { ok:false, message:'IKRC 스테이션은 최대 12개까지 등록할 수 있습니다.', list:[] };
+function normalizeIkrcStationListServer_(source, strict=false, competitionCode='IKRC') {
+  const code = String(competitionCode || '').trim().toUpperCase() || 'IKRC';
+  const maxPerStation = code === 'KCR' ? 20 : 50;
+  if (!Array.isArray(source) || !source.length) return { ok:false, message:`${code} 스테이션을 1개 이상 등록해주세요.`, list:[] };
+  if (source.length > 12) return { ok:false, message:`${code} 스테이션은 최대 12개까지 등록할 수 있습니다.`, list:[] };
   const used = new Set();
   const usedIds = new Set();
   const list = [];
@@ -2489,16 +2508,16 @@ function normalizeIkrcStationListServer_(source, strict=false) {
     let end = Math.floor(Number(item.end));
     if (!Number.isFinite(start) || start < 1 || start > 99) start = 1;
     if (!Number.isFinite(end) || end < 1 || end > 99) end = 10;
-    if (strict && used.has(prefix)) return { ok:false, message:`IKRC 스테이션 코드는 서로 달라야 합니다: ${prefix}`, list:[] };
+    if (strict && used.has(prefix)) return { ok:false, message:`${code} 스테이션 코드는 서로 달라야 합니다: ${prefix}`, list:[] };
     if (strict && end < start) return { ok:false, message:`스테이션 ${index + 1}의 끝 번호는 시작 번호보다 작을 수 없습니다.`, list:[] };
-    if (strict && end - start + 1 > 50) return { ok:false, message:`스테이션 ${index + 1}은 최대 50개 샘플까지 지정할 수 있습니다.`, list:[] };
+    if (strict && end - start + 1 > maxPerStation) return { ok:false, message:`${code} 스테이션 ${index + 1}은 최대 ${maxPerStation}개 ${code === 'KCR' ? '컵' : '샘플'}까지 지정할 수 있습니다.`, list:[] };
     if (used.has(prefix)) {
       prefix = fallback;
       let suffix = 2;
       while (used.has(prefix)) prefix = `${fallback}${suffix++}`.slice(0, 8);
     }
     if (end < start) end = start;
-    if (end - start + 1 > 50) end = start + 49;
+    if (end - start + 1 > maxPerStation) end = start + maxPerStation - 1;
     used.add(prefix);
     list.push({ id, label, prefix, start, end });
   }
@@ -2549,6 +2568,96 @@ function ikrcStationSettingsServer_(cfg, roundOverride) {
 }
 function ikrcStationFingerprintServer_(stations) {
   return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end].join(':')).join('|');
+}
+
+function kcrStationProcessServer_(value, index=0) {
+  const text = safeStr(value).replace(/\s+/g, '').toLowerCase();
+  if (/washed|wash|워시|워쉬/.test(text)) return 'Washed';
+  if (/natural|내추|네추|네츄|나추/.test(text)) return 'Natural';
+  if (/blending|blend|블렌|블랜/.test(text)) return 'Blending';
+  return ['Washed','Natural','Blending'][Math.max(0, Number(index) || 0) % 3];
+}
+function normalizeKcrStationListServer_(source, strict=false) {
+  const checked = normalizeIkrcStationListServer_(source, strict, 'KCR');
+  if (!checked.ok) return checked;
+  checked.list = checked.list.map((station, index) => Object.assign({}, station, {
+    process:kcrStationProcessServer_(source && source[index] && source[index].process, index)
+  }));
+  return checked;
+}
+function validateKcrStationOptionSettings_(rawSettings, currentRound) {
+  const raw = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+  const byRoundSource = raw.byRound && typeof raw.byRound === 'object' ? raw.byRound : {};
+  const legacy = Array.isArray(raw.stations) && raw.stations.length ? raw.stations : [
+    {prefix:'A', start:1, end:10, process:'Washed'},
+    {prefix:'B', start:1, end:10, process:'Natural'},
+    {prefix:'C', start:1, end:10, process:'Blending'}
+  ];
+  const byRound = {};
+  for (const key of ['예선','결선']) {
+    const source = Array.isArray(byRoundSource[key]) && byRoundSource[key].length ? byRoundSource[key] : legacy;
+    const checked = normalizeKcrStationListServer_(source, true);
+    if (!checked.ok) return checked;
+    byRound[key] = checked.list;
+  }
+  const roundKey = ikrcStationRoundKeyServer_(currentRound);
+  const active = byRound[roundKey];
+  return { ok:true, list:active, settings:Object.assign({}, raw, {byRound, stations:active}) };
+}
+function kcrStationSettingsServer_(cfg, roundOverride) {
+  let optionSettings = {};
+  if (cfg && typeof cfg.option_settings === 'string') optionSettings = parseJson(cfg.option_settings, {});
+  else if (cfg && cfg.optionSettings && typeof cfg.optionSettings === 'object') optionSettings = cfg.optionSettings;
+  else if (cfg && typeof cfg === 'object') optionSettings = cfg;
+  const source = optionSettings.kcrStations && typeof optionSettings.kcrStations === 'object' ? optionSettings.kcrStations : {};
+  const roundKey = ikrcStationRoundKeyServer_(roundOverride || (cfg && cfg.current_round) || (cfg && cfg.currentRound));
+  const byRound = source.byRound && typeof source.byRound === 'object' ? source.byRound : {};
+  const defaults = [
+    {prefix:'A', start:1, end:10, process:'Washed'},
+    {prefix:'B', start:1, end:10, process:'Natural'},
+    {prefix:'C', start:1, end:10, process:'Blending'}
+  ];
+  const rawList = Array.isArray(byRound[roundKey]) && byRound[roundKey].length ? byRound[roundKey]
+    : (Array.isArray(source.stations) && source.stations.length ? source.stations : defaults);
+  const normalized = normalizeKcrStationListServer_(rawList, false);
+  return normalized.ok ? normalized.list : normalizeKcrStationListServer_(defaults, false).list;
+}
+function kcrStationFingerprintServer_(stations) {
+  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end, station.process].join(':')).join('|');
+}
+
+function validateKcrStationSubmission_(payload, cfg) {
+  const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
+  const settings = kcrStationSettingsServer_(cfg);
+  const stationId = safeStr(payload && payload.stationId).toLowerCase();
+  const station = settings.find(item => safeStr(item.id).toLowerCase() === stationId);
+  if (!station) return { ok:false, message:'KCR 스테이션을 다시 선택해주세요.' };
+  const expectedUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => `${station.prefix}-${station.start + idx}`);
+  if (rows.length !== expectedUnits.length) {
+    return { ok:false, message:`${station.label} 평가는 ${expectedUnits[0]}부터 ${expectedUnits[expectedUnits.length - 1]}까지 ${expectedUnits.length}개 컵이 모두 있어야 저장됩니다.` };
+  }
+  const actualUnits = rows.map(row => {
+    const inferred = inferScorePayload(Object.assign({}, payload, {rows:[row]}));
+    return safeStr(inferred.unit).toUpperCase().replace(/\s+/g, '');
+  });
+  const duplicates = actualUnits.filter((unit, idx) => actualUnits.indexOf(unit) !== idx);
+  const missing = expectedUnits.filter(unit => !actualUnits.includes(unit));
+  const unexpected = actualUnits.filter(unit => !expectedUnits.includes(unit));
+  if (actualUnits.some(unit => !unit) || duplicates.length || missing.length || unexpected.length) {
+    return {ok:false, message:`${station.label} 컵 번호가 올바르지 않습니다. ${expectedUnits.join(', ')}를 빠짐없이 확인해주세요.`};
+  }
+  const payloadPrefix = safeStr(payload && payload.stationPrefix).toUpperCase().replace(/\s+/g, '');
+  if (payloadPrefix && payloadPrefix !== station.prefix) return {ok:false, message:'KCR 스테이션 설정이 변경되었습니다. 평가 화면을 새로 열어 다시 선택해주세요.'};
+  if (!isCalibrationMode_(payload && payload.mode)) {
+    const expectedProcess = kcrStationProcessServer_(station.process);
+    const invalidProcess = rows.some(row => kcrStationProcessServer_(kcrProcessKeyFromPayload_(Object.assign({}, payload, {rows:[row]}))) !== expectedProcess);
+    if (invalidProcess) return {ok:false, message:`${station.label}의 프로세스 설정이 변경되었습니다. 평가 화면을 새로 열어 다시 선택해주세요.`};
+    const optionSettings = cfg && typeof cfg.option_settings === 'string' ? parseJson(cfg.option_settings, {}) : {};
+    const processSettings = optionSettings.kcrProcesses && typeof optionSettings.kcrProcesses === 'object' ? optionSettings.kcrProcesses : {};
+    const processKey = expectedProcess.toLowerCase();
+    if (processSettings[processKey] === false) return {ok:false, message:`${station.label}의 ${expectedProcess} 프로세스가 현재 닫혀 있습니다. 대회팀장에게 확인해주세요.`};
+  }
+  return {ok:true, station, expectedUnits};
 }
 
 function validateIkrcStationSubmission_(payload, cfg) {
@@ -2635,6 +2744,22 @@ async function submitScores(env, payload, signature, request = null) {
       row.extraFields['스테이션코드'] = stationValidation.station.prefix;
     });
   }
+  if (initial.code === 'KCR') {
+    const stationValidation = validateKcrStationSubmission_(basePayload, cfg);
+    if (!stationValidation.ok) return {success:false, message:stationValidation.message};
+    basePayload.stationId = stationValidation.station.id;
+    basePayload.stationLabel = stationValidation.station.label;
+    basePayload.stationPrefix = stationValidation.station.prefix;
+    basePayload.stationProcess = stationValidation.station.process;
+    basePayload.stationSampleCount = stationValidation.expectedUnits.length;
+    rows.forEach(row => {
+      if (!row || typeof row !== 'object') return;
+      if (!row.extraFields || typeof row.extraFields !== 'object') row.extraFields = {};
+      row.extraFields['스테이션'] = stationValidation.station.label;
+      row.extraFields['스테이션코드'] = stationValidation.station.prefix;
+      if (!isCalibrationMode_(basePayload.mode)) row.extraFields['프로세스'] = stationValidation.station.process;
+    });
+  }
   // KCR/IKRC는 한 번에 여러 컵/샘플을 제출하므로, 디브리핑·순위 매칭을 위해 컵/샘플별로 분리 저장합니다.
   // KCAC는 여러 잔이 한 선수의 한 세트 점수라서 한 제출로 유지합니다.
   const shouldSplit = ['KCR','IKRC'].includes(initial.code) && rows.length > 1;
@@ -2679,14 +2804,15 @@ async function submitScores(env, payload, signature, request = null) {
       onePayload.role = actorRole;
     }
     const evaluationCategory = scoreEvaluationCategoryKey_(onePayload.mode || onePayload.evalMode || initial.mode);
-    const securedTeam = evaluationCategory === 'calibration:all' ? '전체 켈리브레이션팀' : actorTeam;
+    const stationTeam = initial.code === 'KCR' ? safeStr(onePayload.stationLabel || basePayload.stationLabel) : '';
+    const securedTeam = evaluationCategory === 'calibration:all' ? '전체 켈리브레이션팀' : (stationTeam || actorTeam);
     if (securedTeam) {
       onePayload.team = securedTeam;
       onePayload.teamGroup = securedTeam;
     }
     onePayload.actorType = auth.actor && (auth.actor.type || auth.actor.accountType) || '';
     if (onePayload.judge && typeof onePayload.judge === 'object') {
-      onePayload.judge = Object.assign({}, onePayload.judge, { name: actorName, phone: actorPhone, role: actorRole, teamGroup: actorTeam, operatorIdentityKey: actorIdentityKey });
+      onePayload.judge = Object.assign({}, onePayload.judge, { name: actorName, phone: actorPhone, role: actorRole, teamGroup: securedTeam || actorTeam, operatorIdentityKey: actorIdentityKey });
       delete onePayload.judge.judgeToken;
       delete onePayload.judge.actorToken;
       delete onePayload.judge.operatorToken;
@@ -3404,6 +3530,7 @@ function isCalibrationMode_(v) { return /켈리브레이션|캘리브레이션|c
 function scoreEvaluationCategoryKey_(v) {
   const mode = safeStr(v);
   if (!isCalibrationMode_(mode)) return 'competition';
+  if (/스테이션|station/i.test(mode)) return 'calibration:station';
   if (/팀별/.test(mode)) return 'calibration:team';
   if (/전체/.test(mode)) return 'calibration:all';
   return 'calibration:legacy';
