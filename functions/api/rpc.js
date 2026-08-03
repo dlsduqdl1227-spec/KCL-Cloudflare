@@ -2265,7 +2265,7 @@ function scoreBackupCategoryForItem_(code, item) {
   const role = firstNonEmpty([item && item['역할'], item && item.role, item && item['심사위원역할'], item && item.judgeRole, item && item['Judge Role']]);
   if (isCalibrationMode_(mode)) return { category: '켈리브레이션', reason: '켈리브레이션 모드' };
   if (isCalibrationMode_(status)) return { category: '켈리브레이션', reason: '켈리브레이션 검수상태' };
-  if ((code === 'IKRC' || code === 'MOB') && isHeadRole_(role)) return { category: '켈리브레이션', reason: '헤드 심사위원 켈리브레이션' };
+  if (code === 'MOB' && isHeadRole_(role)) return { category: '켈리브레이션', reason: '헤드 심사위원 켈리브레이션' };
   return { category: '실제평가', reason: '' };
 }
 function scoreBackupExclusionReason_(code, item, categoryInfo) {
@@ -2645,10 +2645,10 @@ async function submitScores(env, payload, signature, request = null) {
     if (x.code === 'IKRC') {
       const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
         .bind(x.code, x.round, x.role, x.unit).all();
-      const submittedAsCalibration = isCalibrationMode_(x.mode) || isHeadRole_(x.role);
+      const submittedAsCalibration = isCalibrationMode_(x.mode);
       const existingSameCategory = (existingRows.results || []).find(existing =>
         scoreOwnedByActor_(existing, auth.actor) &&
-        (isCalibrationMode_(existing.mode) || isHeadRole_(existing.role)) === submittedAsCalibration
+        isCalibrationMode_(existing.mode) === submittedAsCalibration
       );
       if (existingSameCategory) {
         return {
@@ -2690,7 +2690,7 @@ async function submitScores(env, payload, signature, request = null) {
         .bind(x.code, x.round, x.judgeName, x.unit, payloadJson, duplicateCutoff).first();
       if (dup && dup.id) { skipped++; continue; }
     }
-    const initialReviewStatus = (isCalibrationMode_(x.mode) || ((x.code === 'MOB' || x.code === 'IKRC') && isHeadRole_(x.role))) ? '켈리브레이션' : '미검수';
+    const initialReviewStatus = (isCalibrationMode_(x.mode) || (x.code === 'MOB' && isHeadRole_(x.role))) ? '켈리브레이션' : '미검수';
     const insertStatement = env.DB.prepare(`INSERT INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(nowIso(), x.code, x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
@@ -2725,10 +2725,9 @@ async function getReviewList(env, competitionCode, actorArg) {
     const pIdx = indexParticipantIdentities_(pRows.results || [], code);
     list = list.map(item => enrichReviewItemWithParticipant_(item, lookupParticipantIdentity_(pIdx, item.round || item['라운드'] || (cfg && cfg.current_round), itemNumber_(item) || item.unit), code));
   }
-  // MOB/IKRC 헤드 켈리브레이션은 별도 켈리브레이션 화면에서만 확인하고, 일반 검수 목록에는 섞지 않는다.
-  if (code === 'MOB' || code === 'IKRC') {
-    list = list.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role));
-  }
+  // 명시적인 켈리브레이션 데이터만 일반 검수에서 분리한다. IKRC 헤드의 공식 평가는 일반 검수·순위에 포함한다.
+  if (code === 'MOB') list = list.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role));
+  if (code === 'IKRC') list = list.filter(item => !isCalibrationMode_(item['모드'] || item.mode));
   let supersededCount = 0;
   if (code === 'IKRC') {
     const latest = latestIkrcReviewItems_(list);
@@ -3077,8 +3076,26 @@ async function markMobCalibrationChecked(env, participantNo, requestedTeam, chec
 }
 
 
-function ikrcCalCheckToken_(team, sampleNo, round) {
-  return 'IKRC_CAL_CHECK:' + [safeStr(team) || '-', safeStr(round) || '-', safeStr(sampleNo)].map(encodeURIComponent).join(':');
+function ikrcCalCheckToken_(scopeKey, sampleNo, round, checkerKey) {
+  return 'IKRC_CAL_CHECK_V2:' + [safeStr(scopeKey) || 'ALL', safeStr(round) || '-', safeStr(sampleNo), safeStr(checkerKey) || '-'].map(encodeURIComponent).join(':');
+}
+function ikrcCalibrationCheckerKey_(actor) {
+  actor = actor || {};
+  return operatorIdentityKey_(actor.name || actor.judgeName || actor.operatorName || '', actor.phone || '') || normalizePersonName_(actor.name || actor.judgeName || actor.operatorName || '') || 'manager';
+}
+function ikrcCalibrationScope_(requestedScope, actor) {
+  actor = actor || {};
+  const raw = requestedScope && typeof requestedScope === 'object' ? requestedScope : { scope:'team', team:requestedScope };
+  const roleMap = actor.roleMap && typeof actor.roleMap === 'object' ? actor.roleMap : {};
+  const teamMap = actor.teamMap && typeof actor.teamMap === 'object' ? actor.teamMap : {};
+  const actorRole = safeStr(roleMap.IKRC || actor.role || actor.judgeRole || actor.operatorRole);
+  const actorTeam = safeStr(teamMap.IKRC || actor.teamGroup || actor.team || actor.judgeTeam);
+  let team = safeStr(raw.team || raw.requestedTeam || actorTeam);
+  let scope = safeStr(raw.scope || raw.mode).toLowerCase() === 'all' ? 'all' : 'team';
+  if (!hasManageAccess(actor, 'IKRC') && isHeadRole_(actorRole)) team = actorTeam;
+  if (!team) scope = 'all';
+  const key = scope === 'team' ? ('TEAM:' + team.replace(/\s+/g, '_').slice(0, 64)) : 'ALL';
+  return { scope, team, key, label: scope === 'team' ? ('내 팀 · ' + team) : '전체 심사위원' };
 }
 function ikrcSeedMatchToken_(matchNo) { return 'IKRC_SEED_MATCH:' + encodeURIComponent(safeStr(matchNo)); }
 function ikrcSeedResultToken_(targetType, targetValue) { return 'IKRC_SEED_RESULT:' + encodeURIComponent(safeStr(targetType) || 'participant') + ':' + encodeURIComponent(safeStr(targetValue)); }
@@ -3102,7 +3119,7 @@ function ikrcScoreObjectFromItem_(item) {
     mouthfeel: itemScore_(item, ['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','Mouthfeel']),
     comment: extraComment,
     submittedAt: item.submittedAt || item['제출시간'] || '',
-    isHeadCalibration: isCalibrationMode_(item['모드'] || item.mode) || isHeadRole_(item['역할'] || item.role)
+    isHeadCalibration: isCalibrationMode_(item['모드'] || item.mode)
   };
 }
 function ikrcSensoryBaseScoreFromItem_(item) {
@@ -3118,13 +3135,16 @@ function ikrcSensoryBaseScoreFromItem_(item) {
   const seed = roundName_(item.round || item['라운드'], '') === '결선' ? ikrcSeedBonusFromExtra_(item) : 0;
   return roundScoreValue_(Math.max(0, direct - seed));
 }
-async function ikrcCalibrationRows_(env, requestedTeam, actorArg) {
+async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return { error: auth.res };
-  const actorRole = safeStr(auth.actor && auth.actor.role);
+  const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
+  const actorRole = safeStr(roleMap.IKRC || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   if (!hasManageAccess(auth.actor, 'IKRC') && !isHeadRole_(actorRole)) {
     return { error: { success:false, message:'IKRC 켈리브레이션은 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' } };
   }
+  const scope = ikrcCalibrationScope_(requestedScope, auth.actor);
+  const checkerKey = ikrcCalibrationCheckerKey_(auth.actor);
   const cfg = await env.DB.prepare('SELECT current_round FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
@@ -3134,16 +3154,19 @@ async function ikrcCalibrationRows_(env, requestedTeam, actorArg) {
     const no = ikrcSampleNoFromItem_(item);
     if (!no) return false;
     if (currentRound && safeStr(item.round || item['라운드']) && safeStr(item.round || item['라운드']) !== currentRound) return false;
-    // Stage72: IKRC 켈리브레이션 표준편차도 헤드별 평가팀명이 아닌 동일 컵·동일 라운드 전체 센서리 제출값 기준으로 고정한다.
+    if (scope.scope === 'team') {
+      const rowTeam = safeStr(item['팀'] || item.team || item['평가팀']);
+      if (!rowTeam || !mobTeamMatchesServer_(scope.team, rowTeam)) return false;
+    }
     return true;
   });
-  return { auth, currentRound, rows };
+  return { auth, currentRound, rows, scope, checkerKey };
 }
-async function getIkrcCalibrationCupNumbers(env, requestedTeam, actorArg) {
-  const data = await ikrcCalibrationRows_(env, requestedTeam, actorArg);
+async function getIkrcCalibrationCupNumbers(env, requestedScope, actorArg) {
+  const data = await ikrcCalibrationRows_(env, requestedScope, actorArg);
   if (data.error) return data.error;
-  const normal = latestCalibrationRowsByJudge_(data.rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role)));
-  const heads = latestCalibrationRowsByJudge_(data.rows.filter(item => isCalibrationMode_(item['모드'] || item.mode) || isHeadRole_(item['역할'] || item.role)));
+  const normal = latestCalibrationRowsByJudge_(data.rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode)));
+  const heads = latestCalibrationRowsByJudge_(data.rows.filter(item => isCalibrationMode_(item['모드'] || item.mode)));
   const visibleRows = normal.concat(heads);
   if (!visibleRows.length) return [];
   const checksRaw = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('IKRC_CALIBRATION_CHECK').all();
@@ -3152,14 +3175,13 @@ async function getIkrcCalibrationCupNumbers(env, requestedTeam, actorArg) {
   const by = new Map();
   visibleRows.forEach(item => {
     const sampleNo = ikrcSampleNoFromItem_(item);
-    const token = ikrcCalCheckToken_(canonicalCalibrationScopeTeam_(), sampleNo, data.currentRound);
-    const legacyToken = ikrcCalCheckToken_(requestedTeam, sampleNo, data.currentRound);
+    const token = ikrcCalCheckToken_(data.scope.key, sampleNo, data.currentRound, data.checkerKey);
     const cur = by.get(sampleNo) || { sampleNo, checked:false, judgeCount:0, headCount:0, latestSubmittedAt:'', checkedAt:'', checkerName:'' };
-    if (isCalibrationMode_(item['모드'] || item.mode) || isHeadRole_(item['역할'] || item.role)) cur.headCount += 1;
+    if (isCalibrationMode_(item['모드'] || item.mode)) cur.headCount += 1;
     else cur.judgeCount += 1;
     const submittedAt = safeStr(item.submittedAt || item['제출시간']);
     if (submittedAt && (!cur.latestSubmittedAt || submittedAt > cur.latestSubmittedAt)) cur.latestSubmittedAt = submittedAt;
-    const check = checks.get(token) || checks.get(legacyToken);
+    const check = checks.get(token);
     if (check && check.checkedAt) { cur.checkedAt = check.checkedAt; cur.checkerName = check.checkerName || ''; }
     by.set(sampleNo, cur);
   });
@@ -3168,26 +3190,26 @@ async function getIkrcCalibrationCupNumbers(env, requestedTeam, actorArg) {
     return item;
   }).sort((a,b) => Number(a.checked) - Number(b.checked) || safeStr(a.sampleNo).localeCompare(safeStr(b.sampleNo), 'ko', {numeric:true}));
 }
-async function getIkrcCalibrationResultsByCup(env, sampleNo, requestedTeam, actorArg) {
-  const data = await ikrcCalibrationRows_(env, requestedTeam, actorArg);
+async function getIkrcCalibrationResultsByCup(env, sampleNo, requestedScope, actorArg) {
+  const data = await ikrcCalibrationRows_(env, requestedScope, actorArg);
   if (data.error) return data.error;
   const no = safeStr(sampleNo);
   if (!no) return [];
   const targetRows = data.rows.filter(item => ikrcSampleNoFromItem_(item) === no);
-  const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role)));
-  const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isCalibrationMode_(item['모드'] || item.mode) || isHeadRole_(item['역할'] || item.role)));
+  const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isCalibrationMode_(item['모드'] || item.mode)));
+  const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isCalibrationMode_(item['모드'] || item.mode)));
   return normal.concat(heads).map(ikrcScoreObjectFromItem_).sort((a,b) => Number(a.isHeadCalibration) - Number(b.isHeadCalibration) || safeStr(a.judgeName).localeCompare(safeStr(b.judgeName), 'ko'));
 }
-async function markIkrcCalibrationChecked(env, sampleNo, requestedTeam, checkerName, roleText, actorArg) {
-  const data = await ikrcCalibrationRows_(env, requestedTeam, actorArg);
+async function markIkrcCalibrationChecked(env, sampleNo, requestedScope, checkerName, roleText, actorArg) {
+  const data = await ikrcCalibrationRows_(env, requestedScope, actorArg);
   if (data.error) return data.error;
   const no = safeStr(sampleNo);
   if (!no) return { success:false, message:'컵/샘플 번호가 없습니다.' };
-  const token = ikrcCalCheckToken_(canonicalCalibrationScopeTeam_(), no, data.currentRound);
-  const payload = { competitionCode:'IKRC', sampleNo:no, team:safeStr(requestedTeam), scopeTeam:canonicalCalibrationScopeTeam_(), role:safeStr(roleText), checkerName:safeStr(checkerName), checkedAt:nowIso(), round:data.currentRound };
+  const token = ikrcCalCheckToken_(data.scope.key, no, data.currentRound, data.checkerKey);
+  const payload = { competitionCode:'IKRC', sampleNo:no, team:data.scope.team, scope:data.scope.scope, scopeKey:data.scope.key, checkerKey:data.checkerKey, role:safeStr(roleText), checkerName:safeStr(checkerName), checkedAt:nowIso(), round:data.currentRound };
   await env.DB.prepare('INSERT OR REPLACE INTO sessions (token, kind, payload_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
     .bind(token, 'IKRC_CALIBRATION_CHECK', JSON.stringify(payload), '2035-12-31T23:59:59.000Z', nowIso()).run();
-  return { success:true, message:'확인 처리되었습니다.', sampleNo:no, checkedAt:payload.checkedAt };
+  return { success:true, message:'현재 범위와 내 계정에 확인 처리되었습니다.', sampleNo:no, checkedAt:payload.checkedAt, scope:data.scope };
 }
 function ikrcSeedTargetKeysForItem_(item) {
   const keys = [];
@@ -3232,7 +3254,7 @@ async function getIkrcSeedToCupConsole(env, actorArg) {
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
   const headers = mergeHeaders('IKRC', rawRows.results || []);
   let rows = (rawRows.results || []).map(r => rowToReviewItem(r, 'IKRC', headers, cfg && cfg.current_round));
-  rows = rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role));
+  rows = rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode));
   const finalRows = rows.filter(item => roundName_(item.round || item['라운드']) === '결선');
   if (finalRows.length) rows = finalRows;
   const resultMap = await loadIkrcSeedResultMap_(env);
@@ -3369,7 +3391,7 @@ function shouldCountItemInRanking_(code, item) {
   if (!item) return false;
   if (rankingExcludedByReviewStatus_(item['검수상태'] || item.status)) return false;
   if (isCalibrationMode_(item['모드'] || item.mode)) return false;
-  if ((code === 'IKRC' || code === 'MOB') && isHeadRole_(firstNonEmpty([item['역할'], item.role, item['심사위원역할'], item.judgeRole, item['Judge Role']]))) return false;
+  if (code === 'MOB' && isHeadRole_(firstNonEmpty([item['역할'], item.role, item['심사위원역할'], item.judgeRole, item['Judge Role']]))) return false;
   return true;
 }
 function tieInfoForItem_(code, item, round) {
@@ -4325,7 +4347,25 @@ function _tone7(v) {
 }
 
 function _result(comments) {
-  return { success: true, comments: (comments || []).filter(Boolean).slice(0,3) };
+  return { success: true, comments: (comments || []).filter(Boolean).slice(0,2) };
+}
+function _commentVariationKey_(payload, code) {
+  payload = payload || {};
+  return [
+    code || '', payload.variationSeed || '', payload.judgeName || '', payload.sampleNo || payload.cupNo || payload.participantNo || payload.label || '',
+    payload.totalScore || payload.subtotal || '', JSON.stringify(payload.scores || payload.tags || {})
+  ].map(safeStr).join('|');
+}
+function _commentHash_(value) {
+  const text = safeStr(value);
+  let hash = 2166136261;
+  for (let i=0;i<text.length;i++) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 16777619); }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35);
+  hash ^= hash >>> 16;
+  return hash >>> 0;
 }
 function _scoreItems(list) {
   return (list || []).filter(x => x && _num(x.score) > 0);
@@ -4431,13 +4471,38 @@ function _strengthSentence_(items, highWord='가장 안정적으로 드러났고
   if (!low) return `${high}${_subjectParticle_(high)} ${highWord}.`;
   return `${high}${_subjectParticle_(high)} ${highWord}, ${low}${_topicParticle_(low)} ${lowWord}.`;
 }
-function _optionSet(lines) {
+function _optionSet(lines, variationKey='') {
   const uniq = [];
   (lines || []).forEach(s => {
     const line = safeStr(s).replace(/\s+/g,' ').replace(/\.\./g,'.').replace(/\s+([,.])/g,'$1').trim();
     if (line && !uniq.includes(line)) uniq.push(line);
   });
-  return _result(uniq);
+  if (!uniq.length || !variationKey) return _result(uniq);
+  const hash = _commentHash_(variationKey);
+  const ordered = uniq.slice(hash % uniq.length).concat(uniq.slice(0, hash % uniq.length));
+  if (((hash >>> 3) & 1) && ordered.length > 1) ordered.reverse();
+  const intros = [
+    '',
+    '점수와 관찰 기록을 함께 보면, ',
+    '항목별 평가 흐름을 기준으로, ',
+    '이번 심사 기록을 종합하면, ',
+    '선택된 감각 단서와 점수를 연결하면, ',
+    '전체 평가 맥락에서 살펴보면, ',
+    '세부 항목의 강약을 반영하면, ',
+    '기록된 스마트태그를 점수와 함께 해석하면, ',
+    '평가 시점의 기록을 기준으로, ',
+    '제출된 점수 분포를 바탕으로, ',
+    '선택된 특성의 연결 관계를 보면, ',
+    '세부 관찰 결과를 정리하면, ',
+    '컵과 수행의 전체 흐름을 확인하면, ',
+    '동일 기준으로 점수와 표현을 대조하면, ',
+    '심사 근거를 중심으로 살펴보면, ',
+    '평가 항목 사이의 관계를 보면, '
+  ];
+  return _result(ordered.map((line, index) => {
+    const intro = intros[(hash + index * 7) % intros.length];
+    return intro + line;
+  }));
 }
 
 function generateCuppingComment(payload) {
@@ -4469,8 +4534,8 @@ function generateCuppingComment(payload) {
   return _optionSet([
     `${processText}${flavor} 인상을 중심으로 첫 향미가 형성됩니다. 이후 ${after}의 흐름과 ${acidity}의 산미 구조, ${sweet}의 단맛, ${mouthfeel}의 마우스필이 연결됩니다. 전체적으로 ${tone}으로 평가됩니다. ${manualText}`,
     `${flavor} 계열의 향미가 주요 인상으로 기록되었고, 에프터테이스트는 ${after} 방향으로 이어졌습니다. 산미는 ${acidity}, 단맛은 ${sweet}, 마우스필은 ${mouthfeel} 특성으로 나타나 전체 컵의 구조를 구성했습니다. ${axis} ${manualText}`,
-    `플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성을 기준으로 평가했습니다. 현재 기록된 감각 단서는 ${flavor}, ${after}, ${sweet}이며, 종합 평가는 각 항목의 균형과 오버롤 인상에 따라 형성되었습니다. ${manualText}`
-  ]);
+    `평균 ${_fmt(avg)}점의 흐름에서 플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성을 확인했습니다. 현재 기록된 감각 단서는 ${flavor}, ${after}, ${sweet}이며, 전체적으로 ${tone}입니다. ${manualText}`
+  ], _commentVariationKey_(payload, 'KCR'));
 }
 
 function generateKbcComment(payload) {
@@ -4483,6 +4548,7 @@ function generateKbcComment(payload) {
   const espressoAvg = _avg(espressoVals);
   const sigAvg = _avg(sigVals);
   const comments = _briefComments(payload.attributeComments, 2);
+  const overallAvg = _avg([presentation].concat(espressoVals, sigVals, [machine]));
   const tagSummary = _tagSummary_(payload.tags, '선택된 수행 특성');
   const serviceText = presentation >= 5 ? '서비스의 전문성과 운영 흐름이 안정적으로 구축되었습니다' : presentation >= 3.5 ? '서비스 흐름은 기준 범위 안에서 진행되었고 설명과 동선의 밀도 차이가 함께 확인되었습니다' : '서비스의 전문성과 운영 안정성에서 낮은 평가가 확인되었습니다';
   const espressoText = espressoAvg >= 5 ? '에스프레소는 맛의 설계, 클린컵, 질감, 플레이버가 자연스럽게 연결되었습니다' : espressoAvg >= 4 ? '에스프레소는 전반적으로 안정적인 구조를 보였으며 향미와 균형이 주요 평가 요소로 작용했습니다' : '에스프레소는 추출 안정성, 향미 표현, 질감의 일관성에서 낮은 평가가 반영되었습니다';
@@ -4491,8 +4557,8 @@ function generateKbcComment(payload) {
   return _optionSet([
     `${serviceText}. ${espressoText}. ${isMain ? sigText + '. ' : ''}${machineText}. 전체 평가는 음료 완성도와 서비스 전달 흐름을 함께 반영합니다.`,
     `이번 수행은 서비스 전달, 에스프레소 완성도${isMain ? ', 창작음료 설계' : ''}, 장비 운용의 연결성을 중심으로 평가되었습니다. 스마트태그 기준으로는 ${tagSummary}이 확인됩니다${comments.length ? ', 세부 코멘트에서는 ' + comments.join(' / ') + '가 함께 기록되었습니다.' : '.'}`,
-    `항목별 평가는 추출 결과, 향미 설명, 서비스 동선이 실제 수행에서 어떻게 연결되었는지를 기준으로 형성되었습니다. ${isMain ? '창작음료는 콘셉트와 실제 향미의 일치도가 종합 인상에 반영되었습니다.' : '에스프레소의 향미 표현과 서비스 흐름이 종합 인상에 반영되었습니다.'}`
-  ]);
+    `항목 평균 ${_fmt(overallAvg)}점의 흐름을 기준으로 추출 결과, 향미 설명, 서비스 동선의 연결성을 평가했습니다. ${isMain ? '창작음료는 콘셉트와 실제 향미의 일치도가 종합 인상에 반영되었습니다.' : '에스프레소의 향미 표현과 서비스 흐름이 종합 인상에 반영되었습니다.'}`
+  ], _commentVariationKey_(payload, 'KBC'));
 }
 
 function _kcacTagEvidence_(payload) {
@@ -4562,13 +4628,13 @@ function generateKcacComment(payload) {
       `${label}은 ${milk ? milk + ' 조건에서 ' : ''}맛의 균형과 질감을 중심으로 평가되었습니다. 전체 인상은 ${tone} 수준입니다. ${evidenceText}`,
       `센서리 관점에서는 맛의 균형과 촉감의 연결성을 확인했습니다. ${balance} ${evidenceText}`,
       `평균 ${_fmt(avg)}점의 항목 점수와 선택된 관찰 근거를 함께 반영하면 ${tone} 결과입니다. ${evidenceText}`
-    ]);
+    ], _commentVariationKey_(payload, 'KCAC'));
   }
   return _optionSet([
     `${label}은 ${milk ? milk + ' 조건에서 ' : ''}${pattern}의 완성도, 표면 품질, 위치와 비율을 중심으로 평가되었습니다. 전체적인 시각 완성도는 ${tone} 편입니다. ${evidenceText}`,
     `패턴 평가는 중심축, 대칭, 리프 간격, 라인의 선명도와 표면 정리감을 기준으로 진행되었습니다. ${balance} ${evidenceText}`,
     `평균 ${_fmt(avg)}점의 항목 점수와 선택된 관찰 근거를 함께 반영하면 ${tone} 결과입니다. ${evidenceText}`
-  ]);
+  ], _commentVariationKey_(payload, 'KCAC'));
 }
 
 function generateMobComment(payload) {
@@ -4577,6 +4643,7 @@ function generateMobComment(payload) {
   const techAvg = _avg(payload.techVals || []);
   const sensAvg = _avg(payload.sensVals || []);
   const sigAvg = _avg(payload.sigVals || []);
+  const overallAvg = _avg([techAvg, sensAvg, sigAvg].filter(v => v > 0));
   const comments = _briefComments(payload.attributeComments, 2);
   const tagSummary = _tagSummary_(payload.tags, '추출과 향미 특성');
   const isCreative = /창작|creative|signature/i.test(menu) || sigAvg > 0;
@@ -4586,8 +4653,8 @@ function generateMobComment(payload) {
   return _optionSet([
     `${menu} 평가는 추출 설계, 서비스 흐름, 향미 표현의 연결성을 중심으로 진행되었습니다. ${techText}. ${sensText}.`,
     `스마트태그 기준으로는 ${tagSummary}이 확인됩니다. ${sigText}. ${comments.length ? '세부 코멘트에서는 ' + comments.join(' / ') + '가 함께 기록되었습니다.' : '컵의 의도와 실제 인상이 종합 평가에 반영되었습니다.'}`,
-    `종합 평가는 추출 일관성, 향미 균형, 설명의 명확성이 실제 수행과 컵의 결과에서 어떻게 드러났는지를 기준으로 형성되었습니다.`
-  ]);
+    `유효 항목 평균 ${_fmt(overallAvg)}점의 흐름에서 추출 일관성, 향미 균형, 설명의 명확성을 함께 확인했습니다. 전체 수행은 ${_toneByScore_(overallAvg, 5)} 수준으로 평가됩니다.`
+  ], _commentVariationKey_(payload, 'MOB'));
 }
 
 function generateIkrcComment(payload) {
@@ -4612,10 +4679,11 @@ function generateIkrcComment(payload) {
   const high = hl.high ? _areaKorean_(hl.high.name) : '';
   const low = hl.low && hl.low !== hl.high ? _areaKorean_(hl.low.name) : '';
   const axis = high && low ? `${high}이 가장 두드러졌고, ${low}은 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 기록되었습니다.';
+  const avg = _avg(items.map(x=>x.score));
   const prefix = sample ? `Sample ${sample}은 ` : '해당 샘플은 ';
   return _optionSet([
     `${prefix}${flavor} 계열의 향미가 첫인상을 형성하고, ${clean}한 인상이 컵의 완성도에 반영되었습니다. 단맛은 ${sweet} 방향으로 나타났으며, 산미는 ${acidity}, 마우스필은 ${mouthfeel} 특성으로 기록되었습니다.`,
-    `로스팅 결과는 향미의 선명도, 후반부 클린함, 단맛 지속성의 균형을 중심으로 평가되었습니다. 향미 강도는 ${_intensityText_(intensities.flavor)} 수준으로 기록되며, 전체적으로 ${_toneByScore_(_avg(items.map(x=>x.score)), 10)} 샘플로 평가됩니다.`,
-    `${axis} 종합 평가는 단맛과 산미, 질감의 연결성이 로스팅 의도와 컵의 실제 인상에서 어떻게 드러났는지를 반영합니다.`
-  ]);
+    `로스팅 결과는 향미의 선명도, 후반부 클린함, 단맛 지속성의 균형을 중심으로 평가되었습니다. 향미 강도는 ${_intensityText_(intensities.flavor)} 수준으로 기록되며, 전체적으로 ${_toneByScore_(avg, 10)} 샘플로 평가됩니다.`,
+    `항목 평균 ${_fmt(avg)}점에서 ${axis} 종합 평가는 단맛과 산미, 질감의 연결성이 로스팅 의도와 컵의 실제 인상에서 어떻게 드러났는지를 반영합니다.`
+  ], _commentVariationKey_(payload, 'IKRC'));
 }

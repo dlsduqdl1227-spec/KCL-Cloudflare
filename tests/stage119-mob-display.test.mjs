@@ -57,10 +57,12 @@ assert.equal(derivedContext.isMobDerivedDisplayHeader_("시간감점"), false);
 
 const listSummarySource = functionSource("mobReviewListSummary_");
 assert.match(listSummarySource, /평가속성/);
-assert.doesNotMatch(listSummarySource, /총점|감점 전 합산|감점 적용 후 점수|순위 반영점수|총평가 반영점수|센서리 반영점수/);
+assert.match(listSummarySource, /'총점 ' \+ totalText \+ '점'/);
+assert.doesNotMatch(listSummarySource, /감점 전 합산|감점 적용 후 점수|순위 반영점수|총평가 반영점수|센서리 반영점수/);
 
 const metricSource = functionSource("setReviewEditMetric_");
-assert.match(metricSource, /metricWrap\.style\.display\s*=\s*isMob\s*\?\s*'none'/);
+assert.match(metricSource, /metricWrap\.style\.display\s*=\s*''/);
+assert.doesNotMatch(metricSource, /isMob\s*\?\s*'none'/);
 
 const reviewRoleSource = functionSource("reviewMobHeaderAppliesToRole_");
 assert.match(reviewRoleSource, /\/\^derived\/\.test\(group\)/);
@@ -69,14 +71,22 @@ assert.match(detailRoleSource, /isMobDerivedDisplayHeader_\(h\)/);
 assert.match(detailRoleSource, /\/\^derived\/\.test\(group\)/);
 
 const detailCardSource = functionSource("renderDetailCard");
-assert.match(detailCardSource, /var total = isMobDetail \? ''/);
+assert.match(detailCardSource, /var total = row\['총점'\] \|\| row\['최종점수'\]/);
 assert.doesNotMatch(detailCardSource, /\['총평가 반영점수'\]|\['감점 적용 후 점수'\]/);
 
 assert.doesNotMatch(assessment, /function buildMobRankingBreakdownHtml_\(/);
 
 const rankingDetailSource = functionSource("renderRankingDetail");
-assert.match(rankingDetailSource, /var detailTotalLine = isMobRankingDetail \? ''/);
+assert.match(rankingDetailSource, /var detailTotalLine = '<br>총점:/);
 assert.doesNotMatch(rankingDetailSource, /buildMobRankingBreakdownHtml_\(rankInfo\)/);
+
+const mobDescSource = functionSource("mobGetDesc");
+assert.match(mobDescSource, /MOB_SCORE_SUBLABELS/);
+assert.match(assessment, /1=아주나쁨 · 2=나쁨 · 3=보통 · 4=좋음 · 5=아주좋음/);
+assert.match(assessment, /점수 고정 \(슬라이더 잠금\)/);
+assert.match(functionSource("toggleMobScoreLock_"), /slider\.disabled/);
+assert.match(assessment, /MOB 전체 종합 코멘트/);
+assert.doesNotMatch(functionSource("startMob"), /MOB_SENS\.map[\s\S]*?mobCommentId_\(a\.id\)/);
 
 // 화면에서 숨겨도 저장·순위 계산과 백업 원본에는 파생값을 계속 유지해야 한다.
 for (const header of [

@@ -194,6 +194,15 @@ for (const operator of [
     role: "센서리 헤드 심사위원",
   },
   {
+    accountType: "JUDGE",
+    name: "QA 헤드2",
+    phone: "01011110005",
+    affiliation: "QA",
+    access: "IKRC",
+    teamGroup: "다른팀",
+    role: "센서리 헤드 심사위원",
+  },
+  {
     accountType: "TEAMLEAD",
     name: "QA 대회팀장",
     phone: "01011110003",
@@ -210,8 +219,9 @@ for (const operator of [
 const judge = await rpc("judgeLogin", "QA 센서리", "01011110001");
 const judge2 = await rpc("judgeLogin", "QA 센서리2", "01011110004");
 const head = await rpc("judgeLogin", "QA 헤드", "01011110002");
+const head2 = await rpc("judgeLogin", "QA 헤드2", "01011110005");
 const lead = await rpc("judgeLogin", "QA 대회팀장", "01011110003");
-for (const login of [judge, judge2, head, lead]) {
+for (const login of [judge, judge2, head, head2, lead]) {
   assert.equal(login.success, true, login.message);
   assert.ok(login.judgeToken);
 }
@@ -251,7 +261,7 @@ assert.equal(participantSave.success, true, participantSave.message);
 
 const ikrcX = await rpc("submitScores", ikrcPayload(judge, station1));
 const ikrcZ = await rpc("submitScores", ikrcPayload(judge, station2));
-const ikrcHeadZ = await rpc("submitScores", ikrcPayload(head, station2, "IKRC 켈리브레이션"));
+const ikrcHeadZ = await rpc("submitScores", ikrcPayload(head, station2));
 assert.equal(ikrcX.success, true, JSON.stringify(ikrcX));
 assert.equal(ikrcZ.success, true, JSON.stringify(ikrcZ));
 assert.equal(ikrcHeadZ.success, true, JSON.stringify(ikrcHeadZ));
@@ -352,7 +362,8 @@ for (const [code, minimum] of Object.entries(reviewExpectedMinimums)) {
   assert.ok(review.list.length >= minimum, `${code} review list is shorter than expected`);
   reviewLists[code] = review;
 }
-assert.equal(reviewLists.IKRC.list.length, 10, "Head calibration rows must stay out of the normal review list");
+assert.equal(reviewLists.IKRC.list.length, 16, "IKRC head official scores must be included in the normal review list");
+assert.ok(reviewLists.IKRC.list.some((item) => item.judgeName === "QA 헤드" || item["심사위원명"] === "QA 헤드"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "X-1"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "Y-2"));
 assert.ok(
@@ -388,34 +399,50 @@ assert.equal(judgeOwnReview.success, true);
 assert.equal(judgeOwnReview.ownOnly, true);
 assert.equal(judgeOwnReview.list.length, 10);
 
-const calibrationBeforeCheck = await rpc("getIkrcCalibrationCupNumbers", "", {
+const allScope = { scope: "all", team: "QA팀" };
+const teamScope = { scope: "team", team: "QA팀" };
+const otherTeamScope = { scope: "team", team: "다른팀" };
+const calibrationBeforeCheck = await rpc("getIkrcCalibrationCupNumbers", allScope, {
   judgeToken: head.judgeToken,
 });
 assert.equal(calibrationBeforeCheck.length, 10);
 const z1Before = calibrationBeforeCheck.find((item) => item.sampleNo === "Z-1");
-assert.equal(z1Before.judgeCount, 1);
-assert.equal(z1Before.headCount, 1);
+assert.equal(z1Before.judgeCount, 2);
+assert.equal(z1Before.headCount, 0);
 assert.equal(z1Before.checked, false);
 
-const calibrationDetail = await rpc("getIkrcCalibrationResultsByCup", "Z-1", "", {
+const calibrationDetail = await rpc("getIkrcCalibrationResultsByCup", "Z-1", allScope, {
   judgeToken: head.judgeToken,
 });
 assert.equal(calibrationDetail.length, 2);
-assert.equal(calibrationDetail.filter((item) => item.isHeadCalibration).length, 1);
+assert.equal(calibrationDetail.filter((item) => item.isHeadCalibration).length, 0);
+
+const teamCalibration = await rpc("getIkrcCalibrationCupNumbers", teamScope, { judgeToken: head.judgeToken });
+assert.equal(teamCalibration.length, 10);
+const otherTeamCalibration = await rpc("getIkrcCalibrationCupNumbers", otherTeamScope, { judgeToken: head2.judgeToken });
+assert.equal(otherTeamCalibration.length, 0, "Team calibration must not mix another team's scores");
 
 const checked = await rpc(
   "markIkrcCalibrationChecked",
   "Z-1",
-  "",
+  allScope,
   "QA 헤드",
   "센서리 헤드 심사위원",
   { judgeToken: head.judgeToken },
 );
 assert.equal(checked.success, true, checked.message);
-const calibrationAfterCheck = await rpc("getIkrcCalibrationCupNumbers", "", {
+const calibrationAfterCheck = await rpc("getIkrcCalibrationCupNumbers", allScope, {
   judgeToken: head.judgeToken,
 });
 assert.equal(calibrationAfterCheck.find((item) => item.sampleNo === "Z-1").checked, true);
+const head2AfterHead1Check = await rpc("getIkrcCalibrationCupNumbers", allScope, { judgeToken: head2.judgeToken });
+assert.equal(head2AfterHead1Check.find((item) => item.sampleNo === "Z-1").checked, false, "Each head must have an independent overall-calibration check state");
+const head1TeamBeforeCheck = await rpc("getIkrcCalibrationCupNumbers", teamScope, { judgeToken: head.judgeToken });
+assert.equal(head1TeamBeforeCheck.find((item) => item.sampleNo === "Z-1").checked, false, "Team and overall calibration states must be independent");
+const checkedTeam = await rpc("markIkrcCalibrationChecked", "Z-1", teamScope, "QA 헤드", "센서리 헤드 심사위원", { judgeToken: head.judgeToken });
+assert.equal(checkedTeam.success, true, checkedTeam.message);
+const head1TeamAfterCheck = await rpc("getIkrcCalibrationCupNumbers", teamScope, { judgeToken: head.judgeToken });
+assert.equal(head1TeamAfterCheck.find((item) => item.sampleNo === "Z-1").checked, true);
 
 for (const [code, review] of Object.entries(reviewLists)) {
   const statusUpdate = await rpc(
@@ -435,8 +462,8 @@ for (const [code, review] of Object.entries(reviewLists)) {
 const backupBeforeDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
 assert.equal(backupBeforeDelete.success, true, backupBeforeDelete.message);
 assert.equal(backupBeforeDelete.rows.length, 16);
-assert.equal(backupBeforeDelete.calibrationRows.length, 6);
-assert.equal(backupBeforeDelete.competitionRows.length, 10);
+assert.equal(backupBeforeDelete.calibrationRows.length, 0);
+assert.equal(backupBeforeDelete.competitionRows.length, 16);
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station1"));
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station3"));
 
@@ -472,7 +499,7 @@ assert.equal(
 );
 
 const reviewAfterStationDelete = await rpc("getReviewList", "IKRC", adminActor);
-assert.equal(reviewAfterStationDelete.list.length, 10);
+assert.equal(reviewAfterStationDelete.list.length, 16);
 assert.ok(reviewAfterStationDelete.list.some((item) => item.unit === "X-1"));
 assert.ok(reviewAfterStationDelete.list.some((item) => item.unit === "Y-1"));
 

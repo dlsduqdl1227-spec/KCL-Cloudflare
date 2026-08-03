@@ -204,7 +204,8 @@ vm.createContext(rpcCommentContext);
 for (const name of [
   "safeStr", "_num", "_avg", "_result", "_scoreItems", "_lowHighScore",
   "_joinWithComma", "_cleanTagText_", "_tagList_", "_tagPhrase_",
-  "_briefComments", "_areaKorean_", "_optionSet", "generateCuppingComment",
+  "_briefComments", "_areaKorean_", "_fmt", "_commentVariationKey_",
+  "_commentHash_", "_optionSet", "generateCuppingComment",
 ]) vm.runInContext(extractFunction(rpc, name), rpcCommentContext);
 const overallResult = rpcCommentContext.generateCuppingComment({
   cupNumber:"1",
@@ -212,7 +213,7 @@ const overallResult = rpcCommentContext.generateCuppingComment({
   tags:{ flavor:["오렌지"], aftertaste:["깔끔한"], acidity:["밝은"], sweetness:["꿀 같은"], mouthfeel:["실키한"] },
   attributeComments:"플레이버: 오렌지 껍질 향이 선명함 / 산미: 식으면서 밝아짐",
 });
-assert.equal(overallResult.comments.length, 3);
+assert.equal(overallResult.comments.length, 2);
 for (const text of overallResult.comments) {
   assert.match(text, /오렌지 껍질 향이 선명함/);
   assert.match(text, /식으면서 밝아짐/);

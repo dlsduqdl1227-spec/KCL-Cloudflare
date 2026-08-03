@@ -78,7 +78,14 @@ assert.doesNotMatch(updateSettingsSource, /평가 기록이 이미 있어 스테
 assert.match(updateSettingsSource, /기존 IKRC 평가 \$\{preservedIkrcScoreCount\}건은 삭제하지 않고/);
 assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /normal\.concat\(heads\)/);
 assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /headCount/);
+assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /data\.scope\.key/);
+assert.match(extractFunction(rpc, "markIkrcCalibrationChecked"), /data\.checkerKey/);
+assert.match(extractFunction(rpc, "ikrcCalibrationRows_"), /scope\.scope === 'team'/);
 assert.match(extractFunction(rpc, "rowToReviewItem"), /스테이션ID/);
+assert.match(assessment, /커핑 기준: 11g 홀빈 \/ 200g 물 \/ 93℃ \/ 700~800µm/);
+assert.match(extractFunction(assessment, "isIkrcCalibrationMode_"), /return false/);
+assert.match(extractFunction(assessment, "showIkrcSetup"), /헤드 평가 점수 반영/);
+assert.match(extractFunction(assessment, "setIkrcCalibrationScope_"), /'team'/);
 
 const unifiedAcidityTags = ["선명한", "부드러운", "과즙감 있는", "밝은", "강렬한", "평평한", "산뜻한", "신맛이 도드라진", "거친", "섬세한"];
 unifiedAcidityTags.forEach((tag) => assert.match(sharedSensoryTags, new RegExp(`["']${tag}["']`)));
