@@ -4665,7 +4665,7 @@ function generateCuppingComment(payload) {
       aftertaste:[
         '마무리가 깨끗하고 안정적입니다',
         '여운과 마무리가 비교적 자연스럽습니다',
-        '마무리의 정돈감은 다소 부족합니다',
+        '마무리의 정돈감이 다소 부족합니다',
         '연결과 마무리가 다소 거칠게 나타납니다',
         '지속성과 마무리의 완성도가 충분히 형성되지 않았습니다'
       ],
@@ -4673,20 +4673,20 @@ function generateCuppingComment(payload) {
         '단맛과 향미 사이에서 조화롭게 연결됩니다',
         '컵의 구조 안에서 비교적 안정적으로 연결됩니다',
         '기본 구조는 확인되지만 다른 요소와의 연결은 다소 약합니다',
-        '다른 요소와의 조화가 약하게 나타납니다',
+        '다른 요소와 충분히 조화를 이루지 못합니다',
         '산미의 질과 연결성이 충분히 형성되지 않았습니다'
       ],
       sweetness:[
-        '향미를 안정적으로 받치며 지속성도 좋습니다',
+        '향미를 안정적으로 받치고 지속성도 좋습니다',
         '향미를 비교적 안정적으로 뒷받침합니다',
-        '향미를 받치는 힘은 크지 않습니다',
+        '향미를 받치는 힘이 크지 않습니다',
         '선명도와 지속성이 다소 낮습니다',
         '존재감과 지속성이 충분하지 않습니다'
       ],
       mouthfeel:[
         '질감의 밀도와 정돈감이 좋습니다',
         '질감이 비교적 매끄럽고 안정적입니다',
-        '기본 촉감은 확인되지만 질감의 세부 정돈은 다소 부족합니다',
+        '기본 촉감이 확인되지만 질감의 세부 정돈은 다소 부족합니다',
         '질감의 균일성과 정돈감이 다소 낮습니다',
         '질감이 거칠거나 비어 있는 인상으로 남습니다'
       ]
@@ -4758,7 +4758,7 @@ function generateCuppingComment(payload) {
   const manualText = observationSentences(payload.attributeComments);
   const evidence = manualText ? manualText + ' ' : '';
   const firstImpression = `첫 인상에서 ${subject(flavorNoun)} ${flavorIntensity ? flavorIntensity + ' 강도로 ' : ''}드러나며, ${qualityText('flavor', payload.flavor)}.`;
-  const middleStructure = `중반부에는 ${subject(acidityNoun)} ${acidityIntensity ? acidityIntensity + ' 강도로 ' : ''}나타나고 ${subject(sweetnessNoun)} ${sweetnessIntensity ? sweetnessIntensity + ' 강도로 ' : ''}이를 받칩니다. ${topic(acidityNoun)} ${qualityText('acidity', payload.acidity)}. ${topic(sweetnessNoun)} ${qualityText('sweetness', payload.sweetness)}.`;
+  const middleStructure = `중반부에는 ${subject(acidityNoun)} ${acidityIntensity ? acidityIntensity + ' 강도로 ' : ''}나타나고 ${subject(sweetnessNoun)} ${sweetnessIntensity ? sweetnessIntensity + ' 강도로 ' : ''}함께 감지됩니다. ${topic(acidityNoun)} ${qualityText('acidity', payload.acidity)}. ${topic(sweetnessNoun)} ${qualityText('sweetness', payload.sweetness)}.`;
   const finishStructure = `후반부에는 ${subject(mouthfeelNoun)} ${mouthfeelIntensity ? mouthfeelIntensity + ' 강도로 ' : ''}느껴지고 ${subject(aftertasteNoun)} ${aftertastePersistence ? aftertastePersistence + ' 수준으로 ' : ''}이어집니다. ${topic(mouthfeelNoun)} ${qualityText('mouthfeel', payload.mouthfeel)}. ${topic(aftertasteNoun)} ${qualityText('aftertaste', payload.aftertaste)}.`;
 
   return _sensoryOptionSet_([

@@ -243,6 +243,7 @@ for (const text of screenshotLikeResult.comments) {
   assert.match(text, /선명도|구분|연결|균형/);
   assert.doesNotMatch(text, /확인했습니다|기록되었습니다|구성했습니다|점수와 표현|감각 단서|평균 .*점/);
   assert.doesNotMatch(text, /산미는 산미|단맛은 단맛|마우스필은 마우스필/);
+  assert.doesNotMatch(text, /단맛은 [^.]*힘은|마우스필은 [^.]*촉감은|여운은 [^.]*정돈감은/);
 }
 
 const lowKcrResult = rpcCommentContext.generateCuppingComment({
