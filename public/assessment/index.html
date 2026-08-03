@@ -157,6 +157,12 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   padding:16px;margin-bottom:10px;cursor:pointer;transition:all .15s}
 .comp-card:active{opacity:.85}
 .comp-card.active{border-color:#fff;background:#222}
+.kcr-select-actions{display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.comp-card.active .kcr-select-actions{display:grid}
+.kcr-select-actions button{min-height:44px;padding:10px 8px;border:1px solid var(--border-lt);border-radius:7px;background:var(--panel);color:var(--text);font-size:12px;font-weight:900;cursor:pointer}
+.kcr-select-actions button.primary{background:#fff;color:#000;border-color:#fff}
+.kcr-select-actions button:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:420px){.kcr-select-actions{grid-template-columns:1fr}}
 .comp-name{font-size:16px;font-weight:700}
 .comp-round{font-size:13px;color:var(--text-3);margin-top:5px}
 
@@ -4283,15 +4289,18 @@ function updateSelectReviewButton_() {
   var code = _selComp && _selComp.code;
   var resultCode = String(code || '').toUpperCase();
   var isKcrMenu = resultCode === 'KCR';
-  if (evalBtn) evalBtn.textContent = isKcrMenu ? '대회평가' : '대회평가 시작';
+  if (evalBtn) {
+    evalBtn.style.display = isKcrMenu ? 'none' : 'block';
+    evalBtn.textContent = '대회평가 시작';
+  }
   var canCal = !!(_selComp && canCalibrationCode_(code));
   if (calAllBtn) {
-    calAllBtn.style.display = canCal ? 'block' : 'none';
+    calAllBtn.style.display = canCal && !isKcrMenu ? 'block' : 'none';
     calAllBtn.textContent = isKcrMenu ? '켈리브레이션(전체)' : '전체 켈리브레이션 시작';
   }
   if (calTeamBtn) {
     var hasTeam = !!judgeTeamText(code);
-    calTeamBtn.style.display = canCal ? 'block' : 'none';
+    calTeamBtn.style.display = canCal && !isKcrMenu ? 'block' : 'none';
     calTeamBtn.disabled = canCal && !hasTeam;
     calTeamBtn.textContent = hasTeam
       ? ((isKcrMenu ? '켈리브레이션(팀별)' : '팀별 켈리브레이션 시작') + ' · ' + judgeTeamText(code))
@@ -4303,9 +4312,21 @@ function updateSelectReviewButton_() {
     calBtn.textContent = '켈리브레이션 결과 확인';
   }
   if (reviewBtn) {
-    reviewBtn.style.display = (_selComp && canReviewCode_(code)) ? 'block' : 'none';
+    reviewBtn.style.display = (_selComp && canReviewCode_(code) && !isKcrMenu) ? 'block' : 'none';
     reviewBtn.textContent = isKcrMenu ? '대회검수' : ((isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내 제출 검수');
   }
+  document.querySelectorAll('[data-kcr-select-actions]').forEach(function(wrap){
+    var active = isKcrMenu && !!wrap.closest('.comp-card.active');
+    wrap.style.display = active ? 'grid' : 'none';
+    if (!active) return;
+    var teamButton = wrap.querySelector('[data-kcr-mode="cal-team"]');
+    var reviewButton = wrap.querySelector('[data-kcr-mode="review"]');
+    if (teamButton) {
+      teamButton.disabled = !judgeTeamText(code);
+      teamButton.textContent = judgeTeamText(code) ? ('켈리브레이션(팀별) · ' + judgeTeamText(code)) : '켈리브레이션(팀별) · 팀 미지정';
+    }
+    if (reviewButton) reviewButton.disabled = !canReviewCode_(code);
+  });
   if (seedVoteBtn) {
     var isIkrcFinal = isIkrcFinalConfig_(_selComp);
     var canManageSeed = isIkrcFinal && (isAdminRole() || isTeamLeaderForCode_('IKRC') || isStaffRoleForCode_('IKRC'));
@@ -4592,6 +4613,11 @@ function goHomePanel_() {
   showPanel(adminHomePanel_());
 }
 function adminOpenEval_(cfg, roleOverride) { _selComp = cfg; setAdminRoleOverride_(cfg.code, roleOverride || ''); goEval(); }
+function managementOpenKcrCalibration_(cfg, scope) {
+  _selComp = cfg;
+  clearAdminRoleOverride_('KCR');
+  goCalibration(scope === 'team' ? 'team' : 'all');
+}
 function adminOpenRanking_(cfg) { _selComp = cfg; clearAdminRoleOverride_(cfg.code); document.getElementById('ranking-back-btn').onclick = function(){ showPanel('pAdmin'); }; goRankingByCode(cfg.code, cfg.name, cfg.currentRound); }
 function adminOpenReview_(cfg) { _selComp = cfg; clearAdminRoleOverride_(cfg.code); document.getElementById('review-back-btn').onclick = function(){ showPanel('pAdmin'); }; goReviewByCode(cfg.code, cfg.name, 'pAdmin'); }
 function adminOpenIkrcHeadInput_(cfg) { _selComp = cfg; setAdminRoleOverride_(cfg.code, '센서리 헤드 심사위원'); goEval(); }
@@ -4761,6 +4787,7 @@ function adminRenderRunCards_() {
     var code = String(c.code || '').toUpperCase();
     var extra = '';
     if (code === 'IKRC') extra += '<button data-act="ikrc-blind">스테이션·블라인드 배정</button>';
+    if (code === 'KCR') extra += '<button data-act="kcr-cal-team">켈리브레이션(팀별)</button><button data-act="kcr-cal-all">켈리브레이션(전체)</button>';
     if (isIkrcFinalConfig_(c)) {
       extra += '<button data-act="ikrc-seed">Seed to Cup 운영 / 결과</button><button data-act="ikrc-head-input">센서리 헤드 심사위원 입력</button><button data-act="ikrc-cal">켈리브레이션 확인</button>';
     } else if (code === 'IKRC') {
@@ -4794,6 +4821,8 @@ function adminRenderRunCards_() {
     b = div.querySelector('[data-act="ikrc-blind"]'); if (b) b.onclick = function(){ openIkrcBlindManager_(c, 'pAdmin'); };
     b = div.querySelector('[data-act="ikrc-head-input"]'); if (b) b.onclick = function(){ adminOpenIkrcHeadInput_(c); };
     b = div.querySelector('[data-act="ikrc-cal"]'); if (b) b.onclick = function(){ adminOpenIkrcCalibration_(c); };
+    b = div.querySelector('[data-act="kcr-cal-team"]'); if (b) b.onclick = function(){ managementOpenKcrCalibration_(c, 'team'); };
+    b = div.querySelector('[data-act="kcr-cal-all"]'); if (b) b.onclick = function(){ managementOpenKcrCalibration_(c, 'all'); };
     b = div.querySelector('[data-act="mob-sens-head"]'); if (b) b.onclick = function(){ adminOpenMobHeadInput_(c, 'sensory'); };
     b = div.querySelector('[data-act="mob-tech-head"]'); if (b) b.onclick = function(){ adminOpenMobHeadInput_(c, 'technical'); };
     b = div.querySelector('[data-act="mob-sens-cal"]'); if (b) b.onclick = function(){ adminOpenMobCalibration_(c, 'sensory'); };
@@ -4932,6 +4961,9 @@ function loadTeamPanel() {
         activeConfigs.forEach(function(c) {
           var seedButton = isIkrcFinalConfig_(c) ? '<button data-act="ikrc-seed">Seed to Cup 운영 / 결과</button>' : '';
           var blindButton = String(c.code || '').toUpperCase() === 'IKRC' ? '<button data-act="ikrc-blind">스테이션·블라인드 배정</button>' : '';
+          var kcrCalibrationButtons = String(c.code || '').toUpperCase() === 'KCR'
+            ? '<button data-act="kcr-cal-team">켈리브레이션(팀별)</button><button data-act="kcr-cal-all">켈리브레이션(전체)</button>'
+            : '';
           var div = document.createElement('div');
           div.className = 'admin-comp-card';
           div.innerHTML =
@@ -4955,7 +4987,7 @@ function loadTeamPanel() {
               '<button' + ((String(c.code).toUpperCase()==='MOC') ? '' : ' class="primary"') + ' data-act="rank">실시간 순위</button>' +
               '<button data-act="review">평가 검수/수정</button>' +
               '<button data-act="score-backup">점수·검수 백업</button>' +
-              '<button data-act="judge-qr">심사 웹 QR</button>' + blindButton + seedButton +
+              '<button data-act="judge-qr">심사 웹 QR</button>' + kcrCalibrationButtons + blindButton + seedButton +
             '</div>';
           if (String(c.code || '').toUpperCase() === 'IKRC') {
             var teamIkrcRound = div.querySelector('#team-cfg-round-IKRC');
@@ -4984,6 +5016,10 @@ function loadTeamPanel() {
           if (seedBtn) seedBtn.onclick = (function(cfg){ return function(){ openIkrcSeedToCup_(cfg); }; })(c);
           var blindBtn = div.querySelector('[data-act="ikrc-blind"]');
           if (blindBtn) blindBtn.onclick = (function(cfg){ return function(){ openIkrcBlindManager_(cfg, 'pTeam'); }; })(c);
+          var kcrTeamCalBtn = div.querySelector('[data-act="kcr-cal-team"]');
+          if (kcrTeamCalBtn) kcrTeamCalBtn.onclick = (function(cfg){ return function(){ managementOpenKcrCalibration_(cfg, 'team'); }; })(c);
+          var kcrAllCalBtn = div.querySelector('[data-act="kcr-cal-all"]');
+          if (kcrAllCalBtn) kcrAllCalBtn.onclick = (function(cfg){ return function(){ managementOpenKcrCalibration_(cfg, 'all'); }; })(c);
           wrap.appendChild(div);
         });
       }
@@ -5036,13 +5072,32 @@ function renderCompList() {
           '<div class="comp-round">현재 라운드 <span class="round-tag">' + escHtml(c.currentRound) + '</span></div>' +
           '<div style="margin-top:6px">' + compTeamBadgeHtml(c.code) + '</div>' +
         '</div>' +
-      '</div>';
+      '</div>' +
+      (String(c.code || '').toUpperCase() === 'KCR'
+        ? '<div class="kcr-select-actions" data-kcr-select-actions>' +
+            '<button type="button" class="primary" data-kcr-mode="eval">대회평가</button>' +
+            '<button type="button" data-kcr-mode="review">대회검수</button>' +
+            '<button type="button" data-kcr-mode="cal-team">켈리브레이션(팀별)</button>' +
+            '<button type="button" data-kcr-mode="cal-all">켈리브레이션(전체)</button>' +
+          '</div>'
+        : '');
     div.onclick = function() {
       _selComp = c;
       document.querySelectorAll('.comp-card').forEach(function(el){ el.classList.remove('active'); });
       div.classList.add('active');
       updateSelectReviewButton_();
     };
+    var kcrModeActions = div.querySelector('[data-kcr-select-actions]');
+    if (kcrModeActions) {
+      var bindKcrMode = function(mode, handler){
+        var button = kcrModeActions.querySelector('[data-kcr-mode="' + mode + '"]');
+        if (button) button.onclick = function(event){ event.stopPropagation(); _selComp = c; handler(); };
+      };
+      bindKcrMode('eval', goEval);
+      bindKcrMode('review', goReview);
+      bindKcrMode('cal-team', function(){ goCalibration('team'); });
+      bindKcrMode('cal-all', function(){ goCalibration('all'); });
+    }
     wrap.appendChild(div);
   });
   var requestedIndex = requestedCode ? active.findIndex(function(c){ return String(c.code || '').toUpperCase() === requestedCode; }) : -1;
@@ -9413,7 +9468,7 @@ function renderCuppingCupNav() {
     var total = roundTotal(c.flavor + c.aftertaste + c.acidity + (c.sweetness * 2) + c.mouthfeel + c.overall);
     var btn = document.createElement('button');
     btn.className = 'cup-btn' + (i === _cupping.currentIdx ? ' active' : '') +
-                    (!kcrOverallCommentEnabled_(c) || (c.noteOverall && c.noteOverall.length >= 10) ? ' done' : '');
+                    (c.noteOverall && c.noteOverall.length >= 10 ? ' done' : '');
     btn.innerHTML = '<span class="cup-btn-num">Cup ' + c.cupNumber + '</span>' +
                     '<span class="cup-btn-score">' + fmtScore(total,2) + '</span>';
     btn.onclick = (function(n) { return function(){ switchCuppingCup(n); }; })(i);
@@ -9659,7 +9714,7 @@ function kcrCommentReferenceHtml_(c) {
     if (commentText) html += '<div class="mob-comment-reference-text">속성 정리: ' + escHtml(commentText) + '</div>';
     return html + '</div>';
   }).join('');
-  return '<div class="review-edit-help" style="margin-bottom:10px">종합 코멘트는 제출하지 않습니다. 현재 컵에서 선택한 점수·강도·스마트태그와 속성별 정리를 아래에서 확인할 수 있습니다.</div><div class="kcr-comment-reference">' + cards + '</div>';
+  return '<div class="review-edit-help" style="margin-bottom:10px">자동 생성 종합 코멘트는 사용하지 않습니다. 현재 컵의 점수·강도·스마트태그와 속성별 정리를 확인한 뒤 아래 입력칸에 종합 코멘트를 직접 작성해주세요.</div><div class="kcr-comment-reference">' + cards + '</div>';
 }
 
 function renderCuppingAttrCard() {
@@ -9669,30 +9724,30 @@ function renderCuppingAttrCard() {
   document.querySelectorAll('#cupping-attr-tabs .attr-tab').forEach(function(tab) {
     var ta = tab.getAttribute('data-attr');
     tab.classList.toggle('active', ta === attr);
-    if (ta === 'comment') tab.classList.toggle('filled', !kcrOverallCommentEnabled_(c) || !!(c.noteOverall && c.noteOverall.length >= 10));
+    if (ta === 'comment') tab.classList.toggle('filled', !!(c.noteOverall && c.noteOverall.length >= 10));
     else tab.classList.remove('filled');
   });
 
   if (attr === 'comment') {
     var commentHtml = '<div class="attr-card">';
     commentHtml += '<h3 style="text-align:center;margin-bottom:16px;font-size:18px;font-weight:700;letter-spacing:1px">전체 코멘트</h3>';
-    commentHtml += '<div class="section-label">종합 코멘트 사용 여부</div>';
-    commentHtml += '<div class="kcr-overall-comment-toggle" role="radiogroup" aria-label="종합 코멘트 사용 여부">';
+    commentHtml += '<div class="section-label">자동 생성 종합 코멘트 사용 여부</div>';
+    commentHtml += '<div class="kcr-overall-comment-toggle" role="radiogroup" aria-label="자동 생성 종합 코멘트 사용 여부">';
     commentHtml += '<label class="kcr-overall-comment-choice"><input type="radio" name="kcr-overall-comment-mode" value="use"' + (kcrOverallCommentEnabled_(c) ? ' checked' : '') + ' onchange="setKcrOverallCommentEnabled_(true)">사용함</label>';
-    commentHtml += '<label class="kcr-overall-comment-choice"><input type="radio" name="kcr-overall-comment-mode" value="skip"' + (!kcrOverallCommentEnabled_(c) ? ' checked' : '') + ' onchange="setKcrOverallCommentEnabled_(false)">사용 안 함</label>';
+    commentHtml += '<label class="kcr-overall-comment-choice"><input type="radio" name="kcr-overall-comment-mode" value="skip"' + (!kcrOverallCommentEnabled_(c) ? ' checked' : '') + ' onchange="setKcrOverallCommentEnabled_(false)">사용 안 함 · 직접 입력</label>';
     commentHtml += '</div>';
     if (kcrOverallCommentEnabled_(c)) {
       commentHtml += '<button class="btn-gen-comment" onclick="generateCuppingComment()">종합 코멘트 자동 생성</button>';
       commentHtml += '<div class="gen-comment-area" id="gen-comment-area"></div>';
-      commentHtml += '<div class="section-label" style="margin-top:16px">Overall Comment (최소 10자)</div>';
-      commentHtml += '<textarea id="cupping-comment-input" placeholder="종합 코멘트를 입력하세요" oninput="onCuppingCommentInput(this.value)">' + escHtml(c.noteOverall || '') + '</textarea>';
-      commentHtml += '<div id="cupping-comment-warning" class="comment-edit-warning" style="display:none"></div>';
     } else {
       commentHtml += kcrCommentReferenceHtml_(c);
     }
+    commentHtml += '<div class="section-label" style="margin-top:16px">Overall Comment (직접 입력 · 최소 10자)</div>';
+    commentHtml += '<textarea id="cupping-comment-input" placeholder="해당 커피의 센서리 종합 코멘트를 직접 입력하세요" oninput="onCuppingCommentInput(this.value)">' + escHtml(c.noteOverall || '') + '</textarea>';
+    commentHtml += '<div id="cupping-comment-warning" class="comment-edit-warning" style="display:none"></div>';
     commentHtml += '</div>';
     document.getElementById('cupping-attr-card').innerHTML = commentHtml;
-    if (kcrOverallCommentEnabled_(c)) setCommentWarning('cupping-comment-warning', c.generatedComment, c.commentEdited);
+    setCommentWarning('cupping-comment-warning', c.generatedComment, c.commentEdited);
     return;
   }
 
@@ -9860,13 +9915,13 @@ function cuppingSubmitAll() {
     renderCuppingAttrCard();
     return;
   }
-  var missing = _cupping.cups.filter(function(c){ return kcrOverallCommentEnabled_(c) && (!c.noteOverall || c.noteOverall.length < 10); });
+  var missing = _cupping.cups.filter(function(c){ return !c.noteOverall || c.noteOverall.length < 10; });
   if (missing.length > 0) {
     var nums = missing.map(function(c){ return 'Cup ' + c.cupNumber; }).join(', ');
     if (!confirm(nums + '의 Overall Comment가 10자 미만입니다.\n그래도 제출하시겠습니까?')) return;
   }
-  var skippedCommentCount = _cupping.cups.filter(function(c){ return !kcrOverallCommentEnabled_(c); }).length;
-  if (!confirm('총 ' + _cupping.cups.length + '개 컵을 제출하시겠습니까?' + (skippedCommentCount ? '\n종합 코멘트 미사용: ' + skippedCommentCount + '개 컵' : ''))) return;
+  var manualCommentCount = _cupping.cups.filter(function(c){ return !kcrOverallCommentEnabled_(c); }).length;
+  if (!confirm('총 ' + _cupping.cups.length + '개 컵을 제출하시겠습니까?' + (manualCommentCount ? '\n자동 생성 미사용·직접 입력: ' + manualCommentCount + '개 컵' : ''))) return;
 
   showOverlay();
   var kcrDqInfo = evalDisqualificationPayload_('KCR', false, '');
@@ -9884,9 +9939,9 @@ function cuppingSubmitAll() {
       c.acidity, c.acidityIntensity, acidityComment.customComment, JSON.stringify(acidityComment), (c.acidityTagIds || []).join(', '),
       c.sweetness, c.sweetnessIntensity, sweetnessComment.customComment, JSON.stringify(sweetnessComment), (c.sweetnessTagIds || []).join(', '),
       c.mouthfeel, c.mouthfeelIntensity, mouthfeelComment.customComment, JSON.stringify(mouthfeelComment), (c.mouthfeelTagIds || []).join(', '),
-      c.overall, kcrOverallCommentEnabled_(c) ? (c.noteOverall || '') : '',
+      c.overall, c.noteOverall || '',
       total, kcrDqInfo.disqualified ? 'Y' : 'N', kcrDqInfo.reason, '미검수'
-    ], extraFields:{'종합코멘트 사용여부':kcrOverallCommentEnabled_(c) ? '사용함' : '사용 안 함'}};
+    ], extraFields:{'종합코멘트 사용여부':kcrOverallCommentEnabled_(c) ? '자동 생성 사용함' : '자동 생성 사용 안 함 · 직접 입력'}};
   });
 
   google.script.run

@@ -68,12 +68,38 @@ vm.runInContext(extractFunction(assessment, "kcrOverallCommentEnabled_"), commen
 assert.equal(commentModeContext.kcrOverallCommentEnabled_({ overallCommentEnabled:true }), true);
 assert.equal(commentModeContext.kcrOverallCommentEnabled_({ overallCommentEnabled:false }), false);
 assert.equal(commentModeContext.kcrOverallCommentEnabled_({}), true, "Old saved drafts must default to comment enabled");
-assert.match(extractFunction(assessment, "renderCuppingAttrCard"), /종합 코멘트 사용 여부/);
-assert.match(extractFunction(assessment, "renderCuppingAttrCard"), /사용 안 함/);
+const kcrCommentRenderSource = extractFunction(assessment, "renderCuppingAttrCard");
+assert.match(kcrCommentRenderSource, /자동 생성 종합 코멘트 사용 여부/);
+assert.match(kcrCommentRenderSource, /사용 안 함 · 직접 입력/);
+assert.match(kcrCommentRenderSource, /Overall Comment \(직접 입력 · 최소 10자\)/);
+const kcrCommentCard = { innerHTML:"" };
+const kcrRenderContext = {
+  _cupping:{currentIdx:0,currentAttr:"comment",cups:[{overallCommentEnabled:false,noteOverall:"직접 작성한 코멘트"}]},
+  document:{querySelectorAll:()=>[],getElementById:(id)=>id === "cupping-attr-card" ? kcrCommentCard : null},
+  kcrOverallCommentEnabled_:(cup)=>cup.overallCommentEnabled !== false,
+  kcrCommentReferenceHtml_:()=>"<div>SUMMARY</div>",
+  escHtml:(value)=>String(value || ""),
+  setCommentWarning:()=>{},
+};
+vm.createContext(kcrRenderContext);
+vm.runInContext(kcrCommentRenderSource, kcrRenderContext);
+kcrRenderContext.renderCuppingAttrCard();
+assert.match(kcrCommentCard.innerHTML, /SUMMARY/);
+assert.match(kcrCommentCard.innerHTML, /id="cupping-comment-input"/);
+assert.match(kcrCommentCard.innerHTML, /직접 작성한 코멘트/);
 assert.match(extractFunction(assessment, "kcrCommentReferenceHtml_"), /점수·강도·스마트태그/);
 assert.match(extractFunction(assessment, "kcrCommentReferenceHtml_"), /slice\(0, 2\)/);
-assert.match(extractFunction(assessment, "cuppingSubmitAll"), /종합코멘트 사용여부/);
+const kcrSubmitSource = extractFunction(assessment, "cuppingSubmitAll");
+assert.match(kcrSubmitSource, /c\.overall, c\.noteOverall \|\| ''/);
+assert.match(kcrSubmitSource, /자동 생성 사용 안 함 · 직접 입력/);
+assert.match(kcrSubmitSource, /종합코멘트 사용여부/);
 assert.match(rpc, /'종합코멘트 사용여부'/);
+assert.match(assessment, /data-kcr-select-actions/);
+assert.match(assessment, /data-kcr-mode="cal-team"/);
+assert.match(assessment, /data-kcr-mode="cal-all"/);
+assert.match(extractFunction(assessment, "adminRenderRunCards_"), /kcr-cal-team/);
+assert.match(extractFunction(assessment, "adminRenderRunCards_"), /kcr-cal-all/);
+assert.match(extractFunction(assessment, "loadTeamPanel"), /kcrCalibrationButtons/);
 
 assert.doesNotMatch(assessment, /onclick="generateMobComment\(\)"/);
 assert.match(assessment, /MOB 전체 종합 코멘트 \(심사위원 직접 작성\)/);
