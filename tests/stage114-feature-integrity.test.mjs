@@ -160,5 +160,9 @@ for (const requiredAction of [
 assert.match(extractFunction(assessment, "initIkrcSamples"), /스테이션을 먼저 선택해주세요/);
 assert.match(extractFunction(assessment, "renderReviewTopActionsV4_"), /textContent/);
 assert.doesNotMatch(extractFunction(assessment, "renderReviewTopActionsV4_"), /innerHTML/);
+assert.match(extractFunction(assessment, "canShowStddevButton_"), /IKRC.*isHeadRoleForCode_/s);
+assert.match(extractFunction(assessment, "openReviewEdit"), /IKRC.*item\._stddev/s);
+assert.match(extractFunction(assessment, "buildStddevHtml_"), /내 점수/);
+assert.match(extractFunction(rpc, "getReviewList"), /ikrcOfficialReviewComparison_/);
 
 process.stdout.write("Stage114 feature integrity tests passed.\n");

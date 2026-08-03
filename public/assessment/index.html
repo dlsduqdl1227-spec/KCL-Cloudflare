@@ -5276,7 +5276,18 @@ function buildStddevHtml_(stats, code) {
   metrics.forEach(function(m){
     html += '<div class="overall-summary-row"><span class="overall-summary-label">' + escHtml(m.label || m.header || m.key) + '</span><span class="overall-summary-value">평균 ' + escHtml(fmtAverageFixedScore_(m.avg || 0, 2)) + ' · 표준편차 ' + escHtml(fmtAverageFixedScore_(m.stddev || 0, 2)) + stddevBadge_(m.stddev || 0, false) + '</span></div>';
   });
-  html += '<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">동일 참가자·동일 라운드의 심사위원별 최신 제출 점수 기준입니다. 점수 편차 확인용이며 총점 계산에는 별도로 반영되지 않습니다. 심사위원 수: ' + escHtml(String(stats.judgeCount || 0)) + '</div>' + scoreSpreadGuideHtml_() + '</div>';
+  if (c === 'IKRC' && Array.isArray(stats.judges) && stats.judges.length) {
+    html += '<div class="ikrc-cal-table-wrap" style="margin-top:12px"><table class="ikrc-cal-table"><thead><tr><th>심사위원</th><th>역할</th><th>총점</th><th>Flavor</th><th>Clean Cup</th><th>Sweetness</th><th>Acidity</th><th>Mouthfeel</th></tr></thead><tbody>';
+    stats.judges.forEach(function(row){
+      var judgeLabel = escHtml(row.judgeName || '심사위원') + (row.isCurrentJudge ? ' <span style="display:inline-block;margin-left:5px;padding:2px 6px;border-radius:999px;background:#fff;color:#000;font-size:10px;font-weight:900">내 점수</span>' : '');
+      html += '<tr><th>' + judgeLabel + '</th><td>' + escHtml(row.role || '-') + '</td><td>' + escHtml(fmtScore(row.total || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.flavor || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.cleanCup || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.sweetness || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.acidity || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.mouthfeel || 0, 1)) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  var scopeNote = c === 'IKRC'
+    ? ('같은 라운드·같은 샘플·같은 팀의 공식 평가 최신 제출값 기준입니다. 헤드 심사위원의 공식 점수도 평균과 실제 대회 점수에 포함됩니다. 비교표는 읽기 전용이며, 검수/수정에서는 본인 점수만 바꿀 수 있습니다.' + (stats.team ? ' 팀: ' + escHtml(stats.team) + '.' : ''))
+    : '동일 참가자·동일 라운드의 심사위원별 최신 제출 점수 기준입니다. 점수 편차 확인용이며 총점 계산에는 별도로 반영되지 않습니다.';
+  html += '<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">' + scopeNote + ' 심사위원 수: ' + escHtml(String(stats.judgeCount || 0)) + '</div>' + scoreSpreadGuideHtml_() + '</div>';
   return html;
 }
 function buildKbcStddevHtml_(stats) { return buildStddevHtml_(stats, 'KBC'); }
@@ -5288,6 +5299,7 @@ function kbcStddevListText_(stats) { return stddevListText_(stats); }
 function getItemStddev_(item) { return (item && (item._stddev || item._kbcStddev)) || null; }
 function canShowStddevButton_(code, item) {
   var c = String(code || '').toUpperCase();
+  if (c === 'IKRC' && isHeadRoleForCode_(c)) return true;
   if (!(isAdminRole() || isTeamLeaderForCode_(c))) return false;
   return true;
 }
@@ -8261,6 +8273,11 @@ function openReviewEdit(item) {
     while (mediaBox.firstChild) wrap.appendChild(mediaBox.firstChild);
   }
   if (String(_reviewState.code || '').toUpperCase() === 'MOB') appendMobReviewScoreBreakdown_(wrap);
+  if (String(_reviewState.code || '').toUpperCase() === 'IKRC' && item._stddev) {
+    var ikrcStdBox = document.createElement('div');
+    ikrcStdBox.innerHTML = buildStddevHtml_(item._stddev, 'IKRC');
+    while (ikrcStdBox.firstChild) wrap.appendChild(ikrcStdBox.firstChild);
+  }
   if (String(_reviewState.code || '').toUpperCase() === 'KBC' && item._kbcStddev) {
     var stdBox = document.createElement('div');
     stdBox.innerHTML = buildKbcStddevHtml_(item._kbcStddev);

@@ -2183,6 +2183,83 @@ function latestIkrcReviewItems_(items) {
   return { list, supersededCount };
 }
 
+function ikrcReviewTeamMatches_(targetTeam, candidateTeam) {
+  const target = safeStr(targetTeam);
+  const candidate = safeStr(candidateTeam);
+  if (!target || !candidate) return !target && !candidate;
+  return mobTeamMatchesServer_(target, candidate);
+}
+function reviewPopulationStats_(values) {
+  const nums = (values || []).map(Number).filter(Number.isFinite);
+  if (!nums.length) return { avg:0, stddev:0, count:0 };
+  const avg = nums.reduce((sum, value) => sum + value, 0) / nums.length;
+  const variance = nums.reduce((sum, value) => sum + Math.pow(value - avg, 2), 0) / nums.length;
+  return {
+    avg: Math.round(avg * 10000) / 10000,
+    stddev: Math.round(Math.sqrt(variance) * 10000) / 10000,
+    count: nums.length
+  };
+}
+function ikrcOfficialReviewComparison_(targetItem, officialItems) {
+  if (!targetItem) return null;
+  const targetRound = safeStr(targetItem.round || targetItem['라운드']).replace(/\s+/g, '').toLowerCase();
+  const targetUnit = ikrcSampleNoFromItem_(targetItem).replace(/\s+/g, '').toUpperCase();
+  const targetTeam = safeStr(targetItem.team || targetItem['팀'] || targetItem['평가팀']);
+  if (!targetUnit) return null;
+  const peers = latestOfficialJudgeRows_((officialItems || []).filter(item => {
+    if (!item || isCalibrationMode_(item.mode || item['모드'])) return false;
+    const itemRound = safeStr(item.round || item['라운드']).replace(/\s+/g, '').toLowerCase();
+    const itemUnit = ikrcSampleNoFromItem_(item).replace(/\s+/g, '').toUpperCase();
+    const itemTeam = safeStr(item.team || item['팀'] || item['평가팀']);
+    return itemUnit === targetUnit && itemRound === targetRound && ikrcReviewTeamMatches_(targetTeam, itemTeam);
+  }));
+  if (!peers.length) return null;
+  const targetJudgeKey = itemJudgeIdentityKey_(targetItem);
+  const targetRole = safeStr(targetItem.role || targetItem['역할']).replace(/\s+/g, '').toLowerCase();
+  const scoreRows = peers.map(item => {
+    const score = ikrcScoreObjectFromItem_(item);
+    return {
+      judgeName: score.judgeName || '심사위원',
+      role: score.role || '',
+      team: score.team || '',
+      total: score.total,
+      flavor: score.flavor,
+      cleanCup: score.cleanCup,
+      sweetness: score.sweetness,
+      acidity: score.acidity,
+      mouthfeel: score.mouthfeel,
+      isCurrentJudge: itemJudgeIdentityKey_(item) === targetJudgeKey && safeStr(item.role || item['역할']).replace(/\s+/g, '').toLowerCase() === targetRole,
+      isHead: isHeadRole_(score.role)
+    };
+  });
+  const totalStats = reviewPopulationStats_(scoreRows.map(row => row.total));
+  const metricSpecs = [
+    ['flavor', 'Flavor(플레이버)'],
+    ['cleanCup', 'Clean Cup(클린컵)'],
+    ['sweetness', 'Sweetness(스윗니스)'],
+    ['acidity', 'Acidity(산미)'],
+    ['mouthfeel', 'Mouthfeel(마우스필)']
+  ];
+  const metrics = metricSpecs.map(([key, label]) => {
+    const stat = reviewPopulationStats_(scoreRows.map(row => row[key]));
+    return { key, label, avg:stat.avg, stddev:stat.stddev, count:stat.count };
+  });
+  return {
+    competitionCode:'IKRC',
+    purpose:'official-review',
+    scope:'team',
+    team:targetTeam,
+    round:safeStr(targetItem.round || targetItem['라운드']),
+    sampleNo:ikrcSampleNoFromItem_(targetItem),
+    judgeCount:scoreRows.length,
+    headCount:scoreRows.filter(row => row.isHead).length,
+    totalAvg:totalStats.avg,
+    totalStddev:totalStats.stddev,
+    metrics,
+    judges:scoreRows
+  };
+}
+
 function mediaSummaryForPayload_(payload) {
   const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
   let count = 0;
@@ -2733,6 +2810,17 @@ async function getReviewList(env, competitionCode, actorArg) {
     const latest = latestIkrcReviewItems_(list);
     list = latest.list;
     supersededCount = latest.supersededCount;
+    const canCompareOfficialScores = manager || actorReviewRoleCategory_(auth.actor, code) === 'head';
+    if (canCompareOfficialScores && list.length) {
+      const allHeaders = mergeHeaders(code, rawAll);
+      const allOfficialItems = rawAll
+        .flatMap(r => rowToReviewItems_(r, code, allHeaders, cfg && cfg.current_round))
+        .filter(item => !isCalibrationMode_(item.mode || item['모드']));
+      list = list.map(item => {
+        item._stddev = ikrcOfficialReviewComparison_(item, allOfficialItems);
+        return item;
+      });
+    }
   }
   return { success: true, list, headers, ownOnly: !manager, supersededCount };
 }
