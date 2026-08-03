@@ -82,7 +82,7 @@ assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /data\.scope\
 assert.match(extractFunction(rpc, "markIkrcCalibrationChecked"), /data\.checkerKey/);
 assert.match(extractFunction(rpc, "ikrcCalibrationRows_"), /scope\.scope === 'team'/);
 assert.match(extractFunction(rpc, "rowToReviewItem"), /스테이션ID/);
-assert.match(assessment, /커핑 기준: 11g 홀빈 \/ 200g 물 \/ 93℃ \/ 700~800µm/);
+assert.match(assessment, /커핑 기준: 11g 홀빈 \/ 200g 물 \/ 93℃ \/ 600~700µm/);
 assert.match(extractFunction(assessment, "isIkrcCalibrationMode_"), /return false/);
 assert.match(extractFunction(assessment, "showIkrcSetup"), /헤드 평가 점수 반영/);
 assert.match(extractFunction(assessment, "setIkrcCalibrationScope_"), /'team'/);
