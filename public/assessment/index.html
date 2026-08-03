@@ -1540,6 +1540,11 @@ body.kcl-admin-scroll-mode{height:100dvh!important;min-height:100dvh!important;o
 .ikrc-station-actions button{width:100%!important;min-width:0!important;min-height:52px!important;margin:0!important;padding:0 14px!important;border-radius:10px!important;font-size:13px!important;font-weight:900!important}
 .ikrc-station-actions .ikrc-station-add{background:transparent!important;color:var(--text)!important;border:1.5px solid var(--border-lt)!important}
 .ikrc-station-actions .ikrc-station-save{background:#fff!important;color:#000!important;border:1.5px solid #fff!important}
+.kcr-station-manager-panel{margin:14px 0;padding:14px;border:1.5px solid rgba(255,255,255,.22);border-radius:14px;background:rgba(255,255,255,.035)}
+.kcr-station-manager-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.kcr-station-manager-title{font-size:15px;font-weight:950;color:#fff}
+.kcr-station-manager-badge{padding:5px 9px;border:1px solid rgba(255,255,255,.2);border-radius:999px;color:var(--text-3);font-size:10px;font-weight:900;white-space:nowrap}
+.kcr-station-manager-panel.focused{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.09)}
 .ikrc-station-divider{margin:18px 0!important}
 #pIkrcBlindManager .ikrc-station-config-list{margin:0 0 10px}
 #pIkrcBlindManager .ikrc-blind-refresh{min-height:48px;margin:0 0 12px}
@@ -3729,7 +3734,9 @@ function configSelectableOptionsHtml_(cfg, prefix) {
   if (code === 'KCR') {
     var settings = kcrProcessSettings_(cfg);
     var kcrStations = kcrStationSettings_(cfg);
-    var html = '<div class="review-edit-help" style="margin:10px 0 8px">KCR 프로세스 오픈/닫기 - 닫힌 프로세스는 평가 스테이션에서 선택할 수 없습니다.</div>';
+    var html = '<section class="kcr-station-manager-panel" data-kcr-station-manager><div class="kcr-station-manager-head"><div class="kcr-station-manager-title">KCR 스테이션 만들기 / 관리</div><div class="kcr-station-manager-badge">대회팀장 저장 가능</div></div>' +
+      '<div class="review-edit-help" style="margin:10px 0 8px">현재 라운드에서 사용할 스테이션을 추가하고 프로세스·컵 범위를 정한 뒤 아래 <b>스테이션 설정 저장</b> 버튼을 눌러주세요.</div>' +
+      '<div class="review-edit-help" style="margin:10px 0 8px">KCR 프로세스 오픈/닫기 - 닫힌 프로세스는 평가 스테이션에서 선택할 수 없습니다.</div>';
     html += '<div class="admin-check-row wide">';
     KCR_PROCESS_OPTIONS.forEach(function(opt){
       var id = prefix + '-kcr-process-' + opt.key + '-' + code;
@@ -3740,7 +3747,7 @@ function configSelectableOptionsHtml_(cfg, prefix) {
       '<div class="ikrc-station-config-list" id="' + prefix + '-ikrc-stations-' + code + '">' +
         kcrStations.map(function(station, index){ return ikrcStationConfigRowHtml_(station, index, code); }).join('') +
       '</div>' +
-      '<button type="button" class="btn-outline ikrc-station-add" onclick="ikrcAddStationConfigRow_(\'' + escapeJsString_(prefix) + '\',\'' + code + '\')">스테이션 추가</button>';
+      '<button type="button" class="btn-outline ikrc-station-add" onclick="ikrcAddStationConfigRow_(\'' + escapeJsString_(prefix) + '\',\'' + code + '\')">+ KCR 스테이션 추가</button></section>';
     return html;
   }
   if (code === 'KTCC') {
@@ -4226,11 +4233,15 @@ function displayJudgeLabel_(name, role, fallback) {
   return label + ' ' + n;
 }
 function normalizeTeamLabel_(team) {
-  var raw = String(team || '').trim();
-  if (!raw) return '';
-  var m = raw.match(/\d+/);
-  return m ? (String(parseInt(m[0], 10)) + '팀') : '';
-}
+    var raw = String(team || '').trim();
+    if (!raw) return '';
+    var m = raw.match(/\d+/);
+    if (m) return String(parseInt(m[0], 10)) + '팀';
+    var compact = raw.replace(/\s+/g, '');
+    var alpha = compact.match(/^([A-Za-z])(?:조|팀)?$/);
+    if (alpha) return alpha[1].toUpperCase() + '조';
+    return '';
+  }
 function roleBadgeClass_(role) {
   var r = normalizeRoleLabel_(role);
   if (r.indexOf('관리자') > -1) return 'badge-관리자';
@@ -4299,11 +4310,17 @@ function judgeIdentityHtml(roleOverride, badgeClass) {
   return html;
 }
 function compTeamBadgeHtml(code) {
+  var c = String(code || '').toUpperCase();
   var team = judgeTeamText(code);
   var role = roleText(code);
   var html = '';
   if (role) html += '<span class="role-mode-badge">' + escHtml(role) + '</span>';
   if (team) html += '<span class="role-mode-badge">' + escHtml(team) + '</span>';
+  var dated = ((_judge && _judge.operatorRows) || []).filter(function(row){
+    var codes = String((row && row.access) || '').toUpperCase().split(/[;,/|]+/).map(function(value){ return value.trim(); }).filter(Boolean);
+    return row && row.effectiveDate && (codes.indexOf(c) > -1 || codes.indexOf('ALL') > -1);
+  })[0];
+  if (dated) html += '<span class="role-mode-badge">날짜 권한 · ' + escHtml(dated.effectiveDate) + '</span>';
   return html;
 }
 function isTeamLeaderForCode_(code) {
@@ -5070,6 +5087,9 @@ function loadTeamPanel() {
           var kcrCalibrationButtons = String(c.code || '').toUpperCase() === 'KCR'
             ? '<button data-act="kcr-cal-station">켈리브레이션(스테이션)</button><button data-act="kcr-cal-all">켈리브레이션(전체)</button>'
             : '';
+          var kcrStationManageButton = String(c.code || '').toUpperCase() === 'KCR'
+            ? '<button class="primary" data-act="kcr-stations">KCR 스테이션 만들기 / 관리</button>'
+            : '';
           var div = document.createElement('div');
           div.className = 'admin-comp-card';
           div.innerHTML =
@@ -5088,6 +5108,7 @@ function loadTeamPanel() {
             '</div>' +
             configSelectableOptionsHtml_(c, 'team-cfg') +
             '<div class="admin-comp-actions team-actions">' +
+              kcrStationManageButton +
               '<button data-act="save-cfg">' + (String(c.code).toUpperCase()==='KCR' ? '스테이션 설정 저장' : '운영 설정 저장') + '</button>' +
               ((String(c.code).toUpperCase()==='MOC') ? '<button class="primary" data-act="eval">평가 입력</button>' : '') +
               '<button' + ((String(c.code).toUpperCase()==='MOC') ? '' : ' class="primary"') + ' data-act="rank">실시간 순위</button>' +
@@ -5102,6 +5123,8 @@ function loadTeamPanel() {
           }
           var saveBtn = div.querySelector('[data-act="save-cfg"]');
           if (saveBtn) saveBtn.onclick = (function(cfg){ return function(){ teamSaveCompetitionConfig(cfg); }; })(c);
+          var kcrStationsBtn = div.querySelector('[data-act="kcr-stations"]');
+          if (kcrStationsBtn) kcrStationsBtn.onclick = function(){ focusKcrStationManager_(this); };
           var evalBtn = div.querySelector('[data-act="eval"]');
           if (evalBtn) evalBtn.onclick = (function(cfg){ return function(){
             _selComp = cfg;
@@ -9545,6 +9568,7 @@ function makeCupData(cupNumber) {
     mouthfeel:3.0, mouthfeelIntensity:4, mouthfeelTagIds:[],
     sensoryComments:commentStates,
     overall:3.0, noteOverall:'', generatedComment:'', commentEdited:true, overallCommentEnabled:true,
+    autoOverallComment:'', manualOverallComment:'', autoGeneratedComment:'', autoCommentEdited:true,
     openTagFamilies:{},
     flavorLocked:false, aftertasteLocked:false, acidityLocked:false,
     sweetnessLocked:false, mouthfeelLocked:false, overallLocked:false
@@ -9555,6 +9579,7 @@ function normalizeCuppingCupUiState_() {
   if (!_cupping || !Array.isArray(_cupping.cups)) return;
   _cupping.cups.forEach(function(c) {
     if (!c || typeof c !== 'object') return;
+    normalizeKcrOverallCommentState_(c);
     if (!c.openTagFamilies || typeof c.openTagFamilies !== 'object' || Array.isArray(c.openTagFamilies)) {
       c.openTagFamilies = {};
     }
@@ -9632,6 +9657,7 @@ function saveCuppingCurrentFromDOM() {
   if (slider) c[attr] = roundScore02(slider.value);
   var ci = document.getElementById('cupping-comment-input');
   if (ci) { c.noteOverall = ci.value; if (c.generatedComment) c.commentEdited = ci.value.trim() !== c.generatedComment.trim() && ci.value.trim().length >= 10; }
+  saveKcrOverallCommentBuffer_(c);
 }
 
 function updateCuppingTotal() {
@@ -9808,15 +9834,44 @@ function kcrOverallCommentEnabled_(c) {
   return !c || c.overallCommentEnabled !== false;
 }
 
+function normalizeKcrOverallCommentState_(c) {
+  if (!c || typeof c !== 'object') return c;
+  var enabled = kcrOverallCommentEnabled_(c);
+  if (!Object.prototype.hasOwnProperty.call(c, 'autoOverallComment')) c.autoOverallComment = enabled ? String(c.noteOverall || '') : '';
+  if (!Object.prototype.hasOwnProperty.call(c, 'manualOverallComment')) c.manualOverallComment = enabled ? '' : String(c.noteOverall || '');
+  if (!Object.prototype.hasOwnProperty.call(c, 'autoGeneratedComment')) c.autoGeneratedComment = enabled ? String(c.generatedComment || '') : '';
+  if (!Object.prototype.hasOwnProperty.call(c, 'autoCommentEdited')) c.autoCommentEdited = enabled ? c.commentEdited !== false : true;
+  return c;
+}
+function saveKcrOverallCommentBuffer_(c) {
+  normalizeKcrOverallCommentState_(c);
+  if (kcrOverallCommentEnabled_(c)) {
+    c.autoOverallComment = String(c.noteOverall || '');
+    c.autoGeneratedComment = String(c.generatedComment || '');
+    c.autoCommentEdited = c.commentEdited !== false;
+  } else {
+    c.manualOverallComment = String(c.noteOverall || '');
+  }
+}
+function loadKcrOverallCommentBuffer_(c) {
+  normalizeKcrOverallCommentState_(c);
+  if (kcrOverallCommentEnabled_(c)) {
+    c.noteOverall = String(c.autoOverallComment || '');
+    c.generatedComment = String(c.autoGeneratedComment || '');
+    c.commentEdited = c.autoCommentEdited !== false;
+  } else {
+    c.noteOverall = String(c.manualOverallComment || '');
+    c.generatedComment = '';
+    c.commentEdited = true;
+  }
+}
+
 function setKcrOverallCommentEnabled_(enabled) {
   saveCuppingCurrentFromDOM();
   var c = _cupping.cups[_cupping.currentIdx];
   if (!c) return;
   c.overallCommentEnabled = !!enabled;
-  if (!c.overallCommentEnabled) {
-    c.generatedComment = '';
-    c.commentEdited = true;
-  }
+  loadKcrOverallCommentBuffer_(c);
   renderCuppingAttrCard();
   renderCuppingCupNav();
 }
@@ -9855,6 +9910,7 @@ function kcrCommentReferenceHtml_(c) {
 
 function renderCuppingAttrCard() {
   var c = _cupping.cups[_cupping.currentIdx];
+  normalizeKcrOverallCommentState_(c);
   var attr = _cupping.currentAttr;
 
   document.querySelectorAll('#cupping-attr-tabs .attr-tab').forEach(function(tab) {
@@ -9968,6 +10024,7 @@ function onCuppingCommentInput(val) {
   var c = _cupping.cups[_cupping.currentIdx];
   c.noteOverall = val;
   if (c.generatedComment) c.commentEdited = val.trim() !== c.generatedComment.trim() && val.trim().length >= 10;
+  saveKcrOverallCommentBuffer_(c);
   setCommentWarning('cupping-comment-warning', c.generatedComment, c.commentEdited);
   renderCuppingCupNav();
 }
@@ -14049,6 +14106,18 @@ function isIkrcCalibrationMode_() { return isActiveCalibrationMode_(); }
 function ikrcAttrMeta_(key) {
   for (var i=0;i<IKRC_ATTRS.length;i++) if (IKRC_ATTRS[i].key === key) return IKRC_ATTRS[i];
   return null;
+}
+function focusKcrStationManager_(button) {
+  var card = button && button.closest ? button.closest('.admin-comp-card') : null;
+  var panel = card && card.querySelector ? card.querySelector('[data-kcr-station-manager]') : null;
+  if (!panel) { toast('KCR 스테이션 관리 영역을 찾지 못했습니다. 관리 정보를 새로고침해주세요.', true); return; }
+  panel.classList.add('focused');
+  try { panel.scrollIntoView({behavior:'smooth', block:'start'}); } catch(e) { panel.scrollIntoView(); }
+  setTimeout(function(){
+    panel.classList.remove('focused');
+    var first = panel.querySelector('[data-field="prefix"]');
+    if (first) first.focus();
+  }, 900);
 }
 function ikrcTagKey_(attr) { return 'selectedTags' + attr.charAt(0).toUpperCase() + attr.slice(1); }
 function ikrcSmartTagHeader_(attrKey) {

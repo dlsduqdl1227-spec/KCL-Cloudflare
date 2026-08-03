@@ -167,6 +167,44 @@ function normalizeAccountType_(type, role='') {
 function normalizePersonName_(v) {
   return safeStr(v).replace(/\s+/g, '').toLowerCase();
 }
+function normalizeEffectiveDate_(v) {
+  const raw = safeStr(v);
+  if (!raw) return '';
+  const match = raw.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
+  if (!match) return '';
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  const check = new Date(Date.UTC(year, month - 1, day));
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return '';
+  return String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+}
+function koreaDateKey_(date = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(date);
+    const map = {};
+    parts.forEach(part => { if (part.type !== 'literal') map[part.type] = part.value; });
+    return normalizeEffectiveDate_([map.year, map.month, map.day].join('-'));
+  } catch (_) {
+    return normalizeEffectiveDate_(date.toISOString().slice(0, 10));
+  }
+}
+function operatorRowsForEffectiveDate_(rows, dateKey = koreaDateKey_()) {
+  const source = Array.isArray(rows) ? rows : [];
+  const effectiveDate = normalizeEffectiveDate_(dateKey) || koreaDateKey_();
+  const selected = [];
+  source.filter(operatorIsAdminRow_).forEach(row => selected.push(row));
+  for (const code of COMPETITION_CODES) {
+    const candidates = source.filter(row => !operatorIsAdminRow_(row) && accessCodes_(row.access || '').some(value => value === 'ALL' || value === code));
+    const dated = candidates.filter(row => normalizeEffectiveDate_(row.effective_date || row.effectiveDate) === effectiveDate);
+    const fallback = candidates.filter(row => !normalizeEffectiveDate_(row.effective_date || row.effectiveDate));
+    (dated.length ? dated : fallback).forEach(row => selected.push({ ...row, access:code, effective_date:normalizeEffectiveDate_(row.effective_date || row.effectiveDate) }));
+  }
+  const merged = new Map();
+  selected.forEach(row => {
+    const key = [row.id == null ? '' : row.id, normalizeAccess_(row.access), normalizeEffectiveDate_(row.effective_date || row.effectiveDate)].join('|');
+    if (!merged.has(key)) merged.set(key, row);
+  });
+  return Array.from(merged.values()).sort((a,b) => Number(a.id || 0) - Number(b.id || 0));
+}
 function operatorIdentityKey_(name, phone) {
   const normalizedName = normalizePersonName_(name);
   const normalizedPhone = normalizePhone(phone);
@@ -186,7 +224,7 @@ function operatorRowsForLogin_(rows, name, phone) {
   const exact = all.filter(r => normalizePersonName_(r.name) === inputName);
   const merged = new Map();
   exact.forEach(r => { if (r && r.id !== undefined) merged.set(String(r.id), r); });
-  return Array.from(merged.values()).sort((a,b) => Number(a.id || 0) - Number(b.id || 0));
+  return operatorRowsForEffectiveDate_(Array.from(merged.values()));
 }
 
 function typeRank_(type, role='') {
@@ -260,6 +298,7 @@ async function ensureSchema(db) {
       access TEXT DEFAULT '',
       team_group TEXT DEFAULT '',
       role TEXT DEFAULT '센서리 심사위원',
+      effective_date TEXT DEFAULT '',
       created_at TEXT,
       updated_at TEXT
     )`,
@@ -357,6 +396,10 @@ async function ensureSchema(db) {
     `CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events(action, created_at)`
   ];
   for (const sql of statements) await db.prepare(sql).run();
+  const operatorColumns = await db.prepare('PRAGMA table_info(operators)').all();
+  const hasEffectiveDate = (operatorColumns.results || []).some(column => safeStr(column.name).toLowerCase() === 'effective_date');
+  if (!hasEffectiveDate) await db.prepare("ALTER TABLE operators ADD COLUMN effective_date TEXT DEFAULT ''").run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_operators_effective_date ON operators(effective_date, access, name)').run();
 }
 
 async function ensureDefaultData(env) {
@@ -427,6 +470,7 @@ async function dispatch(action, args, env, request) {
     clearScores: () => clearScores(env, args[0], args[1]),
     importParticipants: () => importParticipants(env, args[0], args[1]),
     importOperators: () => importOperators(env, args[0], args[1]),
+    applyOperatorDateSchedule: () => applyOperatorDateSchedule(env, args[0], args[1]),
     getRegistrationTemplates: () => getRegistrationTemplates(),
     getParticipantAssignments: () => getParticipantAssignments(env, args[0], args[1]),
     getIkrcBlindAssignments: () => getIkrcBlindAssignments(env, args[0]),
@@ -626,12 +670,14 @@ async function judgeLogin(env, name, phone, request = null) {
     teamMap,
     roleMap,
     accountTypeMap,
+    permissionDate: koreaDateKey_(),
     operatorRows: list.map(r => ({
       rowIndex: r.id,
       accountType: normalizeAccountType_(r.account_type || '', r.role || ''),
       access: normalizeAccess_(r.access),
       teamGroup: r.team_group || '',
-      role: r.role || ''
+      role: r.role || '',
+      effectiveDate: normalizeEffectiveDate_(r.effective_date || r.effectiveDate)
     }))
   };
   result.judgeToken = await issueSession(env, 'judge', result, 21600);
@@ -657,7 +703,8 @@ async function hydrateActorFromOperators_(env, actor) {
   try {
     const rows = await env.DB.prepare('SELECT * FROM operators WHERE phone=? ORDER BY id').bind(phone).all();
     const list = operatorRowsForLogin_(rows.results || [], name, phone);
-    if (!list.length) return actor;
+    // 계정이 삭제되었거나 오늘 유효한 날짜 권한이 없으면 세션에 남아 있던 이전 역할을 재사용하지 않습니다.
+    if (!list.length) return null;
 
     const admin = list.find(x => operatorIsAdminRow_(x));
     const highest = bestOperatorRow_(list);
@@ -704,12 +751,14 @@ async function hydrateActorFromOperators_(env, actor) {
       teamMap: { ...(actor.teamMap || {}), ...teamMap },
       roleMap: { ...(actor.roleMap || {}), ...roleMap },
       accountTypeMap: { ...(actor.accountTypeMap || {}), ...accountTypeMap },
+      permissionDate: koreaDateKey_(),
       operatorRows: list.map(r => ({
         rowIndex: r.id,
         accountType: normalizeAccountType_(r.account_type || '', r.role || ''),
         access: normalizeAccess_(r.access),
         teamGroup: r.team_group || '',
-        role: r.role || ''
+        role: r.role || '',
+        effectiveDate: normalizeEffectiveDate_(r.effective_date || r.effectiveDate)
       }))
     };
   } catch (e) {
@@ -948,15 +997,18 @@ async function upsertOperatorAccount(env, payload, actorArg) {
     affiliation: safeStr(payload.affiliation || payload.affil),
     access: safeStr(payload.access || ''),
     teamGroup: safeStr(payload.teamGroup || payload.team || ''),
-    role: safeStr(payload.role || '센서리 심사위원')
+    role: safeStr(payload.role || '센서리 심사위원'),
+    effectiveDate: normalizeEffectiveDate_(payload.effectiveDate || payload.activeDate || payload.permissionDate || '')
   };
   if (!data.name || !data.phone) return { success: false, message: '이름과 연락처를 입력해주세요.' };
+  if (safeStr(payload.effectiveDate || payload.activeDate || payload.permissionDate || '') && !data.effectiveDate) return { success:false, message:'적용일은 YYYY-MM-DD 형식의 올바른 날짜로 입력해주세요.' };
 
   data.access = normalizeAccess_(data.access || '');
   if (data.accountType === 'ADMIN') {
     data.access = 'ALL';
     data.role = '관리자';
     data.teamGroup = '';
+    data.effectiveDate = '';
   } else if (!data.access) {
     return { success: false, message: '관리자가 아닌 계정은 담당 대회코드가 필요합니다.' };
   } else if (data.accountType === 'TEAMLEAD' && !data.role) {
@@ -965,22 +1017,22 @@ async function upsertOperatorAccount(env, payload, actorArg) {
     data.role = '운영진';
   }
 
-  // 같은 엑셀을 다시 업로드해도 중복 계정이 쌓이지 않도록 이름+연락처+권한대회 기준으로만 갱신합니다.
+  // 같은 엑셀을 다시 업로드해도 중복 계정이 쌓이지 않도록 이름+연락처+권한대회+적용일 기준으로 갱신합니다.
   // 같은 사람이 KCR 팀장과 KCAC 팀장을 병행하는 경우처럼 권한대회가 다르면 별도 행으로 유지해야 로그인 시 두 대회가 모두 노출됩니다.
   if (!id) {
-    const existing = await env.DB.prepare(`SELECT id FROM operators WHERE name=? AND phone=? AND COALESCE(access,'')=? ORDER BY id LIMIT 1`)
-      .bind(data.name, data.phone, data.access).first();
+    const existing = await env.DB.prepare(`SELECT id FROM operators WHERE name=? AND phone=? AND COALESCE(access,'')=? AND COALESCE(effective_date,'')=? ORDER BY id LIMIT 1`)
+      .bind(data.name, data.phone, data.access, data.effectiveDate).first();
     if (existing && existing.id) id = Number(existing.id);
   }
 
   if (id) {
-    await env.DB.prepare(`UPDATE operators SET account_type=?, name=?, affiliation=?, phone=?, access=?, team_group=?, role=?, updated_at=? WHERE id=?`)
-      .bind(data.accountType, data.name, data.affiliation, data.phone, data.access, data.teamGroup, data.role, nowIso(), id).run();
+    await env.DB.prepare(`UPDATE operators SET account_type=?, name=?, affiliation=?, phone=?, access=?, team_group=?, role=?, effective_date=?, updated_at=? WHERE id=?`)
+      .bind(data.accountType, data.name, data.affiliation, data.phone, data.access, data.teamGroup, data.role, data.effectiveDate, nowIso(), id).run();
   } else {
-    await env.DB.prepare(`INSERT INTO operators (account_type, name, affiliation, phone, access, team_group, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(data.accountType, data.name, data.affiliation, data.phone, data.access, data.teamGroup, data.role, nowIso(), nowIso()).run();
+    await env.DB.prepare(`INSERT INTO operators (account_type, name, affiliation, phone, access, team_group, role, effective_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(data.accountType, data.name, data.affiliation, data.phone, data.access, data.teamGroup, data.role, data.effectiveDate, nowIso(), nowIso()).run();
   }
-  return { success: true, message: '저장 완료' };
+  return { success: true, message: data.effectiveDate ? (data.effectiveDate + ' 날짜 권한 저장 완료') : '상시 권한 저장 완료' };
 }
 async function deleteOperatorAccount(env, rowIndex, actorArg) {
   const actor = await getActor(env, actorArg);
@@ -1006,7 +1058,8 @@ function operatorRowOut_(r) {
     phone: r.phone || '',
     access: r.access || '',
     teamGroup: r.team_group || '',
-    role: r.role || ''
+    role: r.role || '',
+    effectiveDate: normalizeEffectiveDate_(r.effective_date || '')
   };
 }
 async function listOperators(env, competitionCode, actorArg) {
@@ -1145,7 +1198,8 @@ function operatorPayloadFromRow_(raw, defaultCode='') {
     phone: normalizePhone(pickByAliases_(raw, ['연락처','전화번호','휴대폰','phone','mobile'])),
     access,
     teamGroup: safeStr(pickByAliases_(raw, ['팀','평가팀','team_group','teamGroup','group'])),
-    role: safeStr(pickByAliases_(raw, ['역할','role','judgeRole'], '센서리 심사위원'))
+    role: safeStr(pickByAliases_(raw, ['역할','role','judgeRole'], '센서리 심사위원')),
+    effectiveDate: normalizeEffectiveDate_(pickByAliases_(raw, ['적용일','권한적용일','심사일','대회일','effective_date','effectiveDate','activeDate','permissionDate'], ''))
   };
 }
 
@@ -1376,6 +1430,46 @@ async function importOperators(env, payload, actorArg) {
   }
   return { success: true, message: `심사위원/운영자 ${ok}건 등록, ${skipped}건 제외`, imported: ok, skipped, errors: errors.slice(0,20) };
 }
+async function applyOperatorDateSchedule(env, payload, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!hasAdmin(actor)) return { success:false, message:'날짜별 권한 일괄 적용은 전체 관리자만 가능합니다.' };
+  const code = safeStr(payload && payload.competitionCode).toUpperCase();
+  if (!COMPETITION_CODES.includes(code) || code === 'ALL') return { success:false, message:'날짜별 권한을 적용할 대회코드를 확인해주세요.' };
+  const entries = Array.isArray(payload && payload.entries) ? payload.entries.slice(0, 100) : [];
+  if (!entries.length) return { success:false, message:'적용할 날짜별 권한이 없습니다.' };
+  const rs = await env.DB.prepare('SELECT * FROM operators ORDER BY id').all();
+  const allRows = rs.results || [];
+  let applied = 0;
+  const missing = [], errors = [];
+  for (const entry of entries) {
+    const name = safeStr(entry && entry.name);
+    const effectiveDate = normalizeEffectiveDate_(entry && entry.effectiveDate);
+    const role = safeStr(entry && entry.role);
+    const teamGroup = safeStr(entry && entry.teamGroup);
+    if (!name || !effectiveDate || !role || !teamGroup) { errors.push((name || '이름 없음') + ': 날짜·역할·팀 정보 불완전'); continue; }
+    const candidates = allRows.filter(row => normalizePersonName_(row.name) === normalizePersonName_(name) && !operatorIsAdminRow_(row) && accessCodes_(row.access || '').some(value => value === 'ALL' || value === code));
+    const base = candidates.find(row => !normalizeEffectiveDate_(row.effective_date || '')) || candidates[0];
+    if (!base || !normalizePhone(base.phone)) { missing.push(name); continue; }
+    const phone = normalizePhone(base.phone);
+    const existing = await env.DB.prepare(`SELECT id FROM operators WHERE name=? AND phone=? AND COALESCE(access,'')=? AND COALESCE(effective_date,'')=? ORDER BY id LIMIT 1`)
+      .bind(base.name || name, phone, code, effectiveDate).first();
+    if (existing && existing.id) {
+      await env.DB.prepare(`UPDATE operators SET account_type='JUDGE', affiliation=?, team_group=?, role=?, effective_date=?, updated_at=? WHERE id=?`)
+        .bind(base.affiliation || '', teamGroup, role, effectiveDate, nowIso(), existing.id).run();
+    } else {
+      await env.DB.prepare(`INSERT INTO operators (account_type, name, affiliation, phone, access, team_group, role, effective_date, created_at, updated_at) VALUES ('JUDGE', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(base.name || name, base.affiliation || '', phone, code, teamGroup, role, effectiveDate, nowIso(), nowIso()).run();
+    }
+    applied++;
+  }
+  return {
+    success:true,
+    message:`${code} 날짜별 권한 ${applied}건 적용 완료` + (missing.length ? ` · 기존 계정을 찾지 못한 심사위원 ${missing.length}명` : '') + (errors.length ? ` · 제외 ${errors.length}건` : ''),
+    applied,
+    missing:Array.from(new Set(missing)),
+    errors:errors.slice(0, 20)
+  };
+}
 function getRegistrationTemplates() {
   // 웹 화면의 CSV 예시는 대회별 정리 양식을 기준으로 제공합니다.
   // 구버전 공통 양식도 alias로 계속 읽을 수 있습니다.
@@ -1390,11 +1484,11 @@ function getRegistrationTemplates() {
     'KTCC,1,팀커핑A,KTCC 선수1,A카페,01077778888,KTCC 선수2,B카페,01077779999,1,F1,팀 단위 등록'
   ].join('\n');
   const operatorCsv = [
-    '대회코드,계정유형,심사위원명,소속,연락처,역할,평가팀',
-    'ALL,ADMIN,총괄관리자,KCL,01012345678,관리자,',
-    'KCR,JUDGE,홍심사,로스터리,01011112222,센서리 심사위원,A',
-    'MOB,JUDGE,김헤드,더컵,01022223333,센서리 헤드 심사위원,Head A',
-    'KTCC,STAFF,운영진,KCL,01033334444,운영진,1번 테이블'
+    '대회코드,계정유형,심사위원명,소속,연락처,역할,평가팀,적용일',
+    'ALL,ADMIN,총괄관리자,KCL,01012345678,관리자,,',
+    'KCR,JUDGE,홍심사,로스터리,01011112222,센서리 심사위원,A,',
+    'MOB,JUDGE,김헤드,더컵,01022223333,센서리 헤드 심사위원,A조,2026-08-06',
+    'KTCC,STAFF,운영진,KCL,01033334444,운영진,1번 테이블,'
   ].join('\n');
   return { success: true, templates: { participants: participantCsv, operators: operatorCsv } };
 }

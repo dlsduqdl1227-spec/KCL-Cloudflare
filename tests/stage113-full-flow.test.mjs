@@ -246,10 +246,41 @@ for (const operator of [
     teamGroup: "QA팀",
     role: "대회팀장",
   },
+  {
+    accountType: "JUDGE",
+    name: "QA 날짜심사",
+    phone: "01011110006",
+    affiliation: "QA",
+    access: "MOB",
+    teamGroup: "상시조",
+    role: "센서리 심사위원",
+  },
 ]) {
   const saved = await rpc("upsertOperatorAccount", operator, adminActor);
   assert.equal(saved.success, true, saved.message);
 }
+
+const kstParts = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+}).formatToParts(new Date()).reduce((out, part) => ({ ...out, [part.type]:part.value }), {});
+const currentKstDate = `${kstParts.year}-${kstParts.month}-${kstParts.day}`;
+const datedPermission = await rpc("applyOperatorDateSchedule", {
+  competitionCode: "MOB",
+  entries: [{
+    effectiveDate: currentKstDate,
+    teamGroup: "B조",
+    role: "센서리 헤드 심사위원",
+    name: "QA 날짜심사",
+  }],
+}, adminActor);
+assert.equal(datedPermission.success, true, datedPermission.message);
+assert.equal(datedPermission.applied, 1);
+const datedJudge = await rpc("judgeLogin", "QA 날짜심사", "01011110006");
+assert.equal(datedJudge.success, true, datedJudge.message);
+assert.equal(datedJudge.permissionDate, currentKstDate);
+assert.equal(datedJudge.teamMap.MOB, "B조");
+assert.equal(datedJudge.roleMap.MOB, "센서리 헤드 심사위원");
+assert.ok(datedJudge.operatorRows.some(row => row.access === "MOB" && row.effectiveDate === currentKstDate));
 
 const judge = await rpc("judgeLogin", "QA 센서리", "01011110001");
 const judge2 = await rpc("judgeLogin", "QA 센서리2", "01011110004");

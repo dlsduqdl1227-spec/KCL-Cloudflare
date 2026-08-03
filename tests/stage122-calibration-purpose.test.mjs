@@ -82,7 +82,7 @@ const kcrRenderContext = {
   setCommentWarning:()=>{},
 };
 vm.createContext(kcrRenderContext);
-vm.runInContext(kcrCommentRenderSource, kcrRenderContext);
+vm.runInContext(extractFunction(assessment, "normalizeKcrOverallCommentState_") + "\n" + kcrCommentRenderSource, kcrRenderContext);
 kcrRenderContext.renderCuppingAttrCard();
 assert.match(kcrCommentCard.innerHTML, /SUMMARY/);
 assert.match(kcrCommentCard.innerHTML, /id="cupping-comment-input"/);

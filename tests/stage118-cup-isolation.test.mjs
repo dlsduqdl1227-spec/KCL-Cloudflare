@@ -65,7 +65,7 @@ const stateContext = {
 };
 vm.createContext(stateContext);
 vm.runInContext("var _cupping = { cups:[], openTagFamilies:{flavor:'nutty'} };", stateContext);
-["makeCupData", "normalizeCuppingCupUiState_", "kcrOpenFamilyFor_"].forEach((name) => {
+["makeCupData", "kcrOverallCommentEnabled_", "normalizeKcrOverallCommentState_", "normalizeCuppingCupUiState_", "kcrOpenFamilyFor_"].forEach((name) => {
   vm.runInContext(functionSource(name), stateContext);
 });
 
