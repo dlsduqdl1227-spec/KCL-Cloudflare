@@ -31,8 +31,12 @@ function extractFunction(source, name) {
 assert.match(assessment, /id="btn-eval"[^>]*>대회평가 시작/);
 assert.match(assessment, /id="btn-calibration-all"[^>]*>전체 켈리브레이션 시작/);
 assert.match(assessment, /id="btn-calibration-team"[^>]*>팀별 켈리브레이션 시작/);
+assert.ok(assessment.indexOf('id="btn-review"') < assessment.indexOf('id="btn-calibration-team"'), "Review must appear before KCR calibration entry buttons");
 assert.match(extractFunction(assessment, "evaluationTeamForSubmit_"), /전체 켈리브레이션팀/);
 assert.match(extractFunction(assessment, "goCalibration"), /setEvaluationPurpose_\('calibration', scope\)/);
+assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /켈리브레이션\(팀별\)/);
+assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /켈리브레이션\(전체\)/);
+assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /대회검수/);
 
 const purposeContext = { _selComp:{code:"IKRC"}, judgeTeamForSubmit:()=>"2팀" };
 vm.createContext(purposeContext);
@@ -54,6 +58,22 @@ assert.match(securedTeamSource, /calibration:all[^\n]*전체 켈리브레이션�
 assert.match(extractFunction(rpc, "ikrcCalibrationRows_"), /!isCalibrationMode_\(mode\)/);
 assert.match(extractFunction(rpc, "ikrcCalibrationRows_"), /팀별/);
 assert.doesNotMatch(extractFunction(rpc, "shouldCountItemInRanking_"), /MOB[^\n]*isHeadRole_/);
+assert.match(extractFunction(assessment, "renderKcrProcessSelect_"), /프로세스 구분 없음/);
+assert.match(extractFunction(assessment, "startCuppingFinalsRange"), /!isActiveCalibrationMode_\(\).*assertKcrProcessOpenForEval_/s);
+assert.match(extractFunction(assessment, "cuppingSubmitAll"), /!_cupping\.isCalibrationMode.*assertKcrProcessOpenForEval_/);
+
+const commentModeContext = {};
+vm.createContext(commentModeContext);
+vm.runInContext(extractFunction(assessment, "kcrOverallCommentEnabled_"), commentModeContext);
+assert.equal(commentModeContext.kcrOverallCommentEnabled_({ overallCommentEnabled:true }), true);
+assert.equal(commentModeContext.kcrOverallCommentEnabled_({ overallCommentEnabled:false }), false);
+assert.equal(commentModeContext.kcrOverallCommentEnabled_({}), true, "Old saved drafts must default to comment enabled");
+assert.match(extractFunction(assessment, "renderCuppingAttrCard"), /종합 코멘트 사용 여부/);
+assert.match(extractFunction(assessment, "renderCuppingAttrCard"), /사용 안 함/);
+assert.match(extractFunction(assessment, "kcrCommentReferenceHtml_"), /점수·강도·스마트태그/);
+assert.match(extractFunction(assessment, "kcrCommentReferenceHtml_"), /slice\(0, 2\)/);
+assert.match(extractFunction(assessment, "cuppingSubmitAll"), /종합코멘트 사용여부/);
+assert.match(rpc, /'종합코멘트 사용여부'/);
 
 assert.doesNotMatch(assessment, /onclick="generateMobComment\(\)"/);
 assert.match(assessment, /MOB 전체 종합 코멘트 \(심사위원 직접 작성\)/);

@@ -354,8 +354,30 @@ const secondJudgeSameKcrCup = await rpc(
 );
 assert.equal(secondJudgeSameKcrCup.success, true, JSON.stringify(secondJudgeSameKcrCup));
 assert.equal(secondJudgeSameKcrCup.inserted, 1);
+
+for (const [mode, team] of [
+  ["KCR 팀별 켈리브레이션", judge.teamGroup],
+  ["KCR 전체 켈리브레이션", "전체 켈리브레이션팀"],
+]) {
+  const calibrationPayload = genericPayload(judge, "KCR", "KCR-1", 64, [
+    { data: ["KCR-1", "켈리브레이션"], extraFields: { Total: 64, "종합코멘트 사용여부": "사용 안 함" } },
+  ]);
+  calibrationPayload.mode = mode;
+  calibrationPayload.team = team;
+  const submitted = await rpc("submitScores", calibrationPayload);
+  assert.equal(submitted.success, true, `${mode}: ${submitted.message}`);
+}
+assert.equal(
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%팀별 켈리브레이션%'").get().n,
+  1,
+);
+assert.equal(
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%전체 켈리브레이션%' AND team='전체 켈리브레이션팀'").get().n,
+  1,
+  "KCR overall calibration must use the shared overall-calibration team",
+);
 const independentKcrRows = testDb.raw
-  .prepare("SELECT judge_name, unit, total_score FROM scores WHERE competition_code='KCR' ORDER BY judge_name, unit")
+  .prepare("SELECT judge_name, unit, total_score FROM scores WHERE competition_code='KCR' AND mode NOT LIKE '%켈리브레이션%' ORDER BY judge_name, unit")
   .all();
 assert.deepEqual(
   independentKcrRows.map((row) => [row.judge_name, row.unit, row.total_score]),
@@ -388,6 +410,7 @@ for (const [code, minimum] of Object.entries(reviewExpectedMinimums)) {
   reviewLists[code] = review;
 }
 assert.equal(reviewLists.IKRC.list.length, 16, "IKRC head official scores must be included in the normal review list");
+assert.equal(reviewLists.KCR.list.length, 3, "KCR team/all calibration rows must stay out of official competition review");
 assert.ok(reviewLists.IKRC.list.some((item) => item.judgeName === "QA 헤드" || item["심사위원명"] === "QA 헤드"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "X-1"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "Y-2"));

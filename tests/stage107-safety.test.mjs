@@ -111,6 +111,7 @@ const kcrRangeInputs = {
 };
 const kcrRangeContext = {
   document: { getElementById: (id) => kcrRangeInputs[id] || null },
+  isActiveCalibrationMode_: () => false,
   assertKcrProcessOpenForEval_: () => true,
   buildCupRange_: cupContext.buildCupRange_,
   toast: (message) => { throw new Error(message); },

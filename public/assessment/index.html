@@ -507,6 +507,13 @@ input[type=range].kcl-range,
 .mob-comment-reference-title{font-size:12px;font-weight:800;color:var(--text-2);line-height:1.4;margin-bottom:4px}
 .mob-comment-reference-text{font-size:12px;color:var(--text-3);line-height:1.55}
 #mob-comment-reference{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-bottom:14px}
+.kcr-overall-comment-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 14px}
+.kcr-overall-comment-choice{display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text-3);font-size:12px;font-weight:800;cursor:pointer}
+.kcr-overall-comment-choice:has(input:checked){border-color:var(--accent);background:rgba(255,255,255,.1);color:var(--text)}
+.kcr-overall-comment-choice input{width:auto;margin:0;accent-color:var(--accent)}
+.kcr-comment-reference{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-bottom:14px}
+.kcr-comment-reference .mob-comment-reference-text+.mob-comment-reference-text{margin-top:4px}
+@media(max-width:420px){.kcr-overall-comment-toggle{grid-template-columns:1fr}.kcr-comment-reference{grid-template-columns:1fr}}
 .review-smart-tags .mob-inline-tag-buttons{display:flex;flex-wrap:wrap;gap:6px}
 .review-smart-tags .category-primary,
 .review-smart-tags .category-secondary,
@@ -1806,10 +1813,10 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <div id="comp-list"></div>
   <div class="divider"></div>
   <button class="btn" id="btn-eval" onclick="goEval()">대회평가 시작</button>
-  <button class="btn-outline" id="btn-calibration-all" style="display:none" onclick="goCalibration('all')">전체 켈리브레이션 시작</button>
-  <button class="btn-outline" id="btn-calibration-team" style="display:none" onclick="goCalibration('team')">팀별 켈리브레이션 시작</button>
-  <button class="btn-outline" id="btn-calibration" style="display:none" onclick="goCalibrationResults()">켈리브레이션 결과 확인</button>
   <button class="btn-outline" id="btn-review" style="display:none" onclick="goReview()">검수 / 현황 보기</button>
+  <button class="btn-outline" id="btn-calibration-team" style="display:none" onclick="goCalibration('team')">팀별 켈리브레이션 시작</button>
+  <button class="btn-outline" id="btn-calibration-all" style="display:none" onclick="goCalibration('all')">전체 켈리브레이션 시작</button>
+  <button class="btn-outline" id="btn-calibration" style="display:none" onclick="goCalibrationResults()">켈리브레이션 결과 확인</button>
   <button class="btn-outline" id="btn-ikrc-seed-vote" style="display:none" onclick="openIkrcSeedToCup_(_selComp)">Seed to Cup 운영 / 결과</button>
   <button class="btn-danger" onclick="doLogout()">로그아웃</button>
 </div>
@@ -1968,14 +1975,16 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <div class="finals-container">
     <div style="text-align:center;font-size:17px;font-weight:700;margin-bottom:4px;color:var(--text-2)" id="cupping-round-label">평가</div>
     <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px">컵 번호를 범위로 입력하거나 개별 지정해 평가합니다</div>
-    <div class="section-label">프로세스</div>
-    <select id="cuppingFinalsProcess" style="margin-bottom:14px">
-      <option value="">프로세스 선택</option>
-      <option value="Washed">Washed Process</option>
-      <option value="Natural">Natural Process</option>
-      <option value="Blending">Blending / 블렌딩</option>
-    </select>
-    <div id="cupping-process-help" style="display:none;margin-top:-6px;margin-bottom:14px"></div>
+    <div id="cupping-process-wrap">
+      <div class="section-label">프로세스</div>
+      <select id="cuppingFinalsProcess" style="margin-bottom:14px">
+        <option value="">프로세스 선택</option>
+        <option value="Washed">Washed Process</option>
+        <option value="Natural">Natural Process</option>
+        <option value="Blending">Blending / 블렌딩</option>
+      </select>
+      <div id="cupping-process-help" style="display:none;margin-top:-6px;margin-bottom:14px"></div>
+    </div>
     <div id="cuppingCalibrationWrap" class="kcr-calibration-control" style="display:block;margin-bottom:14px">
       <div style="font-weight:800;color:var(--text-2);margin-bottom:6px">선택한 평가 목적</div>
       <label style="display:flex;gap:8px;align-items:flex-start;cursor:default">
@@ -3530,6 +3539,17 @@ function kcrProcessOptionsHtml_(cfg, selected) {
 function renderKcrProcessSelect_() {
   var sel = document.getElementById('cuppingFinalsProcess');
   if (!sel) return;
+  if (isActiveCalibrationMode_()) {
+    sel.innerHTML = '<option value="켈리브레이션">켈리브레이션 (프로세스 구분 없음)</option>';
+    sel.value = '켈리브레이션';
+    var calibrationHelp = document.getElementById('cupping-process-help');
+    if (calibrationHelp) { calibrationHelp.style.display = 'none'; calibrationHelp.textContent = ''; }
+    ['cuppingRangeStartBtn','cuppingSingleStartBtn'].forEach(function(id){
+      var calibrationBtn = document.getElementById(id);
+      if (calibrationBtn) calibrationBtn.disabled = false;
+    });
+    return;
+  }
   var prev = sel.value;
   sel.innerHTML = kcrProcessOptionsHtml_(_selComp, prev);
   if (prev && kcrProcessIsOpen_(_selComp, prev)) sel.value = prev;
@@ -4261,27 +4281,30 @@ function updateSelectReviewButton_() {
   var evalBtn = document.getElementById('btn-eval');
   var seedVoteBtn = document.getElementById('btn-ikrc-seed-vote');
   var code = _selComp && _selComp.code;
-  if (evalBtn) evalBtn.textContent = '대회평가 시작';
+  var resultCode = String(code || '').toUpperCase();
+  var isKcrMenu = resultCode === 'KCR';
+  if (evalBtn) evalBtn.textContent = isKcrMenu ? '대회평가' : '대회평가 시작';
   var canCal = !!(_selComp && canCalibrationCode_(code));
   if (calAllBtn) {
     calAllBtn.style.display = canCal ? 'block' : 'none';
-    calAllBtn.textContent = '전체 켈리브레이션 시작';
+    calAllBtn.textContent = isKcrMenu ? '켈리브레이션(전체)' : '전체 켈리브레이션 시작';
   }
   if (calTeamBtn) {
     var hasTeam = !!judgeTeamText(code);
     calTeamBtn.style.display = canCal ? 'block' : 'none';
     calTeamBtn.disabled = canCal && !hasTeam;
-    calTeamBtn.textContent = hasTeam ? ('팀별 켈리브레이션 시작 · ' + judgeTeamText(code)) : '팀별 켈리브레이션 시작 · 팀 미지정';
+    calTeamBtn.textContent = hasTeam
+      ? ((isKcrMenu ? '켈리브레이션(팀별)' : '팀별 켈리브레이션 시작') + ' · ' + judgeTeamText(code))
+      : ((isKcrMenu ? '켈리브레이션(팀별)' : '팀별 켈리브레이션 시작') + ' · 팀 미지정');
   }
   if (calBtn) {
-    var resultCode = String(code || '').toUpperCase();
     var canSeeResults = _selComp && ((resultCode === 'MOB' && isHeadRoleForCode_(code)) || (resultCode === 'IKRC' && (isHeadRoleForCode_(code) || isTeamLeaderForCode_(code) || isAdminRole())));
     calBtn.style.display = canSeeResults ? 'block' : 'none';
     calBtn.textContent = '켈리브레이션 결과 확인';
   }
   if (reviewBtn) {
     reviewBtn.style.display = (_selComp && canReviewCode_(code)) ? 'block' : 'none';
-    reviewBtn.textContent = (isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내 제출 검수';
+    reviewBtn.textContent = isKcrMenu ? '대회검수' : ((isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내 제출 검수');
   }
   if (seedVoteBtn) {
     var isIkrcFinal = isIkrcFinalConfig_(_selComp);
@@ -9236,9 +9259,12 @@ function showCuppingSetup() {
     judgeLineText() + '  ' + _selComp.currentRound + ' · ' + purpose + evaluationTeamContextText_() + (isActiveCalibrationMode_() ? ' · 공식 점수·순위 제외' : ' · 공식 점수 반영');
   var rb = document.getElementById('cuppingRangeStartBtn');
   var sb = document.getElementById('cuppingSingleStartBtn');
-  if (rb) rb.textContent = label + ' 시작';
-  if (sb) sb.textContent = label + ' 시작';
+  var startLabel = isActiveCalibrationMode_() ? purpose : label;
+  if (rb) rb.textContent = startLabel + ' 시작';
+  if (sb) sb.textContent = startLabel + ' 시작';
   renderKcrProcessSelect_();
+  var processWrap = document.getElementById('cupping-process-wrap');
+  if (processWrap) processWrap.style.display = isActiveCalibrationMode_() ? 'none' : 'block';
   _cuppingFinalsCups = [];
   var cw = document.getElementById('cuppingCalibrationWrap');
   var cb = document.getElementById('cuppingCalibrationMode');
@@ -9297,9 +9323,9 @@ function startCuppingEval() {
 }
 
 function startCuppingFinalsRange() {
-  var process = document.getElementById('cuppingFinalsProcess').value;
+  var process = isActiveCalibrationMode_() ? '켈리브레이션' : document.getElementById('cuppingFinalsProcess').value;
   if (!process) { toast('프로세스를 선택하세요', true); return; }
-  if (!assertKcrProcessOpenForEval_(process)) return;
+  if (!isActiveCalibrationMode_() && !assertKcrProcessOpenForEval_(process)) return;
   var built = buildCupRange_(document.getElementById('cuppingFinalsStart').value, document.getElementById('cuppingFinalsEnd').value);
   if (!built.success) { toast(built.message, true); return; }
   var mode = getRoundEvalLabel(_selComp.currentRound);
@@ -9307,9 +9333,9 @@ function startCuppingFinalsRange() {
 }
 
 function startCuppingFinalsSingle() {
-  var process = document.getElementById('cuppingFinalsProcess').value;
+  var process = isActiveCalibrationMode_() ? '켈리브레이션' : document.getElementById('cuppingFinalsProcess').value;
   if (!process) { toast('프로세스를 선택하세요', true); return; }
-  if (!assertKcrProcessOpenForEval_(process)) return;
+  if (!isActiveCalibrationMode_() && !assertKcrProcessOpenForEval_(process)) return;
   if (_cuppingFinalsCups.length === 0) { toast('컵 번호를 1개 이상 추가하세요', true); return; }
   var mode = getRoundEvalLabel(_selComp.currentRound);
   initCuppingEval(_cuppingFinalsCups.slice(), mode, process, String(_selComp.currentRound || '').indexOf('결선') > -1, !!(document.getElementById('cuppingCalibrationMode') && document.getElementById('cuppingCalibrationMode').checked));
@@ -9328,7 +9354,7 @@ function makeCupData(cupNumber) {
     sweetness:3.0, sweetnessIntensity:4, sweetnessTagIds:[],
     mouthfeel:3.0, mouthfeelIntensity:4, mouthfeelTagIds:[],
     sensoryComments:commentStates,
-    overall:3.0, noteOverall:'', generatedComment:'', commentEdited:true,
+    overall:3.0, noteOverall:'', generatedComment:'', commentEdited:true, overallCommentEnabled:true,
     openTagFamilies:{},
     flavorLocked:false, aftertasteLocked:false, acidityLocked:false,
     sweetnessLocked:false, mouthfeelLocked:false, overallLocked:false
@@ -9363,7 +9389,7 @@ function initCuppingEval(cupNumbers, mode, process, isFinalsMode, isCalibrationM
   document.getElementById('cupping-eval-title').textContent =
     'KCR CUPPING — ' + mode + (_cupping.isCalibrationMode ? ' · 켈리브레이션' : '');
   document.getElementById('cupping-eval-sub').textContent =
-    judgeLineText() + '  ' + process + '  ' + mode + (_cupping.isCalibrationMode ? '  켈리브레이션(순위 제외)' : '');
+    judgeLineText() + '  ' + (_cupping.isCalibrationMode ? (evaluationPurposeLabel_() + evaluationTeamContextText_() + ' · 순위 제외') : (process + '  ' + mode));
 
   renderCuppingCupNav();
   renderCuppingAttrCard();
@@ -9387,7 +9413,7 @@ function renderCuppingCupNav() {
     var total = roundTotal(c.flavor + c.aftertaste + c.acidity + (c.sweetness * 2) + c.mouthfeel + c.overall);
     var btn = document.createElement('button');
     btn.className = 'cup-btn' + (i === _cupping.currentIdx ? ' active' : '') +
-                    (c.noteOverall && c.noteOverall.length >= 10 ? ' done' : '');
+                    (!kcrOverallCommentEnabled_(c) || (c.noteOverall && c.noteOverall.length >= 10) ? ' done' : '');
     btn.innerHTML = '<span class="cup-btn-num">Cup ' + c.cupNumber + '</span>' +
                     '<span class="cup-btn-score">' + fmtScore(total,2) + '</span>';
     btn.onclick = (function(n) { return function(){ switchCuppingCup(n); }; })(i);
@@ -9587,6 +9613,55 @@ function kcrManualAttributeComments_(c) {
   }).filter(function(text) { return !!text; });
 }
 
+function kcrOverallCommentEnabled_(c) {
+  return !c || c.overallCommentEnabled !== false;
+}
+
+function setKcrOverallCommentEnabled_(enabled) {
+  saveCuppingCurrentFromDOM();
+  var c = _cupping.cups[_cupping.currentIdx];
+  if (!c) return;
+  c.overallCommentEnabled = !!enabled;
+  if (!c.overallCommentEnabled) {
+    c.generatedComment = '';
+    c.commentEdited = true;
+  }
+  renderCuppingAttrCard();
+  renderCuppingCupNav();
+}
+
+function kcrCommentReferenceHtml_(c) {
+  var attrs = [
+    {key:'flavor', label:'Flavor(플레이버)', intensityKey:'flavorIntensity'},
+    {key:'aftertaste', label:'Aftertaste(에프터테이스트)', intensityKey:'aftertastePersistence'},
+    {key:'acidity', label:'Acidity(산미)', intensityKey:'acidityIntensity'},
+    {key:'sweetness', label:'Sweetness(단맛) ×2', intensityKey:'sweetnessIntensity'},
+    {key:'mouthfeel', label:'Mouthfeel(마우스필)', intensityKey:'mouthfeelIntensity'},
+    {key:'overall', label:'Overall(오버롤)', intensityKey:''}
+  ];
+  var cards = attrs.map(function(meta){
+    var score = parseFloat(c[meta.key]) || 0;
+    var scoreText = fmtScore(score,1) + '점(' + kcrGetMeaning(score) + ')';
+    if (meta.intensityKey) scoreText += ' · ' + (meta.key === 'aftertaste' ? '지속성 ' : '강도 ') + getIntensityText_(normalizeIntensityForScale_(c[meta.intensityKey], getIntensityScale_('KCR')));
+    var ids = meta.key === 'aftertaste'
+      ? (c.aftertasteTagIds || []).concat(c.aftertasteFlavorTagIds || [])
+      : (c[kcrTagIdsKey_(meta.key)] || []);
+    var tags = meta.key === 'overall' ? [] : KcrSensoryTags.labels(ids).slice(0, 2);
+    var tagText = meta.key === 'overall' ? '' : (tags.length ? ('선택 표현: ' + tags.join(', ')) : '선택된 스마트태그 없음');
+    var commentText = '';
+    if (meta.key !== 'overall') {
+      var state = kcrCommentState_(c, meta.key);
+      commentText = String(state.customComment || '').trim();
+    }
+    var html = '<div class="mob-comment-reference-card"><div class="mob-comment-reference-title">' + escHtml(meta.label) + '</div>';
+    html += '<div class="mob-comment-reference-text">' + escHtml(scoreText) + '</div>';
+    if (tagText) html += '<div class="mob-comment-reference-text">' + escHtml(tagText) + '</div>';
+    if (commentText) html += '<div class="mob-comment-reference-text">속성 정리: ' + escHtml(commentText) + '</div>';
+    return html + '</div>';
+  }).join('');
+  return '<div class="review-edit-help" style="margin-bottom:10px">종합 코멘트는 제출하지 않습니다. 현재 컵에서 선택한 점수·강도·스마트태그와 속성별 정리를 아래에서 확인할 수 있습니다.</div><div class="kcr-comment-reference">' + cards + '</div>';
+}
+
 function renderCuppingAttrCard() {
   var c = _cupping.cups[_cupping.currentIdx];
   var attr = _cupping.currentAttr;
@@ -9594,20 +9669,30 @@ function renderCuppingAttrCard() {
   document.querySelectorAll('#cupping-attr-tabs .attr-tab').forEach(function(tab) {
     var ta = tab.getAttribute('data-attr');
     tab.classList.toggle('active', ta === attr);
-    if (ta === 'comment') tab.classList.toggle('filled', !!(c.noteOverall && c.noteOverall.length >= 10));
+    if (ta === 'comment') tab.classList.toggle('filled', !kcrOverallCommentEnabled_(c) || !!(c.noteOverall && c.noteOverall.length >= 10));
     else tab.classList.remove('filled');
   });
 
   if (attr === 'comment') {
     var commentHtml = '<div class="attr-card">';
     commentHtml += '<h3 style="text-align:center;margin-bottom:16px;font-size:18px;font-weight:700;letter-spacing:1px">전체 코멘트</h3>';
-    // Stage52: KCR 코멘트 탭의 Category Summary는 상단/속성 탭 점수와 중복되어 숨긴다.
-    commentHtml += '<button class="btn-gen-comment" onclick="generateCuppingComment()">종합 코멘트 자동 생성</button>';
-    commentHtml += '<div class="gen-comment-area" id="gen-comment-area"></div>';
-    commentHtml += '<div class="section-label" style="margin-top:16px">Overall Comment (최소 10자)</div>';
-    commentHtml += '<textarea id="cupping-comment-input" placeholder="종합 코멘트를 입력하세요" oninput="onCuppingCommentInput(this.value)">' + escHtml(c.noteOverall || '') + '</textarea>';
+    commentHtml += '<div class="section-label">종합 코멘트 사용 여부</div>';
+    commentHtml += '<div class="kcr-overall-comment-toggle" role="radiogroup" aria-label="종합 코멘트 사용 여부">';
+    commentHtml += '<label class="kcr-overall-comment-choice"><input type="radio" name="kcr-overall-comment-mode" value="use"' + (kcrOverallCommentEnabled_(c) ? ' checked' : '') + ' onchange="setKcrOverallCommentEnabled_(true)">사용함</label>';
+    commentHtml += '<label class="kcr-overall-comment-choice"><input type="radio" name="kcr-overall-comment-mode" value="skip"' + (!kcrOverallCommentEnabled_(c) ? ' checked' : '') + ' onchange="setKcrOverallCommentEnabled_(false)">사용 안 함</label>';
+    commentHtml += '</div>';
+    if (kcrOverallCommentEnabled_(c)) {
+      commentHtml += '<button class="btn-gen-comment" onclick="generateCuppingComment()">종합 코멘트 자동 생성</button>';
+      commentHtml += '<div class="gen-comment-area" id="gen-comment-area"></div>';
+      commentHtml += '<div class="section-label" style="margin-top:16px">Overall Comment (최소 10자)</div>';
+      commentHtml += '<textarea id="cupping-comment-input" placeholder="종합 코멘트를 입력하세요" oninput="onCuppingCommentInput(this.value)">' + escHtml(c.noteOverall || '') + '</textarea>';
+      commentHtml += '<div id="cupping-comment-warning" class="comment-edit-warning" style="display:none"></div>';
+    } else {
+      commentHtml += kcrCommentReferenceHtml_(c);
+    }
     commentHtml += '</div>';
     document.getElementById('cupping-attr-card').innerHTML = commentHtml;
+    if (kcrOverallCommentEnabled_(c)) setCommentWarning('cupping-comment-warning', c.generatedComment, c.commentEdited);
     return;
   }
 
@@ -9696,6 +9781,7 @@ function onCuppingCommentInput(val) {
   renderCuppingCupNav();
 }
 function validateCuppingCommentEdited(c) {
+  if (!kcrOverallCommentEnabled_(c)) return true;
   if (c && c.generatedComment && !c.commentEdited) {
     if (_cupping.cups[_cupping.currentIdx] === c && _cupping.currentAttr !== 'comment') {
       _cupping.currentAttr = 'comment';
@@ -9764,8 +9850,8 @@ function useCuppingComment(comment) {
 
 function cuppingSubmitAll() {
   saveCuppingCurrentFromDOM();
-  if (!assertKcrProcessOpenForEval_(_cupping.process)) return;
-  var notEdited = _cupping.cups.filter(function(c){ return c.generatedComment && !c.commentEdited; });
+  if (!_cupping.isCalibrationMode && !assertKcrProcessOpenForEval_(_cupping.process)) return;
+  var notEdited = _cupping.cups.filter(function(c){ return kcrOverallCommentEnabled_(c) && c.generatedComment && !c.commentEdited; });
   if (notEdited.length > 0) {
     toast('자동 생성 코멘트를 적용한 컵은 모두 직접 수정해야 제출할 수 있습니다.', true);
     var targetCommentIdx = _cupping.cups.indexOf(notEdited[0]);
@@ -9774,12 +9860,13 @@ function cuppingSubmitAll() {
     renderCuppingAttrCard();
     return;
   }
-  var missing = _cupping.cups.filter(function(c){ return !c.noteOverall || c.noteOverall.length < 10; });
+  var missing = _cupping.cups.filter(function(c){ return kcrOverallCommentEnabled_(c) && (!c.noteOverall || c.noteOverall.length < 10); });
   if (missing.length > 0) {
     var nums = missing.map(function(c){ return 'Cup ' + c.cupNumber; }).join(', ');
     if (!confirm(nums + '의 Overall Comment가 10자 미만입니다.\n그래도 제출하시겠습니까?')) return;
   }
-  if (!confirm('총 ' + _cupping.cups.length + '개 컵을 제출하시겠습니까?')) return;
+  var skippedCommentCount = _cupping.cups.filter(function(c){ return !kcrOverallCommentEnabled_(c); }).length;
+  if (!confirm('총 ' + _cupping.cups.length + '개 컵을 제출하시겠습니까?' + (skippedCommentCount ? '\n종합 코멘트 미사용: ' + skippedCommentCount + '개 컵' : ''))) return;
 
   showOverlay();
   var kcrDqInfo = evalDisqualificationPayload_('KCR', false, '');
@@ -9797,9 +9884,9 @@ function cuppingSubmitAll() {
       c.acidity, c.acidityIntensity, acidityComment.customComment, JSON.stringify(acidityComment), (c.acidityTagIds || []).join(', '),
       c.sweetness, c.sweetnessIntensity, sweetnessComment.customComment, JSON.stringify(sweetnessComment), (c.sweetnessTagIds || []).join(', '),
       c.mouthfeel, c.mouthfeelIntensity, mouthfeelComment.customComment, JSON.stringify(mouthfeelComment), (c.mouthfeelTagIds || []).join(', '),
-      c.overall, c.noteOverall || '',
+      c.overall, kcrOverallCommentEnabled_(c) ? (c.noteOverall || '') : '',
       total, kcrDqInfo.disqualified ? 'Y' : 'N', kcrDqInfo.reason, '미검수'
-    ]};
+    ], extraFields:{'종합코멘트 사용여부':kcrOverallCommentEnabled_(c) ? '사용함' : '사용 안 함'}};
   });
 
   google.script.run
