@@ -531,6 +531,7 @@ input[type=range].kcl-range,
   margin:2px 0 4px;padding-left:2px;letter-spacing:0}
 .smart-tag-group-label.positive{color:#66e29a}
 .smart-tag-group-label.refine{color:#ffb3b3}
+.mob-smart-tag-group-label{color:var(--text-2)}
 .cat-btn-s{background:var(--card2);border:1px solid var(--border);padding:7px 10px;
   border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text-3)}
 .cat-btn-s.selected{background:#fff;color:#000;border-color:#fff}
@@ -12600,19 +12601,22 @@ function mobSmartTagGroupLabel_(label) {
   if (/^(보완|개선|부정|주의|불균형|결점|보완\s*표현)$/i.test(raw)) return '보완 표현';
   return raw;
 }
+function mobSmartTagSectionLabelHtml_(label) {
+  return '<div class="smart-tag-group-label mob-smart-tag-group-label">' + escHtml(mobSmartTagGroupLabel_(label)) + '</div>';
+}
 function mobTagButtonsHtml_(group, category, handlerName) {
   var selected = mobCategoryTags_(group, category);
   var data = (MOB_SMART_TAGS[group] && MOB_SMART_TAGS[group][category]) || [];
   var handler = handlerName || 'toggleMobInlineTag';
   if (Array.isArray(data)) {
-    return smartTagGroupLabelHtml_('주요 표현') + data.map(function(tag){
+    return mobSmartTagSectionLabelHtml_('주요 표현') + data.map(function(tag){
       return mobTagButtonHtml_(group, category, tag, tag, 'cat-btn-s', selected, handler);
     }).join('');
   }
   var openKey = mobOpenSmartTagKey_(group, category);
   var html = '<div class="category-primary">';
   var primaryKeys = Object.keys(data);
-  if (primaryKeys.some(function(key){ return !smartTagIsToneGroup_(key); })) html += smartTagGroupLabelHtml_('주요 표현');
+  if (primaryKeys.some(function(key){ return !smartTagIsToneGroup_(key); })) html += mobSmartTagSectionLabelHtml_('주요 표현');
   primaryKeys.forEach(function(primary, pi){
     var primaryOpen = smartTagBranchIsOpen_(_mobOpenSmartTagBranches, openKey, pi);
     var primarySelectable = !smartTagIsToneGroup_(primary);

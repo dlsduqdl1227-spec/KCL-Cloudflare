@@ -60,6 +60,10 @@ assert.match(assessment, /MOB 전체 종합 코멘트 \(심사위원 직접 작�
 assert.match(extractFunction(assessment, "renderMobCommentReference"), /slice\(0, 2\)/);
 assert.match(extractFunction(assessment, "mobSmartTagGroupLabel_"), /주요 표현/);
 assert.match(extractFunction(assessment, "mobSmartTagGroupLabel_"), /보완 표현/);
+assert.match(assessment, /\.mob-smart-tag-group-label\{color:var\(--text-2\)\}/);
+assert.match(extractFunction(assessment, "mobSmartTagSectionLabelHtml_"), /mob-smart-tag-group-label/);
+assert.match(extractFunction(assessment, "mobTagButtonsHtml_"), /mobSmartTagSectionLabelHtml_\('주요 표현'\)/);
+assert.doesNotMatch(extractFunction(assessment, "mobTagButtonsHtml_"), /smartTagGroupLabelHtml_\('주요 표현'\)/);
 assert.doesNotMatch(extractFunction(assessment, "reviewCommentGeneratorCode_"), /KCR\|KBC\|KCAC\|MOB/);
 
 process.stdout.write("Stage122 calibration-purpose and MOB manual-comment tests passed.\n");
