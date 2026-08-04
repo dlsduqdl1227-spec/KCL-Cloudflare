@@ -2282,6 +2282,7 @@ function latestIkrcReviewItems_(items) {
       itemJudgeIdentityKey_(item),
       safeStr(item.role || item['역할']).replace(/\s+/g, '').toLowerCase(),
       safeStr(item.unit || item['샘플번호'] || item['컵번호']).replace(/\s+/g, '').toUpperCase(),
+      ikrcItemStationEvidenceTokens_(item).sort().join(','),
       category.replace(/\s+/g, '').toLowerCase()
     ].join('|');
     if (seen.has(key)) {
@@ -2315,14 +2316,13 @@ function ikrcOfficialReviewComparison_(targetItem, officialItems) {
   if (!targetItem) return null;
   const targetRound = safeStr(targetItem.round || targetItem['라운드']).replace(/\s+/g, '').toLowerCase();
   const targetUnit = ikrcSampleNoFromItem_(targetItem).replace(/\s+/g, '').toUpperCase();
-  const targetTeam = safeStr(targetItem.team || targetItem['팀'] || targetItem['평가팀']);
+  const targetStation = ikrcReviewStationLabel_(targetItem);
   if (!targetUnit) return null;
   const peers = latestOfficialJudgeRows_((officialItems || []).filter(item => {
     if (!item || isCalibrationMode_(item.mode || item['모드'])) return false;
     const itemRound = safeStr(item.round || item['라운드']).replace(/\s+/g, '').toLowerCase();
     const itemUnit = ikrcSampleNoFromItem_(item).replace(/\s+/g, '').toUpperCase();
-    const itemTeam = safeStr(item.team || item['팀'] || item['평가팀']);
-    return itemUnit === targetUnit && itemRound === targetRound && ikrcReviewTeamMatches_(targetTeam, itemTeam);
+    return itemUnit === targetUnit && itemRound === targetRound && ikrcReviewStationMatches_(targetItem, item);
   }));
   if (!peers.length) return null;
   const targetJudgeKey = itemJudgeIdentityKey_(targetItem);
@@ -2358,8 +2358,9 @@ function ikrcOfficialReviewComparison_(targetItem, officialItems) {
   return {
     competitionCode:'IKRC',
     purpose:'official-review',
-    scope:'team',
-    team:targetTeam,
+    scope:'station',
+    station:targetStation,
+    team:targetStation,
     round:safeStr(targetItem.round || targetItem['라운드']),
     sampleNo:ikrcSampleNoFromItem_(targetItem),
     judgeCount:scoreRows.length,
@@ -2664,6 +2665,100 @@ function ikrcStationFingerprintServer_(stations) {
   return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end].join(':')).join('|');
 }
 
+function ikrcStationScopeTokenServer_(value) {
+  return safeStr(value)
+    .replace(/IKRC|스테이션|station|헤드|심사위원|심사|센서리|팀|조|team|group|judge|head|sensory|sensor/ig, '')
+    .replace(/[^0-9a-zA-Z가-힣]/g, '')
+    .toLowerCase();
+}
+function ikrcStationScopeTokensServer_(station) {
+  station = station || {};
+  return Array.from(new Set([
+    ikrcStationScopeTokenServer_(station.id),
+    ikrcStationScopeTokenServer_(station.label),
+    ikrcStationScopeTokenServer_(station.prefix)
+  ].filter(Boolean)));
+}
+function ikrcFindStationByAssignmentServer_(assignment, stations) {
+  const token = ikrcStationScopeTokenServer_(assignment);
+  if (!token || /^(all|전체|공통|운영|관리)$/.test(token)) return null;
+  return (stations || []).find(station => ikrcStationScopeTokensServer_(station).includes(token)) || null;
+}
+function ikrcActorTeamServer_(actor) {
+  actor = actor || {};
+  const teamMap = actor.teamMap && typeof actor.teamMap === 'object' ? actor.teamMap : {};
+  return safeStr(teamMap.IKRC || actor.teamGroup || actor.team || actor.judgeTeam);
+}
+function ikrcActorAssignedStationServer_(actor, cfg) {
+  if (!actor || hasAdmin(actor)) return null;
+  return ikrcFindStationByAssignmentServer_(ikrcActorTeamServer_(actor), ikrcStationSettingsServer_(cfg));
+}
+function ikrcUnitBelongsToStationServer_(unit, station) {
+  const normalized = safeStr(unit).toUpperCase().replace(/\s+/g, '');
+  const prefix = safeStr(station && station.prefix).toUpperCase().replace(/\s+/g, '');
+  if (!normalized || !prefix) return false;
+  const match = normalized.match(/^(.+?)-(\d+)$/);
+  if (!match || match[1] !== prefix) return false;
+  const number = Number(match[2]);
+  return Number.isFinite(number) && number >= Number(station.start) && number <= Number(station.end);
+}
+function ikrcPayloadStationEvidenceTokensServer_(payload, fallbackUnit='') {
+  payload = payload && typeof payload === 'object' ? payload : {};
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const row = rows[0] && typeof rows[0] === 'object' ? rows[0] : {};
+  const extra = row.extraFields && typeof row.extraFields === 'object' ? row.extraFields : {};
+  const unit = firstNonEmpty([
+    fallbackUnit,
+    payload.unit,
+    payload.sampleNo,
+    payload.cupNo,
+    Array.isArray(row.data) ? row.data[0] : '',
+    extra['샘플번호'],
+    extra['컵번호']
+  ]);
+  const unitMatch = safeStr(unit).toUpperCase().replace(/\s+/g, '').match(/^(.+?)-\d+$/);
+  return Array.from(new Set([
+    ikrcStationScopeTokenServer_(payload.stationId || extra['스테이션ID']),
+    ikrcStationScopeTokenServer_(payload.stationLabel || extra['스테이션']),
+    ikrcStationScopeTokenServer_(payload.stationPrefix || extra['스테이션코드']),
+    ikrcStationScopeTokenServer_(unitMatch ? unitMatch[1] : '')
+  ].filter(Boolean)));
+}
+function ikrcPayloadBelongsToStationServer_(payload, station, fallbackUnit='') {
+  const evidence = ikrcPayloadStationEvidenceTokensServer_(payload, fallbackUnit);
+  const stationTokens = ikrcStationScopeTokensServer_(station);
+  if (evidence.some(token => stationTokens.includes(token))) return true;
+  return ikrcUnitBelongsToStationServer_(fallbackUnit, station);
+}
+function ikrcScoreBelongsToStationServer_(scoreRow, station) {
+  if (!scoreRow || !station) return false;
+  return ikrcPayloadBelongsToStationServer_(parseJson(scoreRow.payload_json, {}), station, scoreRow.unit);
+}
+function ikrcItemStationEvidenceTokens_(item) {
+  item = item || {};
+  const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
+  const payloadEvidence = ikrcPayloadStationEvidenceTokensServer_(payload, item.unit || item['샘플번호'] || item['컵번호']);
+  const directEvidence = [
+    ikrcStationScopeTokenServer_(item['스테이션ID'] || item.stationId),
+    ikrcStationScopeTokenServer_(item['스테이션'] || item.stationLabel),
+    ikrcStationScopeTokenServer_(item['스테이션코드'] || item.stationPrefix)
+  ].filter(Boolean);
+  const evidence = Array.from(new Set(payloadEvidence.concat(directEvidence)));
+  if (evidence.length) return evidence;
+  return [ikrcStationScopeTokenServer_(item.team || item['팀'] || item['평가팀'])].filter(Boolean);
+}
+function ikrcReviewStationMatches_(targetItem, candidateItem) {
+  const target = ikrcItemStationEvidenceTokens_(targetItem);
+  const candidate = ikrcItemStationEvidenceTokens_(candidateItem);
+  if (!target.length || !candidate.length) return false;
+  return target.some(token => candidate.includes(token));
+}
+function ikrcReviewStationLabel_(item) {
+  item = item || {};
+  const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
+  return safeStr(item['스테이션'] || item.stationLabel || payload.stationLabel || item.team || item['팀']);
+}
+
 function kcrStationProcessServer_(value, index=0) {
   const text = safeStr(value).replace(/\s+/g, '').toLowerCase();
   if (/washed|wash|워시|워쉬/.test(text)) return 'Washed';
@@ -2827,9 +2922,39 @@ async function submitScores(env, payload, signature, request = null) {
   if (initial.code === 'IKRC') {
     const stationValidation = validateIkrcStationSubmission_(basePayload, cfg);
     if (!stationValidation.ok) return { success:false, message:stationValidation.message };
+    const selectedStation = stationValidation.station;
+    const configuredStations = ikrcStationSettingsServer_(cfg, submitRound);
+    const assignedStation = ikrcActorAssignedStationServer_(auth.actor, cfg);
+    if (assignedStation && safeStr(assignedStation.id) !== safeStr(selectedStation.id)) {
+      return {
+        success:false,
+        message:`현재 계정은 ${assignedStation.label}에 배정되어 있어 ${selectedStation.label} 평가를 제출할 수 없습니다. 운영계정의 IKRC 팀/스테이션 배정을 확인해주세요.`,
+        assignedStationId:assignedStation.id,
+        assignedStationLabel:assignedStation.label
+      };
+    }
+    if (!isCalibrationMode_(basePayload.mode)) {
+      const priorRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? ORDER BY id DESC')
+        .bind('IKRC', submitRound).all();
+      const priorOtherStation = (priorRows.results || []).find(scoreRow => {
+        if (!scoreOwnedByActor_(scoreRow, auth.actor) || isCalibrationMode_(scoreRow.mode)) return false;
+        const priorStation = configuredStations.find(station => ikrcScoreBelongsToStationServer_(scoreRow, station));
+        return priorStation && safeStr(priorStation.id) !== safeStr(selectedStation.id);
+      });
+      if (priorOtherStation) {
+        const priorStation = configuredStations.find(station => ikrcScoreBelongsToStationServer_(priorOtherStation, station));
+        return {
+          success:false,
+          message:`현재 라운드의 대회평가는 이미 ${priorStation ? priorStation.label : '다른 스테이션'}으로 시작되었습니다. 한 심사위원의 공식 평가는 한 스테이션에만 저장됩니다. 배정 변경이 필요하면 운영팀장에게 먼저 확인해주세요.`,
+          lockedStationId:priorStation ? priorStation.id : '',
+          lockedStationLabel:priorStation ? priorStation.label : ''
+        };
+      }
+    }
     basePayload.stationId = stationValidation.station.id;
     basePayload.stationLabel = stationValidation.station.label;
     basePayload.stationPrefix = stationValidation.station.prefix;
+    basePayload.stationScopeKey = stationValidation.station.id;
     basePayload.stationSampleCount = stationValidation.expectedUnits.length;
     rows.forEach(row => {
       if (!row || typeof row !== 'object') return;
@@ -2898,7 +3023,7 @@ async function submitScores(env, payload, signature, request = null) {
       onePayload.role = actorRole;
     }
     const evaluationCategory = scoreEvaluationCategoryKey_(onePayload.mode || onePayload.evalMode || initial.mode);
-    const stationTeam = initial.code === 'KCR' ? safeStr(onePayload.stationLabel || basePayload.stationLabel) : '';
+    const stationTeam = ['KCR','IKRC'].includes(initial.code) ? safeStr(onePayload.stationLabel || basePayload.stationLabel) : '';
     const securedTeam = evaluationCategory === 'calibration:all' ? '전체 켈리브레이션팀' : (stationTeam || actorTeam);
     if (securedTeam) {
       onePayload.team = securedTeam;
@@ -3015,7 +3140,9 @@ async function getReviewList(env, competitionCode, actorArg) {
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC').bind(code).all();
   const rawAll = rowsRaw.results || [];
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
-  const raw = manager ? rawAll : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false));
+  const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
+  const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
+  const raw = manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false));
   const headers = mergeHeaders(code, raw);
   let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
   if (manager && list.length) {
@@ -3042,7 +3169,14 @@ async function getReviewList(env, competitionCode, actorArg) {
       });
     }
   }
-  return { success: true, list, headers, ownOnly: !manager, supersededCount };
+  return {
+    success: true,
+    list,
+    headers,
+    ownOnly: !manager,
+    supersededCount,
+    stationScope:managerStation ? {id:managerStation.id, label:managerStation.label, prefix:managerStation.prefix} : null
+  };
 }
 
 async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatus, roleText, actorArg) {
@@ -3056,6 +3190,11 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   const payloadRowIndex = Math.max(0, Number(ref.payloadRowIndex) || 0);
   const current = await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id, code).first();
   if (!current) return { success: false, message: '수정할 데이터를 찾지 못했습니다.' };
+  const cfg = code === 'IKRC' ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
+  const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(actor, cfg) : null;
+  if (managerStation && !ikrcScoreBelongsToStationServer_(current, managerStation)) {
+    return { success:false, message:`${managerStation.label}에 배정된 팀장은 다른 스테이션 평가를 검수할 수 없습니다.` };
+  }
   if (!canReviewScoreRow_(current, actor, code, manager)) return { success: false, message: '본인이 제출한 평가만 직접 검수할 수 있습니다. 전체 검수는 관리자 또는 대회팀장 권한이 필요합니다.' };
   const statusRequested = safeStr(newStatus) || current.review_status || '미검수';
   if (safeStr(current.review_status) === '검수완료' && statusRequested !== '검수완료' && !manager) {
@@ -3065,7 +3204,9 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   const rawAll = rowsRaw.results || [];
   // 검수 수정 컬럼은 getReviewList와 동일한 행 집합 기준으로 계산한다.
   // 심사위원별 payload 필드 차이로 전체 행 기준 헤더를 쓰면 열 번호가 밀릴 수 있다.
-  const rawForHeaders = manager ? rawAll : rawAll.filter(r => reviewScoreVisibleToActor_(r, actor, code, false));
+  const rawForHeaders = manager
+    ? (managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll)
+    : rawAll.filter(r => reviewScoreVisibleToActor_(r, actor, code, false));
   const headers = mergeHeaders(code, rawForHeaders.length ? rawForHeaders : [current]); const updateObj = updates || {};
   const payload = parseJson(current.payload_json, {});
   if (!Array.isArray(payload.rows)) payload.rows = [{}];
@@ -3142,6 +3283,8 @@ async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus, r
   const auth = await requireActorForCode_(env, actorArg, code, '검수 상태 변경 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
+  const cfg = code === 'IKRC' ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
+  const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const ids = Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes];
   const status = safeStr(newStatus) || '미검수';
   const seenIds = new Set();
@@ -3152,6 +3295,9 @@ async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus, r
     seenIds.add(id);
     const cur = await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id, code).first();
     if (!cur) continue;
+    if (managerStation && !ikrcScoreBelongsToStationServer_(cur, managerStation)) {
+      return { success:false, message:`${managerStation.label}에 배정된 팀장은 다른 스테이션 평가 상태를 변경할 수 없습니다.` };
+    }
     if (!canReviewScoreRow_(cur, auth.actor, code, manager)) {
       return { success: false, message: '본인이 제출한 평가만 직접 검수할 수 있습니다. 전체 검수는 관리자 또는 대회팀장 권한이 필요합니다.' };
     }
@@ -3400,19 +3546,29 @@ function ikrcCalibrationCheckerKey_(actor) {
   actor = actor || {};
   return operatorIdentityKey_(actor.name || actor.judgeName || actor.operatorName || '', actor.phone || '') || normalizePersonName_(actor.name || actor.judgeName || actor.operatorName || '') || 'manager';
 }
-function ikrcCalibrationScope_(requestedScope, actor) {
+function ikrcCalibrationScope_(requestedScope, actor, stations=[]) {
   actor = actor || {};
-  const raw = requestedScope && typeof requestedScope === 'object' ? requestedScope : { scope:'team', team:requestedScope };
+  const raw = requestedScope && typeof requestedScope === 'object' ? requestedScope : { scope:'station', team:requestedScope };
   const roleMap = actor.roleMap && typeof actor.roleMap === 'object' ? actor.roleMap : {};
-  const teamMap = actor.teamMap && typeof actor.teamMap === 'object' ? actor.teamMap : {};
   const actorRole = safeStr(roleMap.IKRC || actor.role || actor.judgeRole || actor.operatorRole);
-  const actorTeam = safeStr(teamMap.IKRC || actor.teamGroup || actor.team || actor.judgeTeam);
+  const actorTeam = ikrcActorTeamServer_(actor);
+  const actorStation = hasAdmin(actor) ? null : ikrcFindStationByAssignmentServer_(actorTeam, stations);
   let team = safeStr(raw.team || raw.requestedTeam || actorTeam);
-  let scope = safeStr(raw.scope || raw.mode).toLowerCase() === 'all' ? 'all' : 'team';
-  if (!hasManageAccess(actor, 'IKRC') && isHeadRole_(actorRole)) team = actorTeam;
+  let scope = safeStr(raw.scope || raw.mode).toLowerCase() === 'all' ? 'all' : 'station';
+  if (scope === 'station' && actorStation && (!hasManageAccess(actor, 'IKRC') || hasTeamLead(actor) || isHeadRole_(actorRole))) {
+    team = actorStation.label;
+  }
   if (!team) scope = 'all';
-  const key = scope === 'team' ? ('TEAM:' + team.replace(/\s+/g, '_').slice(0, 64)) : 'ALL';
-  return { scope, team, key, label: scope === 'team' ? ('내 팀 · ' + team) : '전체 심사위원' };
+  const station = scope === 'station' ? (actorStation || ikrcFindStationByAssignmentServer_(team, stations)) : null;
+  if (station) team = station.label;
+  const key = scope === 'station' ? ('STATION:' + safeStr((station && station.id) || team).replace(/\s+/g, '_').slice(0, 64)) : 'ALL';
+  return {
+    scope,
+    team,
+    station:station ? {id:station.id, label:station.label, prefix:station.prefix} : null,
+    key,
+    label:scope === 'station' ? ('스테이션 · ' + (station ? station.label : team)) : '전체 심사위원'
+  };
 }
 function ikrcSeedMatchToken_(matchNo) { return 'IKRC_SEED_MATCH:' + encodeURIComponent(safeStr(matchNo)); }
 function ikrcSeedResultToken_(targetType, targetValue) { return 'IKRC_SEED_RESULT:' + encodeURIComponent(safeStr(targetType) || 'participant') + ':' + encodeURIComponent(safeStr(targetValue)); }
@@ -3460,10 +3616,11 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
   if (!hasManageAccess(auth.actor, 'IKRC') && !isHeadRole_(actorRole)) {
     return { error: { success:false, message:'IKRC 켈리브레이션은 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' } };
   }
-  const scope = ikrcCalibrationScope_(requestedScope, auth.actor);
   const checkerKey = ikrcCalibrationCheckerKey_(auth.actor);
-  const cfg = await env.DB.prepare('SELECT current_round FROM competitions WHERE code=?').bind('IKRC').first();
+  const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
+  const stations = ikrcStationSettingsServer_(cfg, currentRound);
+  const scope = ikrcCalibrationScope_(requestedScope, auth.actor, stations);
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
   const headers = mergeHeaders('IKRC', rawRows.results || []);
   let rows = (rawRows.results || []).map(r => rowToReviewItem(r, 'IKRC', headers, currentRound));
@@ -3473,11 +3630,12 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
     if (currentRound && safeStr(item.round || item['라운드']) && safeStr(item.round || item['라운드']) !== currentRound) return false;
     const mode = safeStr(item['모드'] || item.mode);
     if (!isCalibrationMode_(mode)) return false;
-    if (scope.scope === 'team') {
-      if (!/팀별/.test(mode)) return false;
+    if (scope.scope === 'station') {
+      if (!/팀별|스테이션/.test(mode)) return false;
+      if (scope.station) return ikrcPayloadBelongsToStationServer_(item.payload, scope.station, ikrcSampleNoFromItem_(item));
       const rowTeam = safeStr(item['팀'] || item.team || item['평가팀']);
       if (!rowTeam || !mobTeamMatchesServer_(scope.team, rowTeam)) return false;
-    } else if (/팀별/.test(mode)) return false;
+    } else if (/팀별|스테이션/.test(mode)) return false;
     return true;
   });
   return { auth, currentRound, rows, scope, checkerKey };

@@ -80,13 +80,13 @@ assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /normal\.conc
 assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /headCount/);
 assert.match(extractFunction(rpc, "getIkrcCalibrationCupNumbers"), /data\.scope\.key/);
 assert.match(extractFunction(rpc, "markIkrcCalibrationChecked"), /data\.checkerKey/);
-assert.match(extractFunction(rpc, "ikrcCalibrationRows_"), /scope\.scope === 'team'/);
+assert.match(extractFunction(rpc, "ikrcCalibrationRows_"), /scope\.scope === 'station'/);
 assert.match(extractFunction(rpc, "rowToReviewItem"), /스테이션ID/);
 assert.match(assessment, /커핑 기준: 11g 홀빈 \/ 200g 물 \/ 93℃ \/ 600~700µm/);
 assert.match(extractFunction(assessment, "isIkrcCalibrationMode_"), /isActiveCalibrationMode_/);
 assert.match(extractFunction(assessment, "showIkrcSetup"), /헤드 포함 공식 점수 반영/);
 assert.match(extractFunction(assessment, "evaluationTeamForSubmit_"), /전체 켈리브레이션팀/);
-assert.match(extractFunction(assessment, "setIkrcCalibrationScope_"), /'team'/);
+assert.match(extractFunction(assessment, "setIkrcCalibrationScope_"), /'station'/);
 
 const unifiedAcidityTags = ["선명한", "부드러운", "과즙감 있는", "밝은", "강렬한", "평평한", "산뜻한", "신맛이 도드라진", "거친", "섬세한"];
 unifiedAcidityTags.forEach((tag) => assert.match(sharedSensoryTags, new RegExp(`["']${tag}["']`)));

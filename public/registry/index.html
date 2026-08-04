@@ -163,6 +163,7 @@ html,body{width:100%;overflow-x:hidden}.wrap,.card{max-width:100%}.top{flex-wrap
           <input id="opAff" placeholder="소속">
           <input id="opDate" type="date" title="권한 적용일 · 비워두면 상시 권한">
         </div>
+        <div class="mode-note compact" id="operatorTeamHelp"></div>
         <div class="edit-state hidden" id="operatorEditState"></div>
         <div class="btnrow">
           <button class="btn" id="operatorSaveBtn" onclick="saveOneOperator()">운영계정 저장</button>
@@ -656,6 +657,9 @@ function importOperators(){msg('opMsg','등록 중...');rpc('importOperators',[{
 function setFieldVisible_(id, visible, placeholder){var el=document.getElementById(id);if(!el)return;el.classList.toggle('field-hidden',!visible);if(placeholder)el.placeholder=placeholder;}
 function updateManualParticipantFields(){var code=((document.getElementById('comp')||{}).value||'KBC').toUpperCase();
   var help=document.getElementById('manualFieldHelp'); if(help)help.textContent=PARTICIPANT_FIELD_HELP[code]||'';
+  var opTeam=document.getElementById('opTeam'); var opHelp=document.getElementById('operatorTeamHelp');
+  if(opTeam)opTeam.placeholder=code==='IKRC'?'IKRC 스테이션 예: 스테이션 1 / 1팀 / X':'평가팀 예: A / 1팀 / Head A';
+  if(opHelp)opHelp.textContent=code==='IKRC'?'IKRC는 이 항목을 스테이션 배정으로 사용합니다. 같은 스테이션의 헤드·심사위원·팀장에게 동일한 스테이션 번호(예: 스테이션 2)를 입력하면 평가와 검수가 다른 스테이션과 분리됩니다. 전체 운영팀장은 “전체”로 입력하거나 비워두세요.':'평가팀은 해당 대회의 팀별 평가·켈리브레이션 범위를 구분합니다.';
   setFieldVisible_('mNo',true,code==='KTCC'?'팀번호':(code==='KCR'||code==='KCAC'?'관리번호(선택)': '참가자번호'));
   setFieldVisible_('mName',true,code==='KTCC'?'팀명':'선수명');
   setFieldVisible_('mPhone',true,'연락처'); setFieldVisible_('mAff',true,'소속');

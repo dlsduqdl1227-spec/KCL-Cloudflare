@@ -207,7 +207,7 @@ for (const operator of [
     phone: "01011110001",
     affiliation: "QA",
     access: "ALL",
-    teamGroup: "QA팀",
+    teamGroup: "스테이션 1",
     role: "센서리 심사위원",
   },
   {
@@ -216,7 +216,16 @@ for (const operator of [
     phone: "01011110004",
     affiliation: "QA",
     access: "ALL",
-    teamGroup: "QA팀",
+    teamGroup: "스테이션 3",
+    role: "센서리 심사위원",
+  },
+  {
+    accountType: "JUDGE",
+    name: "QA 센서리Z",
+    phone: "01011110007",
+    affiliation: "QA",
+    access: "IKRC",
+    teamGroup: "스테이션 2",
     role: "센서리 심사위원",
   },
   {
@@ -225,7 +234,7 @@ for (const operator of [
     phone: "01011110002",
     affiliation: "QA",
     access: "IKRC",
-    teamGroup: "QA팀",
+    teamGroup: "스테이션 2",
     role: "센서리 헤드 심사위원",
   },
   {
@@ -234,7 +243,7 @@ for (const operator of [
     phone: "01011110005",
     affiliation: "QA",
     access: "IKRC",
-    teamGroup: "다른팀",
+    teamGroup: "스테이션 2",
     role: "센서리 헤드 심사위원",
   },
   {
@@ -243,7 +252,16 @@ for (const operator of [
     phone: "01011110003",
     affiliation: "QA",
     access: "IKRC",
-    teamGroup: "QA팀",
+    teamGroup: "전체",
+    role: "대회팀장",
+  },
+  {
+    accountType: "TEAMLEAD",
+    name: "QA 스테이션2팀장",
+    phone: "01011110008",
+    affiliation: "QA",
+    access: "IKRC",
+    teamGroup: "스테이션 2",
     role: "대회팀장",
   },
   {
@@ -284,14 +302,17 @@ assert.ok(datedJudge.operatorRows.some(row => row.access === "MOB" && row.effect
 
 const judge = await rpc("judgeLogin", "QA 센서리", "01011110001");
 const judge2 = await rpc("judgeLogin", "QA 센서리2", "01011110004");
+const judgeZ = await rpc("judgeLogin", "QA 센서리Z", "01011110007");
 const head = await rpc("judgeLogin", "QA 헤드", "01011110002");
 const head2 = await rpc("judgeLogin", "QA 헤드2", "01011110005");
 const lead = await rpc("judgeLogin", "QA 대회팀장", "01011110003");
-for (const login of [judge, judge2, head, head2, lead]) {
+const stationLead = await rpc("judgeLogin", "QA 스테이션2팀장", "01011110008");
+for (const login of [judge, judge2, judgeZ, head, head2, lead, stationLead]) {
   assert.equal(login.success, true, login.message);
   assert.ok(login.judgeToken);
 }
 const leadActor = managedActor(lead);
+const stationLeadActor = managedActor(stationLead);
 
 const station1 = station("station1", "스테이션 1", "X", 1, 2);
 const station2 = station("station2", "스테이션 2", "Z", 1, 6);
@@ -347,7 +368,7 @@ const participantSave = await rpc(
 assert.equal(participantSave.success, true, participantSave.message);
 
 const ikrcX = await rpc("submitScores", ikrcPayload(judge, station1));
-const ikrcZ = await rpc("submitScores", ikrcPayload(judge, station2));
+const ikrcZ = await rpc("submitScores", ikrcPayload(judgeZ, station2));
 const ikrcHeadZ = await rpc("submitScores", ikrcPayload(head, station2));
 assert.equal(ikrcX.success, true, JSON.stringify(ikrcX));
 assert.equal(ikrcZ.success, true, JSON.stringify(ikrcZ));
@@ -355,6 +376,10 @@ assert.equal(ikrcHeadZ.success, true, JSON.stringify(ikrcHeadZ));
 assert.equal(ikrcX.inserted, 2);
 assert.equal(ikrcZ.inserted, 6);
 assert.equal(ikrcHeadZ.inserted, 6);
+
+const crossStationOfficial = await rpc("submitScores", ikrcPayload(judge, station2));
+assert.equal(crossStationOfficial.success, false, "한 심사위원의 공식 평가는 현재 라운드에서 한 스테이션에만 속해야 합니다");
+assert.match(crossStationOfficial.message, /스테이션 1|배정/);
 
 const duplicateX = await rpc("submitScores", ikrcPayload(judge, station1));
 assert.equal(duplicateX.success, false);
@@ -371,17 +396,22 @@ const addedStationSave = await rpc(
 assert.equal(addedStationSave.success, true, addedStationSave.message);
 assert.equal(addedStationSave.preservedScoreCount, 14);
 
-const ikrcY = await rpc("submitScores", ikrcPayload(judge, station3));
+const ikrcY = await rpc("submitScores", ikrcPayload(judge2, station3));
 assert.equal(ikrcY.inserted, 2);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
   16,
 );
+assert.deepEqual(
+  testDb.raw.prepare("SELECT team, COUNT(*) AS n FROM scores WHERE competition_code='IKRC' AND mode NOT LIKE '%켈리브레이션%' GROUP BY team ORDER BY team").all().map((row) => [row.team, row.n]),
+  [["스테이션 1", 2], ["스테이션 2", 12], ["스테이션 3", 2]],
+  "IKRC 공식 점수는 계정의 가변 팀명이 아니라 선택한 스테이션으로 분리 저장되어야 합니다",
+);
 
 for (const [login, stationInfo, scope] of [
-  [judge, station1, "all"], [judge, station2, "all"], [judge, station3, "all"],
+  [judge, station1, "all"], [judgeZ, station2, "all"], [judge2, station3, "all"],
   [head, station2, "all"], [head2, station2, "all"],
-  [judge, station1, "team"], [judge, station2, "team"], [judge, station3, "team"],
+  [judge, station1, "team"], [judgeZ, station2, "team"], [judge2, station3, "team"],
   [head, station2, "team"], [head2, station2, "team"],
 ]) {
   const submitted = await rpc("submitScores", ikrcCalibrationPayload(login, stationInfo, scope));
@@ -505,6 +535,22 @@ assert.ok(
   "Manager review must enrich the blind sample with participant identity",
 );
 
+const stationLeadReview = await rpc("getReviewList", "IKRC", stationLeadActor);
+assert.equal(stationLeadReview.success, true);
+assert.equal(stationLeadReview.stationScope.label, "스테이션 2");
+assert.equal(stationLeadReview.list.length, 12, "스테이션 2 팀장은 해당 스테이션의 헤드·심사위원 공식 점수만 확인해야 합니다");
+assert.ok(stationLeadReview.list.every((item) => String(item.unit || "").startsWith("Z-")));
+const stationLeadCrossEdit = await rpc(
+  "updateReviewRow",
+  "IKRC",
+  reviewLists.IKRC.list.find((item) => item.unit === "X-1").rowIndex,
+  {},
+  "검수완료",
+  "대회팀장",
+  stationLeadActor,
+);
+assert.equal(stationLeadCrossEdit.success, false, "스테이션 팀장은 다른 스테이션 행을 직접 지정해도 수정할 수 없어야 합니다");
+
 const kbcCommentColumn = reviewLists.KBC.headers.indexOf("종합코멘트");
 assert.ok(kbcCommentColumn >= 0);
 const kbcReviewEdit = await rpc(
@@ -529,7 +575,7 @@ const judgeOwnReview = await rpc("getReviewList", "IKRC", {
 });
 assert.equal(judgeOwnReview.success, true);
 assert.equal(judgeOwnReview.ownOnly, true);
-assert.equal(judgeOwnReview.list.length, 10);
+assert.equal(judgeOwnReview.list.length, 2, "스테이션 1 심사위원은 자신의 스테이션 공식 평가만 보유해야 합니다");
 
 const headOwnReview = await rpc("getReviewList", "IKRC", {
   judgeToken: head.judgeToken,
@@ -541,11 +587,11 @@ assert.equal(headOwnReview.ownOnly, true);
 assert.equal(headOwnReview.list.length, 6, "The IKRC head must retain all six official station scores in their own review list");
 const headZ1BeforeEdit = headOwnReview.list.find((item) => item.unit === "Z-1");
 assert.ok(headZ1BeforeEdit, "The head's official Z-1 score must be reviewable");
-assert.equal(headZ1BeforeEdit._stddev.judgeCount, 2, "Head review must compare the head and same-team sensory judge");
+assert.equal(headZ1BeforeEdit._stddev.judgeCount, 2, "Head review must compare the head and same-station sensory judge");
 assert.deepEqual(
   headZ1BeforeEdit._stddev.judges.map((item) => item.judgeName).sort(),
-  ["QA 센서리", "QA 헤드"],
-  "The official review comparison must expose same-team judge scores to the head",
+  ["QA 센서리Z", "QA 헤드"],
+  "The official review comparison must expose same-station judge scores to the head",
 );
 assert.equal(headZ1BeforeEdit._stddev.judges.filter((item) => item.isCurrentJudge).length, 1);
 assert.equal(headZ1BeforeEdit._stddev.totalAvg, 20);
@@ -575,7 +621,7 @@ assert.equal(headZ1AfterEdit._stddev.totalAvg, 23);
 assert.equal(headZ1AfterEdit._stddev.totalStddev, 3);
 assert.equal(headZ1AfterEdit._stddev.metrics.find((item) => item.key === "flavor").avg, 3);
 
-const sensoryZ1 = reviewLists.IKRC.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 센서리");
+const sensoryZ1 = reviewLists.IKRC.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 센서리Z");
 assert.ok(sensoryZ1);
 const forbiddenPeerEdit = await rpc(
   "updateReviewRow",
@@ -588,9 +634,9 @@ const forbiddenPeerEdit = await rpc(
 );
 assert.equal(forbiddenPeerEdit.success, false, "The head may compare peer scores but must not edit another judge's submission");
 
-const allScope = { scope: "all", team: "QA팀" };
-const teamScope = { scope: "team", team: "QA팀" };
-const otherTeamScope = { scope: "team", team: "다른팀" };
+const allScope = { scope: "all", team: "스테이션 2" };
+const teamScope = { scope: "station", team: "스테이션 2" };
+const otherTeamScope = { scope: "station", team: "스테이션 2" };
 const calibrationBeforeCheck = await rpc("getIkrcCalibrationCupNumbers", allScope, {
   judgeToken: head.judgeToken,
 });
@@ -607,7 +653,7 @@ assert.equal(calibrationDetail.length, 3);
 assert.equal(calibrationDetail.filter((item) => item.isHeadCalibration).length, 2);
 
 const teamCalibration = await rpc("getIkrcCalibrationCupNumbers", teamScope, { judgeToken: head.judgeToken });
-assert.equal(teamCalibration.length, 10);
+assert.equal(teamCalibration.length, 6);
 const otherTeamCalibration = await rpc("getIkrcCalibrationCupNumbers", otherTeamScope, { judgeToken: head2.judgeToken });
 assert.equal(otherTeamCalibration.length, 6, "Team calibration must use only its initially assigned team");
 assert.ok(otherTeamCalibration.every((item) => String(item.sampleNo).startsWith("Z-")));
