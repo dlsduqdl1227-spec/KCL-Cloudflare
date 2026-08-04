@@ -122,6 +122,9 @@ html,body{width:100%;overflow-x:hidden}.wrap,.card{max-width:100%}.top{flex-wrap
           <input id="mAff" data-manual-field="affiliation" placeholder="소속">
           <input id="mCup" data-manual-field="roundA" placeholder="예선번호">
           <input id="mSample" data-manual-field="roundB" placeholder="결선번호">
+          <input id="mDate" data-manual-field="mobSchedule" type="date" title="MOB 대회일">
+          <input id="mPrep" data-manual-field="mobSchedule" placeholder="준비시간 예: 09:50~09:55">
+          <input id="mPerformance" data-manual-field="mobSchedule" placeholder="시연시간 예: 09:55~10:05">
         </div>
         <div class="mode-note compact" id="manualFieldHelp"></div>
         <div class="edit-state hidden" id="participantEditState"></div>
@@ -245,7 +248,7 @@ var PARTICIPANT_HEADERS=['대회코드','참가자번호','선수명','소속','
 var PARTICIPANT_HEADER_MAP={
   KBC:['대회코드','참가자번호','선수명','소속','연락처','예선번호','본선번호','결선번호','비고'],
   MOC:['대회코드','참가자번호','선수명','소속','연락처','예선번호','본선번호','결선번호','비고'],
-  MOB:['대회코드','참가자번호','선수명','소속','연락처','예선번호','결선번호','비고'],
+  MOB:['대회코드','참가자번호','선수명','소속','연락처','예선번호','결선번호','대회일','경연순서','스테이션번호','대기시간','준비시간','시연시간','비고'],
   KCR:['대회코드','예선출품번호','결선출품번호','선수명','소속','연락처','비고'],
   IKRC:['대회코드','참가자번호','예선샘플번호','결선샘플번호','선수명','소속','연락처','비고'],
   KCAC:['대회코드','예선블라인드번호','결선참가번호','선수명','소속','연락처','비고'],
@@ -254,7 +257,7 @@ var PARTICIPANT_HEADER_MAP={
 var PARTICIPANT_SAMPLE_MAP={
   KBC:['KBC','1','KBC 선수1','카페A','01011112222','','','','현장 평가'],
   MOC:['MOC','1','MOC 선수1','카페A','01022223333','1','','','감별형 대회'],
-  MOB:['MOB','1','MOB 선수1','로스터리A','01033334444','','','브루잉 시연'],
+  MOB:['MOB','0806-01','MOB 선수1','로스터리A','','0806-01','','2026-08-06','1','1','09:45~09:50','09:50~09:55','09:55~10:05','연락처는 나중에 입력 가능'],
   KCR:['KCR','KCR-P001','KCR-F001','KCR 선수1','로스터리A','01044445555','블라인드 출품번호'],
   IKRC:['IKRC','1','A-1','F-1','IKRC 선수1','카페A','01055556666','샘플번호 중심'],
   KCAC:['KCAC','KCAC-P001','KCAC-F001','KCAC 선수1','카페A','01066667777','온라인 예선 블라인드 번호'],
@@ -263,7 +266,7 @@ var PARTICIPANT_SAMPLE_MAP={
 var PARTICIPANT_FIELD_HELP={
   KBC:'KBC: 현장 시연형입니다. 참가자번호를 기본으로 사용하며, 필요 시 예선번호/본선번호/결선번호를 라운드별 무대번호로 관리합니다.',
   MOC:'MOC: 감별형 개인 대회입니다. 현장 즉시 입력도 가능하지만, 사전등록 시 참가자번호 또는 예선/본선/결선번호로 빠르게 선택할 수 있습니다.',
-  MOB:'MOB: 예선/결선만 있는 현장 시연형입니다. 참가자번호를 기본으로 사용하고 본선번호는 사용하지 않습니다.',
+  MOB:'MOB: 예선/결선만 있는 현장 시연형입니다. 참가자번호와 대회일·준비시간·시연시간을 함께 저장할 수 있고, 연락처는 비워둔 채 나중에 입력해도 됩니다.',
   KCR:'KCR: 블라인드 출품 심사형입니다. 예선출품번호와 결선출품번호만 사용합니다. 심사위원 화면에는 선수명 없이 출품번호만 표시합니다.',
   IKRC:'IKRC: 로스팅 샘플 심사형입니다. 예선샘플번호와 결선샘플번호를 사용하고, 예선은 심사위원 화면에서 이름을 숨깁니다.',
   KCAC:'KCAC: 본선이 없습니다. 예선블라인드번호와 결선참가번호만 사용합니다. 본선번호·팀번호·팀명은 쓰지 않습니다.',
@@ -314,7 +317,7 @@ function participantExportRow_(code,r){
   if(code==='IKRC')return [code,r.uniqueNo||'',r.prelimCupNo||r.sampleNo||'',r.finalCupNo||'',r.name||'',r.affiliation||'',r.phone||'',registryNote_(r)];
   if(code==='KCAC')return [code,r.prelimCupNo||'',r.finalCupNo||'',r.name||'',r.affiliation||'',r.phone||'',registryNote_(r)];
   if(code==='KTCC')return [code,r.teamNo||r.uniqueNo||'',r.teamName||r.name||'',ex['팀원1명']||'',ex['팀원1소속']||r.affiliation||'',ex['팀원1연락처']||r.phone||'',ex['팀원2명']||'',ex['팀원2소속']||'',ex['팀원2연락처']||'',r.prelimCupNo||r.teamNo||'',r.finalCupNo||'',registryNote_(r)];
-  if(code==='MOB')return [code,r.uniqueNo||'',r.name||'',r.affiliation||'',r.phone||'',r.prelimCupNo||'',r.finalCupNo||'',registryNote_(r)];
+  if(code==='MOB')return [code,r.uniqueNo||'',r.name||'',r.affiliation||'',r.phone||'',r.prelimCupNo||'',r.finalCupNo||'',r.competitionDate||ex['대회일']||'',r.performanceOrder||ex['경연순서']||'',r.stationNo||ex['스테이션번호']||'',r.waitingTime||ex['대기시간']||'',r.preparationTime||ex['준비시간']||'',r.performanceTime||ex['시연시간']||'',registryNote_(r)];
   return [code,r.uniqueNo||'',r.name||'',r.affiliation||'',r.phone||'',r.prelimCupNo||'',r.mainCupNo||'',r.finalCupNo||'',registryNote_(r)];
 }
 function operatorExportSheetCode_(r){var access=String((r&&r.access)||'').toUpperCase().split(/[\s,;|/]+/).filter(Boolean);if(access.indexOf('ALL')>=0)return COMP_CODES[0];for(var i=0;i<access.length;i++){if(COMP_CODES.indexOf(access[i])>=0)return access[i];}return '';}
@@ -663,6 +666,7 @@ function updateManualParticipantFields(){var code=((document.getElementById('com
   setFieldVisible_('mNo',true,code==='KTCC'?'팀번호':(code==='KCR'||code==='KCAC'?'관리번호(선택)': '참가자번호'));
   setFieldVisible_('mName',true,code==='KTCC'?'팀명':'선수명');
   setFieldVisible_('mPhone',true,'연락처'); setFieldVisible_('mAff',true,'소속');
+  setFieldVisible_('mDate',code==='MOB');setFieldVisible_('mPrep',code==='MOB','준비시간 예: 09:50~09:55');setFieldVisible_('mPerformance',code==='MOB','시연시간 예: 09:55~10:05');
   if(code==='KCR'){setFieldVisible_('mNo',false);setFieldVisible_('mCup',true,'예선출품번호');setFieldVisible_('mSample',true,'결선출품번호');}
   else if(code==='KCAC'){setFieldVisible_('mNo',false);setFieldVisible_('mCup',true,'예선블라인드번호');setFieldVisible_('mSample',true,'결선참가번호');}
   else if(code==='IKRC'){setFieldVisible_('mCup',true,'예선샘플번호');setFieldVisible_('mSample',true,'결선샘플번호');}
@@ -675,7 +679,7 @@ function saveOneParticipant(){var code=document.getElementById('comp').value;var
   else if(code==='KCAC'){payload.prelimCupNo=a;payload.finalCupNo=b;}
   else if(code==='IKRC'){payload.prelimCupNo=a;payload.finalCupNo=b;payload.sampleNo=a||b;}
   else if(code==='KTCC'){payload.teamNo=no||a;payload.teamName=document.getElementById('mName').value;payload.prelimCupNo=a||no;payload.finalCupNo=b;}
-  else if(code==='MOB'){payload.prelimCupNo=a||no;payload.finalCupNo=b;}
+  else if(code==='MOB'){payload.prelimCupNo=a||no;payload.finalCupNo=b;payload.extra=Object.assign({},payload.extra||{}, {'대회일':document.getElementById('mDate').value||'', '준비시간':document.getElementById('mPrep').value||'', '시연시간':document.getElementById('mPerformance').value||''});}
   else {payload.prelimCupNo=a||no;payload.mainCupNo=b;payload.finalCupNo=b;}
   msg('manualMsg','저장 중...');rpc('upsertParticipant',[payload,actor],function(res){msg('manualMsg',res.message||'완료',!res.success,res.success);if(res.success){cancelParticipantEdit();loadParticipants();}})}
 function participantActionHtml_(r){return '<td><div class="table-actions"><button class="btn secondary small" data-edit-part="'+Number(r.rowIndex)+'">수정</button><button class="btn danger small" data-del-part="'+Number(r.rowIndex)+'" data-del-name="'+escAttr(r.name||r.teamName||'선수')+'">삭제</button></div></td>';}
@@ -684,7 +688,7 @@ function participantListHtml_(code,rows){var html;
   if(code==='KCR') {html='<tr><th>ID</th><th>예선출품번호</th><th>결선출품번호</th><th>선수명</th><th>소속</th><th>연락처</th><th>비고</th><th>관리</th></tr>';return html+rows.map(function(r){return '<tr><td>'+r.rowIndex+'</td><td>'+esc(r.prelimCupNo||r.cupNo)+'</td><td>'+esc(r.finalCupNo)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>'+esc((r.extra||{})['비고'])+'</td>'+participantActionHtml_(r)+'</tr>'}).join('');}
   if(code==='IKRC'){html='<tr><th>ID</th><th>참가자번호</th><th>예선샘플번호</th><th>결선샘플번호</th><th>선수명</th><th>소속</th><th>연락처</th><th>관리</th></tr>';return html+rows.map(function(r){return '<tr><td>'+r.rowIndex+'</td><td>'+esc(r.uniqueNo)+'</td><td>'+esc(r.prelimCupNo||r.sampleNo)+'</td><td>'+esc(r.finalCupNo)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td>'+participantActionHtml_(r)+'</tr>'}).join('');}
   if(code==='KCAC'){html='<tr><th>ID</th><th>예선블라인드번호</th><th>결선참가번호</th><th>선수명</th><th>소속</th><th>연락처</th><th>비고</th><th>관리</th></tr>';return html+rows.map(function(r){return '<tr><td>'+r.rowIndex+'</td><td>'+esc(r.prelimCupNo)+'</td><td>'+esc(r.finalCupNo)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>'+esc((r.extra||{})['비고'])+'</td>'+participantActionHtml_(r)+'</tr>'}).join('');}
-  if(code==='MOB'){html='<tr><th>ID</th><th>참가자번호</th><th>선수명</th><th>소속</th><th>연락처</th><th>예선번호</th><th>결선번호</th><th>관리</th></tr>';return html+rows.map(function(r){return '<tr><td>'+r.rowIndex+'</td><td>'+esc(r.uniqueNo||r.displayNo)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>'+esc(r.prelimCupNo)+'</td><td>'+esc(r.finalCupNo)+'</td>'+participantActionHtml_(r)+'</tr>'}).join('');}
+  if(code==='MOB'){html='<tr><th>ID</th><th>대회일</th><th>순서/스테이션</th><th>선수명</th><th>연락처</th><th>준비시간</th><th>시연시간</th><th>관리</th></tr>';return html+rows.map(function(r){var ex=r.extra||{};return '<tr><td>'+r.rowIndex+'</td><td>'+esc(r.competitionDate||ex['대회일'])+'</td><td>'+esc((r.performanceOrder||ex['경연순서']||r.uniqueNo||r.displayNo)+(r.stationNo||ex['스테이션번호']?' / '+(r.stationNo||ex['스테이션번호']):''))+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.phone||'미입력')+'</td><td class="mono">'+esc(r.preparationTime||ex['준비시간'])+'</td><td class="mono">'+esc(r.performanceTime||ex['시연시간'])+'</td>'+participantActionHtml_(r)+'</tr>'}).join('');}
   html='<tr><th>ID</th><th>참가자번호</th><th>선수명</th><th>소속</th><th>연락처</th><th>예선번호</th><th>본선번호</th><th>결선번호</th><th>관리</th></tr>';return html+rows.map(function(r){return '<tr><td>'+r.rowIndex+'</td><td>'+esc(r.uniqueNo||r.displayNo)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>'+esc(r.prelimCupNo)+'</td><td>'+esc(r.mainCupNo)+'</td><td>'+esc(r.finalCupNo)+'</td>'+participantActionHtml_(r)+'</tr>'}).join('');
 }
 function bindParticipantActionButtons(table){if(!table)return;
@@ -698,8 +702,9 @@ function editParticipant(rowIndex){var r=(participantRows||[]).find(function(x){
   else if(code==='KTCC'){document.getElementById('mNo').value=r.teamNo||r.prelimCupNo||'';document.getElementById('mCup').value=r.prelimCupNo||r.teamNo||'';document.getElementById('mSample').value=r.finalCupNo||'';}
   else if(code==='MOB'){document.getElementById('mNo').value=r.uniqueNo||r.displayNo||'';document.getElementById('mCup').value=r.prelimCupNo||'';document.getElementById('mSample').value=r.finalCupNo||'';}
   else {document.getElementById('mNo').value=r.uniqueNo||r.displayNo||'';document.getElementById('mCup').value=r.prelimCupNo||'';document.getElementById('mSample').value=r.mainCupNo||r.finalCupNo||'';}
+  document.getElementById('mDate').value=code==='MOB'?(r.competitionDate||(r.extra||{})['대회일']||''):'';document.getElementById('mPrep').value=code==='MOB'?(r.preparationTime||(r.extra||{})['준비시간']||''):'';document.getElementById('mPerformance').value=code==='MOB'?(r.performanceTime||(r.extra||{})['시연시간']||''):'';
   var el=document.getElementById('participantEditState');if(el){el.textContent='수정 중: '+(r.name||r.teamName||'선수')+' · ID '+rowIndex;}setHidden_('participantEditState',false);setHidden_('participantCancelBtn',false);var b=document.getElementById('participantSaveBtn');if(b)b.textContent='선수·팀 수정완료';var lab=document.getElementById('participantFormLabel');if(lab)lab.textContent='선수·팀 정보 수정';document.getElementById('mName').focus();}
-function cancelParticipantEdit(){editingParticipantId=null;editingParticipantOriginal=null;['mNo','mName','mPhone','mAff','mCup','mSample'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});setHidden_('participantEditState',true);setHidden_('participantCancelBtn',true);var b=document.getElementById('participantSaveBtn');if(b)b.textContent='선수·팀 저장';var lab=document.getElementById('participantFormLabel');if(lab)lab.textContent='선수·팀 개별 추가';msg('manualMsg','');updateManualParticipantFields();}
+function cancelParticipantEdit(){editingParticipantId=null;editingParticipantOriginal=null;['mNo','mName','mPhone','mAff','mCup','mSample','mDate','mPrep','mPerformance'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});setHidden_('participantEditState',true);setHidden_('participantCancelBtn',true);var b=document.getElementById('participantSaveBtn');if(b)b.textContent='선수·팀 저장';var lab=document.getElementById('participantFormLabel');if(lab)lab.textContent='선수·팀 개별 추가';msg('manualMsg','');updateManualParticipantFields();}
 function deleteParticipantRow(rowIndex,name){if(!rowIndex)return;if(!confirm((name||'해당 선수')+' 등록 데이터를 삭제할까요?\n점수 데이터는 삭제되지 않습니다.'))return;rpc('deleteParticipant',[rowIndex,actor],function(res){alert(res.message||'완료');if(res.success!==false){if(editingParticipantId===rowIndex)cancelParticipantEdit();loadParticipants();}})}
 function confirmDangerReset(code, kind){
   code=String(code||'').toUpperCase();

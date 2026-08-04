@@ -427,6 +427,27 @@ assert.equal(
   "Overall calibration must merge every original team into one calibration team",
 );
 
+// 팀별 켈리브레이션은 운영계정의 고정 스테이션이 아니라 실제 현장 선택으로 임시 팀을 구성합니다.
+// 스테이션 2에 공식 배정된 헤드도 현장에서 안내받은 스테이션 1 팀별 켈리에 참여할 수 있어야 합니다.
+const adHocHeadCalibration = await rpc("submitScores", ikrcCalibrationPayload(head, station1, "team"));
+assert.equal(adHocHeadCalibration.success, true, adHocHeadCalibration.message);
+const headScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: head.judgeToken });
+assert.equal(headScopeOptions.success, true, headScopeOptions.message);
+assert.deepEqual(headScopeOptions.stations.map((item) => item.id).sort(), ["station1", "station2"]);
+const head2ScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: head2.judgeToken });
+assert.deepEqual(head2ScopeOptions.stations.map((item) => item.id), ["station2"]);
+const managerScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: lead.judgeToken });
+assert.equal(managerScopeOptions.success, true, managerScopeOptions.message);
+assert.deepEqual(managerScopeOptions.stations.map((item) => item.id), ["station1", "station2", "station3"]);
+const sensoryScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: judge.judgeToken });
+assert.equal(sensoryScopeOptions.success, false, "일반 센서리 심사위원은 표준편차·켈리 결과를 볼 수 없어야 합니다");
+const forbiddenHeadStation = await rpc("getIkrcCalibrationCupNumbers", { scope:"station", stationId:"station1", team:"스테이션 1" }, { judgeToken:head2.judgeToken });
+assert.equal(forbiddenHeadStation.success, false, "헤드는 자신이 팀별 켈리에 참여하지 않은 스테이션 결과를 볼 수 없어야 합니다");
+const managerStationCalibration = await rpc("getIkrcCalibrationCupNumbers", { scope:"station", stationId:"station1", team:"스테이션 1" }, { judgeToken:lead.judgeToken });
+assert.equal(managerStationCalibration.length, 2, "대회팀장은 모든 스테이션의 켈리 결과를 볼 수 있어야 합니다");
+assert.equal(managerStationCalibration[0].judgeCount, 1);
+assert.equal(managerStationCalibration[0].headCount, 1);
+
 const mobReviewComment = "향미의 연결성과 밸런스를 확인한 MOB 전체 종합 코멘트";
 const mobReviewPayload = genericPayload(judge, "MOB", "MOB-1", 55);
 mobReviewPayload.rows[0].extraFields["종합코멘트"] = mobReviewComment;
@@ -704,8 +725,8 @@ assert.equal(rankedZ1.judgeCount, 2, "The head official score must remain part o
 
 const backupBeforeDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
 assert.equal(backupBeforeDelete.success, true, backupBeforeDelete.message);
-assert.equal(backupBeforeDelete.rows.length, 60);
-assert.equal(backupBeforeDelete.calibrationRows.length, 44);
+assert.equal(backupBeforeDelete.rows.length, 62);
+assert.equal(backupBeforeDelete.calibrationRows.length, 46);
 assert.equal(backupBeforeDelete.competitionRows.length, 16);
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station1"));
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station3"));
@@ -720,10 +741,10 @@ const removeStations = await rpc(
 );
 assert.equal(removeStations.success, true, removeStations.message);
 assert.equal(removeStations.stationChanged, true);
-assert.equal(removeStations.preservedScoreCount, 60);
+assert.equal(removeStations.preservedScoreCount, 62);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  60,
+  62,
 );
 
 const configAfterDelete = await rpc("getConfig");
@@ -738,7 +759,7 @@ const oldStationSubmit = await rpc("submitScores", ikrcPayload(judge, station1))
 assert.equal(oldStationSubmit.success, false);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  60,
+  62,
 );
 
 const reviewAfterStationDelete = await rpc("getReviewList", "IKRC", adminActor);
@@ -766,11 +787,11 @@ const adminDelete = await rpc(
 assert.equal(adminDelete.success, true, adminDelete.message);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  59,
+  61,
 );
 
 const backupAfterDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
-assert.equal(backupAfterDelete.rows.length, 59);
+assert.equal(backupAfterDelete.rows.length, 61);
 assert.ok(backupAfterDelete.rows.some((row) => row["스테이션ID"] === "station3"));
 
 const storedPayloads = testDb.raw

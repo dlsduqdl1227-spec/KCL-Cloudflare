@@ -503,6 +503,7 @@ async function dispatch(action, args, env, request) {
     getIkrcSeedToCupConsole: () => getIkrcSeedToCupConsole(env, args[0]),
     saveIkrcSeedToCupMatch: () => saveIkrcSeedToCupMatch(env, args[0], args[1]),
     updateIkrcSeedToCupResult: () => updateIkrcSeedToCupResult(env, args[0], args[1], args[2], args[3]),
+    getIkrcCalibrationScopeOptions: () => getIkrcCalibrationScopeOptions(env, args[0]),
     getIkrcCalibrationCupNumbers: () => getIkrcCalibrationCupNumbers(env, args[0], args[1]),
     getIkrcCalibrationResultsByCup: () => getIkrcCalibrationResultsByCup(env, args[0], args[1], args[2]),
     markIkrcCalibrationChecked: () => markIkrcCalibrationChecked(env, args[0], args[1], args[2], args[3], args[4]),
@@ -1157,22 +1158,47 @@ function participantNumberFromRow_(row, code) {
   if (code === 'IKRC') return firstNonEmpty([pickByAliases_(row, ['샘플번호','sample_no','sampleNo','참가자번호','participant_no','player_no','unique_no','번호'])]);
   return firstNonEmpty([pickByAliases_(row, ['참가자번호','participant_no','participantNo','player_no','playerNo','unique_no','고유번호','번호'])]);
 }
+function normalizeParticipantScheduleRange_(value) {
+  const raw = safeStr(value).replace(/\s+/g, '').replace(/[–—-]/g, '~');
+  if (!raw) return '';
+  const match = raw.match(/^(\d{1,2}):(\d{2})~(\d{1,2}):(\d{2})$/);
+  if (!match) return safeStr(value);
+  const startHour = Number(match[1]), startMinute = Number(match[2]), endHour = Number(match[3]), endMinute = Number(match[4]);
+  if (startHour > 23 || endHour > 23 || startMinute > 59 || endMinute > 59) return safeStr(value);
+  return `${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}~${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`;
+}
 function participantPayloadFromRow_(raw, defaultCode='') {
-  const code = safeStr(pickByAliases_(raw, ['대회코드','competition_code','competitionCode','code'], defaultCode === 'ALL' ? '' : defaultCode)).toUpperCase();
-  const name = safeStr(pickByAliases_(raw, ['선수명','참가자명','이름','name','playerName','participantName']));
-  const affiliation = safeStr(pickByAliases_(raw, ['소속','affiliation','company','업체명']));
-  const phone = normalizePhone(pickByAliases_(raw, ['연락처','전화번호','휴대폰','phone','mobile']));
-  const teamName = safeStr(pickByAliases_(raw, ['팀명','team_name','teamName']));
-  const teamNo = safeStr(pickByAliases_(raw, ['팀번호','team_no','teamNo','예선팀번호','결선팀번호']));
-  const uniqueNo = safeStr(pickByAliases_(raw, ['고유번호','unique_no','uniqueNo','참가자번호','선수번호','번호']));
-  const prelim = safeStr(pickByAliases_(raw, ['예선컵번호','prelim_cup_no','prelimCupNo','예선번호','예선출품번호','예선샘플번호','예선팀번호','예선블라인드번호']));
-  const main = safeStr(pickByAliases_(raw, ['본선컵번호','main_cup_no','mainCupNo','본선번호','본선출품번호','본선샘플번호','본선팀번호']));
-  const final = safeStr(pickByAliases_(raw, ['결선컵번호','final_cup_no','finalCupNo','결선번호','결선출품번호','결선샘플번호','결선팀번호','결선참가번호']));
-  const cupNo = safeStr(pickByAliases_(raw, ['컵번호','cup_no','cupNo','출품번호','예선출품번호','결선출품번호','예선컵번호','결선컵번호']));
-  const sampleNo = safeStr(pickByAliases_(raw, ['샘플번호','sample_no','sampleNo','예선샘플번호','결선샘플번호']));
-  const number = participantNumberFromRow_(raw, code);
+  raw = raw && typeof raw === 'object' ? raw : {};
+  const inheritedExtra = raw.extra && typeof raw.extra === 'object' && !Array.isArray(raw.extra) ? raw.extra : {};
+  const source = Object.assign({}, inheritedExtra, raw);
+  delete source.extra;
+  const code = safeStr(pickByAliases_(source, ['대회코드','competition_code','competitionCode','code'], defaultCode === 'ALL' ? '' : defaultCode)).toUpperCase();
+  const name = safeStr(pickByAliases_(source, ['선수명','참가자명','이름','name','playerName','participantName']));
+  const affiliation = safeStr(pickByAliases_(source, ['소속','affiliation','company','업체명']));
+  const phone = normalizePhone(pickByAliases_(source, ['연락처','전화번호','휴대폰','phone','mobile']));
+  const teamName = safeStr(pickByAliases_(source, ['팀명','team_name','teamName']));
+  const teamNo = safeStr(pickByAliases_(source, ['팀번호','team_no','teamNo','예선팀번호','결선팀번호']));
+  const uniqueNo = safeStr(pickByAliases_(source, ['고유번호','unique_no','uniqueNo','참가자번호','선수번호','번호']));
+  const prelim = safeStr(pickByAliases_(source, ['예선컵번호','prelim_cup_no','prelimCupNo','예선번호','예선출품번호','예선샘플번호','예선팀번호','예선블라인드번호']));
+  const main = safeStr(pickByAliases_(source, ['본선컵번호','main_cup_no','mainCupNo','본선번호','본선출품번호','본선샘플번호','본선팀번호']));
+  const final = safeStr(pickByAliases_(source, ['결선컵번호','final_cup_no','finalCupNo','결선번호','결선출품번호','결선샘플번호','결선팀번호','결선참가번호']));
+  const cupNo = safeStr(pickByAliases_(source, ['컵번호','cup_no','cupNo','출품번호','예선출품번호','결선출품번호','예선컵번호','결선컵번호']));
+  const sampleNo = safeStr(pickByAliases_(source, ['샘플번호','sample_no','sampleNo','예선샘플번호','결선샘플번호']));
+  const number = participantNumberFromRow_(source, code);
+  const competitionDate = normalizeEffectiveDate_(pickByAliases_(source, ['대회일','대회날짜','경연일','경연날짜','예선일','일자','competition_date','competitionDate','event_date','eventDate','date']));
+  const preparationTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['준비시간','준비 시간','preparation_time','preparationTime','prep_time','prepTime']));
+  const performanceTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['시연시간','경연시간','시연 시간','performance_time','performanceTime','presentation_time','presentationTime']));
+  const waitingTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['대기시간','대기 시간','waiting_time','waitingTime']));
+  const stationNo = safeStr(pickByAliases_(source, ['스테이션번호','스테이션 번호','Station No.','station_no','stationNo']));
+  const performanceOrder = safeStr(pickByAliases_(source, ['경연순서','경연 순서','시연순서','순서','performance_order','performanceOrder']));
   const extra = {};
-  Object.keys(raw || {}).forEach(k => { if (safeStr(raw[k]) !== '') extra[k] = raw[k]; });
+  Object.keys(source).forEach(k => { if (safeStr(source[k]) !== '') extra[k] = source[k]; });
+  if (competitionDate) extra['대회일'] = competitionDate;
+  if (preparationTime) extra['준비시간'] = preparationTime;
+  if (performanceTime) extra['시연시간'] = performanceTime;
+  if (waitingTime) extra['대기시간'] = waitingTime;
+  if (stationNo) extra['스테이션번호'] = stationNo;
+  if (performanceOrder) extra['경연순서'] = performanceOrder;
   return {
     competitionCode: code,
     name: name || teamName,
@@ -1298,6 +1324,12 @@ function participantRowOut_(r) {
     name: r.name || '', affiliation: r.affiliation || '', phone: r.phone || '',
     uniqueNo: r.unique_no || '', prelimCupNo: r.prelim_cup_no || '', mainCupNo: r.main_cup_no || '', finalCupNo: r.final_cup_no || '',
     cupNo: r.cup_no || '', sampleNo: r.sample_no || '', teamName: r.team_name || '', teamNo: r.team_no || '', extra: ex,
+    competitionDate: normalizeEffectiveDate_(ex['대회일'] || ex.competitionDate || ex.competition_date),
+    preparationTime: normalizeParticipantScheduleRange_(ex['준비시간'] || ex.preparationTime || ex.preparation_time),
+    performanceTime: normalizeParticipantScheduleRange_(ex['시연시간'] || ex['경연시간'] || ex.performanceTime || ex.performance_time),
+    waitingTime: normalizeParticipantScheduleRange_(ex['대기시간'] || ex.waitingTime || ex.waiting_time),
+    stationNo: safeStr(ex['스테이션번호'] || ex.stationNo || ex.station_no),
+    performanceOrder: safeStr(ex['경연순서'] || ex.performanceOrder || ex.performance_order),
     displayNo: r.team_no || r.final_cup_no || r.main_cup_no || r.prelim_cup_no || r.cup_no || r.sample_no || r.unique_no || String(r.id)
   };
 }
@@ -2925,7 +2957,7 @@ async function submitScores(env, payload, signature, request = null) {
     const selectedStation = stationValidation.station;
     const configuredStations = ikrcStationSettingsServer_(cfg, submitRound);
     const assignedStation = ikrcActorAssignedStationServer_(auth.actor, cfg);
-    if (assignedStation && safeStr(assignedStation.id) !== safeStr(selectedStation.id)) {
+    if (!isCalibrationMode_(basePayload.mode) && assignedStation && safeStr(assignedStation.id) !== safeStr(selectedStation.id)) {
       return {
         success:false,
         message:`현재 계정은 ${assignedStation.label}에 배정되어 있어 ${selectedStation.label} 평가를 제출할 수 없습니다. 운영계정의 IKRC 팀/스테이션 배정을 확인해주세요.`,
@@ -3547,19 +3579,12 @@ function ikrcCalibrationCheckerKey_(actor) {
   return operatorIdentityKey_(actor.name || actor.judgeName || actor.operatorName || '', actor.phone || '') || normalizePersonName_(actor.name || actor.judgeName || actor.operatorName || '') || 'manager';
 }
 function ikrcCalibrationScope_(requestedScope, actor, stations=[]) {
-  actor = actor || {};
   const raw = requestedScope && typeof requestedScope === 'object' ? requestedScope : { scope:'station', team:requestedScope };
-  const roleMap = actor.roleMap && typeof actor.roleMap === 'object' ? actor.roleMap : {};
-  const actorRole = safeStr(roleMap.IKRC || actor.role || actor.judgeRole || actor.operatorRole);
-  const actorTeam = ikrcActorTeamServer_(actor);
-  const actorStation = hasAdmin(actor) ? null : ikrcFindStationByAssignmentServer_(actorTeam, stations);
-  let team = safeStr(raw.team || raw.requestedTeam || actorTeam);
+  let team = safeStr(raw.team || raw.requestedTeam);
   let scope = safeStr(raw.scope || raw.mode).toLowerCase() === 'all' ? 'all' : 'station';
-  if (scope === 'station' && actorStation && (!hasManageAccess(actor, 'IKRC') || hasTeamLead(actor) || isHeadRole_(actorRole))) {
-    team = actorStation.label;
-  }
-  if (!team) scope = 'all';
-  const station = scope === 'station' ? (actorStation || ikrcFindStationByAssignmentServer_(team, stations)) : null;
+  const requestedStationId = safeStr(raw.stationId || raw.stationID);
+  const station = scope === 'station' ? ((stations || []).find(item => safeStr(item.id) === requestedStationId) || ikrcFindStationByAssignmentServer_(team, stations)) : null;
+  if (scope === 'station' && !station) team = '';
   if (station) team = station.label;
   const key = scope === 'station' ? ('STATION:' + safeStr((station && station.id) || team).replace(/\s+/g, '_').slice(0, 64)) : 'ALL';
   return {
@@ -3568,6 +3593,46 @@ function ikrcCalibrationScope_(requestedScope, actor, stations=[]) {
     station:station ? {id:station.id, label:station.label, prefix:station.prefix} : null,
     key,
     label:scope === 'station' ? ('스테이션 · ' + (station ? station.label : team)) : '전체 심사위원'
+  };
+}
+function ikrcStationCalibrationMode_(mode) {
+  return isCalibrationMode_(mode) && /팀별|스테이션|station/i.test(safeStr(mode));
+}
+function ikrcScoreMode_(scoreRow) {
+  const payload = parseJson(scoreRow && scoreRow.payload_json, {});
+  return safeStr((scoreRow && scoreRow.mode) || payload.mode || payload.evalMode);
+}
+function ikrcScoreRound_(scoreRow) {
+  const payload = parseJson(scoreRow && scoreRow.payload_json, {});
+  return safeStr((scoreRow && scoreRow.round) || payload.round || payload.currentRound || payload.roundName);
+}
+function ikrcHeadCalibrationStations_(scoreRows, actor, stations, currentRound) {
+  return (stations || []).filter(station => (scoreRows || []).some(scoreRow => {
+    if (!scoreOwnedByActor_(scoreRow, actor)) return false;
+    if (!ikrcStationCalibrationMode_(ikrcScoreMode_(scoreRow))) return false;
+    const scoreRound = ikrcScoreRound_(scoreRow);
+    if (currentRound && scoreRound && scoreRound !== currentRound) return false;
+    return ikrcScoreBelongsToStationServer_(scoreRow, station);
+  }));
+}
+async function getIkrcCalibrationScopeOptions(env, actorArg) {
+  const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
+  if (!auth.ok) return auth.res;
+  const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
+  const actorRole = safeStr(roleMap.IKRC || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
+  const canManageAll = hasManageAccess(auth.actor, 'IKRC');
+  if (!isHeadRole_(actorRole) && !canManageAll) return { success:false, message:'IKRC 켈리브레이션 결과는 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' };
+  const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
+  const currentRound = safeStr(cfg && cfg.current_round);
+  const stations = ikrcStationSettingsServer_(cfg, currentRound);
+  const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
+  const allowed = canManageAll ? stations : ikrcHeadCalibrationStations_(rawRows.results || [], auth.actor, stations, currentRound);
+  return {
+    success:true,
+    currentRound,
+    canViewOverall:true,
+    canManageAll,
+    stations:allowed.map(station => ({ id:station.id, label:station.label, prefix:station.prefix, start:station.start, end:station.end }))
   };
 }
 function ikrcSeedMatchToken_(matchNo) { return 'IKRC_SEED_MATCH:' + encodeURIComponent(safeStr(matchNo)); }
@@ -3613,15 +3678,22 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
   if (!auth.ok) return { error: auth.res };
   const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
   const actorRole = safeStr(roleMap.IKRC || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
-  if (!hasManageAccess(auth.actor, 'IKRC') && !isHeadRole_(actorRole)) {
-    return { error: { success:false, message:'IKRC 켈리브레이션은 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' } };
-  }
+  const canManageAll = hasManageAccess(auth.actor, 'IKRC');
+  if (!isHeadRole_(actorRole) && !canManageAll) return { error: { success:false, message:'IKRC 켈리브레이션 결과는 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' } };
   const checkerKey = ikrcCalibrationCheckerKey_(auth.actor);
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
   const stations = ikrcStationSettingsServer_(cfg, currentRound);
-  const scope = ikrcCalibrationScope_(requestedScope, auth.actor, stations);
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
+  let scope = ikrcCalibrationScope_(requestedScope, auth.actor, stations);
+  const allowedStations = canManageAll ? stations : ikrcHeadCalibrationStations_(rawRows.results || [], auth.actor, stations, currentRound);
+  if (scope.scope === 'station') {
+    const requestedStation = scope.station || (!safeStr(requestedScope && requestedScope.stationId) ? allowedStations[0] : null);
+    if (!requestedStation || !allowedStations.some(station => safeStr(station.id) === safeStr(requestedStation.id))) {
+      return { error: { success:false, message:'헤드는 직접 팀별 켈리브레이션을 평가한 스테이션만 확인할 수 있습니다. 대회팀장·관리자는 모든 스테이션을 확인할 수 있습니다.' } };
+    }
+    scope = ikrcCalibrationScope_({scope:'station', stationId:requestedStation.id, team:requestedStation.label}, auth.actor, stations);
+  }
   const headers = mergeHeaders('IKRC', rawRows.results || []);
   let rows = (rawRows.results || []).map(r => rowToReviewItem(r, 'IKRC', headers, currentRound));
   rows = rows.filter(item => {

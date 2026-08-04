@@ -65,6 +65,13 @@ assert.equal(cup2.manualOverallComment, "두 번째 컵 직접 입력");
 assert.notEqual(cup2.manualOverallComment, cup1.manualOverallComment, "each cup must keep its own comment buffer");
 
 assert.match(registry, /id="opDate" type="date"/);
+assert.match(registry, /id="mDate"[^>]*type="date"/);
+assert.match(registry, /id="mPrep"/);
+assert.match(registry, /id="mPerformance"/);
+assert.match(registry, /'대회일','경연순서','스테이션번호','대기시간','준비시간','시연시간'/);
+assert.match(functionSource(registry, "saveOneParticipant"), /'대회일'/);
+assert.match(functionSource(registry, "saveOneParticipant"), /'준비시간'/);
+assert.match(functionSource(registry, "saveOneParticipant"), /'시연시간'/);
 assert.match(registry, /data-copy-date-op/);
 assert.match(registry, /MOB_2026_PRELIM_PERMISSION_PRESET/);
 assert.match(functionSource(registry, "applyMobSchedulePreset"), /applyOperatorDateSchedule/);
@@ -77,6 +84,9 @@ assert.match(rpc, /idx_operators_effective_date/);
 assert.match(rpc, /applyOperatorDateSchedule/);
 assert.match(functionSource(rpc, "upsertOperatorAccount"), /effectiveDate/);
 assert.match(functionSource(rpc, "operatorRowOut_"), /effectiveDate/);
+assert.match(functionSource(rpc, "participantRowOut_"), /competitionDate/);
+assert.match(functionSource(rpc, "participantRowOut_"), /preparationTime/);
+assert.match(functionSource(rpc, "participantRowOut_"), /performanceTime/);
 assert.match(functionSource(rpc, "hydrateActorFromOperators_"), /if \(!list\.length\) return null/);
 
 const dateContext = { COMPETITION_CODES:["KCR", "MOB"] };
