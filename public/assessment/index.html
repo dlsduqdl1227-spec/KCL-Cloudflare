@@ -14224,7 +14224,7 @@ function renderIkrcStationChoices_() {
     '</button>';
   }).join('');
   if (help) help.textContent = calibrationMode
-    ? (_evaluationPurposeScope === 'all'
+    ? (_evaluationPurpose.scope === 'all'
       ? '전체 켈리브레이션입니다. 헤드와 센서리 심사위원 모두 현장에서 안내받은 동일 샘플 범위를 선택해 평가하며, 결과와 표준편차는 헤드·대회팀장·관리자만 확인합니다.'
       : '스테이션 켈리브레이션입니다. 현장에서 안내받은 스테이션을 선택하세요. 실제로 같은 스테이션에서 평가한 헤드와 센서리 심사위원이 임시 한 팀으로 묶입니다.')
     : (assignedStation
