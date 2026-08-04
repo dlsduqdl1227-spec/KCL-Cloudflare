@@ -1830,7 +1830,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <button class="btn" id="btn-eval" onclick="goEval()">대회평가 시작</button>
   <button class="btn-outline" id="btn-review" style="display:none" onclick="goReview()">검수 / 현황 보기</button>
   <button class="btn-outline" id="btn-calibration-team" style="display:none" onclick="goCalibration('team')">팀별 켈리브레이션 시작</button>
-  <button class="btn-outline" id="btn-calibration-all" style="display:none" onclick="goCalibration('all')">전체 켈리브레이션 시작</button>
+  <button class="btn-outline" id="btn-calibration-all" style="display:none" onclick="goCalibration('all')">전체 켈리브레이션</button>
   <button class="btn-outline" id="btn-calibration" style="display:none" onclick="goCalibrationResults()">켈리브레이션 결과 확인</button>
   <button class="btn-outline" id="btn-ikrc-seed-vote" style="display:none" onclick="openIkrcSeedToCup_(_selComp)">Seed to Cup 운영 / 결과</button>
   <button class="btn-danger" onclick="doLogout()">로그아웃</button>
@@ -2367,7 +2367,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <p style="text-align:center;color:var(--text-3);margin-bottom:24px;font-size:14px" id="ikrc-setup-sub"></p>
 
   <div class="finals-container">
-    <div style="text-align:center;font-size:17px;font-weight:700;margin-bottom:4px;color:var(--text-2)">평가 스테이션 선택</div>
+    <div style="text-align:center;font-size:17px;font-weight:700;margin-bottom:4px;color:var(--text-2)">스테이션 선택</div>
     <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px">운영팀장이 등록한 스테이션만 선택할 수 있습니다. 샘플 번호는 자동으로 적용됩니다.</div>
     <div id="ikrcCalibrationNotice" class="review-edit-help" style="display:none;margin-bottom:14px">헤드 심사위원 평가도 실제 순위·총점에 반영됩니다.</div>
     <div class="ikrc-station-grid" id="ikrc-station-grid"></div>
@@ -4443,14 +4443,14 @@ function updateSelectReviewButton_() {
   var canCal = !!(_selComp && canCalibrationCode_(code));
   if (calAllBtn) {
     calAllBtn.style.display = canCal && !isKcrMenu ? 'block' : 'none';
-    calAllBtn.textContent = isKcrMenu ? '켈리브레이션(전체)' : '전체 켈리브레이션 시작';
+    calAllBtn.textContent = isKcrMenu ? '켈리브레이션(전체)' : (isIkrcMenu ? '전체 켈리브레이션' : '전체 켈리브레이션 시작');
   }
   if (calTeamBtn) {
     var hasTeam = !!judgeTeamText(code);
     calTeamBtn.style.display = canCal && !isKcrMenu ? 'block' : 'none';
     calTeamBtn.disabled = canCal && !hasTeam && !isIkrcMenu;
     calTeamBtn.textContent = isIkrcMenu
-      ? ('스테이션 켈리브레이션 시작' + (ikrcAssignedStation_(_selComp) ? (' · ' + ikrcAssignedStation_(_selComp).label) : ' · 스테이션 선택'))
+      ? ('스테이션별 켈리브레이션' + (ikrcAssignedStation_(_selComp) ? (' · ' + ikrcAssignedStation_(_selComp).label) : ''))
       : (hasTeam ? ('팀별 켈리브레이션 시작 · ' + judgeTeamText(code)) : '팀별 켈리브레이션 시작 · 팀 미지정');
   }
   if (calBtn) {
@@ -14189,15 +14189,16 @@ function calcIkrcSampleTotal_(s) {
 
 function showIkrcSetup() {
   var isHead = isHeadRoleForCode_('IKRC');
+  var calibrationMode = isIkrcCalibrationMode_();
   var title = document.getElementById('ikrc-setup-title');
   var sub = document.getElementById('ikrc-setup-sub');
-  if (title) title.textContent = 'IKRC ' + evaluationPurposeLabel_();
-  if (sub) sub.textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + evaluationPurposeLabel_() + evaluationTeamContextText_() + (isIkrcCalibrationMode_() ? ' · 공식 점수·순위 제외' : ' · 헤드 포함 공식 점수 반영');
+  if (title) title.textContent = calibrationMode ? 'IKRC 켈리브레이션' : 'IKRC 대회평가';
+  if (sub) sub.textContent = judgeLineText() + '  ' + _selComp.currentRound + (calibrationMode ? ' · 공식 점수·순위 제외' : ' · 헤드 포함 공식 점수 반영');
   var notice = document.getElementById('ikrcCalibrationNotice');
   if (notice) {
     notice.style.display = 'block';
-    notice.textContent = isIkrcCalibrationMode_()
-      ? evaluationPurposeLabel_() + '입니다. 헤드 심사위원과 센서리 심사위원 모두 참여할 수 있으며 제출값은 켈리브레이션으로 분리 저장되어 대회평가에 반영되지 않습니다.'
+    notice.textContent = calibrationMode
+      ? '헤드와 센서리 심사위원 모두 참여할 수 있으며, 제출값은 공식 점수·순위에 반영되지 않습니다.'
       : '대회평가입니다. 각 스테이션의 헤드와 심사위원 평가만 해당 스테이션에 독립 저장되며, 헤드 심사위원 점수도 일반 심사위원과 동일하게 공식 합산에 반영됩니다.';
   }
   var headActions = document.getElementById('ikrcHeadCalActions');
@@ -14225,8 +14226,8 @@ function renderIkrcStationChoices_() {
   }).join('');
   if (help) help.textContent = calibrationMode
     ? (_evaluationPurpose.scope === 'all'
-      ? '전체 켈리브레이션입니다. 헤드와 센서리 심사위원 모두 현장에서 안내받은 동일 샘플 범위를 선택해 평가하며, 결과와 표준편차는 헤드·대회팀장·관리자만 확인합니다.'
-      : '스테이션 켈리브레이션입니다. 현장에서 안내받은 스테이션을 선택하세요. 실제로 같은 스테이션에서 평가한 헤드와 센서리 심사위원이 임시 한 팀으로 묶입니다.')
+      ? '현장에서 안내받은 동일 샘플 범위를 선택하세요. 모든 헤드와 센서리 심사위원 결과가 한 그룹으로 집계됩니다.'
+      : '현장에서 안내받은 스테이션을 선택하세요. 같은 스테이션의 헤드와 센서리 심사위원 결과가 한 그룹으로 집계됩니다.')
     : (assignedStation
       ? assignedStation.label + ' 배정 계정입니다. 이 스테이션의 평가만 제출하고 검수할 수 있으며 다른 스테이션과 섞이지 않습니다.'
       : '스테이션 미배정 계정은 현재 라운드의 첫 공식 제출 스테이션으로 고정됩니다. 운영계정의 IKRC 팀 항목에 스테이션 번호를 지정하면 처음부터 해당 스테이션만 표시됩니다.');
@@ -14251,7 +14252,7 @@ function initIkrcSamples(cupNumbers, station) {
   _ikrcSamples = []; _ikrcIdx = 0; _ikrcCurrentAttr = 'flavor';
   resetEvaluationDisqualification_('IKRC');
   cupNumbers.forEach(function(cupNo) { _ikrcSamples.push(makeIkrcSampleData(cupNo)); });
-  document.getElementById('ikrc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + ((_ikrcStation && _ikrcStation.label) || '스테이션') + ' · ' + cupNumbers.length + '개 샘플 · ' + evaluationPurposeLabel_() + evaluationTeamContextText_() + (isIkrcCalibrationMode_() ? ' · 순위 제외' : ' · 공식 점수 반영');
+  document.getElementById('ikrc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + ((_ikrcStation && _ikrcStation.label) || '스테이션') + ' · ' + cupNumbers.length + '개 샘플' + (isIkrcCalibrationMode_() ? ' · 켈리브레이션 · 순위 제외' : ' · 대회평가 · 공식 점수 반영');
   renderIkrcNav();
   loadIkrcSample(0);
   showEval('evalIkrc');

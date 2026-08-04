@@ -29,7 +29,7 @@ function extractFunction(source, name) {
 }
 
 assert.match(assessment, /id="btn-eval"[^>]*>대회평가 시작/);
-assert.match(assessment, /id="btn-calibration-all"[^>]*>전체 켈리브레이션 시작/);
+assert.match(assessment, /id="btn-calibration-all"[^>]*>전체 켈리브레이션</);
 assert.match(assessment, /id="btn-calibration-team"[^>]*>팀별 켈리브레이션 시작/);
 assert.ok(assessment.indexOf('id="btn-review"') < assessment.indexOf('id="btn-calibration-team"'), "Review must appear before KCR calibration entry buttons");
 assert.match(extractFunction(assessment, "evaluationTeamForSubmit_"), /전체 켈리브레이션팀/);

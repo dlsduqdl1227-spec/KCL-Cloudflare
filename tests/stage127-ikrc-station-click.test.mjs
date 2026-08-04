@@ -53,13 +53,23 @@ vm.runInContext([
 
 context.renderIkrcStationChoices_();
 assert.match(wrap.innerHTML, /startIkrcStation_\('station1'\)/);
-assert.match(help.textContent, /스테이션 켈리브레이션/);
+assert.match(help.textContent, /현장에서 안내받은 스테이션/);
+assert.doesNotMatch(help.textContent, /스테이션 켈리브레이션/);
 context.startIkrcStation_("station1");
 assert.deepEqual(started.cups, ["T-1", "T-2", "T-3"]);
 assert.equal(started.selected.id, "station1");
 
 context._evaluationPurpose.scope = "all";
 context.renderIkrcStationChoices_();
-assert.match(help.textContent, /전체 켈리브레이션/);
+assert.match(help.textContent, /동일 샘플 범위/);
+assert.doesNotMatch(help.textContent, /전체 켈리브레이션입니다/);
+
+const selectButtonSource = functionSource(assessment, "updateSelectReviewButton_");
+assert.match(selectButtonSource, /스테이션별 켈리브레이션/);
+assert.doesNotMatch(selectButtonSource, /스테이션 켈리브레이션 시작/);
+assert.doesNotMatch(selectButtonSource, /스테이션 선택'\)\)/);
+const setupSource = functionSource(assessment, "showIkrcSetup");
+assert.match(setupSource, /IKRC 켈리브레이션/);
+assert.doesNotMatch(setupSource, /evaluationPurposeLabel_\(\)/);
 
 process.stdout.write("Stage127 IKRC station-click tests passed.\n");
