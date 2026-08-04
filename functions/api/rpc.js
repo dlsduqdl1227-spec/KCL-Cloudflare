@@ -3607,13 +3607,20 @@ function ikrcScoreRound_(scoreRow) {
   return safeStr((scoreRow && scoreRow.round) || payload.round || payload.currentRound || payload.roundName);
 }
 function ikrcHeadCalibrationStations_(scoreRows, actor, stations, currentRound) {
-  return (stations || []).filter(station => (scoreRows || []).some(scoreRow => {
+  const allowed = (stations || []).filter(station => (scoreRows || []).some(scoreRow => {
     if (!scoreOwnedByActor_(scoreRow, actor)) return false;
     if (!ikrcStationCalibrationMode_(ikrcScoreMode_(scoreRow))) return false;
     const scoreRound = ikrcScoreRound_(scoreRow);
     if (currentRound && scoreRound && scoreRound !== currentRound) return false;
     return ikrcScoreBelongsToStationServer_(scoreRow, station);
   }));
+  const teamMap = actor && actor.teamMap && typeof actor.teamMap === 'object' ? actor.teamMap : {};
+  const assignments = [teamMap.IKRC, actor && actor.teamGroup, actor && actor.team, actor && actor.requestedTeam].map(safeStr).filter(Boolean);
+  assignments.forEach(assignment => {
+    const assigned = ikrcFindStationByAssignmentServer_(assignment, stations || []);
+    if (assigned && !allowed.some(station => safeStr(station.id) === safeStr(assigned.id))) allowed.push(assigned);
+  });
+  return allowed;
 }
 async function getIkrcCalibrationScopeOptions(env, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');

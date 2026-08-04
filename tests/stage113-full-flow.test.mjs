@@ -247,6 +247,15 @@ for (const operator of [
     role: "센서리 헤드 심사위원",
   },
   {
+    accountType: "JUDGE",
+    name: "QA 배정헤드",
+    phone: "01011110009",
+    affiliation: "QA",
+    access: "IKRC",
+    teamGroup: "스테이션 1",
+    role: "센서리 헤드 심사위원",
+  },
+  {
     accountType: "TEAMLEAD",
     name: "QA 대회팀장",
     phone: "01011110003",
@@ -305,9 +314,10 @@ const judge2 = await rpc("judgeLogin", "QA 센서리2", "01011110004");
 const judgeZ = await rpc("judgeLogin", "QA 센서리Z", "01011110007");
 const head = await rpc("judgeLogin", "QA 헤드", "01011110002");
 const head2 = await rpc("judgeLogin", "QA 헤드2", "01011110005");
+const assignedHead = await rpc("judgeLogin", "QA 배정헤드", "01011110009");
 const lead = await rpc("judgeLogin", "QA 대회팀장", "01011110003");
 const stationLead = await rpc("judgeLogin", "QA 스테이션2팀장", "01011110008");
-for (const login of [judge, judge2, judgeZ, head, head2, lead, stationLead]) {
+for (const login of [judge, judge2, judgeZ, head, head2, assignedHead, lead, stationLead]) {
   assert.equal(login.success, true, login.message);
   assert.ok(login.judgeToken);
 }
@@ -436,6 +446,8 @@ assert.equal(headScopeOptions.success, true, headScopeOptions.message);
 assert.deepEqual(headScopeOptions.stations.map((item) => item.id).sort(), ["station1", "station2"]);
 const head2ScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: head2.judgeToken });
 assert.deepEqual(head2ScopeOptions.stations.map((item) => item.id), ["station2"]);
+const assignedHeadScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: assignedHead.judgeToken });
+assert.deepEqual(assignedHeadScopeOptions.stations.map((item) => item.id), ["station1"], "헤드는 제출 전에도 사전 배정된 스테이션 켈리브레이션을 확인할 수 있어야 합니다");
 const managerScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: lead.judgeToken });
 assert.equal(managerScopeOptions.success, true, managerScopeOptions.message);
 assert.deepEqual(managerScopeOptions.stations.map((item) => item.id), ["station1", "station2", "station3"]);

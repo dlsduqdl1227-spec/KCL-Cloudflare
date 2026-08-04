@@ -71,5 +71,15 @@ assert.doesNotMatch(selectButtonSource, /스테이션 선택'\)\)/);
 const setupSource = functionSource(assessment, "showIkrcSetup");
 assert.match(setupSource, /IKRC 켈리브레이션/);
 assert.doesNotMatch(setupSource, /evaluationPurposeLabel_\(\)/);
+assert.match(assessment, /onclick="goCalibrationResults\(\)">켈리브레이션 결과 확인</);
+assert.match(assessment, /헤드 심사위원·대회팀장·관리자 확인 화면입니다/);
+const calibrationScopeSource = functionSource(assessment, "renderIkrcCalibrationScope_");
+assert.match(calibrationScopeSource, /teamBtn\.disabled = false/);
+assert.match(calibrationScopeSource, /스테이션 불러오는 중/);
+assert.match(calibrationScopeSource, /스테이션 선택/);
+assert.doesNotMatch(calibrationScopeSource, /스테이션 미지정/);
+const setCalibrationScopeSource = functionSource(assessment, "setIkrcCalibrationScope_");
+assert.match(setCalibrationScopeSource, /_ikrcCalibrationScope = scope/);
+assert.doesNotMatch(setCalibrationScopeSource, /운영팀장이 IKRC 스테이션을 먼저 등록해야 합니다/);
 
 process.stdout.write("Stage127 IKRC station-click tests passed.\n");
