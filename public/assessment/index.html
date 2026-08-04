@@ -14521,8 +14521,23 @@ function ikrcIntensityLabel_(value) {
   return '';
 }
 function buildIkrcManualCommentReferenceHtml_(s) {
-  // Stage52: IKRC 코멘트 탭의 수기 작성 참고 박스는 공식 평가 항목/점수처럼 보일 수 있어 숨긴다.
-  return '';
+  if (!s) return '';
+  var cards = IKRC_ATTRS.map(function(meta){
+    var score = parseFloat(s[meta.key]) || 0;
+    var scoreText = fmtScore(score, 1) + '점 (' + ikrcGetMeaning(score) + ')';
+    if (meta.weight > 1) scoreText += ' · ×' + meta.weight + ' 반영 ' + fmtScore(score * meta.weight, 1) + '점';
+    var intensity = ikrcIntensityLabel_(s[ikrcIntensityKey_(meta.key)]);
+    var selected = Array.isArray(s[ikrcTagKey_(meta.key)]) ? s[ikrcTagKey_(meta.key)] : [];
+    var tags = selected.map(smartTagLeaf_).filter(function(tag){ return !!tag; });
+    var tagText = tags.length ? ('선택 표현: ' + tags.join(', ')) : '선택 표현 없음';
+    var html = '<div class="mob-comment-reference-card">';
+    html += '<div class="mob-comment-reference-title">' + escHtml(meta.name) + '</div>';
+    html += '<div class="mob-comment-reference-text">' + escHtml(scoreText + ' · 강도 ' + (intensity || '-')) + '</div>';
+    html += '<div class="mob-comment-reference-text">' + escHtml(tagText) + '</div>';
+    return html + '</div>';
+  }).join('');
+  return '<div class="review-edit-help" style="margin-bottom:10px">AI 코멘트를 사용하지 않아도 현재 컵에서 선택한 점수·강도·스마트태그는 그대로 유지됩니다. 아래 선택값을 참고해 종합 코멘트를 직접 작성해주세요. · 반영 총점 ' + escHtml(fmtScore(calcIkrcSampleTotal_(s), 1)) + '점</div>' +
+    '<div class="kcr-comment-reference" data-ikrc-comment-reference="true">' + cards + '</div>';
 }
 
 function clearIkrcGeneratedComment() {
@@ -14539,9 +14554,7 @@ function clearIkrcGeneratedComment() {
   }
   s.generatedComment = '';
   s.commentEdited = true;
-  setCommentWarning('ikrc-comment-warning', '', true);
-  var area = document.getElementById('ikrc-comment-gen');
-  if (area) { area.innerHTML = ''; area.classList.remove('active'); }
+  renderIkrcAttrCard();
   renderIkrcAttrTabs();
   renderIkrcNav();
   toast('AI 자동 코멘트 사용을 해제했습니다.');
