@@ -167,7 +167,8 @@ assert.ok(Buffer.byteLength(JSON.stringify(simulatedKcacPayload), "utf8") < 1_75
 assert.match(assessment, /KCAC_PERSISTED_SNAPSHOT_LIMIT\s*=\s*1/);
 assert.match(assessment, /KCAC_FULL_IMAGE_MAX_BYTES\s*=\s*120\s*\*\s*1024/);
 assert.match(rpc, /payloadBytes\s*>\s*1750000/);
-assert.match(rpc, /x\.code === 'IKRC' \|\| x\.code === 'KCR'\) atomicInsertStatements\.push/);
+assert.match(rpc, /x\.code === 'IKRC' \|\| x\.code === 'KCR' \|\| receiptInfo\.token\) atomicInsertStatements\.push/);
+assert.match(rpc, /INSERT OR IGNORE/);
 assert.match(rpc, /operatorIdentityKey_/);
 assert.match(
   rpc,

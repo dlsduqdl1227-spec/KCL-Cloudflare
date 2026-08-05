@@ -301,6 +301,24 @@ for (const operator of [
     teamGroup: "상시조",
     role: "센서리 심사위원",
   },
+  {
+    accountType: "TEAMLEAD",
+    name: "QA 다중권한",
+    phone: "01011110012",
+    affiliation: "QA",
+    access: "MOC",
+    teamGroup: "",
+    role: "대회팀장",
+  },
+  {
+    accountType: "JUDGE",
+    name: "QA 다중권한",
+    phone: "01011110012",
+    affiliation: "QA",
+    access: "KCR",
+    teamGroup: "KCR 스테이션 1",
+    role: "센서리 심사위원",
+  },
 ]) {
   const saved = await rpc("upsertOperatorAccount", operator, adminActor);
   assert.equal(saved.success, true, saved.message);
@@ -327,6 +345,34 @@ assert.equal(datedJudge.permissionDate, currentKstDate);
 assert.equal(datedJudge.teamMap.MOB, "B조");
 assert.equal(datedJudge.roleMap.MOB, "센서리 헤드 심사위원");
 assert.ok(datedJudge.operatorRows.some(row => row.access === "MOB" && row.effectiveDate === currentKstDate));
+
+const nextKstDate = new Date(Date.parse(currentKstDate + "T00:00:00.000Z") + 86400000).toISOString().slice(0, 10);
+for (const participant of [
+  { name:"QA MOB 현재 A", prelimCupNo:"901", uniqueNo:"MOB-CURRENT-A", competitionDate:currentKstDate, extra:{심사조:"A조", 경연순서:"1"} },
+  { name:"QA MOB 현재 B", prelimCupNo:"902", uniqueNo:"MOB-CURRENT-B", competitionDate:currentKstDate, extra:{심사조:"B조", 경연순서:"2"} },
+  { name:"QA MOB 다음 B", prelimCupNo:"903", uniqueNo:"MOB-NEXT-B", competitionDate:nextKstDate, extra:{심사조:"B조", 경연순서:"1"} },
+]) {
+  const saved = await rpc("upsertParticipant", { competitionCode:"MOB", ...participant }, adminActor);
+  assert.equal(saved.success, true, saved.message);
+}
+const datedMobAssignments = await rpc("getParticipantAssignments", "MOB", { judgeToken:datedJudge.judgeToken });
+assert.equal(datedMobAssignments.success, true, datedMobAssignments.message);
+assert.deepEqual(datedMobAssignments.assignments.map(item => item.name), ["QA MOB 현재 B"], "MOB judge must only see the active date and assigned team");
+assert.equal(datedMobAssignments.scheduleScope.competitionDate, currentKstDate);
+assert.equal(datedMobAssignments.scheduleScope.team, "B조");
+const adminMobAssignments = await rpc("getParticipantAssignments", "MOB", adminActor);
+assert.equal(adminMobAssignments.assignments.length, 3, "MOB manager must retain all dates and teams");
+
+const multiRoleJudge = await rpc("judgeLogin", "QA 다중권한", "01011110012");
+assert.equal(multiRoleJudge.success, true, multiRoleJudge.message);
+const blindKcrParticipant = await rpc("upsertParticipant", {
+  competitionCode:"KCR", name:"QA 블라인드 선수", phone:"01022229999", uniqueNo:"KCR-BLIND-01", prelimCupNo:"KCR-BLIND-01"
+}, adminActor);
+assert.equal(blindKcrParticipant.success, true, blindKcrParticipant.message);
+const multiRoleKcrAssignments = await rpc("getParticipantAssignments", "KCR", { judgeToken:multiRoleJudge.judgeToken });
+assert.equal(multiRoleKcrAssignments.success, true, multiRoleKcrAssignments.message);
+assert.equal(multiRoleKcrAssignments.assignments[0].identityHidden, true, "MOC teamlead must not unlock KCR participant identity");
+assert.equal(multiRoleKcrAssignments.assignments[0].name, "");
 
 const judge = await rpc("judgeLogin", "QA 센서리", "01011110001");
 const judge2 = await rpc("judgeLogin", "QA 센서리2", "01011110004");
@@ -516,6 +562,7 @@ assert.match(prematureFinalization.message, /센서리 검수 0\/3/);
 
 const mobReviewComment = "향미의 연결성과 밸런스를 확인한 MOB 전체 종합 코멘트";
 const mobReviewPayload = genericPayload(judge, "MOB", "MOB-1", 55);
+mobReviewPayload.clientSubmissionId = "QA-MOB-SUBMISSION-1";
 mobReviewPayload.rows[0].extraFields["종합코멘트"] = mobReviewComment;
 
 for (const [code, payload, signature] of [
@@ -544,6 +591,15 @@ for (const [code, payload, signature] of [
   if (code === "KCR") assert.equal(submitted.inserted, 2);
   else assert.equal(submitted.inserted, 1);
 }
+
+const mobRetry = await rpc("submitScores", mobReviewPayload);
+assert.equal(mobRetry.success, true, mobRetry.message);
+assert.equal(mobRetry.idempotent, true, "MOB network retry must return the prior receipt");
+assert.equal(
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='MOB' AND unit='MOB-1'").get().n,
+  1,
+  "MOB retry must not create a duplicate score row",
+);
 
 const secondJudgeSameKcrCup = await rpc(
   "submitScores",

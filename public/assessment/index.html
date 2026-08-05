@@ -3360,7 +3360,7 @@ function applyParticipantSelect_(code, selectId, numId, nameId) {
     var help = document.getElementById('mob-participant-help');
     if (help) {
       help.style.display = 'block';
-      help.textContent = (assignment.competitionDate ? ('대회일 ' + assignment.competitionDate + ' · ') : '') + '타임테이블 순서에 따른 참가자번호가 자동 입력되었습니다.';
+      help.textContent = (assignment.competitionDate ? ('대회일 ' + assignment.competitionDate + ' · ') : '') + (assignment.scheduleTeam ? (assignment.scheduleTeam + ' · ') : '') + '타임테이블 순서에 따른 참가자번호가 자동 입력되었습니다.';
     }
   }
 }
@@ -3416,7 +3416,11 @@ function renderParticipantControl_(code, cfg) {
     if (policy.identityHidden) {
       help.textContent = (policy.numberLabel || '심사용 번호') + '만 심사위원 화면에 표시됩니다. 선수명과 소속은 관리자/팀장 검수·정산 화면에서만 확인됩니다.';
     } else if (code === 'MOB') {
-      help.textContent = '대회 날짜와 선수를 선택하면 타임테이블 순서에 따른 참가자번호가 자동 입력됩니다.';
+      var scope = st.scheduleScope || {};
+      var scopeText = [scope.competitionDate, scope.team].filter(Boolean).join(' · ');
+      help.textContent = scopeText
+        ? ('현재 권한 ' + scopeText + '에 해당하는 참가자만 표시됩니다. 선수를 선택하면 참가자번호가 자동 입력됩니다.')
+        : '대회 날짜·심사조와 선수를 확인하면 타임테이블 순서에 따른 참가자번호가 자동 입력됩니다.';
     } else if (code === 'IKRC') {
       help.textContent = '현재 라운드의 샘플/참가번호를 사용합니다. 목록에 없으면 직접 입력할 수 있습니다.';
     } else {
@@ -3442,9 +3446,11 @@ function loadParticipantAssignmentsForCode_(code) {
       if (res && res.success) {
         cur.list = res.assignments || [];
         cur.policy = res.policy || {};
+        cur.scheduleScope = res.scheduleScope || null;
         cur.message = res.message || '';
       } else {
         cur.list = [];
+        cur.scheduleScope = null;
         cur.message = (res && res.message) || '선수등록 목록을 불러오지 못했습니다. 직접 입력하세요.';
       }
       renderParticipantControls_(code);
@@ -3457,6 +3463,7 @@ function loadParticipantAssignmentsForCode_(code) {
       cur.loaded = true;
       cur.list = [];
       cur.policy = {};
+      cur.scheduleScope = null;
       cur.message = '선수등록 목록을 불러오지 못했습니다. 직접 입력하세요.';
       renderParticipantControls_(code);
       if (code === 'MOC') renderMocSetupList();
@@ -13027,6 +13034,8 @@ var MOB_SMART_TAGS = {
 var _mobTags = mobCreateTagState_();
 var _mobOpenSmartTagBranches = {};
 var _mobScoreLocks = {};
+var _mobClientSubmissionId = '';
+var _mobSubmitting = false;
 
 function mobScoreLockHtml_(id) {
   var checked = !!_mobScoreLocks[id];
@@ -13528,6 +13537,8 @@ function startMob() {
   _mobTags = mobCreateTagState_();
   _mobOpenSmartTagBranches = {};
   _mobScoreLocks = {};
+  _mobClientSubmissionId = 'MOB-' + Date.now() + '-' + Math.random().toString(36).slice(2,10);
+  _mobSubmitting = false;
   document.getElementById('mob-tech-rows').innerHTML = MOB_TECH.map(function(a){
     return makeScoreRow(a.id, a.name, '', 1, 5, 0.2, 3, mobGetDesc, 'calcMobTotal()', mobCommentId_(a.id), a.name + ' 코멘트', mobScoreLockHtml_(a.id) + renderMobInlineTagSection_(a), MOB_SCORE_LABELS);
   }).join('');
@@ -13752,6 +13763,7 @@ function onMobCommentInput() {
 }
 
 function mobSubmit() {
+  if (_mobSubmitting) { toast('MOB 평가를 안전하게 저장하고 있습니다. 잠시만 기다려주세요.'); return; }
   if (isMobHeadCategoryMissing_()) { toast(mobHeadCategoryMessage_(), true); return; }
   var num = document.getElementById('mob-num').value.trim();
   var playerName = val_('mob-name').trim();
@@ -13831,21 +13843,34 @@ function mobSubmit() {
   if (mobDqInfo.disqualified && !timeDq) timeMsg += '\n수동 실격: ' + mobDqInfo.reason;
   if (!confirm('참가자 ' + num + (playerName ? ' · ' + playerName : '') + ' (' + menu + ') 제출? 총점: ' + fmtScore(total,1) + '점' + timeMsg + (isMobCalibrationMode_() ? '\n이 데이터는 ' + mobCalibrationLabel_() + '으로 저장되어 순위에는 반영되지 않습니다.' : '\n이 데이터는 대회평가 공식 점수에 반영됩니다.'))) return;
 
+  _mobSubmitting = true;
+  kclSaveActiveEvalDraftNow_(true);
   showOverlay();
   google.script.run
     .withSuccessHandler(function(res){
       hideOverlay();
       if (res.success) {
+        kclClearActiveEvalDraftAfterSubmit({competitionCode:'MOB'});
         toast(isMobCalibrationMode_() ? '켈리브레이션 기준 점수 저장 완료' : '제출 완료');
         setTimeout(function(){
           if (isMobCalibrationMode_()) openMobCalibrationDetail(num);
           else { hideEval(); showPanel(adminHomePanel_()); }
         }, 900);
-      } else { toast(res.message, true); }
+      } else {
+        _mobSubmitting = false;
+        kclSaveActiveEvalDraftNow_(true);
+        toast(res.message, true);
+      }
     })
-    .withFailureHandler(function(){ hideOverlay(); toast('오류 발생', true); })
+    .withFailureHandler(function(){
+      hideOverlay();
+      _mobSubmitting = false;
+      kclSaveActiveEvalDraftNow_(true);
+      toast('네트워크 응답을 확인하지 못했습니다. 새로고침하지 말고 같은 제출 버튼을 다시 누르면 중복 없이 저장 상태를 확인합니다.', true);
+    })
     .submitScores({
       competitionCode: 'MOB',
+      clientSubmissionId: _mobClientSubmissionId,
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: mobRoleText_(),
@@ -16768,17 +16793,31 @@ function kclActiveEvalCode_() {
 function kclDraftRound_() {
   return String((_selComp && _selComp.currentRound) || (_cupping && _cupping.mode) || 'ROUND');
 }
-function kclDraftActor_() {
+function kclDraftActor_(code) {
+  code = String(code || kclActiveEvalCode_() || '').toUpperCase();
   var parts = [String((_judge && (_judge.name || _judge.id || _judge.judgeName)) || 'actor')];
   if (_judge && (_judge.phone || _judge.judgeToken)) parts.push(String(_judge.phone || _judge.judgeToken).slice(-8));
-  if (_judge && _judge.role) parts.push(String(_judge.role));
+  var mappedRole = typeof roleTextForCode_ === 'function' ? roleTextForCode_(code) : ((_judge && _judge.role) || '');
+  var mappedTeam = typeof judgeTeamText === 'function' ? judgeTeamText(code) : ((_judge && _judge.teamGroup) || '');
+  if (mappedRole) parts.push(String(mappedRole));
+  if (mappedTeam) parts.push(String(mappedTeam));
+  if (_judge && _judge.permissionDate) parts.push(String(_judge.permissionDate));
   return parts.join('_').replace(/[^0-9A-Za-z가-힣_.-]/g, '_');
+}
+function kclDraftContextKey_(code) {
+  code = String(code || kclActiveEvalCode_() || '').toUpperCase();
+  var type = (typeof _evaluationPurpose !== 'undefined' && _evaluationPurpose && _evaluationPurpose.type) || 'competition';
+  var scope = (typeof _evaluationPurpose !== 'undefined' && _evaluationPurpose && _evaluationPurpose.scope) || '';
+  var station = '';
+  if (code === 'KCR' && typeof _cupping !== 'undefined' && _cupping && _cupping.station) station = _cupping.station.id || _cupping.station.prefix || '';
+  if (code === 'IKRC' && typeof _ikrcStation !== 'undefined' && _ikrcStation) station = _ikrcStation.id || _ikrcStation.prefix || '';
+  return [type, scope, station].filter(Boolean).join('_') || 'competition';
 }
 function kclDraftKey_(code) {
   code = code || kclActiveEvalCode_();
   if (!code) return '';
   var version = code === 'IKRC' ? KCL_IKRC_DRAFT_VERSION : KCL_DRAFT_VERSION;
-  return 'KCL_EVAL_DRAFT::' + version + '::' + code + '::' + kclDraftRound_() + '::' + kclDraftActor_();
+  return 'KCL_EVAL_DRAFT::' + version + '::' + code + '::' + kclDraftRound_() + '::' + kclDraftContextKey_(code) + '::' + kclDraftActor_(code);
 }
 function kclCollectFormValues_(root) {
   var out = {};
@@ -16815,7 +16854,7 @@ function kclBuildDraftState_(code) {
   if (code === 'KCR') state.cupping = JSON.parse(JSON.stringify(_cupping || {}));
   if (code === 'KCAC') state.kcac = kclSlimKcacForDraft_(_kcac);
   if (code === 'KBC') { state.kbcYN = JSON.parse(JSON.stringify(_kbcYN || {})); state.kbcTags = JSON.parse(JSON.stringify(_kbcTags || {})); state.kbcCommentMeta = { generated:_kbcGeneratedComment || '', edited:!!_kbcCommentEdited }; }
-  if (code === 'MOB') { state.mobTags = JSON.parse(JSON.stringify(_mobTags || {})); state.mobScoreLocks = JSON.parse(JSON.stringify(_mobScoreLocks || {})); state.mobCommentMeta = { generated:_mobGeneratedComment || '', edited:!!_mobCommentEdited }; }
+  if (code === 'MOB') { state.mobTags = JSON.parse(JSON.stringify(_mobTags || {})); state.mobScoreLocks = JSON.parse(JSON.stringify(_mobScoreLocks || {})); state.mobCommentMeta = { generated:_mobGeneratedComment || '', edited:!!_mobCommentEdited }; state.mobClientSubmissionId = _mobClientSubmissionId || ''; }
   if (code === 'IKRC') { if (typeof saveIkrc === 'function') saveIkrc(); state.ikrcSamples = JSON.parse(JSON.stringify(_ikrcSamples || [])); state.ikrcIdx = _ikrcIdx || 0; state.ikrcCurrentAttr = _ikrcCurrentAttr || 'flavor'; state.ikrcStation = _ikrcStation ? JSON.parse(JSON.stringify(_ikrcStation)) : null; state.ikrcClientSubmissionId = _ikrcClientSubmissionId || ''; }
   if (code === 'MOC') { try { var mt = currentMocTarget_ && currentMocTarget_(); if (mt) mt.snapshot = captureMocState_(); } catch(e) {} state.moc = JSON.parse(JSON.stringify(_moc || {})); }
   if (code === 'KTCC') { try { var kt = currentKtccTarget_ && currentKtccTarget_(); if (kt) kt.snapshot = captureKtccState_(); } catch(e) {} state.ktcc = JSON.parse(JSON.stringify(_ktcc || {})); }
@@ -16832,7 +16871,7 @@ function kclSaveActiveEvalDraftNow_(silent) {
       version: KCL_DRAFT_VERSION,
       code: code,
       round: kclDraftRound_(),
-      actor: kclDraftActor_(),
+      actor: kclDraftActor_(code),
       updatedAt: new Date().toISOString(),
       form: kclCollectFormValues_(root),
       state: kclBuildDraftState_(code)
@@ -16847,7 +16886,7 @@ function kclSaveActiveEvalDraftNow_(silent) {
           version: KCL_DRAFT_VERSION,
           code: code,
           round: kclDraftRound_(),
-          actor: kclDraftActor_(),
+          actor: kclDraftActor_(code),
           updatedAt: new Date().toISOString(),
           form: kclCollectFormValues_(root),
           state: { kcac: kclSlimKcacForDraft_(_kcac) }
@@ -16903,6 +16942,8 @@ function kclRestoreDraftForCode_(code, draft) {
       if (draft.state.mobTags) _mobTags = draft.state.mobTags;
       if (draft.state.mobScoreLocks) _mobScoreLocks = draft.state.mobScoreLocks;
       if (draft.state.mobCommentMeta) { _mobGeneratedComment = draft.state.mobCommentMeta.generated || ''; _mobCommentEdited = !!draft.state.mobCommentMeta.edited; }
+      _mobClientSubmissionId = draft.state.mobClientSubmissionId || ('MOB-' + Date.now() + '-' + Math.random().toString(36).slice(2,10));
+      _mobSubmitting = false;
       kclApplyFormValues_(draft.form);
       if (typeof toggleMobSig === 'function') toggleMobSig();
       if (typeof updateMobTimeStatus_ === 'function') updateMobTimeStatus_();

@@ -60,8 +60,8 @@ function participantRoundPolicy_(code, round) {
   if (code === 'KBC') return { mode:'STAGE_VISIBLE', numberLabel:r + '참가자번호', identityHidden:false, directInput:true };
   return base;
 }
-function actorCanSeeParticipantIdentity_(actor) {
-  return !!(hasAdmin(actor) || hasTeamLead(actor));
+function actorCanSeeParticipantIdentity_(actor, code) {
+  return !!(hasAdmin(actor) || hasManageAccess(actor, code));
 }
 
 
@@ -422,7 +422,10 @@ async function ensureSchema(db) {
     `CREATE INDEX IF NOT EXISTS idx_otps_lookup ON otps(competition_code, name, phone, id DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_kind ON sessions(kind)`,
     `CREATE INDEX IF NOT EXISTS idx_sms_logs_comp ON sms_logs(competition_code, phone, created_at)`,
-    `CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events(action, created_at)`
+    `CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events(action, created_at)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_client_submission_unit
+      ON scores(competition_code, judge_name, json_extract(payload_json, '$.clientSubmissionId'), unit)
+      WHERE COALESCE(json_extract(payload_json, '$.clientSubmissionId'), '') <> ''`
   ];
   for (const sql of statements) await db.prepare(sql).run();
   const operatorColumns = await db.prepare('PRAGMA table_info(operators)').all();
@@ -1850,12 +1853,29 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const currentRound = normalizeRoundForCompetition_(code, cfg && cfg.current_round || '예선');
   const rows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind(code).all();
   const policy = participantRoundPolicy_(code, currentRound);
-  const canSeeIdentity = actorCanSeeParticipantIdentity_(actor);
+  const canSeeIdentity = actorCanSeeParticipantIdentity_(actor, code);
   const hideIdentity = !!(policy.identityHidden && !canSeeIdentity);
-  const assignments = sortParticipantRowsForCompetition_(rows.results || [], code).map(r => {
+  const sourceRows = sortParticipantRowsForCompetition_(rows.results || [], code);
+  const mobManager = code === 'MOB' && hasManageAccess(actor, code);
+  const mobPermissionRows = code === 'MOB' && Array.isArray(actor && actor.operatorRows)
+    ? actor.operatorRows.filter(row => accessCodes_(row && row.access).some(value => value === 'ALL' || value === 'MOB'))
+    : [];
+  const mobDatedPermission = !mobManager && mobPermissionRows.some(row => !!normalizeEffectiveDate_(row && (row.effectiveDate || row.effective_date)));
+  const mobPermissionDate = normalizeEffectiveDate_(actor && actor.permissionDate) || koreaDateKey_();
+  const mobActorTeam = safeStr(actor && actor.teamMap && actor.teamMap.MOB || actor && (actor.teamGroup || actor.team));
+  const scopedRows = code !== 'MOB' || mobManager ? sourceRows : sourceRows.filter(r => {
+    const extra = parseJson(r.extra_json, {});
+    const participantDate = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date || extra['예선일'] || extra['날짜']);
+    const participantTeam = safeStr(extra['심사조'] || extra.judgeTeam || extra.teamGroup || extra['평가조']);
+    if (mobDatedPermission && participantDate && participantDate !== mobPermissionDate) return false;
+    if (mobActorTeam && participantTeam && !mobTeamMatchesServer_(mobActorTeam, participantTeam)) return false;
+    return true;
+  });
+  const assignments = scopedRows.map(r => {
     const extra = parseJson(r.extra_json, {});
     const competitionDate = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date || extra['예선일'] || extra['날짜']);
     const operatingDay = safeStr(extra['\uC6B4\uC601\uC77C\uCC28'] || extra.operatingDay || extra.scheduleDay);
+    const scheduleTeam = safeStr(extra['심사조'] || extra.judgeTeam || extra.teamGroup || extra['평가조']);
     const scheduleLabel = competitionDate || operatingDay;
     const number = participantRoundNumber_(r, code, currentRound);
     const rawName = code === 'KTCC' ? (r.team_name || r.name || '') : (r.name || '');
@@ -1883,7 +1903,8 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       sampleNo: r.sample_no || '',
       competitionDate,
       operatingDay,
-      display: (scheduleLabel ? (scheduleLabel + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? ' · ' + displayAff : '') + (hideIdentity ? ' · 블라인드' : '')
+      scheduleTeam,
+      display: (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? ' · ' + displayAff : '') + (hideIdentity ? ' · 블라인드' : '')
     };
     if (code === 'IKRC' && hideIdentity) {
       return {
@@ -1899,7 +1920,14 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     }
     return assignment;
   });
-  return { success: true, competitionCode: code, currentRound, policy, assignments };
+  return {
+    success: true,
+    competitionCode: code,
+    currentRound,
+    policy,
+    assignments,
+    scheduleScope: code === 'MOB' && !mobManager ? { competitionDate:mobDatedPermission ? mobPermissionDate : '', team:mobActorTeam } : null
+  };
 }
 
 function ikrcAssignmentFieldForRound_(round) {
@@ -3202,7 +3230,7 @@ function kcrProcessKeyFromPayload_(payload) {
 
 async function scoreSubmissionReceipt_(env, code, clientSubmissionId, actorIdentityKey) {
   const clientId = safeStr(clientSubmissionId);
-  if (!clientId || !['IKRC','KCR'].includes(safeStr(code).toUpperCase())) return { token:'', receipt:null };
+  if (!clientId || !COMPETITION_CODES.includes(safeStr(code).toUpperCase())) return { token:'', receipt:null };
   const digest = await sha256Hex_([safeStr(code).toUpperCase(), clientId, safeStr(actorIdentityKey)].join('|'));
   const token = 'SCORE_SUBMISSION_RECEIPT:' + safeStr(code).toUpperCase() + ':' + digest;
   const row = await env.DB.prepare('SELECT payload_json FROM sessions WHERE token=? AND kind=?')
@@ -3444,10 +3472,11 @@ async function submitScores(env, payload, signature, request = null) {
     // 스테이션 최종확정 조건은 센서리 3명의 검수완료이며 최종점수는 헤드 1명과 센서리 3명의 평균입니다.
     const ikrcOfficialHead = x.code === 'IKRC' && !isCalibrationMode_(x.mode) && isHeadRole_(x.role);
     const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (ikrcOfficialHead ? '검수완료' : '미검수');
-    const insertStatement = env.DB.prepare(`INSERT INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
+    const insertVerb = safeStr(onePayload.clientSubmissionId) ? 'INSERT OR IGNORE' : 'INSERT';
+    const insertStatement = env.DB.prepare(`${insertVerb} INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(nowIso(), x.code, x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
-    if (x.code === 'IKRC' || x.code === 'KCR') atomicInsertStatements.push(insertStatement);
+    if (x.code === 'IKRC' || x.code === 'KCR' || receiptInfo.token) atomicInsertStatements.push(insertStatement);
     else {
       await insertStatement.run();
       inserted++;

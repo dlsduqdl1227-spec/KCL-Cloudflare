@@ -54,6 +54,7 @@ const draftContext = {
   KCL_IKRC_DRAFT_VERSION: "ikrc-test",
   kclActiveEvalCode_: () => "",
   kclDraftRound_: () => "예선",
+  kclDraftContextKey_: () => "competition",
   kclDraftActor_: () => "동일심사위원",
 };
 vm.createContext(draftContext);
