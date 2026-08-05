@@ -230,6 +230,24 @@ for (const operator of [
   },
   {
     accountType: "JUDGE",
+    name: "QA 센서리Z2",
+    phone: "01011110010",
+    affiliation: "QA",
+    access: "IKRC",
+    teamGroup: "스테이션 2",
+    role: "센서리 심사위원",
+  },
+  {
+    accountType: "JUDGE",
+    name: "QA 센서리Z3",
+    phone: "01011110011",
+    affiliation: "QA",
+    access: "IKRC",
+    teamGroup: "스테이션 2",
+    role: "센서리 심사위원",
+  },
+  {
+    accountType: "JUDGE",
     name: "QA 헤드",
     phone: "01011110002",
     affiliation: "QA",
@@ -312,12 +330,14 @@ assert.ok(datedJudge.operatorRows.some(row => row.access === "MOB" && row.effect
 const judge = await rpc("judgeLogin", "QA 센서리", "01011110001");
 const judge2 = await rpc("judgeLogin", "QA 센서리2", "01011110004");
 const judgeZ = await rpc("judgeLogin", "QA 센서리Z", "01011110007");
+const judgeZ2 = await rpc("judgeLogin", "QA 센서리Z2", "01011110010");
+const judgeZ3 = await rpc("judgeLogin", "QA 센서리Z3", "01011110011");
 const head = await rpc("judgeLogin", "QA 헤드", "01011110002");
 const head2 = await rpc("judgeLogin", "QA 헤드2", "01011110005");
 const assignedHead = await rpc("judgeLogin", "QA 배정헤드", "01011110009");
 const lead = await rpc("judgeLogin", "QA 대회팀장", "01011110003");
 const stationLead = await rpc("judgeLogin", "QA 스테이션2팀장", "01011110008");
-for (const login of [judge, judge2, judgeZ, head, head2, assignedHead, lead, stationLead]) {
+for (const login of [judge, judge2, judgeZ, judgeZ2, judgeZ3, head, head2, assignedHead, lead, stationLead]) {
   assert.equal(login.success, true, login.message);
   assert.ok(login.judgeToken);
 }
@@ -379,13 +399,27 @@ assert.equal(participantSave.success, true, participantSave.message);
 
 const ikrcX = await rpc("submitScores", ikrcPayload(judge, station1));
 const ikrcZ = await rpc("submitScores", ikrcPayload(judgeZ, station2));
-const ikrcHeadZ = await rpc("submitScores", ikrcPayload(head, station2));
+const ikrcZ2 = await rpc("submitScores", ikrcPayload(judgeZ2, station2));
+const ikrcZ3 = await rpc("submitScores", ikrcPayload(judgeZ3, station2));
+const headOfficialPayload = ikrcPayload(head, station2);
+headOfficialPayload.clientSubmissionId = "QA-IKRC-HEAD-STATION2";
+const ikrcHeadZ = await rpc("submitScores", headOfficialPayload);
 assert.equal(ikrcX.success, true, JSON.stringify(ikrcX));
 assert.equal(ikrcZ.success, true, JSON.stringify(ikrcZ));
+assert.equal(ikrcZ2.success, true, JSON.stringify(ikrcZ2));
+assert.equal(ikrcZ3.success, true, JSON.stringify(ikrcZ3));
 assert.equal(ikrcHeadZ.success, true, JSON.stringify(ikrcHeadZ));
 assert.equal(ikrcX.inserted, 2);
 assert.equal(ikrcZ.inserted, 6);
+assert.equal(ikrcZ2.inserted, 6);
+assert.equal(ikrcZ3.inserted, 6);
 assert.equal(ikrcHeadZ.inserted, 6);
+const ikrcHeadRetry = await rpc("submitScores", headOfficialPayload);
+assert.equal(ikrcHeadRetry.success, true);
+assert.equal(ikrcHeadRetry.idempotent, true, "동일 전체제출 재시도는 중복 저장 없이 기존 영수증을 반환해야 합니다");
+assert.equal(ikrcHeadRetry.inserted, 6);
+// 배포 전 OT에서 저장된 헤드 기록은 미검수일 수 있다. 새 규칙에서는 별도 헤드 검수 없이도 공식 확정으로 호환해야 한다.
+testDb.raw.prepare("UPDATE scores SET review_status='미검수' WHERE competition_code='IKRC' AND judge_name='QA 헤드' AND mode NOT LIKE '%켈리브레이션%'").run();
 
 const crossStationOfficial = await rpc("submitScores", ikrcPayload(judge, station2));
 assert.equal(crossStationOfficial.success, false, "한 심사위원의 공식 평가는 현재 라운드에서 한 스테이션에만 속해야 합니다");
@@ -404,17 +438,17 @@ const addedStationSave = await rpc(
   leadActor,
 );
 assert.equal(addedStationSave.success, true, addedStationSave.message);
-assert.equal(addedStationSave.preservedScoreCount, 14);
+assert.equal(addedStationSave.preservedScoreCount, 26);
 
 const ikrcY = await rpc("submitScores", ikrcPayload(judge2, station3));
 assert.equal(ikrcY.inserted, 2);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  16,
+  28,
 );
 assert.deepEqual(
   testDb.raw.prepare("SELECT team, COUNT(*) AS n FROM scores WHERE competition_code='IKRC' AND mode NOT LIKE '%켈리브레이션%' GROUP BY team ORDER BY team").all().map((row) => [row.team, row.n]),
-  [["스테이션 1", 2], ["스테이션 2", 12], ["스테이션 3", 2]],
+  [["스테이션 1", 2], ["스테이션 2", 24], ["스테이션 3", 2]],
   "IKRC 공식 점수는 계정의 가변 팀명이 아니라 선택한 스테이션으로 분리 저장되어야 합니다",
 );
 
@@ -429,7 +463,7 @@ for (const [login, stationInfo, scope] of [
 }
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  60,
+  72,
 );
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC' AND mode LIKE '%전체 켈리브레이션%' AND team='전체 켈리브레이션팀'").get().n,
@@ -459,6 +493,23 @@ const managerStationCalibration = await rpc("getIkrcCalibrationCupNumbers", { sc
 assert.equal(managerStationCalibration.length, 2, "대회팀장은 모든 스테이션의 켈리 결과를 볼 수 있어야 합니다");
 assert.equal(managerStationCalibration[0].judgeCount, 1);
 assert.equal(managerStationCalibration[0].headCount, 1);
+
+const officialScopeOptions = await rpc("getIkrcOfficialCalibrationScopeOptions", { judgeToken:head.judgeToken });
+assert.equal(officialScopeOptions.success, true, officialScopeOptions.message);
+assert.deepEqual(officialScopeOptions.stations.map((item) => item.id), ["station2"], "헤드는 담당 공식평가 스테이션만 확인해야 합니다");
+const officialStationBeforeReview = await rpc("getIkrcOfficialCalibrationCupNumbers", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
+assert.equal(officialStationBeforeReview.success, true);
+assert.equal(officialStationBeforeReview.items.length, 6);
+assert.ok(officialStationBeforeReview.items.every((item) => item.headCount === 1 && item.judgeCount === 3 && item.sensoryReviewCount === 0));
+const officialZ1Detail = await rpc("getIkrcOfficialCalibrationResultsByCup", "Z-1", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
+assert.equal(officialZ1Detail.success, true, officialZ1Detail.message);
+assert.equal(officialZ1Detail.rows.length, 3, "헤드 화면에는 센서리 3명만 개별 표시해야 합니다");
+assert.equal(officialZ1Detail.headCount, 1);
+assert.equal(officialZ1Detail.headScoreHidden, true);
+assert.ok(officialZ1Detail.rows.every((item) => !/헤드|head/i.test(item.role)));
+const prematureFinalization = await rpc("finalizeIkrcStationEvaluation", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
+assert.equal(prematureFinalization.success, false, "센서리 검수 전에는 헤드가 스테이션을 최종확정할 수 없어야 합니다");
+assert.match(prematureFinalization.message, /센서리 검수 0\/3/);
 
 const mobReviewComment = "향미의 연결성과 밸런스를 확인한 MOB 전체 종합 코멘트";
 const mobReviewPayload = genericPayload(judge, "MOB", "MOB-1", 55);
@@ -555,10 +606,11 @@ for (const [code, minimum] of Object.entries(reviewExpectedMinimums)) {
   assert.ok(review.list.length >= minimum, `${code} review list is shorter than expected`);
   reviewLists[code] = review;
 }
-assert.equal(reviewLists.IKRC.list.length, 16, "IKRC head official scores must be included in the normal review list");
+assert.equal(reviewLists.IKRC.list.length, 28, "IKRC head official scores must be included in the normal review list");
 assert.equal(reviewLists.KCR.list.length, 4, "KCR station/all calibration rows must stay out of official competition review");
 assert.equal(reviewLists.MOB.list[0]["종합코멘트"], mobReviewComment, "MOB review must expose the submitted overall comment verbatim");
 assert.ok(reviewLists.IKRC.list.some((item) => item.judgeName === "QA 헤드" || item["심사위원명"] === "QA 헤드"));
+assert.ok(reviewLists.IKRC.list.filter((item) => item.judgeName === "QA 헤드").every((item) => item.status === "검수완료"), "기존 미검수 헤드 기록도 화면에서는 검수 없는 확정 상태로 보여야 합니다");
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "X-1"));
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "Y-2"));
 assert.ok(
@@ -571,7 +623,7 @@ assert.ok(
 const stationLeadReview = await rpc("getReviewList", "IKRC", stationLeadActor);
 assert.equal(stationLeadReview.success, true);
 assert.equal(stationLeadReview.stationScope.label, "스테이션 2");
-assert.equal(stationLeadReview.list.length, 12, "스테이션 2 팀장은 해당 스테이션의 헤드·심사위원 공식 점수만 확인해야 합니다");
+assert.equal(stationLeadReview.list.length, 24, "스테이션 2 팀장은 해당 스테이션의 헤드·심사위원 공식 점수만 확인해야 합니다");
 assert.ok(stationLeadReview.list.every((item) => String(item.unit || "").startsWith("Z-")));
 const stationLeadCrossEdit = await rpc(
   "updateReviewRow",
@@ -619,13 +671,13 @@ assert.equal(headOwnReview.success, true);
 assert.equal(headOwnReview.ownOnly, false);
 assert.equal(headOwnReview.readOnlyHeadMonitor, true);
 assert.equal(headOwnReview.stationScope.label, "스테이션 2");
-assert.equal(headOwnReview.list.length, 12, "The IKRC head must see every official score from the assigned station");
+assert.equal(headOwnReview.list.length, 24, "The IKRC head must see every official score from the assigned station");
 const headZ1BeforeEdit = headOwnReview.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 헤드");
 assert.ok(headZ1BeforeEdit, "The head's official Z-1 score must be visible in station statistics");
-assert.equal(headZ1BeforeEdit._stddev.judgeCount, 2, "Head review must compare the head and same-station sensory judge");
+assert.equal(headZ1BeforeEdit._stddev.judgeCount, 4, "Head review must compare the head and three same-station sensory judges");
 assert.deepEqual(
   headZ1BeforeEdit._stddev.judges.map((item) => item.judgeName).sort(),
-  ["QA 센서리Z", "QA 헤드"],
+  ["QA 센서리Z", "QA 센서리Z2", "QA 센서리Z3", "QA 헤드"],
   "The official review comparison must expose same-station judge scores to the head",
 );
 assert.equal(headZ1BeforeEdit._stddev.judges.filter((item) => item.isCurrentJudge).length, 1);
@@ -729,18 +781,44 @@ for (const [code, review] of Object.entries(reviewLists)) {
   assert.ok(report.approvedRows.length > 0, `${code} final report has no approved rows`);
 }
 
+const ikrcRankingBeforeStationFinal = await rpc("getRanking", "IKRC", adminActor);
+assert.equal(ikrcRankingBeforeStationFinal.success, true);
+assert.equal(ikrcRankingBeforeStationFinal.ranking.some((item) => item.unit === "Z-1"), false, "센서리 검수만 끝난 점수는 헤드 스테이션 최종확정 전 순위에 공개하면 안 됩니다");
+const stationFinal = await rpc("finalizeIkrcStationEvaluation", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
+assert.equal(stationFinal.success, true, stationFinal.message);
+assert.equal(stationFinal.finalization.units.length, 6);
+const officialStationAfterReview = await rpc("getIkrcOfficialCalibrationCupNumbers", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
+assert.ok(officialStationAfterReview.items.every((item) => item.reviewComplete && item.sensoryReviewCount === 3));
+assert.ok(officialStationAfterReview.finalization && officialStationAfterReview.finalization.confirmedAt);
+
 const ikrcRankingAfterReview = await rpc("getRanking", "IKRC", adminActor);
 assert.equal(ikrcRankingAfterReview.success, true, ikrcRankingAfterReview.message);
 const rankedZ1 = ikrcRankingAfterReview.ranking.find((item) => item.unit === "Z-1");
 assert.ok(rankedZ1);
 assert.equal(rankedZ1.totalScore, 20, "The official IKRC result must average the unchanged head and sensory scores");
-assert.equal(rankedZ1.judgeCount, 2, "The head official score must remain part of the counted judge set");
+assert.equal(rankedZ1.judgeCount, 4, "The head official score and three sensory scores must be averaged together");
+
+const judgeZRows = reviewLists.IKRC.list.filter((item) => item.judgeName === "QA 센서리Z" && String(item.unit).startsWith("Z-"));
+const reopenJudgeZ = await rpc("updateReviewStatusBatch", "IKRC", judgeZRows.map((item) => item.rowIndex), "미검수", "관리자", adminActor);
+assert.equal(reopenJudgeZ.success, true, reopenJudgeZ.message);
+const judgeZOwnReopened = await rpc("getReviewList", "IKRC", { judgeToken:judgeZ.judgeToken, reviewScope:"own", manageReview:false });
+assert.equal(judgeZOwnReopened.list.length, 6, "재평가 허용 후 센서리 심사위원의 내 제출 검수에 다시 보여야 합니다");
+const rankingAfterReopen = await rpc("getRanking", "IKRC", adminActor);
+assert.equal(rankingAfterReopen.ranking.some((item) => item.unit === "Z-1"), false, "재평가 허용 시 기존 스테이션 확정과 순위 반영이 해제되어야 합니다");
+const completeJudgeZAgain = await rpc("updateReviewStatusBatch", "IKRC", judgeZRows.map((item) => item.rowIndex), "검수완료", "센서리 심사위원", { judgeToken:judgeZ.judgeToken, reviewScope:"own", manageReview:false });
+assert.equal(completeJudgeZAgain.success, true, completeJudgeZAgain.message);
+const rankingBeforeRefinal = await rpc("getRanking", "IKRC", adminActor);
+assert.equal(rankingBeforeRefinal.ranking.some((item) => item.unit === "Z-1"), false, "재검수 후에도 헤드가 다시 최종확정하기 전에는 순위가 복구되면 안 됩니다");
+const refinal = await rpc("finalizeIkrcStationEvaluation", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
+assert.equal(refinal.success, true, refinal.message);
+const rankingAfterRefinal = await rpc("getRanking", "IKRC", adminActor);
+assert.ok(rankingAfterRefinal.ranking.some((item) => item.unit === "Z-1"));
 
 const backupBeforeDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
 assert.equal(backupBeforeDelete.success, true, backupBeforeDelete.message);
-assert.equal(backupBeforeDelete.rows.length, 62);
+assert.equal(backupBeforeDelete.rows.length, 74);
 assert.equal(backupBeforeDelete.calibrationRows.length, 46);
-assert.equal(backupBeforeDelete.competitionRows.length, 16);
+assert.equal(backupBeforeDelete.competitionRows.length, 28);
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station1"));
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station3"));
 
@@ -754,10 +832,10 @@ const removeStations = await rpc(
 );
 assert.equal(removeStations.success, true, removeStations.message);
 assert.equal(removeStations.stationChanged, true);
-assert.equal(removeStations.preservedScoreCount, 62);
+assert.equal(removeStations.preservedScoreCount, 74);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  62,
+  74,
 );
 
 const configAfterDelete = await rpc("getConfig");
@@ -772,11 +850,11 @@ const oldStationSubmit = await rpc("submitScores", ikrcPayload(judge, station1))
 assert.equal(oldStationSubmit.success, false);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  62,
+  74,
 );
 
 const reviewAfterStationDelete = await rpc("getReviewList", "IKRC", adminActor);
-assert.equal(reviewAfterStationDelete.list.length, 16);
+assert.equal(reviewAfterStationDelete.list.length, 28);
 assert.ok(reviewAfterStationDelete.list.some((item) => item.unit === "X-1"));
 assert.ok(reviewAfterStationDelete.list.some((item) => item.unit === "Y-1"));
 
@@ -800,11 +878,11 @@ const adminDelete = await rpc(
 assert.equal(adminDelete.success, true, adminDelete.message);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  61,
+  73,
 );
 
 const backupAfterDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
-assert.equal(backupAfterDelete.rows.length, 61);
+assert.equal(backupAfterDelete.rows.length, 73);
 assert.ok(backupAfterDelete.rows.some((row) => row["스테이션ID"] === "station3"));
 
 const storedPayloads = testDb.raw

@@ -32,10 +32,11 @@ const elements = {
   picker: { value:"0" },
   number: { value:"", readOnly:true },
   name: { value:"", readOnly:false, placeholder:"" },
+  "mob-participant-help": { textContent:"", style:{} },
 };
 const context = {
   document: { getElementById: (id) => elements[id] || null },
-  participantListForCode_: () => [{ number:"1", roundCupNo:"1", name:"이세명", identityHidden:false }],
+  participantListForCode_: () => [{ number:"1", roundCupNo:"1", name:"이세명", competitionDate:"2026-08-06", identityHidden:false }],
   participantAssignmentIdentityHidden_: (row) => !!row?.identityHidden,
 };
 vm.createContext(context);
@@ -48,6 +49,7 @@ vm.runInContext([
 context.applyParticipantSelect_("MOB", "picker", "number", "name");
 assert.equal(elements.number.value, "1", "MOB participant number must be filled automatically from the selected timetable participant");
 assert.equal(elements.name.value, "이세명");
+assert.match(elements["mob-participant-help"].textContent, /대회일 2026-08-06/);
 elements.picker.value = "";
 context.applyParticipantSelect_("MOB", "picker", "number", "name");
 assert.equal(elements.number.value, "", "clearing the MOB participant selection must clear the auto-filled number");
@@ -64,6 +66,7 @@ assert.match(participantTable, /r\.prelimCupNo\|\|i\+1/);
 assert.match(operatorTable, /\(i\+1\)/);
 assert.match(functionSource(assessment, "renderParticipantControl_"), /numInput\.readOnly = true/);
 assert.match(functionSource(assessment, "renderParticipantControl_"), /타임테이블 순서에 따른 참가자번호가 자동 입력/);
+assert.match(functionSource(assessment, "renderParticipantControl_"), /대회 날짜/);
 assert.doesNotMatch(functionSource(registry, "editOperator"), /ID/);
 assert.doesNotMatch(functionSource(registry, "editAdmin"), /ID/);
 assert.doesNotMatch(functionSource(registry, "editParticipant"), /ID/);
