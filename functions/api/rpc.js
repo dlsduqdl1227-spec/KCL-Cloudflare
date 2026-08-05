@@ -2371,6 +2371,7 @@ function ikrcOfficialReviewComparison_(targetItem, officialItems) {
       sweetness: score.sweetness,
       acidity: score.acidity,
       mouthfeel: score.mouthfeel,
+      comment: score.comment || '',
       isCurrentJudge: itemJudgeIdentityKey_(item) === targetJudgeKey && safeStr(item.role || item['역할']).replace(/\s+/g, '').toLowerCase() === targetRole,
       isHead: isHeadRole_(score.role)
     };
@@ -3172,12 +3173,15 @@ async function getReviewList(env, competitionCode, actorArg) {
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC').bind(code).all();
   const rawAll = rowsRaw.results || [];
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
+  const headMonitor = code === 'IKRC' && !manager && actorReviewRoleCategory_(auth.actor, code) === 'head';
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
-  const raw = manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false));
+  const headStations = headMonitor ? ikrcHeadOfficialStations_(rawAll, auth.actor, ikrcStationSettingsServer_(cfg, cfg && cfg.current_round), safeStr(cfg && cfg.current_round)) : [];
+  const headRows = headMonitor ? rawAll.filter(row => headStations.some(station => ikrcScoreBelongsToStationServer_(row, station))) : [];
+  const raw = manager ? managerRows : (headMonitor ? headRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
   const headers = mergeHeaders(code, raw);
   let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
-  if (manager && list.length) {
+  if ((manager || headMonitor) && list.length) {
     const pRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
     const pIdx = indexParticipantIdentities_(pRows.results || [], code);
     list = list.map(item => enrichReviewItemWithParticipant_(item, lookupParticipantIdentity_(pIdx, item.round || item['라운드'] || (cfg && cfg.current_round), itemNumber_(item) || item.unit), code));
@@ -3205,9 +3209,11 @@ async function getReviewList(env, competitionCode, actorArg) {
     success: true,
     list,
     headers,
-    ownOnly: !manager,
+    ownOnly: !manager && !headMonitor,
+    readOnlyHeadMonitor:headMonitor,
     supersededCount,
-    stationScope:managerStation ? {id:managerStation.id, label:managerStation.label, prefix:managerStation.prefix} : null
+    stationScope:managerStation ? {id:managerStation.id, label:managerStation.label, prefix:managerStation.prefix} : (headStations.length === 1 ? {id:headStations[0].id, label:headStations[0].label, prefix:headStations[0].prefix} : null),
+    stationScopes:(managerStation ? [managerStation] : headStations).map(station => ({id:station.id, label:station.label, prefix:station.prefix}))
   };
 }
 
@@ -3217,6 +3223,9 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   if (!auth.ok) return auth.res;
   const actor = auth.actor;
   const manager = reviewManageAllowed_(actor, code, actorArg);
+  if (code === 'IKRC' && !manager && actorReviewRoleCategory_(actor, code) === 'head') {
+    return { success:false, message:'IKRC 헤드 심사위원 화면은 스테이션 통계 확인 전용입니다. 평가값과 검수 상태는 변경되지 않습니다.' };
+  }
   const ref = parseReviewRowRef_(rowIndex);
   const id = ref.id; if (!id) return { success: false, message: '수정할 행 번호가 없습니다.' };
   const payloadRowIndex = Math.max(0, Number(ref.payloadRowIndex) || 0);
@@ -3315,6 +3324,9 @@ async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus, r
   const auth = await requireActorForCode_(env, actorArg, code, '검수 상태 변경 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
+  if (code === 'IKRC' && !manager && actorReviewRoleCategory_(auth.actor, code) === 'head') {
+    return { success:false, message:'IKRC 헤드 심사위원 화면은 스테이션 통계 확인 전용입니다. 검수 상태는 변경되지 않습니다.' };
+  }
   const cfg = code === 'IKRC' ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const ids = Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes];
@@ -3621,6 +3633,17 @@ function ikrcHeadCalibrationStations_(scoreRows, actor, stations, currentRound) 
     if (assigned && !allowed.some(station => safeStr(station.id) === safeStr(assigned.id))) allowed.push(assigned);
   });
   return allowed;
+}
+function ikrcHeadOfficialStations_(scoreRows, actor, stations, currentRound) {
+  const assigned = ikrcFindStationByAssignmentServer_(ikrcActorTeamServer_(actor), stations || []);
+  if (assigned) return [assigned];
+  return (stations || []).filter(station => (scoreRows || []).some(scoreRow => {
+    if (!scoreOwnedByActor_(scoreRow, actor)) return false;
+    if (isCalibrationMode_(ikrcScoreMode_(scoreRow))) return false;
+    const scoreRound = ikrcScoreRound_(scoreRow);
+    if (currentRound && scoreRound && scoreRound !== currentRound) return false;
+    return ikrcScoreBelongsToStationServer_(scoreRow, station);
+  }));
 }
 async function getIkrcCalibrationScopeOptions(env, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');

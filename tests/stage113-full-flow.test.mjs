@@ -616,10 +616,12 @@ const headOwnReview = await rpc("getReviewList", "IKRC", {
   manageReview: false,
 });
 assert.equal(headOwnReview.success, true);
-assert.equal(headOwnReview.ownOnly, true);
-assert.equal(headOwnReview.list.length, 6, "The IKRC head must retain all six official station scores in their own review list");
-const headZ1BeforeEdit = headOwnReview.list.find((item) => item.unit === "Z-1");
-assert.ok(headZ1BeforeEdit, "The head's official Z-1 score must be reviewable");
+assert.equal(headOwnReview.ownOnly, false);
+assert.equal(headOwnReview.readOnlyHeadMonitor, true);
+assert.equal(headOwnReview.stationScope.label, "스테이션 2");
+assert.equal(headOwnReview.list.length, 12, "The IKRC head must see every official score from the assigned station");
+const headZ1BeforeEdit = headOwnReview.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 헤드");
+assert.ok(headZ1BeforeEdit, "The head's official Z-1 score must be visible in station statistics");
 assert.equal(headZ1BeforeEdit._stddev.judgeCount, 2, "Head review must compare the head and same-station sensory judge");
 assert.deepEqual(
   headZ1BeforeEdit._stddev.judges.map((item) => item.judgeName).sort(),
@@ -629,6 +631,7 @@ assert.deepEqual(
 assert.equal(headZ1BeforeEdit._stddev.judges.filter((item) => item.isCurrentJudge).length, 1);
 assert.equal(headZ1BeforeEdit._stddev.totalAvg, 20);
 assert.equal(headZ1BeforeEdit._stddev.totalStddev, 0);
+assert.ok(headZ1BeforeEdit._stddev.judges.every((item) => Object.hasOwn(item, "comment")), "Station statistics must expose each judge comment field");
 
 const flavorColumn = headOwnReview.headers.indexOf("Flavor(플레이버) ×3");
 assert.ok(flavorColumn >= 0);
@@ -641,18 +644,16 @@ const headScoreEdit = await rpc(
   "센서리 헤드 심사위원",
   { judgeToken: head.judgeToken, reviewScope: "own", manageReview: false },
 );
-assert.equal(headScoreEdit.success, true, headScoreEdit.message);
+assert.equal(headScoreEdit.success, false, "The IKRC head station-statistics screen must be read-only, including the head's own submitted score");
 const headOwnReviewAfterEdit = await rpc("getReviewList", "IKRC", {
   judgeToken: head.judgeToken,
   reviewScope: "own",
   manageReview: false,
 });
-const headZ1AfterEdit = headOwnReviewAfterEdit.list.find((item) => item.unit === "Z-1");
-assert.equal(headZ1AfterEdit.totalScore, 26, "Editing the head's Flavor score must recalculate and retain the official total");
-assert.equal(headZ1AfterEdit.status, "수정완료");
-assert.equal(headZ1AfterEdit._stddev.totalAvg, 23);
-assert.equal(headZ1AfterEdit._stddev.totalStddev, 3);
-assert.equal(headZ1AfterEdit._stddev.metrics.find((item) => item.key === "flavor").avg, 3);
+const headZ1AfterEdit = headOwnReviewAfterEdit.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 헤드");
+assert.equal(headZ1AfterEdit.totalScore, 20, "Read-only head statistics must not mutate the official score");
+assert.equal(headZ1AfterEdit._stddev.totalAvg, 20);
+assert.equal(headZ1AfterEdit._stddev.totalStddev, 0);
 
 const sensoryZ1 = reviewLists.IKRC.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 센서리Z");
 assert.ok(sensoryZ1);
@@ -732,7 +733,7 @@ const ikrcRankingAfterReview = await rpc("getRanking", "IKRC", adminActor);
 assert.equal(ikrcRankingAfterReview.success, true, ikrcRankingAfterReview.message);
 const rankedZ1 = ikrcRankingAfterReview.ranking.find((item) => item.unit === "Z-1");
 assert.ok(rankedZ1);
-assert.equal(rankedZ1.totalScore, 23, "The official IKRC result must average the reviewed head score (26) with the sensory score (20)");
+assert.equal(rankedZ1.totalScore, 20, "The official IKRC result must average the unchanged head and sensory scores");
 assert.equal(rankedZ1.judgeCount, 2, "The head official score must remain part of the counted judge set");
 
 const backupBeforeDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);

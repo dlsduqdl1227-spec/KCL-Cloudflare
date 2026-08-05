@@ -1291,8 +1291,9 @@ html,body{width:100%;overflow-x:hidden}.panel{width:min(100%,560px);padding-top:
   .eval-wrap.active .eval-total-val,
   .panel.review-screen.active .eval-total-val,
   .panel.review-screen.active .review-count-val{
-    font-size:clamp(26px,9vw,38px)!important;line-height:1.02!important;letter-spacing:-.06em!important;
-    min-width:54px!important;max-width:74px!important;overflow:hidden!important;text-align:right!important;
+    font-size:clamp(24px,8.2vw,36px)!important;line-height:1.02!important;letter-spacing:-.05em!important;
+    min-width:max-content!important;max-width:none!important;overflow:visible!important;white-space:nowrap!important;
+    font-variant-numeric:tabular-nums!important;text-align:right!important;
   }
 
   .panel.review-screen.active{padding:0!important;overflow:hidden!important;width:100%!important;max-width:none!important;}
@@ -3228,7 +3229,7 @@ var _participantAssignments = {};
 // 순위 / 인쇄용
 var _ranking = null;
 var _rankingDetail = null;
-var _reviewState = { code:null, name:null, headers:[], list:[], current:null, backPanel:'pSelect', stationScope:null };
+var _reviewState = { code:null, name:null, headers:[], list:[], current:null, backPanel:'pSelect', stationScope:null, stationScopes:[], readOnlyHeadMonitor:false };
 var _kbcGeneratedComment = '', _kbcCommentEdited = true;
 var _mobGeneratedComment = '', _mobCommentEdited = true;
 
@@ -4393,6 +4394,7 @@ function canReviewCode_(code) {
 function canReviewEditDetails() {
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
   if (isAdminRole()) return true;
+  if (c === 'IKRC' && isIkrcHeadMonitor_()) return false;
   // MOC·KTCC는 심사위원 없이 운영 스텝이 실제 기록/검수를 맡는 경우가 있어,
   // 팀장뿐 아니라 해당 대회 운영진/스텝도 본인 제출 건에 한해 수정할 수 있게 엽니다.
   // 목록 자체는 서버에서 '본인 제출 건'으로 필터링되므로, 다른 사람의 개인 평가는 열리지 않습니다.
@@ -4404,6 +4406,10 @@ function canReviewEditDetails() {
 function canReviewEditAny_() {
   return canReviewEditDetails() || canReviewEditDisqualification_();
 }
+function isIkrcHeadMonitor_() {
+  return String((_reviewState && _reviewState.code) || '').toUpperCase() === 'IKRC' && !!(_reviewState && _reviewState.readOnlyHeadMonitor);
+}
+function canOpenReviewDetails_() { return canReviewEditAny_() || isIkrcHeadMonitor_(); }
 function canReviewEditDisqualification_() {
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
   return reviewManageScopeForCode_(c);
@@ -4419,9 +4425,10 @@ function reviewManageScopeForCode_(code) {
   var back = String((_reviewState && _reviewState.backPanel) || '').trim();
   return !!c && (back === 'pAdmin' || back === 'pTeam') && (isAdminRole() || isTeamLeaderForCode_(c));
 }
-function shouldHideCompletedReviewRows() { return !reviewManageScopeForCode_(_reviewState && _reviewState.code); }
+function shouldHideCompletedReviewRows() { return isIkrcHeadMonitor_() ? false : !reviewManageScopeForCode_(_reviewState && _reviewState.code); }
 function canReviewToggleStatus_(code, item) {
   var c = String(code || (_reviewState && _reviewState.code) || '').toUpperCase();
+  if (c === 'IKRC' && isIkrcHeadMonitor_()) return false;
   if (c === 'IKRC' && item && item.status === '검수완료' && !(isAdminRole() || isTeamLeaderForCode_(c))) return false;
   return true;
 }
@@ -4460,7 +4467,9 @@ function updateSelectReviewButton_() {
   }
   if (reviewBtn) {
     reviewBtn.style.display = (_selComp && canReviewCode_(code) && !isKcrMenu) ? 'block' : 'none';
-    reviewBtn.textContent = isKcrMenu ? '대회검수' : ((isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내 제출 검수');
+    reviewBtn.textContent = isKcrMenu ? '대회검수' : (isIkrcMenu && isHeadRoleForCode_(code) && !isTeamLeaderForCode_(code) && !isAdminRole()
+      ? '스테이션 평가 통계'
+      : ((isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내 제출 검수'));
   }
   document.querySelectorAll('[data-kcr-select-actions]').forEach(function(wrap){
     var active = isKcrMenu && !!wrap.closest('.comp-card.active');
@@ -5421,8 +5430,11 @@ function goReviewByCode(code, name, backPanel) {
   _reviewState.code = code;
   _reviewState.name = name || code;
   _reviewState.stationScope = null;
+  _reviewState.stationScopes = [];
+  _reviewState.readOnlyHeadMonitor = false;
   _reviewState.backPanel = backPanel || (_judge.role === '관리자' ? 'pAdmin' : (isTeamLeaderRole() ? 'pTeam' : 'pSelect'));
-  document.getElementById('review-title').textContent = (name || code) + ' 검수';
+  var requestedHeadMonitor = String(code || '').toUpperCase() === 'IKRC' && isHeadRoleForCode_('IKRC') && !isAdminRole() && !isTeamLeaderForCode_('IKRC');
+  document.getElementById('review-title').textContent = (name || code) + (requestedHeadMonitor ? ' 스테이션 평가 통계' : ' 검수');
   document.getElementById('review-list').innerHTML = '';
   document.getElementById('review-stat').textContent = '불러오는 중...';
   setReviewLogo_('review-logo', code);
@@ -5448,7 +5460,10 @@ function goReviewByCode(code, name, backPanel) {
         return;
       }
       _reviewState.stationScope = res.stationScope || null;
-      document.getElementById('review-title').textContent = (name || code) + ' 검수' + (_reviewState.stationScope ? (' · ' + _reviewState.stationScope.label) : '');
+      _reviewState.stationScopes = Array.isArray(res.stationScopes) ? res.stationScopes : (_reviewState.stationScope ? [_reviewState.stationScope] : []);
+      _reviewState.readOnlyHeadMonitor = !!res.readOnlyHeadMonitor;
+      var scopeText = _reviewState.stationScopes.length ? (' · ' + _reviewState.stationScopes.map(function(scope){ return scope.label; }).join(', ')) : '';
+      document.getElementById('review-title').textContent = (name || code) + (_reviewState.readOnlyHeadMonitor ? ' 스테이션 평가 통계' : ' 검수') + scopeText;
       renderReview(res.list || [], code, res.headers || [], Number(res.supersededCount || 0));
     })
     .withFailureHandler(function(err) {
@@ -5533,9 +5548,17 @@ function buildStddevHtml_(stats, code) {
       html += '<tr><th>' + judgeLabel + '</th><td>' + escHtml(row.role || '-') + '</td><td>' + escHtml(fmtScore(row.total || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.flavor || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.cleanCup || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.sweetness || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.acidity || 0, 1)) + '</td><td>' + escHtml(fmtScore(row.mouthfeel || 0, 1)) + '</td></tr>';
     });
     html += '</tbody></table></div>';
+    var commentRows = stats.judges.filter(function(row){ return String(row.comment || '').trim(); });
+    if (commentRows.length) {
+      html += '<div style="margin-top:12px;display:grid;gap:8px"><div class="section-label">심사위원별 코멘트</div>';
+      commentRows.forEach(function(row){
+        html += '<div class="review-eval-card" style="padding:12px"><div class="review-eval-title" style="font-size:13px">' + escHtml(row.judgeName || '심사위원') + '</div><div class="review-eval-note" style="margin-top:4px">' + escHtml(row.role || '-') + '</div><div style="font-size:13px;line-height:1.65;margin-top:8px;white-space:pre-wrap">' + escHtml(row.comment) + '</div></div>';
+      });
+      html += '</div>';
+    }
   }
   var scopeNote = c === 'IKRC'
-    ? ('같은 라운드·같은 샘플·같은 팀의 공식 평가 최신 제출값 기준입니다. 헤드 심사위원의 공식 점수도 평균과 실제 대회 점수에 포함됩니다. 비교표는 읽기 전용이며, 검수/수정에서는 본인 점수만 바꿀 수 있습니다.' + (stats.team ? ' 팀: ' + escHtml(stats.team) + '.' : ''))
+    ? ('같은 라운드·같은 샘플·같은 스테이션의 공식 평가 최신 제출값 기준입니다. 헤드 심사위원의 공식 점수도 평균과 실제 대회 점수에 포함됩니다. ' + (isIkrcHeadMonitor_() ? '헤드 통계 화면은 점수·코멘트·검수 상태를 변경하지 않는 읽기 전용입니다.' : '일반 심사위원의 내 제출 검수에서는 본인 점수만 수정할 수 있습니다.') + (stats.team ? ' 스테이션: ' + escHtml(stats.team) + '.' : ''))
     : '동일 참가자·동일 라운드의 심사위원별 최신 제출 점수 기준입니다. 점수 편차 확인용이며 총점 계산에는 별도로 반영되지 않습니다.';
   html += '<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">' + scopeNote + ' 심사위원 수: ' + escHtml(String(stats.judgeCount || 0)) + '</div>' + scoreSpreadGuideHtml_() + '</div>';
   return html;
@@ -5834,10 +5857,10 @@ function renderReview(list, code, headers, supersededCount) {
     var actionHtml = '';
     var canToggleStatus = canReviewToggleStatus_(code, item) && !isCalibrationReview;
     var disabledTitle = isCalibrationReview ? '켈리브레이션은 실제평가 검수완료로 전환하지 않습니다' : '검수완료 후 미검수 전환은 팀장만 가능합니다';
-    if (canReviewEditAny_()) actionHtml += '<button class="review-edit-btn">검수/수정</button>';
+    if (canOpenReviewDetails_()) actionHtml += '<button class="review-edit-btn">' + (isIkrcHeadMonitor_() ? '상세보기' : '검수/수정') + '</button>';
     if (canShowStddevButton_(code, item)) actionHtml += '<button class="review-edit-btn stddev-btn">표준편차</button>';
     if (canReviewDelete()) actionHtml += '<button class="review-delete-btn">삭제</button>';
-    actionHtml += '<button class="review-status-btn status-' + item.status + '"' + (canToggleStatus ? '' : ' disabled title="' + escHtml(disabledTitle) + '"') + '>' + item.status + '</button>';
+    if (!isIkrcHeadMonitor_()) actionHtml += '<button class="review-status-btn status-' + item.status + '"' + (canToggleStatus ? '' : ' disabled title="' + escHtml(disabledTitle) + '"') + '>' + item.status + '</button>';
 
     var team = item['팀'] || item._col4 || '팀 미지정';
     var role = item['역할'] || item._col5 || '';
@@ -5863,7 +5886,7 @@ function renderReview(list, code, headers, supersededCount) {
     if (editBtn) editBtn.onclick = function() { openReviewEdit(item); };
     if (stdBtn) stdBtn.onclick = function() { toggleStddevPanel_(row, item); };
     if (delBtn) delBtn.onclick = function() { deleteReviewItem(item); };
-    statusBtn.onclick = function() {
+    if (statusBtn) statusBtn.onclick = function() {
       if (isCalibrationReview) { toast('켈리브레이션은 실제평가 검수완료로 전환하지 않습니다.', true); return; }
       if (!canReviewToggleStatus_(code, item)) { toast('검수완료 항목을 미검수로 되돌리는 권한은 대회 팀장에게만 있습니다.', true); return; }
       var newS = item.status === '미검수' ? '검수완료' : '미검수';
@@ -8105,7 +8128,9 @@ function renderReviewTopActionsV4_() {
   }
   state.className = 'review-autosaved';
   state.style.cssText = 'font-size:11px;color:var(--text-3);text-align:center;line-height:1.5';
-  state.textContent = '현재 상태: ' + statusText + ' · 수정 내용은 자동 저장됩니다.';
+  state.textContent = isIkrcHeadMonitor_()
+    ? '읽기 전용 · 해당 스테이션의 점수·코멘트·평균·표준편차를 확인합니다.'
+    : '현재 상태: ' + statusText + ' · 수정 내용은 자동 저장됩니다.';
 }
 function generateReviewOverallComment(commentIdx) {
   var code = reviewCommentGeneratorCode_();
@@ -8489,16 +8514,17 @@ function appendKcacReviewGroupTabs_(wrap, groupItems, activeRowIndex) {
 }
 
 function openReviewEdit(item) {
-  if (!canReviewEditAny_()) {
+  if (!canOpenReviewDetails_()) {
     toast('이 대회 검수 수정 권한이 없습니다.', true);
     return;
   }
+  var readOnlyHeadMonitor = isIkrcHeadMonitor_();
   _reviewState.current = item;
   _reviewOpenSmartTagBranches = {};
   _reviewKcrOpenFamilies = {};
   var reviewPanel = document.getElementById('pReviewEdit');
   if (reviewPanel) reviewPanel.classList.toggle('ikrc-review-mode', String(_reviewState.code || '').toUpperCase() === 'IKRC');
-  document.getElementById('review-edit-title').textContent = (_reviewState.name || _reviewState.code) + ' 검수 상세';
+  document.getElementById('review-edit-title').textContent = (_reviewState.name || _reviewState.code) + (readOnlyHeadMonitor ? ' 스테이션 평가 상세' : ' 검수 상세');
   setReviewLogo_('review-edit-logo', _reviewState.code);
   setReviewEditMetric_(item);
   var groupItems = reviewGroupItems_(item);
@@ -8514,7 +8540,10 @@ function openReviewEdit(item) {
     document.getElementById('review-edit-sub').textContent = '행 ' + item.rowIndex + ' · 현재 상태: ' + (item.status || '미검수') + categorySuffix;
   }
   var help = document.getElementById('review-edit-help');
-  if (help) { help.textContent = ''; help.style.display = 'none'; }
+  if (help) {
+    help.textContent = readOnlyHeadMonitor ? '읽기 전용 화면입니다. 해당 스테이션 심사위원들의 점수·코멘트와 평균·표준편차를 확인할 수 있으며 평가값이나 검수 상태는 변경되지 않습니다.' : '';
+    help.style.display = readOnlyHeadMonitor ? 'block' : 'none';
+  }
   var wrap = document.getElementById('review-edit-fields');
   wrap.innerHTML = '';
   var categoryBox = document.createElement('div');
@@ -8649,12 +8678,14 @@ function openReviewEdit(item) {
   }
   document.getElementById('review-edit-enable').style.display = 'none';
   var saveOnlyBtn = document.getElementById('review-edit-save-only');
-  if (saveOnlyBtn) saveOnlyBtn.style.display = 'block';
-  document.getElementById('review-edit-save-complete').style.display = (item.status === '검수완료') ? 'none' : 'block';
-  document.getElementById('review-edit-delete').style.display = canReviewDelete() ? 'block' : 'none';
+  if (saveOnlyBtn) saveOnlyBtn.style.display = readOnlyHeadMonitor ? 'none' : 'block';
+  document.getElementById('review-edit-save-complete').style.display = readOnlyHeadMonitor || item.status === '검수완료' ? 'none' : 'block';
+  document.getElementById('review-edit-delete').style.display = !readOnlyHeadMonitor && canReviewDelete() ? 'block' : 'none';
+  var stickyActions = document.getElementById('review-edit-sticky-actions');
+  if (stickyActions) stickyActions.style.display = readOnlyHeadMonitor ? 'none' : 'grid';
   renderReviewTopActionsV4_();
   ensureReviewOverallCard_();
-  setReviewAutoSaveState('수정 내용은 자동 저장됩니다.', 'review-autosaved');
+  setReviewAutoSaveState(readOnlyHeadMonitor ? '읽기 전용 · 평가값과 검수 상태는 변경되지 않습니다.' : '수정 내용은 자동 저장됩니다.', 'review-autosaved');
   syncReviewDerivedTotals_();
   showPanel('pReviewEdit');
 }
@@ -9602,6 +9633,7 @@ function makeCupData(cupNumber) {
   });
   return {
     cupNumber: cupNumber,
+    activeAttr:'flavor',
     flavor:3.0, flavorIntensity:4, flavorTagIds:[],
     aftertaste:3.0, aftertastePersistence:4, aftertasteTagIds:[], aftertasteFlavorTagIds:[],
     acidity:3.0, acidityIntensity:4, acidityTagIds:[],
@@ -9624,6 +9656,7 @@ function normalizeCuppingCupUiState_() {
     if (!c.openTagFamilies || typeof c.openTagFamilies !== 'object' || Array.isArray(c.openTagFamilies)) {
       c.openTagFamilies = {};
     }
+    if (['flavor','aftertaste','acidity','sweetness','mouthfeel','overall','comment'].indexOf(c.activeAttr) < 0) c.activeAttr = 'flavor';
   });
   // Stage118 이전 임시저장의 화면 공용 펼침 상태는 컵별 데이터로 복제하지 않습니다.
   // 복제하면 다른 컵에서 열지 않은 카테고리가 다시 열린 것처럼 보일 수 있습니다.
@@ -9682,7 +9715,7 @@ function switchCuppingCup(idx) {
   saveCuppingCurrentFromDOM();
   if (!validateCuppingCommentEdited(_cupping.cups[_cupping.currentIdx])) return;
   _cupping.currentIdx = idx;
-  _cupping.currentAttr = 'flavor';
+  _cupping.currentAttr = (_cupping.cups[idx] && _cupping.cups[idx].activeAttr) || 'flavor';
   renderCuppingCupNav();
   renderCuppingAttrCard();
   updateCuppingTotal();
@@ -9694,6 +9727,7 @@ function saveCuppingCurrentFromDOM() {
   if (!_cupping.cups.length) return;
   var c = _cupping.cups[_cupping.currentIdx];
   var attr = _cupping.currentAttr;
+  c.activeAttr = attr;
   var slider = document.getElementById('cupping-score-slider');
   if (slider) c[attr] = roundScore02(slider.value);
   var ci = document.getElementById('cupping-comment-input');
@@ -9710,6 +9744,7 @@ function updateCuppingTotal() {
 function switchCuppingAttr(attr) {
   saveCuppingCurrentFromDOM();
   _cupping.currentAttr = attr;
+  if (_cupping.cups[_cupping.currentIdx]) _cupping.cups[_cupping.currentIdx].activeAttr = attr;
   renderCuppingAttrCard();
 }
 
@@ -10074,6 +10109,7 @@ function validateCuppingCommentEdited(c) {
   if (c && c.generatedComment && !c.commentEdited) {
     if (_cupping.cups[_cupping.currentIdx] === c && _cupping.currentAttr !== 'comment') {
       _cupping.currentAttr = 'comment';
+      c.activeAttr = 'comment';
       renderCuppingAttrCard();
     }
     setCommentWarning('cupping-comment-warning', c.generatedComment, false);
@@ -10147,6 +10183,7 @@ function cuppingSubmitAll() {
     var targetCommentIdx = _cupping.cups.indexOf(notEdited[0]);
     if (targetCommentIdx !== _cupping.currentIdx) switchCuppingCup(targetCommentIdx);
     _cupping.currentAttr = 'comment';
+    if (_cupping.cups[_cupping.currentIdx]) _cupping.cups[_cupping.currentIdx].activeAttr = 'comment';
     renderCuppingAttrCard();
     return;
   }
@@ -14185,7 +14222,7 @@ function ikrcGetMeaning(v) {
   return '매우 미흡';
 }
 function makeIkrcSampleData(no) {
-  var obj = { no:normalizeCupId_(no), comment:'', generatedComment:'', commentEdited:true };
+  var obj = { no:normalizeCupId_(no), activeAttr:'flavor', comment:'', generatedComment:'', commentEdited:true };
   IKRC_ATTRS.forEach(function(a){
     obj[a.key] = 5;
     obj[ikrcIntensityKey_(a.key)] = 4;
@@ -14289,6 +14326,7 @@ function renderIkrcNav() {
 function saveIkrc() {
   if (!_ikrcSamples.length) return;
   var s = _ikrcSamples[_ikrcIdx];
+  s.activeAttr = _ikrcCurrentAttr;
   if (_ikrcCurrentAttr !== 'comment') {
     var slider = document.getElementById('ikrc-score-slider');
     if (slider) s[_ikrcCurrentAttr] = roundScore02(slider.value);
@@ -14302,7 +14340,11 @@ function saveIkrc() {
 
 function loadIkrcSample(idx) {
   _ikrcIdx = idx;
-  _ikrcCurrentAttr = 'flavor';
+  var s = _ikrcSamples[_ikrcIdx];
+  if (!s || ['flavor','cleanCup','sweetness','acidity','mouthfeel','comment'].indexOf(s.activeAttr) < 0) {
+    if (s) s.activeAttr = 'flavor';
+  }
+  _ikrcCurrentAttr = (s && s.activeAttr) || 'flavor';
   renderIkrcAttrTabs();
   renderIkrcAttrCard();
   calcIkrcTotal();
@@ -14323,6 +14365,7 @@ function renderIkrcAttrTabs() {
 function switchIkrcAttr(attr) {
   saveIkrc();
   _ikrcCurrentAttr = attr;
+  if (_ikrcSamples[_ikrcIdx]) _ikrcSamples[_ikrcIdx].activeAttr = attr;
   renderIkrcAttrTabs();
   renderIkrcAttrCard();
   calcIkrcTotal();
@@ -16581,7 +16624,8 @@ function kclRestoreDraftForCode_(code, draft) {
       _cupping = draft.state.cupping;
       normalizeCuppingCupUiState_();
       _cupping.currentIdx = Math.max(0, Math.min(Number(_cupping.currentIdx) || 0, Math.max(0, _cupping.cups.length - 1)));
-      _cupping.currentAttr = _cupping.currentAttr || 'flavor';
+      _cupping.currentAttr = (_cupping.cups[_cupping.currentIdx] && _cupping.cups[_cupping.currentIdx].activeAttr) || _cupping.currentAttr || 'flavor';
+      if (_cupping.cups[_cupping.currentIdx]) _cupping.cups[_cupping.currentIdx].activeAttr = _cupping.currentAttr;
       if (typeof renderCuppingCupNav === 'function') renderCuppingCupNav();
       if (typeof renderCuppingAttrCard === 'function' && _cupping.cups.length) renderCuppingAttrCard();
       if (typeof updateCuppingTotal === 'function' && _cupping.cups.length) updateCuppingTotal();
@@ -16619,6 +16663,9 @@ function kclRestoreDraftForCode_(code, draft) {
       _ikrcSamples = draft.state.ikrcSamples || [];
       _ikrcIdx = Number(draft.state.ikrcIdx) || 0;
       _ikrcCurrentAttr = draft.state.ikrcCurrentAttr || 'flavor';
+      _ikrcSamples.forEach(function(sample, sampleIdx){
+        if (!sample || ['flavor','cleanCup','sweetness','acidity','mouthfeel','comment'].indexOf(sample.activeAttr) < 0) sample.activeAttr = sampleIdx === _ikrcIdx ? _ikrcCurrentAttr : 'flavor';
+      });
       _ikrcStation = draft.state.ikrcStation || null;
       if (!_ikrcStation && _ikrcSamples.length) {
         var samplePrefix = String(_ikrcSamples[0].no || '').split('-')[0].toUpperCase();
