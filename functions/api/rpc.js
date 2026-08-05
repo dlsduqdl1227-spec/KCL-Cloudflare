@@ -3846,13 +3846,8 @@ async function mobCalibrationRows_(env, requestedTeam, roleText, actorArg) {
     if (currentRound && safeStr(item.round || item['라운드']) && safeStr(item.round || item['라운드']) !== currentRound) return false;
     const roleCat = mobRoleCategoryServer_(item['역할'] || item.role);
     if (roleCat !== category) return false;
-    const mode = safeStr(item['모드'] || item.mode);
-    if (!isCalibrationMode_(mode)) return false;
-    if (requestedTeam) {
-      if (!/팀별/.test(mode)) return false;
-      const rowTeam = safeStr(item['팀'] || item.team || item['평가팀']);
-      if (!rowTeam || !mobTeamMatchesServer_(requestedTeam, rowTeam)) return false;
-    } else if (/팀별/.test(mode)) return false;
+    // MOB는 IKRC식 스테이션/팀 켈리브레이션이 아니다. 동일 참가자·라운드·역할
+    // 카테고리의 일반 대회평가와 헤드 기준점수를 함께 비교한다.
     return true;
   });
   return { auth, category, currentRound, rows, label: mobCategoryLabelServer_(category) };
@@ -3860,19 +3855,18 @@ async function mobCalibrationRows_(env, requestedTeam, roleText, actorArg) {
 async function getMobCalibrationParticipantNumbers(env, requestedTeam, roleText, actorArg) {
   const data = await mobCalibrationRows_(env, requestedTeam, roleText, actorArg);
   if (data.error) return data.error;
-  const visible = latestCalibrationRowsByJudge_(data.rows);
-  if (!visible.length) return [];
+  const normal = latestCalibrationRowsByJudge_(data.rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role)));
+  if (!normal.length) return [];
   const checksRaw = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('MOB_CALIBRATION_CHECK').all();
   const checks = new Map();
   (checksRaw.results || []).forEach(r => checks.set(r.token, parseJson(r.payload_json, {})));
   const by = new Map();
-  visible.forEach(item => {
+  normal.forEach(item => {
     const no = mobCalNumberFromItem_(item);
-    const token = mobCalCheckToken_(canonicalCalibrationScopeTeam_(requestedTeam), data.category, no, data.currentRound);
-    const legacyToken = mobCalCheckToken_(requestedTeam ? 'ALL' : requestedTeam, data.category, no, data.currentRound);
+    const token = mobCalCheckToken_(canonicalCalibrationScopeTeam_(), data.category, no, data.currentRound);
+    const legacyToken = mobCalCheckToken_(requestedTeam, data.category, no, data.currentRound);
     const cur = by.get(no) || { participantNo:no, checked:false, judgeCount:0, headCount:0, latestSubmittedAt:'', checkedAt:'', checkerName:'', categoryLabel:data.label };
-    if (isHeadRole_(item['역할'] || item.role)) cur.headCount += 1;
-    else cur.judgeCount += 1;
+    cur.judgeCount += 1;
     const submittedAt = safeStr(item.submittedAt || item['제출시간']);
     if (submittedAt && (!cur.latestSubmittedAt || submittedAt > cur.latestSubmittedAt)) cur.latestSubmittedAt = submittedAt;
     const check = checks.get(token) || checks.get(legacyToken);
@@ -3888,8 +3882,8 @@ async function getMobCalibrationResultsByParticipant(env, participantNo, request
   const no = safeStr(participantNo);
   if (!no) return [];
   const targetRows = data.rows.filter(item => mobCalNumberFromItem_(item) === no);
-  const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isHeadRole_(item['역할'] || item.role)));
-  const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isHeadRole_(item['역할'] || item.role)));
+  const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role)));
+  const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isCalibrationMode_(item['모드'] || item.mode) && isHeadRole_(item['역할'] || item.role)));
   return normal.concat(heads).map(mobScoreObjectFromItem_).sort((a,b) => Number(a.isHeadCalibration) - Number(b.isHeadCalibration) || safeStr(a.judgeName).localeCompare(safeStr(b.judgeName), 'ko'));
 }
 async function markMobCalibrationChecked(env, participantNo, requestedTeam, checkerName, roleText, actorArg) {
@@ -3897,7 +3891,7 @@ async function markMobCalibrationChecked(env, participantNo, requestedTeam, chec
   if (data.error) return data.error;
   const no = safeStr(participantNo);
   if (!no) return { success:false, message:'참가자 번호가 없습니다.' };
-  const scopeTeam = canonicalCalibrationScopeTeam_(requestedTeam);
+  const scopeTeam = canonicalCalibrationScopeTeam_();
   const token = mobCalCheckToken_(scopeTeam, data.category, no, data.currentRound);
   const payload = { competitionCode:'MOB', participantNo:no, team:safeStr(requestedTeam), scopeTeam, category:data.category, role:safeStr(roleText), checkerName:safeStr(checkerName), checkedAt:nowIso(), round:data.currentRound };
   await env.DB.prepare('INSERT OR REPLACE INTO sessions (token, kind, payload_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')

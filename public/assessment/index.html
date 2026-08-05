@@ -2358,13 +2358,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <h2 style="margin-top:8px">MOB 켈리브레이션</h2>
   <p style="text-align:center;color:var(--text-3);margin-bottom:18px;font-size:14px" id="mob-cal-sub"></p>
   <div class="review-edit-help" style="margin-bottom:14px">
-    켈리브레이션으로 제출된 데이터만 비교합니다. 헤드와 일반 심사위원 입력은 역할별로 구분되며 모두 공식 순위에는 반영되지 않습니다.
+    센서리/테크니컬 헤드 전용 화면입니다. 일반 심사위원의 대회평가 점수와 헤드 기준점수를 역할별로 비교하며, 헤드 기준점수는 공식 순위에 반영되지 않습니다.
   </div>
-  <div class="finals-tab-row" style="margin-bottom:12px">
-    <button class="finals-tab active" id="mob-cal-scope-team" onclick="setMobCalibrationScope_('team')">내 팀</button>
-    <button class="finals-tab" id="mob-cal-scope-all" onclick="setMobCalibrationScope_('all')">전체</button>
-  </div>
-  <div id="mob-cal-scope-note" class="review-edit-help" style="margin-bottom:12px"></div>
   <button class="btn" onclick="loadMobCalibrationTargets()">새로고침</button>
   <div id="mob-cal-list"></div>
   <div class="divider"></div>
@@ -4423,7 +4418,11 @@ function isJudgeReviewRoleForCode_(code) {
 }
 function canCalibrationCode_(code) {
   var c = String(code || (_selComp && _selComp.code) || '').toUpperCase();
-  return ['KCR','KCAC','KBC','MOB','IKRC'].indexOf(c) > -1;
+  // MOB는 IKRC식 공통 켈리브레이션 진입을 사용하지 않는다.
+  // 센서리/테크니컬 헤드가 각자의 기준 입력과 결과 확인을 담당하고,
+  // 운영팀장·관리자는 전용 운영 카드에서 두 헤드 영역을 관리한다.
+  if (c === 'MOB') return isHeadRoleForCode_(c) || isTeamLeaderForCode_(c) || isAdminRole();
+  return ['KCR','KCAC','KBC','IKRC'].indexOf(c) > -1;
 }
 function calibrationButtonLabel_(code) {
   var c = String(code || '').toUpperCase();
@@ -4502,28 +4501,30 @@ function updateSelectReviewButton_() {
   var resultCode = String(code || '').toUpperCase();
   var isKcrMenu = resultCode === 'KCR';
   var isIkrcMenu = resultCode === 'IKRC';
+  var isMobMenu = resultCode === 'MOB';
+  var isMobHeadEntry = isMobMenu && isHeadRoleForCode_(code) && !isTeamLeaderForCode_(code) && !isAdminRole();
   if (evalBtn) {
     evalBtn.style.display = isKcrMenu ? 'none' : 'block';
-    evalBtn.textContent = '대회평가 시작';
+    evalBtn.textContent = isMobHeadEntry ? 'MOB 헤드 켈리브레이션 입력' : '대회평가 시작';
   }
   var canCal = !!(_selComp && canCalibrationCode_(code));
   if (calAllBtn) {
-    calAllBtn.style.display = canCal && !isKcrMenu && !isIkrcMenu ? 'block' : 'none';
+    calAllBtn.style.display = canCal && !isKcrMenu && !isIkrcMenu && !isMobMenu ? 'block' : 'none';
     calAllBtn.textContent = isKcrMenu ? '켈리브레이션(전체)' : '전체 켈리브레이션 시작';
   }
   if (calTeamBtn) {
     var hasTeam = !!judgeTeamText(code);
-    calTeamBtn.style.display = canCal && !isKcrMenu && !isIkrcMenu ? 'block' : 'none';
+    calTeamBtn.style.display = canCal && !isKcrMenu && !isIkrcMenu && !isMobMenu ? 'block' : 'none';
     calTeamBtn.disabled = canCal && !hasTeam;
     calTeamBtn.textContent = hasTeam ? ('팀별 켈리브레이션 시작 · ' + judgeTeamText(code)) : '팀별 켈리브레이션 시작 · 팀 미지정';
   }
   if (calBtn) {
     var canSeeResults = _selComp && ((resultCode === 'MOB' && isHeadRoleForCode_(code)) || (resultCode === 'IKRC' && (isHeadRoleForCode_(code) || isTeamLeaderForCode_(code) || isAdminRole())));
     calBtn.style.display = canSeeResults ? 'block' : 'none';
-    calBtn.textContent = isIkrcMenu ? '켈리브레이션 확인' : '켈리브레이션 결과 확인';
+    calBtn.textContent = isMobMenu ? 'MOB 켈리브레이션 확인' : (isIkrcMenu ? '켈리브레이션 확인' : '켈리브레이션 결과 확인');
   }
   if (reviewBtn) {
-    reviewBtn.style.display = (_selComp && canReviewCode_(code) && !isKcrMenu) ? 'block' : 'none';
+    reviewBtn.style.display = (_selComp && canReviewCode_(code) && !isKcrMenu && !isMobHeadEntry) ? 'block' : 'none';
     reviewBtn.textContent = isKcrMenu ? '대회검수' : (isIkrcMenu && !isTeamLeaderForCode_(code) && !isAdminRole()
       ? '내 제출 검수'
       : ((isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내 제출 검수'));
@@ -5080,7 +5081,12 @@ function openIkrcSeedToCup_(cfg) {
   showPanel('pIkrcSeed');
   loadIkrcSeedToCupFinalists();
 }
-function adminOpenMobHeadInput_(cfg, category) { _selComp = cfg; setAdminRoleOverride_(cfg.code, category === 'technical' ? '테크니컬 헤드 심사위원' : '센서리 헤드 심사위원'); goEval(); }
+function adminOpenMobHeadInput_(cfg, category) {
+  _selComp = cfg;
+  setAdminRoleOverride_(cfg.code, category === 'technical' ? '테크니컬 헤드 심사위원' : '센서리 헤드 심사위원');
+  setEvaluationPurpose_('calibration', judgeTeamText('MOB') ? 'team' : 'all');
+  startMob();
+}
 function adminOpenMobCalibration_(cfg, category) { _selComp = cfg; setAdminRoleOverride_(cfg.code, category === 'technical' ? '테크니컬 헤드 심사위원' : '센서리 헤드 심사위원'); loadMobCalibrationTargets(); }
 
 function adminRenderRunCards_() {
@@ -5099,7 +5105,7 @@ function adminRenderRunCards_() {
     } else if (code === 'IKRC') {
       extra += '<button data-act="station-settings">스테이션 설정</button><button data-act="ikrc-head-input">센서리 헤드 심사위원 입력</button><button data-act="ikrc-cal">켈리브레이션 확인</button>';
     } else if (code === 'MOB') {
-      extra += '<button data-act="mob-sens-head">센서리 헤드 심사위원 입력</button><button data-act="mob-tech-head">테크니컬 헤드 심사위원 입력</button><button data-act="mob-sens-cal">센서리 편차 확인</button><button data-act="mob-tech-cal">테크니컬 편차 확인</button>';
+      extra += '<button data-act="mob-sens-head">센서리 헤드 켈리브레이션 입력</button><button data-act="mob-tech-head">테크니컬 헤드 켈리브레이션 입력</button><button data-act="mob-sens-cal">센서리 켈리브레이션 확인</button><button data-act="mob-tech-cal">테크니컬 켈리브레이션 확인</button>';
     }
     var div = document.createElement('div');
     div.className = 'admin-comp-card';
@@ -5272,6 +5278,7 @@ function loadTeamPanel() {
           var cardTeamLead = isTeamLeaderForCode_(cardCode);
           if (!cardTeamLead) {
             var cardHead = isHeadRoleForCode_(cardCode);
+            var mobHeadCard = cardHead && cardCode === 'MOB';
             var judgeCard = document.createElement('div');
             judgeCard.className = 'admin-comp-card';
             judgeCard.innerHTML =
@@ -5282,12 +5289,13 @@ function loadTeamPanel() {
               '</div></div>' +
               '<div class="review-edit-help" style="margin:10px 0">이 대회에서는 ' + escHtml(roleTextForCode_(cardCode) || '심사위원') + ' 권한으로 표시됩니다. 다른 대회의 팀장 권한과 섞이지 않고 해당 심사 기능만 실행합니다.</div>' +
               '<div class="admin-comp-actions team-actions">' +
-                '<button class="primary" data-act="judge-eval">대회평가 시작</button>' +
-                '<button data-act="judge-review">내 제출 검수</button>' +
-                (cardHead && (cardCode === 'MOB' || cardCode === 'IKRC') ? '<button data-act="judge-cal-result">' + (cardCode === 'IKRC' ? '켈리브레이션 확인' : '켈리브레이션 결과 확인') + '</button>' : '') +
+                '<button class="primary" data-act="judge-eval">' + (mobHeadCard ? 'MOB 헤드 켈리브레이션 입력' : '대회평가 시작') + '</button>' +
+                (mobHeadCard ? '' : '<button data-act="judge-review">내 제출 검수</button>') +
+                (cardHead && (cardCode === 'MOB' || cardCode === 'IKRC') ? '<button data-act="judge-cal-result">' + (cardCode === 'IKRC' ? '켈리브레이션 확인' : 'MOB 켈리브레이션 확인') + '</button>' : '') +
               '</div>';
             judgeCard.querySelector('[data-act="judge-eval"]').onclick = (function(cfg){ return function(){ _selComp = cfg; goEval(); }; })(c);
-            judgeCard.querySelector('[data-act="judge-review"]').onclick = (function(cfg){ return function(){ _selComp = cfg; goReview(); }; })(c);
+            var judgeReview = judgeCard.querySelector('[data-act="judge-review"]');
+            if (judgeReview) judgeReview.onclick = (function(cfg){ return function(){ _selComp = cfg; goReview(); }; })(c);
             var judgeCalResult = judgeCard.querySelector('[data-act="judge-cal-result"]');
             if (judgeCalResult) judgeCalResult.onclick = (function(cfg){ return function(){ _selComp = cfg; goCalibrationResults(); }; })(c);
             wrap.appendChild(judgeCard);
@@ -5296,7 +5304,7 @@ function loadTeamPanel() {
           var seedButton = isIkrcFinalConfig_(c) ? '<button data-act="ikrc-seed">Seed to Cup 운영 / 결과</button>' : '';
           var blindButton = '';
           var teamLeadHeadButtons = cardCode === 'MOB'
-            ? '<button data-act="mob-sens-cal">센서리 헤드 편차 확인</button><button data-act="mob-tech-cal">테크니컬 헤드 편차 확인</button>'
+            ? '<button data-act="mob-sens-cal">센서리 켈리브레이션 확인</button><button data-act="mob-tech-cal">테크니컬 켈리브레이션 확인</button>'
             : (cardCode === 'IKRC' ? '<button data-act="ikrc-cal-result">켈리브레이션 확인</button>' : '');
           var kcrCalibrationButtons = String(c.code || '').toUpperCase() === 'KCR'
             ? '<button data-act="kcr-cal-station">켈리브레이션(스테이션)</button><button data-act="kcr-cal-all">켈리브레이션(전체)</button>'
@@ -5466,7 +5474,12 @@ function goEval() {
   if (!_selComp) { toast('대회를 선택해주세요', true); return; }
   var code = _selComp.code;
   if (!assertCanEvaluate(code)) return;
-  setEvaluationPurpose_('competition');
+  var normalizedCode = String(code || '').toUpperCase();
+  var mobHeadEntry = normalizedCode === 'MOB' && isHeadRoleForCode_('MOB') && !isTeamLeaderForCode_('MOB') && !isAdminRole();
+  if (mobHeadEntry) {
+    setEvaluationPurpose_('calibration', judgeTeamText('MOB') ? 'team' : 'all');
+  }
+  else setEvaluationPurpose_('competition');
   if (String(code || '').toUpperCase() === 'KCR') _forceKcrCalibrationMode = false;
   if (code === 'KCR')   { showCuppingSetup(); return; }
   if (code === 'MOC')   { showMocSetup(); return; }
@@ -13052,8 +13065,8 @@ function isMobSensoryOnly_() {
 }
 function isMobCalibrationMode_() { return isActiveCalibrationMode_(); }
 function mobCalibrationLabel_() {
-  if (isActiveCalibrationMode_()) return evaluationPurposeLabel_();
-  return (typeof _mobCalibrationScope !== 'undefined' && _mobCalibrationScope === 'all') ? '전체 켈리브레이션' : '팀별 켈리브레이션';
+  var category = mobRoleCategoryClient_();
+  return category === 'technical' ? '테크니컬 헤드 켈리브레이션' : (category === 'sensory' ? '센서리 헤드 켈리브레이션' : '헤드 역할 구분 필요');
 }
 function mobCreativeAllowed_() {
   var round = String((_selComp && _selComp.currentRound) || '');
@@ -13824,7 +13837,7 @@ function mobSubmit() {
     })
     .withFailureHandler(function(){ hideOverlay(); toast('오류 발생', true); })
     .submitScores({
-      competitionCode: _selComp.code,
+      competitionCode: 'MOB',
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: mobRoleText_(),
@@ -13875,29 +13888,12 @@ function mobCalItem_(item) {
     categoryLabel: item.categoryLabel || mobCalibrationLabel_()
   };
 }
-var _mobCalibrationScope = 'team';
-function mobCalibrationTeamArg_() { return _mobCalibrationScope === 'team' ? judgeTeamText('MOB') : ''; }
-function renderMobCalibrationScope_() {
-  var team = judgeTeamText('MOB');
-  if (_mobCalibrationScope === 'team' && !team) _mobCalibrationScope = 'all';
-  var teamBtn = document.getElementById('mob-cal-scope-team');
-  var allBtn = document.getElementById('mob-cal-scope-all');
-  var note = document.getElementById('mob-cal-scope-note');
-  if (teamBtn) { teamBtn.disabled = !team; teamBtn.textContent = team ? ('내 팀 · ' + team) : '내 팀 · 팀 미지정'; teamBtn.classList.toggle('active', _mobCalibrationScope === 'team'); }
-  if (allBtn) allBtn.classList.toggle('active', _mobCalibrationScope === 'all');
-  if (note) note.textContent = _mobCalibrationScope === 'team' ? '팀별 켈리브레이션으로 제출된 현재 팀 데이터만 확인합니다.' : '전체 켈리브레이션으로 제출된 모든 팀 데이터만 확인합니다. 팀별 데이터와 섞이지 않습니다.';
-}
-function setMobCalibrationScope_(scope) {
-  if (scope === 'team' && !judgeTeamText('MOB')) { toast('팀별 결과를 보려면 MOB 팀을 먼저 지정해주세요.', true); return; }
-  _mobCalibrationScope = scope === 'team' ? 'team' : 'all';
-  loadMobCalibrationTargets();
-}
+function mobCalibrationTeamArg_() { return judgeTeamText('MOB'); }
 function loadMobCalibrationTargets() {
   if (isMobHeadCategoryMissing_()) { toast(mobHeadCategoryMessage_(), true); return; }
   if (!_selComp) _selComp = {code:'MOB', name:'MOB', currentRound:''};
-  renderMobCalibrationScope_();
   var sub = document.getElementById('mob-cal-sub');
-  if (sub) sub.textContent = judgeLineText() + '  ' + ((_selComp && _selComp.currentRound) || '') + ' · ' + (_mobCalibrationScope === 'team' ? '팀별 켈리브레이션' : '전체 켈리브레이션') + ' · 확인완료 항목 숨김';
+  if (sub) sub.textContent = judgeLineText() + '  ' + ((_selComp && _selComp.currentRound) || '') + ' · ' + mobCalibrationLabel_() + ' · 확인완료 항목 숨김';
   showPanel('pMobCalList');
   var wrap = document.getElementById('mob-cal-list');
   if (wrap) wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">불러오는 중...</p>';
@@ -13914,7 +13910,7 @@ function loadMobCalibrationTargets() {
       items.forEach(function(item){
         html += '<div class="review-item" onclick="openMobCalibrationDetail(\'' + escapeJsString_(item.participantNo) + '\')">' +
           '<div class="review-info"><div class="review-info-name">참가자 ' + escHtml(item.participantNo) + '</div>' +
-          '<div class="review-info-sub">' + escHtml(item.categoryLabel) + ' · 일반 심사 ' + escHtml(String(item.judgeCount)) + '명 · 헤드 ' + escHtml(String(item.headCount)) + '명' + (item.checked ? ' · 확인완료' : ' · 미확인') + '</div></div>' +
+          '<div class="review-info-sub">' + escHtml(item.categoryLabel) + ' · 일반 심사 ' + escHtml(String(item.judgeCount)) + '명' + (item.checked ? ' · 확인완료' : ' · 미확인') + '</div></div>' +
           '<button type="button" onclick="event.stopPropagation(); openMobCalibrationDetail(\'' + escapeJsString_(item.participantNo) + '\')" class="review-status-btn ' + (item.checked ? 'status-검수완료' : 'status-미검수') + '">' + (item.checked ? '검수완료' : '검수확인') + '</button></div>';
       });
       wrap.innerHTML = html;
