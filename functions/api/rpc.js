@@ -239,13 +239,34 @@ function bestOperatorRow_(rows) {
 }
 function hasTeamLead(actor) {
   if (!actor) return false;
-  return String(actor.type || actor.accountType || '').toUpperCase() === 'TEAMLEAD' || /팀장|team\s*lead|leader/i.test(actor.role || '');
+  if (String(actor.type || actor.accountType || '').toUpperCase() === 'TEAMLEAD' || /팀장|team\s*lead|leader/i.test(actor.role || '')) return true;
+  const accountTypeMap = actor.accountTypeMap && typeof actor.accountTypeMap === 'object' ? actor.accountTypeMap : {};
+  const roleMap = actor.roleMap && typeof actor.roleMap === 'object' ? actor.roleMap : {};
+  return Object.keys(accountTypeMap).some(code => normalizeAccountType_(accountTypeMap[code], roleMap[code] || '') === 'TEAMLEAD')
+    || Object.keys(roleMap).some(code => /팀장|team\s*lead|leader/i.test(safeStr(roleMap[code])));
 }
 function actorAccessCodes_(actor) { return accessCodes_(actor && actor.access); }
+function actorAccountTypeForCode_(actor, code) {
+  if (!actor) return '';
+  const normalizedCode = safeStr(code).toUpperCase();
+  const accountTypeMap = actor.accountTypeMap && typeof actor.accountTypeMap === 'object' ? actor.accountTypeMap : {};
+  const roleMap = actor.roleMap && typeof actor.roleMap === 'object' ? actor.roleMap : {};
+  if (normalizedCode && (accountTypeMap[normalizedCode] || roleMap[normalizedCode])) {
+    return normalizeAccountType_(accountTypeMap[normalizedCode] || '', roleMap[normalizedCode] || '');
+  }
+  const rows = Array.isArray(actor.operatorRows) ? actor.operatorRows : [];
+  const scoped = rows.find(row => accessCodes_(row && row.access).some(value => value === 'ALL' || value === normalizedCode));
+  if (scoped) return normalizeAccountType_(scoped.accountType || scoped.account_type || '', scoped.role || '');
+  return normalizeAccountType_(actor.type || actor.accountType || '', actor.role || '');
+}
 function hasManageAccess(actor, code) {
   if (!actor) return false;
   if (hasAdmin(actor)) return true;
-  return hasTeamLead(actor) && hasAccess(actor, code);
+  return hasAccess(actor, code) && actorAccountTypeForCode_(actor, code) === 'TEAMLEAD';
+}
+function actorManageCodes_(actor) {
+  if (hasAdmin(actor)) return COMPETITION_CODES.slice();
+  return COMPETITION_CODES.filter(code => hasManageAccess(actor, code));
 }
 function strictCompetitionCode_(competitionCode, label='초기화') {
   const code = safeStr(competitionCode).toUpperCase();
@@ -259,14 +280,14 @@ function strictCompetitionCode_(competitionCode, label='초기화') {
 }
 function isStaffActorForCode_(actor, code) {
   if (!actor || !hasAccess(actor, code)) return false;
-  const t = normalizeAccountType_(actor.type || actor.accountType || '', actor.role || '');
+  const t = actorAccountTypeForCode_(actor, code);
   if (t === 'STAFF') return true;
   const rows = Array.isArray(actor.operatorRows) ? actor.operatorRows : [];
   return rows.some(r => normalizeAccountType_(r.accountType || r.account_type || '', r.role || '') === 'STAFF' && hasAccess({ access: r.access || actor.access, role: r.role || '', type: r.accountType || r.account_type || '' }, code));
 }
 function operatorRowVisibleToActor_(actor, row) {
   if (hasAdmin(actor)) return true;
-  const actorCodes = actorAccessCodes_(actor);
+  const actorCodes = actorManageCodes_(actor);
   if (!actorCodes.length) return false;
   if (actorCodes.includes('ALL')) return true;
   const rowCodes = accessCodes_(row && row.access);
@@ -471,6 +492,7 @@ async function dispatch(action, args, env, request) {
     importParticipants: () => importParticipants(env, args[0], args[1]),
     importOperators: () => importOperators(env, args[0], args[1]),
     applyOperatorDateSchedule: () => applyOperatorDateSchedule(env, args[0], args[1]),
+    bulkApplyOperatorEffectiveDate: () => bulkApplyOperatorEffectiveDate(env, args[0], args[1]),
     getRegistrationTemplates: () => getRegistrationTemplates(),
     getParticipantAssignments: () => getParticipantAssignments(env, args[0], args[1]),
     getIkrcBlindAssignments: () => getIkrcBlindAssignments(env, args[0]),
@@ -1216,6 +1238,7 @@ function participantPayloadFromRow_(raw, defaultCode='') {
     sampleNo: sampleNo || (code === 'IKRC' ? number : ''),
     teamName,
     teamNo: teamNo || (code === 'KTCC' ? number : ''),
+    competitionDate,
     extra
   };
 }
@@ -1300,7 +1323,8 @@ async function getRegistryData(env, competitionCode, actorArg) {
   const parts = await listParticipants(env, code || 'ALL', actorArg);
   const cfg = await getConfig(env);
   const ops = await env.DB.prepare('SELECT * FROM operators ORDER BY id').all();
-  const visibleConfigs = hasAdmin(actor) ? cfg.configs : filterConfigsForActor_(cfg.configs, actor);
+  const manageCodes = actorManageCodes_(actor);
+  const visibleConfigs = hasAdmin(actor) ? cfg.configs : (cfg.configs || []).filter(c => manageCodes.includes(safeStr(c && c.code).toUpperCase()));
   const visibleOps = hasAdmin(actor) ? (ops.results || []) : (ops.results || []).filter(r => operatorRowVisibleToActor_(actor, r));
   return { success: true, configs: visibleConfigs, participants: parts.participants || [], operators: visibleOps.map(operatorRowOut_), templates: getRegistrationTemplates().templates };
 }
@@ -1313,7 +1337,7 @@ async function listParticipants(env, competitionCode, actorArg) {
   if (code && code !== 'ALL') rs = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind(code).all();
   else if (hasAdmin(actor)) rs = await env.DB.prepare('SELECT * FROM participants ORDER BY competition_code, id').all();
   else {
-    const codes = actorAccessCodes_(actor).filter(c => COMPETITION_CODES.includes(c));
+    const codes = actorManageCodes_(actor);
     if (!codes.length) return { success: true, participants: [] };
     const placeholders = codes.map(() => '?').join(',');
     rs = await env.DB.prepare(`SELECT * FROM participants WHERE competition_code IN (${placeholders}) ORDER BY competition_code, id`).bind(...codes).all();
@@ -1374,6 +1398,10 @@ async function upsertParticipant(env, payload, actorArg) {
   const code = safeStr(data.competitionCode).toUpperCase();
   if (!code) return { success: false, message: '대회코드가 필요합니다.' };
   if (!hasManageAccess(actor, code)) return { success: false, message: code + ' 선수 등록 권한이 없습니다.' };
+  const participantDateSource = Object.assign({}, payload && payload.extra && typeof payload.extra === 'object' ? payload.extra : {}, payload || {});
+  const rawCompetitionDate = safeStr(pickByAliases_(participantDateSource, ['대회일','대회날짜','경연일','경연날짜','예선일','일자','competition_date','competitionDate','event_date','eventDate','date']));
+  if (rawCompetitionDate && !data.competitionDate) return { success:false, message:'대회일은 YYYY-MM-DD 형식의 올바른 날짜로 입력해주세요.' };
+  if (code === 'MOB' && !data.competitionDate) return { success:false, message:'MOB 선수 등록 시 대회일을 반드시 선택해주세요.' };
   let id = Number(payload && (payload.rowIndex || payload.id));
   const bind = [code, data.name, data.affiliation, data.phone, data.uniqueNo, data.prelimCupNo, data.mainCupNo, data.finalCupNo, data.cupNo, data.sampleNo, data.teamName, data.teamNo, JSON.stringify(data.extra || {}), nowIso()];
 
@@ -1409,7 +1437,7 @@ async function upsertParticipant(env, payload, actorArg) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(code, data.name, data.affiliation, data.phone, data.uniqueNo, data.prelimCupNo, data.mainCupNo, data.finalCupNo, data.cupNo, data.sampleNo, data.teamName, data.teamNo, JSON.stringify(data.extra || {}), nowIso(), nowIso()).run();
   }
-  return { success: true, message: '선수 등록 저장 완료' };
+  return { success: true, message: '선수 등록 저장 완료' + (data.competitionDate ? ` · 대회일 ${data.competitionDate}` : ''), competitionDate:data.competitionDate || '' };
 }
 async function deleteParticipant(env, rowIndex, actorArg) {
   const actor = await getActor(env, actorArg);
@@ -1537,6 +1565,59 @@ async function applyOperatorDateSchedule(env, payload, actorArg) {
     applied,
     missing:Array.from(new Set(missing)),
     errors:errors.slice(0, 20)
+  };
+}
+async function bulkApplyOperatorEffectiveDate(env, payload, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!actor || (!hasAdmin(actor) && !hasTeamLead(actor))) return { success:false, message:'날짜별 권한 저장 권한이 없습니다.' };
+  const code = safeStr(payload && payload.competitionCode).toUpperCase();
+  if (!COMPETITION_CODES.includes(code)) return { success:false, message:'심사 적용일을 저장할 대회를 확인해주세요.' };
+  if (!hasManageAccess(actor, code)) return { success:false, message:code + ' 심사 적용일 관리 권한이 없습니다.' };
+  const effectiveDate = normalizeEffectiveDate_(payload && payload.effectiveDate);
+  if (!effectiveDate) return { success:false, message:'심사 적용일을 올바른 날짜로 선택해주세요.' };
+  const ids = Array.from(new Set((Array.isArray(payload && payload.rowIndexes) ? payload.rowIndexes : [])
+    .map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0))).slice(0, 200);
+  if (!ids.length) return { success:false, message:'날짜를 적용할 계정을 한 명 이상 선택해주세요.' };
+
+  const placeholders = ids.map(() => '?').join(',');
+  const rs = await env.DB.prepare(`SELECT * FROM operators WHERE id IN (${placeholders}) ORDER BY id`).bind(...ids).all();
+  const sourceRows = rs.results || [];
+  if (sourceRows.length !== ids.length) return { success:false, message:'선택한 계정 목록이 변경되었습니다. 목록을 새로고침한 뒤 다시 시도해주세요.' };
+  const selectedIdentityKeys = new Set();
+  for (const row of sourceRows) {
+    if (operatorIsAdminRow_(row)) return { success:false, message:'관리자 계정에는 심사 적용일을 지정할 수 없습니다.' };
+    const rowCodes = accessCodes_(row.access || '');
+    if (!rowCodes.includes(code)) return { success:false, message:'선택한 계정 중 현재 대회와 다른 권한이 포함되어 있습니다.' };
+    const identityKey = operatorIdentityKey_(row.name, row.phone);
+    if (identityKey && selectedIdentityKeys.has(identityKey)) return { success:false, message:`${row.name || '동일 계정'}의 서로 다른 날짜 역할이 동시에 선택되었습니다. 적용할 역할 한 행만 체크해주세요.` };
+    if (identityKey) selectedIdentityKeys.add(identityKey);
+  }
+
+  const timestamp = nowIso();
+  let created = 0, updated = 0;
+  for (const source of sourceRows) {
+    const existing = await env.DB.prepare(`SELECT id FROM operators WHERE name=? AND phone=? AND COALESCE(access,'')=? AND COALESCE(effective_date,'')=? ORDER BY id LIMIT 1`)
+      .bind(source.name || '', normalizePhone(source.phone), code, effectiveDate).first();
+    if (existing && Number(existing.id) === Number(source.id)) {
+      await env.DB.prepare('UPDATE operators SET updated_at=? WHERE id=?').bind(timestamp, source.id).run();
+      updated++;
+    } else if (existing && existing.id) {
+      await env.DB.prepare(`UPDATE operators SET account_type=?, affiliation=?, team_group=?, role=?, updated_at=? WHERE id=?`)
+        .bind(source.account_type || 'JUDGE', source.affiliation || '', source.team_group || '', source.role || '', timestamp, existing.id).run();
+      updated++;
+    } else {
+      await env.DB.prepare(`INSERT INTO operators (account_type, name, affiliation, phone, access, team_group, role, effective_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(source.account_type || 'JUDGE', source.name || '', source.affiliation || '', normalizePhone(source.phone), code, source.team_group || '', source.role || '', effectiveDate, timestamp, timestamp).run();
+      created++;
+    }
+  }
+  return {
+    success:true,
+    message:`${code} ${effectiveDate} 심사 적용일 저장 완료 · 새 날짜 권한 ${created}건 / 갱신 ${updated}건`,
+    effectiveDate,
+    applied:sourceRows.length,
+    created,
+    updated
   };
 }
 function getRegistrationTemplates() {
@@ -1720,7 +1801,7 @@ async function getIkrcBlindAssignments(env, actorArg) {
   if (!cfg) return { success:false, message:'IKRC 대회 설정을 찾을 수 없습니다.' };
   const round = normalizeRoundForCompetition_('IKRC', cfg.current_round || '예선');
   const field = ikrcAssignmentFieldForRound_(round);
-  const stations = ikrcStationSettingsServer_(cfg, round);
+  const stations = ikrcStationsForPurposeServer_(cfg, round, 'competition');
   const units = ikrcUnitsForStationsServer_(stations);
   const allowed = new Set(units.map(item => item.unit));
   const rows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY name, id').bind('IKRC').all();
@@ -1809,7 +1890,7 @@ async function saveIkrcBlindAssignments(env, payload, actorArg) {
   const requestedRound = normalizeRoundForCompetition_('IKRC', payload && payload.currentRound || round);
   if (requestedRound !== round) return { success:false, message:'IKRC 진행 라운드가 변경되었습니다. 블라인드 배정 화면을 새로 열어주세요.' };
   const field = ikrcAssignmentFieldForRound_(round);
-  const stations = ikrcStationSettingsServer_(cfg, round);
+  const stations = ikrcStationsForPurposeServer_(cfg, round, 'competition');
   const allowed = new Set(ikrcUnitsForStationsServer_(stations).map(item => item.unit));
   const participantRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('IKRC').all();
   const existing = participantRows.results || [];
@@ -2665,6 +2746,12 @@ function ikrcDefaultStationPrefixServer_(index) {
 function normalizeIkrcStationListServer_(source, strict=false, competitionCode='IKRC') {
   const code = String(competitionCode || '').trim().toUpperCase() || 'IKRC';
   const maxPerStation = code === 'KCR' ? 20 : 50;
+  const purposeFlag = (value, fallback=true) => {
+    if (value === undefined || value === null || value === '') return !!fallback;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    return !/^(?:0|false|no|n|off|미사용)$/i.test(safeStr(value));
+  };
   if (!Array.isArray(source) || !source.length) return { ok:false, message:`${code} 스테이션을 1개 이상 등록해주세요.`, list:[] };
   if (source.length > 12) return { ok:false, message:`${code} 스테이션은 최대 12개까지 등록할 수 있습니다.`, list:[] };
   const used = new Set();
@@ -2698,7 +2785,14 @@ function normalizeIkrcStationListServer_(source, strict=false, competitionCode='
     if (end < start) end = start;
     if (end - start + 1 > maxPerStation) end = start + maxPerStation - 1;
     used.add(prefix);
-    list.push({ id, label, prefix, start, end });
+    const useForCalibration = code === 'IKRC' ? purposeFlag(item.useForCalibration, true) : true;
+    const useForCompetition = code === 'IKRC' ? purposeFlag(item.useForCompetition, true) : true;
+    if (strict && code === 'IKRC' && !useForCalibration && !useForCompetition) {
+      return { ok:false, message:`${label}은 켈리브레이션용 또는 대회용 중 하나 이상을 선택해야 합니다.`, list:[] };
+    }
+    list.push(code === 'IKRC'
+      ? { id, label, prefix, start, end, useForCalibration, useForCompetition }
+      : { id, label, prefix, start, end });
   }
   return { ok:true, list };
 }
@@ -2746,7 +2840,11 @@ function ikrcStationSettingsServer_(cfg, roundOverride) {
   return normalized.ok ? normalized.list : normalizeIkrcStationListServer_([{prefix:'A',start:1,end:10},{prefix:'B',start:1,end:10}], false).list;
 }
 function ikrcStationFingerprintServer_(stations) {
-  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end].join(':')).join('|');
+  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end, station.useForCalibration !== false ? 1 : 0, station.useForCompetition !== false ? 1 : 0].join(':')).join('|');
+}
+function ikrcStationsForPurposeServer_(cfg, roundOverride, purpose='competition') {
+  const calibration = safeStr(purpose).toLowerCase() === 'calibration';
+  return ikrcStationSettingsServer_(cfg, roundOverride).filter(station => calibration ? station.useForCalibration !== false : station.useForCompetition !== false);
 }
 
 function ikrcStationScopeTokenServer_(value) {
@@ -2775,7 +2873,7 @@ function ikrcActorTeamServer_(actor) {
 }
 function ikrcActorAssignedStationServer_(actor, cfg) {
   if (!actor || hasAdmin(actor)) return null;
-  return ikrcFindStationByAssignmentServer_(ikrcActorTeamServer_(actor), ikrcStationSettingsServer_(cfg));
+  return ikrcFindStationByAssignmentServer_(ikrcActorTeamServer_(actor), ikrcStationsForPurposeServer_(cfg, cfg && (cfg.current_round || cfg.currentRound), 'competition'));
 }
 function ikrcUnitBelongsToStationServer_(unit, station) {
   const normalized = safeStr(unit).toUpperCase().replace(/\s+/g, '');
@@ -2935,10 +3033,11 @@ function validateKcrStationSubmission_(payload, cfg) {
 
 function validateIkrcStationSubmission_(payload, cfg) {
   const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
-  const settings = ikrcStationSettingsServer_(cfg);
+  const purpose = isCalibrationMode_(payload && payload.mode) ? 'calibration' : 'competition';
+  const settings = ikrcStationsForPurposeServer_(cfg, payload && payload.round, purpose);
   const stationId = safeStr(payload && payload.stationId).toLowerCase();
   const station = settings.find(item => safeStr(item.id).toLowerCase() === stationId);
-  if (!station) return { ok:false, message:'IKRC 스테이션을 다시 선택해주세요.' };
+  if (!station) return { ok:false, message:`현재 ${purpose === 'calibration' ? '켈리브레이션' : '대회평가'}용으로 열린 IKRC 스테이션을 다시 선택해주세요.` };
   const expectedUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => `${station.prefix}-${station.start + idx}`);
   if (rows.length !== expectedUnits.length) {
     return { ok:false, message:`${station.label} 평가는 ${expectedUnits[0]}부터 ${expectedUnits[expectedUnits.length - 1]}까지 ${expectedUnits.length}개 샘플이 모두 있어야 저장됩니다.` };
@@ -3028,7 +3127,7 @@ async function submitScores(env, payload, signature, request = null) {
     const stationValidation = validateIkrcStationSubmission_(basePayload, cfg);
     if (!stationValidation.ok) return { success:false, message:stationValidation.message };
     const selectedStation = stationValidation.station;
-    const configuredStations = ikrcStationSettingsServer_(cfg, submitRound);
+    const configuredStations = ikrcStationsForPurposeServer_(cfg, submitRound, 'competition');
     const assignedStation = ikrcActorAssignedStationServer_(auth.actor, cfg);
     if (!isCalibrationMode_(basePayload.mode) && assignedStation && safeStr(assignedStation.id) !== safeStr(selectedStation.id)) {
       return {
@@ -3264,7 +3363,7 @@ async function getReviewList(env, competitionCode, actorArg) {
   const headMonitor = code === 'IKRC' && !manager && actorReviewRoleCategory_(auth.actor, code) === 'head';
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
-  const headStations = headMonitor ? ikrcHeadOfficialStations_(rawAll, auth.actor, ikrcStationSettingsServer_(cfg, cfg && cfg.current_round), safeStr(cfg && cfg.current_round)) : [];
+  const headStations = headMonitor ? ikrcHeadOfficialStations_(rawAll, auth.actor, ikrcStationsForPurposeServer_(cfg, cfg && cfg.current_round, 'competition'), safeStr(cfg && cfg.current_round)) : [];
   const headRows = headMonitor ? rawAll.filter(row => headStations.some(station => ikrcScoreBelongsToStationServer_(row, station))) : [];
   const raw = manager ? managerRows : (headMonitor ? headRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
   const headers = mergeHeaders(code, raw);
@@ -3612,7 +3711,8 @@ function mobScoreObjectFromItem_(item) {
 async function mobCalibrationRows_(env, requestedTeam, roleText, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'MOB', 'MOB 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return { error: auth.res };
-  const actorRole = safeStr(auth.actor && auth.actor.role);
+  const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
+  const actorRole = safeStr(roleMap.MOB || (auth.actor && auth.actor.role));
   if (!hasManageAccess(auth.actor, 'MOB') && !isHeadRole_(actorRole)) {
     return { error: { success:false, message:'MOB 켈리브레이션은 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' } };
   }
@@ -3760,7 +3860,7 @@ async function getIkrcCalibrationScopeOptions(env, actorArg) {
   if (!isHeadRole_(actorRole) && !canManageAll) return { success:false, message:'IKRC 켈리브레이션 결과는 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' };
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
-  const stations = ikrcStationSettingsServer_(cfg, currentRound);
+  const stations = ikrcStationsForPurposeServer_(cfg, currentRound, 'calibration');
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
   const allowed = canManageAll ? stations : ikrcHeadCalibrationStations_(rawRows.results || [], auth.actor, stations, currentRound);
   return {
@@ -3819,7 +3919,7 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
   const checkerKey = ikrcCalibrationCheckerKey_(auth.actor);
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
-  const stations = ikrcStationSettingsServer_(cfg, currentRound);
+  const stations = ikrcStationsForPurposeServer_(cfg, currentRound, 'calibration');
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
   let scope = ikrcCalibrationScope_(requestedScope, auth.actor, stations);
   const allowedStations = canManageAll ? stations : ikrcHeadCalibrationStations_(rawRows.results || [], auth.actor, stations, currentRound);
@@ -3920,7 +4020,7 @@ async function getIkrcStationFinalization_(env, round, station) {
 async function invalidateIkrcStationFinalizationForScore_(env, scoreRow, cfg) {
   if (!scoreRow || isCalibrationMode_(ikrcScoreMode_(scoreRow))) return;
   const round = ikrcScoreRound_(scoreRow) || safeStr(cfg && cfg.current_round);
-  const station = ikrcStationSettingsServer_(cfg, round).find(item => ikrcScoreBelongsToStationServer_(scoreRow, item));
+  const station = ikrcStationsForPurposeServer_(cfg, round, 'competition').find(item => ikrcScoreBelongsToStationServer_(scoreRow, item));
   if (!station) return;
   await env.DB.prepare("DELETE FROM sessions WHERE token=? AND kind='IKRC_STATION_FINALIZATION'")
     .bind(ikrcStationFinalizationToken_(round, station.id)).run();
@@ -3936,7 +4036,7 @@ async function ikrcOfficialCalibrationRows_(env, requestedScope, actorArg) {
   }
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
-  const stations = ikrcStationSettingsServer_(cfg, currentRound);
+  const stations = ikrcStationsForPurposeServer_(cfg, currentRound, 'competition');
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
   const allowedStations = canManageAll ? stations : ikrcHeadOfficialStations_(rawRows.results || [], auth.actor, stations, currentRound);
   let scope = ikrcCalibrationScope_(requestedScope, auth.actor, stations);

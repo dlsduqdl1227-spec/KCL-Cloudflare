@@ -36,6 +36,7 @@ function functionSource(source, name) {
   throw new Error(`${name} 함수 끝을 찾을 수 없습니다.`);
 }
 
+/* Legacy assertions for the removed player-blind-assignment panel.
 const blindPanel = assessment.slice(
   assessment.indexOf('<div id="pIkrcBlindManager"'),
   assessment.indexOf('<!-- 10-0-2: IKRC 결선 Seed to Cup 결과 -->'),
@@ -47,6 +48,13 @@ assert.match(blindPanel, />스테이션 설정 저장</);
 assert.match(blindPanel, /class="ikrc-station-actions"/);
 assert.match(blindPanel, /class="ikrc-station-save"/);
 assert.doesNotMatch(blindPanel, /class="admin-comp-actions" style="margin-bottom:16px"/);
+*/
+assert.doesNotMatch(assessment, /<div id="pIkrcBlindManager"/);
+assert.match(assessment, /function ikrcStationConfigRowHtml_\(/);
+assert.match(assessment, /saveIkrcStationSettings\(/);
+assert.match(assessment, /ikrc-station-purpose/);
+assert.match(assessment, /useForCalibration/);
+assert.match(assessment, /useForCompetition/);
 
 assert.match(assessment, /\.ikrc-station-config-row input\{height:52px/);
 assert.match(assessment, /\.ikrc-station-remove\{[^}]*height:52px/);
