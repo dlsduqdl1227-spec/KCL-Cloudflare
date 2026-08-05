@@ -2376,9 +2376,6 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div class="ikrc-station-grid" id="ikrc-station-grid"></div>
     <div class="participant-picker-help" id="ikrc-station-help" style="display:block;margin-top:12px"></div>
   </div>
-  <div id="ikrcHeadCalActions" style="display:none;margin-top:12px">
-    <button class="btn" onclick="goIkrcOfficialStationResults_()">대회평가 스테이션 확인</button>
-  </div>
   <button class="btn-danger" onclick="goHomePanel_()">대회 선택으로</button>
 </div>
 
@@ -2456,16 +2453,22 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <!-- 10-1: IKRC 켈리브레이션 표준편차 / 공식 대회평가 스테이션 확인 -->
 <div id="pIkrcCalList" class="panel">
   <div class="hero-logo-wrap" data-comp-logo="IKRC"></div>
-  <h2 style="margin-top:8px" id="ikrc-cal-list-title">IKRC 켈리브레이션 결과</h2>
+  <h2 style="margin-top:8px" id="ikrc-cal-list-title">IKRC 켈리브레이션 확인</h2>
   <p style="text-align:center;color:var(--text-3);margin-bottom:18px;font-size:14px" id="ikrc-cal-sub"></p>
   <div class="review-edit-help" id="ikrc-cal-list-help" style="margin-bottom:14px">
-    대회 전 켈리브레이션 데이터의 평균과 표준편차를 확인합니다. 이 데이터는 공식 점수와 순위에 반영되지 않습니다.
+    대회평가 또는 스테이션 켈리브레이션을 선택해 점수·코멘트·표준편차를 확인합니다.
+  </div>
+  <div class="ikrc-cal-scope">
+    <div class="ikrc-cal-scope-title">확인 구분</div>
+    <div class="ikrc-cal-scope-actions">
+      <button type="button" class="ikrc-cal-scope-btn" id="ikrc-result-mode-official" onclick="setIkrcResultViewMode_('official')">대회평가</button>
+      <button type="button" class="ikrc-cal-scope-btn" id="ikrc-result-mode-station" onclick="setIkrcResultViewMode_('precalibration')">스테이션 켈리브레이션</button>
+    </div>
   </div>
   <div class="ikrc-cal-scope">
     <div class="ikrc-cal-scope-title">조회 스테이션</div>
     <div class="ikrc-cal-scope-actions">
       <button type="button" class="ikrc-cal-scope-btn" id="ikrc-cal-scope-team" onclick="setIkrcCalibrationScope_('station')">스테이션</button>
-      <button type="button" class="ikrc-cal-scope-btn" id="ikrc-cal-scope-all" onclick="setIkrcCalibrationScope_('all')">전체 스테이션</button>
     </div>
     <select id="ikrc-cal-station-select" class="input" style="margin-top:8px" onchange="setIkrcCalibrationStation_(this.value)"></select>
     <div class="ikrc-cal-scope-note" id="ikrc-cal-scope-note"></div>
@@ -4457,7 +4460,11 @@ function reviewManageScopeForCode_(code) {
   var back = String((_reviewState && _reviewState.backPanel) || '').trim();
   return !!c && (back === 'pAdmin' || back === 'pTeam') && (isAdminRole() || isTeamLeaderForCode_(c));
 }
-function shouldHideCompletedReviewRows() { return isIkrcHeadMonitor_() ? false : !reviewManageScopeForCode_(_reviewState && _reviewState.code); }
+function shouldHideCompletedReviewRows() {
+  var code = String((_reviewState && _reviewState.code) || '').toUpperCase();
+  if (code === 'IKRC' && isHeadRoleForCode_('IKRC') && !reviewManageScopeForCode_('IKRC')) return false;
+  return isIkrcHeadMonitor_() ? false : !reviewManageScopeForCode_(code);
+}
 function canReviewToggleStatus_(code, item) {
   var c = String(code || (_reviewState && _reviewState.code) || '').toUpperCase();
   if (c === 'IKRC' && isIkrcHeadMonitor_()) return false;
@@ -4482,26 +4489,24 @@ function updateSelectReviewButton_() {
   }
   var canCal = !!(_selComp && canCalibrationCode_(code));
   if (calAllBtn) {
-    calAllBtn.style.display = canCal && !isKcrMenu ? 'block' : 'none';
-    calAllBtn.textContent = isKcrMenu ? '켈리브레이션(전체)' : (isIkrcMenu ? '전체 켈리브레이션' : '전체 켈리브레이션 시작');
+    calAllBtn.style.display = canCal && !isKcrMenu && !isIkrcMenu ? 'block' : 'none';
+    calAllBtn.textContent = isKcrMenu ? '켈리브레이션(전체)' : '전체 켈리브레이션 시작';
   }
   if (calTeamBtn) {
     var hasTeam = !!judgeTeamText(code);
-    calTeamBtn.style.display = canCal && !isKcrMenu ? 'block' : 'none';
-    calTeamBtn.disabled = canCal && !hasTeam && !isIkrcMenu;
-    calTeamBtn.textContent = isIkrcMenu
-      ? ('스테이션별 켈리브레이션' + (ikrcAssignedStation_(_selComp) ? (' · ' + ikrcAssignedStation_(_selComp).label) : ''))
-      : (hasTeam ? ('팀별 켈리브레이션 시작 · ' + judgeTeamText(code)) : '팀별 켈리브레이션 시작 · 팀 미지정');
+    calTeamBtn.style.display = canCal && !isKcrMenu && !isIkrcMenu ? 'block' : 'none';
+    calTeamBtn.disabled = canCal && !hasTeam;
+    calTeamBtn.textContent = hasTeam ? ('팀별 켈리브레이션 시작 · ' + judgeTeamText(code)) : '팀별 켈리브레이션 시작 · 팀 미지정';
   }
   if (calBtn) {
     var canSeeResults = _selComp && ((resultCode === 'MOB' && isHeadRoleForCode_(code)) || (resultCode === 'IKRC' && (isHeadRoleForCode_(code) || isTeamLeaderForCode_(code) || isAdminRole())));
     calBtn.style.display = canSeeResults ? 'block' : 'none';
-    calBtn.textContent = '켈리브레이션 결과 확인';
+    calBtn.textContent = isIkrcMenu ? '켈리브레이션 확인' : '켈리브레이션 결과 확인';
   }
   if (reviewBtn) {
     reviewBtn.style.display = (_selComp && canReviewCode_(code) && !isKcrMenu) ? 'block' : 'none';
-    reviewBtn.textContent = isKcrMenu ? '대회검수' : (isIkrcMenu && isHeadRoleForCode_(code) && !isTeamLeaderForCode_(code) && !isAdminRole()
-      ? '대회평가 스테이션 확인'
+    reviewBtn.textContent = isKcrMenu ? '대회검수' : (isIkrcMenu && !isTeamLeaderForCode_(code) && !isAdminRole()
+      ? '내 제출 검수'
       : ((isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내 제출 검수'));
   }
   document.querySelectorAll('[data-kcr-select-actions]').forEach(function(wrap){
@@ -5171,8 +5176,8 @@ function loadTeamPanel() {
               '<div class="review-edit-help" style="margin:10px 0">이 대회에서는 ' + escHtml(roleTextForCode_(cardCode) || '심사위원') + ' 권한으로 표시됩니다. 다른 대회의 팀장 권한과 섞이지 않고 해당 심사 기능만 실행합니다.</div>' +
               '<div class="admin-comp-actions team-actions">' +
                 '<button class="primary" data-act="judge-eval">대회평가 시작</button>' +
-                '<button data-act="judge-review">' + (cardCode === 'IKRC' && cardHead ? '대회평가 스테이션 확인' : '내 제출 검수') + '</button>' +
-                (cardHead && (cardCode === 'MOB' || cardCode === 'IKRC') ? '<button data-act="judge-cal-result">켈리브레이션 결과 확인</button>' : '') +
+                '<button data-act="judge-review">내 제출 검수</button>' +
+                (cardHead && (cardCode === 'MOB' || cardCode === 'IKRC') ? '<button data-act="judge-cal-result">' + (cardCode === 'IKRC' ? '켈리브레이션 확인' : '켈리브레이션 결과 확인') + '</button>' : '') +
               '</div>';
             judgeCard.querySelector('[data-act="judge-eval"]').onclick = (function(cfg){ return function(){ _selComp = cfg; goEval(); }; })(c);
             judgeCard.querySelector('[data-act="judge-review"]').onclick = (function(cfg){ return function(){ _selComp = cfg; goReview(); }; })(c);
@@ -5185,7 +5190,7 @@ function loadTeamPanel() {
           var blindButton = '';
           var teamLeadHeadButtons = cardCode === 'MOB'
             ? '<button data-act="mob-sens-cal">센서리 헤드 편차 확인</button><button data-act="mob-tech-cal">테크니컬 헤드 편차 확인</button>'
-            : (cardCode === 'IKRC' ? '<button data-act="ikrc-cal-result">켈리브레이션 결과 확인</button><button data-act="ikrc-official-result">대회평가 스테이션 확인</button>' : '');
+            : (cardCode === 'IKRC' ? '<button data-act="ikrc-cal-result">켈리브레이션 확인</button>' : '');
           var kcrCalibrationButtons = String(c.code || '').toUpperCase() === 'KCR'
             ? '<button data-act="kcr-cal-station">켈리브레이션(스테이션)</button><button data-act="kcr-cal-all">켈리브레이션(전체)</button>'
             : '';
@@ -5254,8 +5259,6 @@ function loadTeamPanel() {
           if (mobTechCalBtn) mobTechCalBtn.onclick = (function(cfg){ return function(){ adminOpenMobCalibration_(cfg, 'technical'); }; })(c);
           var ikrcCalResultBtn = div.querySelector('[data-act="ikrc-cal-result"]');
           if (ikrcCalResultBtn) ikrcCalResultBtn.onclick = (function(cfg){ return function(){ _selComp = cfg; goCalibrationResults(); }; })(c);
-          var ikrcOfficialResultBtn = div.querySelector('[data-act="ikrc-official-result"]');
-          if (ikrcOfficialResultBtn) ikrcOfficialResultBtn.onclick = (function(cfg){ return function(){ _selComp = cfg; goIkrcOfficialStationResults_(); }; })(c);
           var kcrStationCalBtn = div.querySelector('[data-act="kcr-cal-station"]');
           if (kcrStationCalBtn) kcrStationCalBtn.onclick = (function(cfg){ return function(){ managementOpenKcrCalibration_(cfg, 'station'); }; })(c);
           var kcrAllCalBtn = div.querySelector('[data-act="kcr-cal-all"]');
@@ -5379,10 +5382,6 @@ function backToSelect() {
 function goReview() {
   if (!_selComp) { toast('먼저 대회를 선택해주세요', true); return; }
   if (!canReviewCode_(_selComp.code)) { toast('이 대회 검수 권한이 없습니다.', true); return; }
-  if (String(_selComp.code || '').toUpperCase() === 'IKRC' && isHeadRoleForCode_('IKRC') && !isAdminRole() && !isTeamLeaderForCode_('IKRC')) {
-    goIkrcOfficialStationResults_();
-    return;
-  }
   document.getElementById('review-back-btn').onclick = goHomePanel_;
   goReviewByCode(_selComp.code, _selComp.name);
 }
@@ -5392,6 +5391,7 @@ function goCalibration(scope) {
   var code = String(_selComp.code || '').toUpperCase();
   if (!canCalibrationCode_(code)) { toast('이 대회 켈리브레이션 권한이 없습니다.', true); return; }
   if (!assertCanEvaluate(code)) return;
+  if (code === 'IKRC' && scope === 'all') { toast('IKRC 전체 켈리브레이션은 사용하지 않습니다. 스테이션 켈리브레이션만 이용해주세요.', true); return; }
   if (code === 'IKRC' && scope === 'team') scope = 'station';
   if (code === 'KCR' && scope === 'station') scope = 'station';
   else if (code === 'IKRC' && scope === 'station') scope = 'station';
@@ -5416,13 +5416,13 @@ function goCalibrationResults() {
     return;
   }
   if (code === 'IKRC') {
-    _ikrcCalibrationViewMode = 'precalibration';
+    _ikrcCalibrationViewMode = 'official';
     _ikrcCalibrationScope = 'station';
     _ikrcCalibrationAllowedStations = [];
     _ikrcCalibrationStationId = '';
     _ikrcCalibrationScopeReady = false;
     _ikrcCalibrationScopeLoading = false;
-    _ikrcCalibrationCanViewOverall = true;
+    _ikrcCalibrationCanViewOverall = false;
     loadIkrcCalibrationCups();
     return;
   }
@@ -5524,8 +5524,7 @@ function goReviewByCode(code, name, backPanel) {
   _reviewState.stationScopes = [];
   _reviewState.readOnlyHeadMonitor = false;
   _reviewState.backPanel = backPanel || (_judge.role === '관리자' ? 'pAdmin' : (isTeamLeaderRole() ? 'pTeam' : 'pSelect'));
-  var requestedHeadMonitor = String(code || '').toUpperCase() === 'IKRC' && isHeadRoleForCode_('IKRC') && !isAdminRole() && !isTeamLeaderForCode_('IKRC');
-  document.getElementById('review-title').textContent = (name || code) + (requestedHeadMonitor ? ' 스테이션 평가 통계' : ' 검수');
+  document.getElementById('review-title').textContent = (name || code) + ' 검수';
   document.getElementById('review-list').innerHTML = '';
   document.getElementById('review-stat').textContent = '불러오는 중...';
   setReviewLogo_('review-logo', code);
@@ -14336,7 +14335,6 @@ function calcIkrcSampleTotal_(s) {
 }
 
 function showIkrcSetup() {
-  var isHead = isHeadRoleForCode_('IKRC');
   var calibrationMode = isIkrcCalibrationMode_();
   var title = document.getElementById('ikrc-setup-title');
   var sub = document.getElementById('ikrc-setup-sub');
@@ -14349,8 +14347,6 @@ function showIkrcSetup() {
       ? '헤드와 센서리 심사위원 모두 참여할 수 있으며, 제출값은 공식 점수·순위에 반영되지 않습니다.'
       : '대회평가입니다. 각 스테이션의 헤드와 심사위원 평가만 해당 스테이션에 독립 저장되며, 헤드 심사위원 점수도 일반 심사위원과 동일하게 공식 합산에 반영됩니다.';
   }
-  var headActions = document.getElementById('ikrcHeadCalActions');
-  if (headActions) headActions.style.display = (isHead || isTeamLeaderForCode_('IKRC') || isAdminRole()) ? 'block' : 'none';
   _ikrcStation = null;
   renderIkrcStationChoices_();
   showPanel('pIkrcSetup');
@@ -14743,6 +14739,22 @@ var _ikrcCalibrationScopeReady = false;
 var _ikrcCalibrationScopeLoading = false;
 var _ikrcCalibrationCanViewOverall = false;
 function isIkrcOfficialStationView_() { return _ikrcCalibrationViewMode === 'official'; }
+function renderIkrcResultViewMode_() {
+  var officialBtn = document.getElementById('ikrc-result-mode-official');
+  var stationBtn = document.getElementById('ikrc-result-mode-station');
+  if (officialBtn) officialBtn.classList.toggle('active', isIkrcOfficialStationView_());
+  if (stationBtn) stationBtn.classList.toggle('active', !isIkrcOfficialStationView_());
+}
+function setIkrcResultViewMode_(mode) {
+  _ikrcCalibrationViewMode = mode === 'precalibration' ? 'precalibration' : 'official';
+  _ikrcCalibrationScope = 'station';
+  _ikrcCalibrationAllowedStations = [];
+  _ikrcCalibrationStationId = '';
+  _ikrcCalibrationScopeReady = false;
+  _ikrcCalibrationScopeLoading = false;
+  _ikrcCalibrationCanViewOverall = false;
+  loadIkrcCalibrationCups();
+}
 function ikrcCalibrationSelectedStation_() {
   var stations = _ikrcCalibrationAllowedStations || [];
   var selected = stations.filter(function(station){ return station.id === _ikrcCalibrationStationId; })[0] || stations[0] || null;
@@ -14751,28 +14763,23 @@ function ikrcCalibrationSelectedStation_() {
 }
 function ikrcCalibrationRequest_() {
   var station = ikrcCalibrationSelectedStation_();
-  var scope = _ikrcCalibrationScope === 'station' ? 'station' : 'all';
-  return {scope:scope, team:station ? station.label : '', stationId:station ? station.id : ''};
+  return {scope:'station', team:station ? station.label : '', stationId:station ? station.id : ''};
 }
 function ikrcCalibrationScopeLabel_() {
   var req = ikrcCalibrationRequest_();
-  return req.scope === 'station' ? (req.team ? ('스테이션 · ' + req.team) : '스테이션 선택') : '전체 심사위원';
+  return req.team ? ('스테이션 · ' + req.team) : '스테이션 선택';
 }
 function renderIkrcCalibrationScope_() {
   var req = ikrcCalibrationRequest_();
   var stations = _ikrcCalibrationAllowedStations || [];
   var teamBtn = document.getElementById('ikrc-cal-scope-team');
-  var allBtn = document.getElementById('ikrc-cal-scope-all');
   var stationSelect = document.getElementById('ikrc-cal-station-select');
   var note = document.getElementById('ikrc-cal-scope-note');
+  renderIkrcResultViewMode_();
   if (teamBtn) {
     teamBtn.disabled = false;
-    teamBtn.classList.toggle('active', req.scope === 'station');
+    teamBtn.classList.add('active');
     teamBtn.textContent = req.team ? ('스테이션 · ' + req.team) : (_ikrcCalibrationScopeLoading ? '스테이션 불러오는 중' : '스테이션 선택');
-  }
-  if (allBtn) {
-    allBtn.classList.toggle('active', req.scope === 'all');
-    allBtn.style.display = _ikrcCalibrationCanViewOverall ? '' : 'none';
   }
   if (stationSelect) {
     stationSelect.innerHTML = stations.length
@@ -14780,25 +14787,19 @@ function renderIkrcCalibrationScope_() {
       : '<option value="">' + (_ikrcCalibrationScopeLoading ? '스테이션을 불러오는 중입니다' : '확인 가능한 스테이션이 없습니다') + '</option>';
     if (req.stationId) stationSelect.value = req.stationId;
     stationSelect.disabled = _ikrcCalibrationScopeLoading || stations.length <= 1;
-    stationSelect.style.display = req.scope === 'station' ? 'block' : 'none';
+    stationSelect.style.display = 'block';
   }
   if (note) {
-    if (req.scope === 'station' && !stations.length) note.textContent = _ikrcCalibrationScopeLoading
+    if (!stations.length) note.textContent = _ikrcCalibrationScopeLoading
       ? '확인 가능한 스테이션을 불러오고 있습니다.'
       : (isIkrcOfficialStationView_() ? '헤드는 공식 대회평가를 제출했거나 배정된 스테이션을 확인할 수 있습니다.' : '헤드는 참여 또는 배정된 사전 켈리브레이션 스테이션을 확인할 수 있습니다.');
-    else if (isIkrcOfficialStationView_()) note.textContent = req.scope === 'station'
-      ? '공식 대회평가 기준입니다. 센서리 3명의 항목별 점수·코멘트와 표준편차를 표시하며 헤드 개인점수는 표시하지 않습니다.'
-      : '대회팀장·관리자 전용 전체 스테이션 공식평가 현황입니다.';
-    else note.textContent = req.scope === 'station'
-      ? '대회 전 스테이션별 켈리브레이션 데이터만 비교합니다. 검수나 순위에는 연결되지 않습니다.'
-      : '대회 전 전체 켈리브레이션 참여자를 한 그룹으로 비교합니다. 공식 대회평가 점수에는 반영되지 않습니다.';
+    else if (isIkrcOfficialStationView_()) note.textContent = '공식 대회평가 기준입니다. 센서리 3명의 항목별 점수·코멘트와 표준편차를 표시하며 헤드 개인점수는 표시하지 않습니다.';
+    else note.textContent = '대회 전 스테이션 켈리브레이션 데이터만 비교합니다. 검수나 순위에는 연결되지 않습니다.';
   }
 }
 function setIkrcCalibrationScope_(scope) {
-  scope = (scope === 'station' || scope === 'team') ? 'station' : 'all';
-  if (scope === 'all' && !_ikrcCalibrationCanViewOverall) scope = 'station';
-  _ikrcCalibrationScope = scope;
-  if (scope === 'station' && !ikrcCalibrationSelectedStation_()) {
+  _ikrcCalibrationScope = 'station';
+  if (!ikrcCalibrationSelectedStation_()) {
     if (!_ikrcCalibrationScopeReady && !_ikrcCalibrationScopeLoading) loadIkrcCalibrationCups();
     else if (_ikrcCalibrationScopeReady) toast('현재 계정에서 확인 가능한 IKRC 스테이션이 없습니다.', true);
     renderIkrcCalibrationScope_();
@@ -14818,10 +14819,10 @@ function loadIkrcCalibrationCups(scopeReady) {
   var help = document.getElementById('ikrc-cal-list-help');
   var finalizeBtn = document.getElementById('ikrc-official-station-finalize');
   var finalizeStatus = document.getElementById('ikrc-official-station-status');
-  if (title) title.textContent = officialView ? 'IKRC 대회평가 스테이션 확인' : 'IKRC 켈리브레이션 결과';
+  if (title) title.textContent = 'IKRC 켈리브레이션 확인';
   if (help) help.textContent = officialView
-    ? '공식 대회평가를 기준으로 센서리 3명의 점수·코멘트와 평균·표준편차를 확인합니다. 헤드 개인점수는 숨기지만 최종점수에는 포함됩니다.'
-    : '대회 전 전체/스테이션 켈리브레이션 결과입니다. 자체 기준 확인용이며 검수·공식점수·순위에 반영되지 않습니다.';
+    ? '대회평가용 스테이션을 기준으로 센서리 3명의 점수·코멘트와 평균·표준편차를 확인합니다. 헤드 개인점수는 숨기지만 최종점수에는 포함됩니다.'
+    : '켈리브레이션용 스테이션의 결과입니다. 자체 기준 확인용이며 검수·공식점수·순위에 반영되지 않습니다.';
   if (finalizeBtn) finalizeBtn.style.display = officialView && _ikrcCalibrationScope === 'station' ? 'block' : 'none';
   if (finalizeStatus) { finalizeStatus.style.display = officialView ? 'block' : 'none'; finalizeStatus.textContent = officialView ? '센서리 3명 모두 내 제출 검수를 완료한 뒤 헤드가 스테이션 최종확정을 누릅니다.' : ''; }
   var sub = document.getElementById('ikrc-cal-sub');
@@ -14848,11 +14849,10 @@ function loadIkrcCalibrationCups(scopeReady) {
           return;
         }
         _ikrcCalibrationScopeReady = true;
-        _ikrcCalibrationCanViewOverall = !!res.canViewOverall;
-        if (!_ikrcCalibrationCanViewOverall) _ikrcCalibrationScope = 'station';
+        _ikrcCalibrationCanViewOverall = false;
+        _ikrcCalibrationScope = 'station';
         _ikrcCalibrationAllowedStations = Array.isArray(res.stations) ? res.stations : [];
         if (!_ikrcCalibrationAllowedStations.some(function(station){ return station.id === _ikrcCalibrationStationId; })) _ikrcCalibrationStationId = _ikrcCalibrationAllowedStations[0] ? _ikrcCalibrationAllowedStations[0].id : '';
-        if (!_ikrcCalibrationAllowedStations.length && _ikrcCalibrationScope === 'station' && _ikrcCalibrationCanViewOverall) _ikrcCalibrationScope = 'all';
         loadIkrcCalibrationCups(true);
       })
       .withFailureHandler(function(err){ hideOverlay(); _ikrcCalibrationScopeLoading = false; _ikrcCalibrationScopeReady = false; renderIkrcCalibrationScope_(); if (wrap) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">권한 확인 실패</p>'; toast('IKRC 결과 확인 권한 오류: ' + ((err && err.message) || err || ''), true); });

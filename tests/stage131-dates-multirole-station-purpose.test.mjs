@@ -90,6 +90,7 @@ assert.match(functionSource(assessment, "renderIkrcStationChoices_"), /useForCom
 assert.doesNotMatch(assessment, /<div id="pIkrcBlindManager"/);
 assert.match(functionSource(assessment, "loadTeamPanel"), /다른 대회의 팀장 권한과 섞이지 않고/);
 assert.match(functionSource(assessment, "loadTeamPanel"), /mob-sens-cal/);
-assert.match(functionSource(assessment, "loadTeamPanel"), /ikrc-official-result/);
+assert.match(functionSource(assessment, "loadTeamPanel"), /ikrc-cal-result/);
+assert.doesNotMatch(functionSource(assessment, "loadTeamPanel"), /ikrc-official-result/);
 
 process.stdout.write("Stage131 date, multi-role, teamlead-superset, and IKRC station-purpose tests passed.\n");

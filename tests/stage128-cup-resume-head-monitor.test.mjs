@@ -94,13 +94,12 @@ assert.match(mobileTotalRule, /overflow:visible!important/);
 assert.match(mobileTotalRule, /white-space:nowrap!important/);
 assert.doesNotMatch(mobileTotalRule, /max-width:74px|overflow:hidden/);
 
-assert.match(functionSource(assessment, "isIkrcHeadMonitor_"), /readOnlyHeadMonitor/);
-assert.match(functionSource(assessment, "openReviewEdit"), /읽기 전용 화면입니다/);
-assert.match(functionSource(assessment, "renderReview"), /상세보기/);
-assert.match(functionSource(rpc, "getReviewList"), /ikrcHeadOfficialStations_/);
-assert.match(functionSource(rpc, "getReviewList"), /readOnlyHeadMonitor:headMonitor/);
+assert.doesNotMatch(functionSource(assessment, "goReview"), /goIkrcOfficialStationResults_/);
+assert.match(functionSource(assessment, "shouldHideCompletedReviewRows"), /isHeadRoleForCode_\('IKRC'\)/);
+assert.match(functionSource(rpc, "getReviewList"), /ownOnly: !manager/);
+assert.match(functionSource(rpc, "getReviewList"), /readOnlyHeadMonitor:false/);
 assert.match(functionSource(rpc, "ikrcOfficialReviewComparison_"), /comment:\s*score\.comment/);
-assert.match(functionSource(rpc, "updateReviewRow"), /통계 확인 전용/);
-assert.match(functionSource(rpc, "updateReviewStatus"), /통계 확인 전용/);
+assert.doesNotMatch(functionSource(rpc, "updateReviewRow"), /통계 확인 전용/);
+assert.match(functionSource(rpc, "updateReviewStatus"), /제출 즉시 확정/);
 
 process.stdout.write("Stage128 cup resume, mobile total, and IKRC head-monitor tests passed.\n");

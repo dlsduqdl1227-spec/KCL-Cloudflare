@@ -3243,6 +3243,9 @@ async function submitScores(env, payload, signature, request = null) {
       onePayload.role = actorRole;
     }
     const evaluationCategory = scoreEvaluationCategoryKey_(onePayload.mode || onePayload.evalMode || initial.mode);
+    if (safeStr(initial.code).toUpperCase() === 'IKRC' && evaluationCategory === 'calibration:all') {
+      return { success:false, message:'IKRC 전체 켈리브레이션은 운영하지 않습니다. 켈리브레이션용 스테이션을 선택해주세요.' };
+    }
     const stationTeam = ['KCR','IKRC'].includes(initial.code) ? safeStr(onePayload.stationLabel || basePayload.stationLabel) : '';
     const securedTeam = evaluationCategory === 'calibration:all' ? '전체 켈리브레이션팀' : (stationTeam || actorTeam);
     if (securedTeam) {
@@ -3333,8 +3336,8 @@ async function submitScores(env, payload, signature, request = null) {
         .bind(x.code, x.round, x.judgeName, x.unit, payloadJson, duplicateCutoff).first();
       if (dup && dup.id) { skipped++; continue; }
     }
-    // IKRC 헤드는 별도 '내 제출 검수' 단계 없이 담당 스테이션 결과를 확인하고 최종확정합니다.
-    // 공식 대회평가의 헤드 점수는 제출 즉시 확정하며 센서리 3명의 검수완료 후 4인 평균에 포함합니다.
+    // IKRC 헤드 공식점수는 제출 즉시 반영 대상이지만, '내 제출 검수'에서 본인 점수·코멘트는 다시 확인하고 수정할 수 있습니다.
+    // 스테이션 최종확정 조건은 센서리 3명의 검수완료이며 최종점수는 헤드 1명과 센서리 3명의 평균입니다.
     const ikrcOfficialHead = x.code === 'IKRC' && !isCalibrationMode_(x.mode) && isHeadRole_(x.role);
     const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (ikrcOfficialHead ? '검수완료' : '미검수');
     const insertStatement = env.DB.prepare(`INSERT INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
@@ -3376,15 +3379,12 @@ async function getReviewList(env, competitionCode, actorArg) {
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC').bind(code).all();
   const rawAll = rowsRaw.results || [];
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
-  const headMonitor = code === 'IKRC' && !manager && actorReviewRoleCategory_(auth.actor, code) === 'head';
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
-  const headStations = headMonitor ? ikrcHeadOfficialStations_(rawAll, auth.actor, ikrcStationsForPurposeServer_(cfg, cfg && cfg.current_round, 'competition'), safeStr(cfg && cfg.current_round)) : [];
-  const headRows = headMonitor ? rawAll.filter(row => headStations.some(station => ikrcScoreBelongsToStationServer_(row, station))) : [];
-  const raw = manager ? managerRows : (headMonitor ? headRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
+  const raw = manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false));
   const headers = mergeHeaders(code, raw);
   let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
-  if ((manager || headMonitor) && list.length) {
+  if (manager && list.length) {
     const pRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
     const pIdx = indexParticipantIdentities_(pRows.results || [], code);
     list = list.map(item => enrichReviewItemWithParticipant_(item, lookupParticipantIdentity_(pIdx, item.round || item['라운드'] || (cfg && cfg.current_round), itemNumber_(item) || item.unit), code));
@@ -3402,7 +3402,7 @@ async function getReviewList(env, competitionCode, actorArg) {
       return item;
     });
     supersededCount = latest.supersededCount;
-    const canCompareOfficialScores = manager || actorReviewRoleCategory_(auth.actor, code) === 'head';
+    const canCompareOfficialScores = manager;
     if (canCompareOfficialScores && list.length) {
       const allHeaders = mergeHeaders(code, rawAll);
       const allOfficialItems = rawAll
@@ -3418,11 +3418,11 @@ async function getReviewList(env, competitionCode, actorArg) {
     success: true,
     list,
     headers,
-    ownOnly: !manager && !headMonitor,
-    readOnlyHeadMonitor:headMonitor,
+    ownOnly: !manager,
+    readOnlyHeadMonitor:false,
     supersededCount,
-    stationScope:managerStation ? {id:managerStation.id, label:managerStation.label, prefix:managerStation.prefix} : (headStations.length === 1 ? {id:headStations[0].id, label:headStations[0].label, prefix:headStations[0].prefix} : null),
-    stationScopes:(managerStation ? [managerStation] : headStations).map(station => ({id:station.id, label:station.label, prefix:station.prefix}))
+    stationScope:managerStation ? {id:managerStation.id, label:managerStation.label, prefix:managerStation.prefix} : null,
+    stationScopes:(managerStation ? [managerStation] : []).map(station => ({id:station.id, label:station.label, prefix:station.prefix}))
   };
 }
 
@@ -3432,9 +3432,6 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   if (!auth.ok) return auth.res;
   const actor = auth.actor;
   const manager = reviewManageAllowed_(actor, code, actorArg);
-  if (code === 'IKRC' && !manager && actorReviewRoleCategory_(actor, code) === 'head') {
-    return { success:false, message:'IKRC 헤드 심사위원 화면은 스테이션 통계 확인 전용입니다. 평가값과 검수 상태는 변경되지 않습니다.' };
-  }
   const ref = parseReviewRowRef_(rowIndex);
   const id = ref.id; if (!id) return { success: false, message: '수정할 행 번호가 없습니다.' };
   const payloadRowIndex = Math.max(0, Number(ref.payloadRowIndex) || 0);
@@ -3882,7 +3879,7 @@ async function getIkrcCalibrationScopeOptions(env, actorArg) {
   return {
     success:true,
     currentRound,
-    canViewOverall:true,
+    canViewOverall:false,
     canManageAll,
     stations:allowed.map(station => ({ id:station.id, label:station.label, prefix:station.prefix, start:station.start, end:station.end }))
   };
@@ -3939,6 +3936,7 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
   let scope = ikrcCalibrationScope_(requestedScope, auth.actor, stations);
   const allowedStations = canManageAll ? stations : ikrcHeadCalibrationStations_(rawRows.results || [], auth.actor, stations, currentRound);
+  if (scope.scope !== 'station') scope = ikrcCalibrationScope_({scope:'station', stationId:allowedStations[0] && allowedStations[0].id}, auth.actor, stations);
   if (scope.scope === 'station') {
     const requestedStation = scope.station || (!safeStr(requestedScope && requestedScope.stationId) ? allowedStations[0] : null);
     if (!requestedStation || !allowedStations.some(station => safeStr(station.id) === safeStr(requestedStation.id))) {
@@ -4056,8 +4054,8 @@ async function ikrcOfficialCalibrationRows_(env, requestedScope, actorArg) {
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
   const allowedStations = canManageAll ? stations : ikrcHeadOfficialStations_(rawRows.results || [], auth.actor, stations, currentRound);
   let scope = ikrcCalibrationScope_(requestedScope, auth.actor, stations);
-  // 헤드에게는 본인이 배정·평가한 한 스테이션만 제공한다. 전체 범위는 대회팀장/관리자 전용이다.
-  if (!canManageAll && scope.scope === 'all') scope = ikrcCalibrationScope_({scope:'station', stationId:allowedStations[0] && allowedStations[0].id}, auth.actor, stations);
+  // 전체 켈리브레이션은 사용하지 않는다. 헤드·대회팀장·관리자 모두 선택한 스테이션 단위로 확인한다.
+  if (scope.scope !== 'station') scope = ikrcCalibrationScope_({scope:'station', stationId:allowedStations[0] && allowedStations[0].id}, auth.actor, stations);
   if (scope.scope === 'station') {
     const requestedStation = scope.station || (!safeStr(requestedScope && requestedScope.stationId) ? allowedStations[0] : null);
     if (!requestedStation || !allowedStations.some(station => safeStr(station.id) === safeStr(requestedStation.id))) {
@@ -4083,7 +4081,7 @@ async function getIkrcOfficialCalibrationScopeOptions(env, actorArg) {
   return {
     success:true,
     currentRound:data.currentRound,
-    canViewOverall:!!data.canManageAll,
+    canViewOverall:false,
     canManageAll:!!data.canManageAll,
     stations:data.allowedStations.map(station => ({ id:station.id, label:station.label, prefix:station.prefix, start:station.start, end:station.end }))
   };

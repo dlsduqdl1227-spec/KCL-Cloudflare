@@ -452,9 +452,10 @@ assert.deepEqual(
   "IKRC 공식 점수는 계정의 가변 팀명이 아니라 선택한 스테이션으로 분리 저장되어야 합니다",
 );
 
+const removedOverallCalibration = await rpc("submitScores", ikrcCalibrationPayload(head, station2, "all"));
+assert.equal(removedOverallCalibration.success, false, "IKRC 전체 켈리브레이션 제출은 서버에서도 차단되어야 합니다");
+
 for (const [login, stationInfo, scope] of [
-  [judge, station1, "all"], [judgeZ, station2, "all"], [judge2, station3, "all"],
-  [head, station2, "all"], [head2, station2, "all"],
   [judge, station1, "team"], [judgeZ, station2, "team"], [judge2, station3, "team"],
   [head, station2, "team"], [head2, station2, "team"],
 ]) {
@@ -463,12 +464,12 @@ for (const [login, stationInfo, scope] of [
 }
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  72,
+  50,
 );
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC' AND mode LIKE '%전체 켈리브레이션%' AND team='전체 켈리브레이션팀'").get().n,
-  22,
-  "Overall calibration must merge every original team into one calibration team",
+  0,
+  "IKRC 전체 켈리브레이션 데이터는 새로 저장되지 않아야 합니다",
 );
 
 // 팀별 켈리브레이션은 운영계정의 고정 스테이션이 아니라 실제 현장 선택으로 임시 팀을 구성합니다.
@@ -477,6 +478,7 @@ const adHocHeadCalibration = await rpc("submitScores", ikrcCalibrationPayload(he
 assert.equal(adHocHeadCalibration.success, true, adHocHeadCalibration.message);
 const headScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: head.judgeToken });
 assert.equal(headScopeOptions.success, true, headScopeOptions.message);
+assert.equal(headScopeOptions.canViewOverall, false);
 assert.deepEqual(headScopeOptions.stations.map((item) => item.id).sort(), ["station1", "station2"]);
 const head2ScopeOptions = await rpc("getIkrcCalibrationScopeOptions", { judgeToken: head2.judgeToken });
 assert.deepEqual(head2ScopeOptions.stations.map((item) => item.id), ["station2"]);
@@ -668,22 +670,13 @@ const headOwnReview = await rpc("getReviewList", "IKRC", {
   manageReview: false,
 });
 assert.equal(headOwnReview.success, true);
-assert.equal(headOwnReview.ownOnly, false);
-assert.equal(headOwnReview.readOnlyHeadMonitor, true);
-assert.equal(headOwnReview.stationScope.label, "스테이션 2");
-assert.equal(headOwnReview.list.length, 24, "The IKRC head must see every official score from the assigned station");
+assert.equal(headOwnReview.ownOnly, true);
+assert.equal(headOwnReview.readOnlyHeadMonitor, false);
+assert.equal(headOwnReview.stationScope, null);
+assert.equal(headOwnReview.list.length, 6, "IKRC 헤드의 내 제출 검수에는 본인 공식 평가만 보여야 합니다");
 const headZ1BeforeEdit = headOwnReview.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 헤드");
-assert.ok(headZ1BeforeEdit, "The head's official Z-1 score must be visible in station statistics");
-assert.equal(headZ1BeforeEdit._stddev.judgeCount, 4, "Head review must compare the head and three same-station sensory judges");
-assert.deepEqual(
-  headZ1BeforeEdit._stddev.judges.map((item) => item.judgeName).sort(),
-  ["QA 센서리Z", "QA 센서리Z2", "QA 센서리Z3", "QA 헤드"],
-  "The official review comparison must expose same-station judge scores to the head",
-);
-assert.equal(headZ1BeforeEdit._stddev.judges.filter((item) => item.isCurrentJudge).length, 1);
-assert.equal(headZ1BeforeEdit._stddev.totalAvg, 20);
-assert.equal(headZ1BeforeEdit._stddev.totalStddev, 0);
-assert.ok(headZ1BeforeEdit._stddev.judges.every((item) => Object.hasOwn(item, "comment")), "Station statistics must expose each judge comment field");
+assert.ok(headZ1BeforeEdit, "헤드의 공식 Z-1 제출은 내 제출 검수에서 확인되어야 합니다");
+assert.equal(headZ1BeforeEdit._stddev, undefined, "스테이션 통계는 내 제출 검수가 아니라 켈리브레이션 확인 화면에서만 제공합니다");
 
 const flavorColumn = headOwnReview.headers.indexOf("Flavor(플레이버) ×3");
 assert.ok(flavorColumn >= 0);
@@ -691,21 +684,19 @@ const headScoreEdit = await rpc(
   "updateReviewRow",
   "IKRC",
   headZ1BeforeEdit.rowIndex,
-  { [flavorColumn]: 4 },
+  { [flavorColumn]: 2 },
   "수정완료",
   "센서리 헤드 심사위원",
   { judgeToken: head.judgeToken, reviewScope: "own", manageReview: false },
 );
-assert.equal(headScoreEdit.success, false, "The IKRC head station-statistics screen must be read-only, including the head's own submitted score");
+assert.equal(headScoreEdit.success, true, "IKRC 헤드는 내 제출 검수에서 본인 점수·코멘트를 수정할 수 있어야 합니다");
 const headOwnReviewAfterEdit = await rpc("getReviewList", "IKRC", {
   judgeToken: head.judgeToken,
   reviewScope: "own",
   manageReview: false,
 });
 const headZ1AfterEdit = headOwnReviewAfterEdit.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 헤드");
-assert.equal(headZ1AfterEdit.totalScore, 20, "Read-only head statistics must not mutate the official score");
-assert.equal(headZ1AfterEdit._stddev.totalAvg, 20);
-assert.equal(headZ1AfterEdit._stddev.totalStddev, 0);
+assert.equal(headZ1AfterEdit.totalScore, 20, "같은 점수를 저장하면 공식 총점이 유지되어야 합니다");
 
 const sensoryZ1 = reviewLists.IKRC.list.find((item) => item.unit === "Z-1" && item.judgeName === "QA 센서리Z");
 assert.ok(sensoryZ1);
@@ -720,19 +711,18 @@ const forbiddenPeerEdit = await rpc(
 );
 assert.equal(forbiddenPeerEdit.success, false, "The head may compare peer scores but must not edit another judge's submission");
 
-const allScope = { scope: "all", team: "스테이션 2" };
 const teamScope = { scope: "station", team: "스테이션 2" };
 const otherTeamScope = { scope: "station", team: "스테이션 2" };
-const calibrationBeforeCheck = await rpc("getIkrcCalibrationCupNumbers", allScope, {
+const calibrationBeforeCheck = await rpc("getIkrcCalibrationCupNumbers", teamScope, {
   judgeToken: head.judgeToken,
 });
-assert.equal(calibrationBeforeCheck.length, 10);
+assert.equal(calibrationBeforeCheck.length, 6);
 const z1Before = calibrationBeforeCheck.find((item) => item.sampleNo === "Z-1");
 assert.equal(z1Before.judgeCount, 1);
 assert.equal(z1Before.headCount, 2);
 assert.equal(z1Before.checked, false);
 
-const calibrationDetail = await rpc("getIkrcCalibrationResultsByCup", "Z-1", allScope, {
+const calibrationDetail = await rpc("getIkrcCalibrationResultsByCup", "Z-1", teamScope, {
   judgeToken: head.judgeToken,
 });
 assert.equal(calibrationDetail.length, 3);
@@ -747,24 +737,18 @@ assert.ok(otherTeamCalibration.every((item) => String(item.sampleNo).startsWith(
 const checked = await rpc(
   "markIkrcCalibrationChecked",
   "Z-1",
-  allScope,
+  teamScope,
   "QA 헤드",
   "센서리 헤드 심사위원",
   { judgeToken: head.judgeToken },
 );
 assert.equal(checked.success, true, checked.message);
-const calibrationAfterCheck = await rpc("getIkrcCalibrationCupNumbers", allScope, {
+const calibrationAfterCheck = await rpc("getIkrcCalibrationCupNumbers", teamScope, {
   judgeToken: head.judgeToken,
 });
 assert.equal(calibrationAfterCheck.find((item) => item.sampleNo === "Z-1").checked, true);
-const head2AfterHead1Check = await rpc("getIkrcCalibrationCupNumbers", allScope, { judgeToken: head2.judgeToken });
-assert.equal(head2AfterHead1Check.find((item) => item.sampleNo === "Z-1").checked, false, "Each head must have an independent overall-calibration check state");
-const head1TeamBeforeCheck = await rpc("getIkrcCalibrationCupNumbers", teamScope, { judgeToken: head.judgeToken });
-assert.equal(head1TeamBeforeCheck.find((item) => item.sampleNo === "Z-1").checked, false, "Team and overall calibration states must be independent");
-const checkedTeam = await rpc("markIkrcCalibrationChecked", "Z-1", teamScope, "QA 헤드", "센서리 헤드 심사위원", { judgeToken: head.judgeToken });
-assert.equal(checkedTeam.success, true, checkedTeam.message);
-const head1TeamAfterCheck = await rpc("getIkrcCalibrationCupNumbers", teamScope, { judgeToken: head.judgeToken });
-assert.equal(head1TeamAfterCheck.find((item) => item.sampleNo === "Z-1").checked, true);
+const head2AfterHead1Check = await rpc("getIkrcCalibrationCupNumbers", teamScope, { judgeToken: head2.judgeToken });
+assert.equal(head2AfterHead1Check.find((item) => item.sampleNo === "Z-1").checked, false, "각 헤드의 스테이션 켈리브레이션 확인 상태는 독립적이어야 합니다");
 
 for (const [code, review] of Object.entries(reviewLists)) {
   const statusUpdate = await rpc(
@@ -816,8 +800,8 @@ assert.ok(rankingAfterRefinal.ranking.some((item) => item.unit === "Z-1"));
 
 const backupBeforeDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
 assert.equal(backupBeforeDelete.success, true, backupBeforeDelete.message);
-assert.equal(backupBeforeDelete.rows.length, 74);
-assert.equal(backupBeforeDelete.calibrationRows.length, 46);
+assert.equal(backupBeforeDelete.rows.length, 52);
+assert.equal(backupBeforeDelete.calibrationRows.length, 24);
 assert.equal(backupBeforeDelete.competitionRows.length, 28);
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station1"));
 assert.ok(backupBeforeDelete.rows.some((row) => row["스테이션ID"] === "station3"));
@@ -832,10 +816,10 @@ const removeStations = await rpc(
 );
 assert.equal(removeStations.success, true, removeStations.message);
 assert.equal(removeStations.stationChanged, true);
-assert.equal(removeStations.preservedScoreCount, 74);
+assert.equal(removeStations.preservedScoreCount, 52);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  74,
+  52,
 );
 
 const configAfterDelete = await rpc("getConfig");
@@ -850,7 +834,7 @@ const oldStationSubmit = await rpc("submitScores", ikrcPayload(judge, station1))
 assert.equal(oldStationSubmit.success, false);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  74,
+  52,
 );
 
 const reviewAfterStationDelete = await rpc("getReviewList", "IKRC", adminActor);
@@ -878,11 +862,11 @@ const adminDelete = await rpc(
 assert.equal(adminDelete.success, true, adminDelete.message);
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='IKRC'").get().n,
-  73,
+  51,
 );
 
 const backupAfterDelete = await rpc("getScoreBackupReport", "IKRC", adminActor);
-assert.equal(backupAfterDelete.rows.length, 73);
+assert.equal(backupAfterDelete.rows.length, 51);
 assert.ok(backupAfterDelete.rows.some((row) => row["스테이션ID"] === "station3"));
 
 const storedPayloads = testDb.raw
