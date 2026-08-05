@@ -43,9 +43,10 @@ assert.match(functionBody(rpc, "getLoginSecurityStatus"), /hasAdmin\(actor\)/);
 assert.match(functionBody(rpc, "setLoginSecurityCode"), /hasAdmin\(actor\)/);
 assert.match(functionBody(rpc, "deleteLoginSecurityCode"), /hasAdmin\(actor\)/);
 const deriveBody = functionBody(rpc, "deriveLoginSecurityHash_");
-assert.match(deriveBody, /PBKDF2/);
+assert.match(deriveBody, /HMAC/);
 assert.match(deriveBody, /SHA-256/);
-assert.match(deriveBody, /100000/);
+assert.match(deriveBody, /KCL_LOGIN_SECURITY_PEPPER/);
+assert.match(deriveBody, /crypto\.subtle\.sign/);
 assert.match(rpc, /crypto\.getRandomValues\(salt\)/);
 assert.match(migration, /CREATE TABLE IF NOT EXISTS system_settings/);
 

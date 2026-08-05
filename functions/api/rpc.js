@@ -18,7 +18,7 @@ const COMPETITION_ROUNDS = {
   KCAC: ['예선','결선']
 };
 const LOGIN_SECURITY_SETTING_KEY = 'assessment_login_security_code';
-const LOGIN_SECURITY_PBKDF2_ITERATIONS = 120000;
+const LOGIN_SECURITY_HMAC_ALGORITHM = 'HMAC-SHA256';
 
 let __schemaReadyPromise = null;
 let __defaultDataReadyPromise = null;
@@ -653,32 +653,28 @@ async function adminLogin(env, adminId, password, secretCode, request = null) {
 function loginSecurityCodeValid_(code) {
   return /^\d{4,8}$/.test(safeStr(code));
 }
-function hexBytes_(hex) {
-  const value = safeStr(hex).toLowerCase();
-  if (!value || value.length % 2 || !/^[0-9a-f]+$/.test(value)) return new Uint8Array();
-  const out = new Uint8Array(value.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(value.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
 function bytesHex_(value) {
   return Array.from(value instanceof Uint8Array ? value : new Uint8Array(value || [])).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-async function deriveLoginSecurityHash_(code, saltHex, iterations = LOGIN_SECURITY_PBKDF2_ITERATIONS) {
+async function deriveLoginSecurityHash_(env, code, saltHex) {
+  const pepper = safeStr(env && env.KCL_LOGIN_SECURITY_PEPPER);
+  if (!pepper) throw new Error('LOGIN_SECURITY_PEPPER_NOT_CONFIGURED');
   const enc = new TextEncoder();
-  const material = await crypto.subtle.importKey('raw', enc.encode(safeStr(code)), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({
-    name:'PBKDF2',
-    hash:'SHA-256',
-    salt:hexBytes_(saltHex),
-    iterations:Math.max(100000, Number(iterations || LOGIN_SECURITY_PBKDF2_ITERATIONS))
-  }, material, 256);
-  return bytesHex_(bits);
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(pepper),
+    { name:'HMAC', hash:'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, enc.encode(safeStr(saltHex) + ':' + safeStr(code)));
+  return bytesHex_(signature);
 }
 async function loginSecuritySetting_(env) {
   const row = await env.DB.prepare('SELECT setting_value, updated_at, updated_by FROM system_settings WHERE setting_key=?').bind(LOGIN_SECURITY_SETTING_KEY).first();
   if (!row) return { enabled:false, valid:true, updatedAt:'', updatedBy:'' };
   const record = parseJson(row.setting_value, {});
-  const valid = !!(record && record.salt && record.hash && Number(record.iterations || 0) >= 100000);
+  const valid = !!(record && record.algorithm === LOGIN_SECURITY_HMAC_ALGORITHM && record.salt && record.hash);
   return { enabled:true, valid, record, updatedAt:safeStr(row.updated_at), updatedBy:safeStr(row.updated_by) };
 }
 async function verifyLoginSecurityCode_(env, code) {
@@ -688,7 +684,8 @@ async function verifyLoginSecurityCode_(env, code) {
   const entered = safeStr(code);
   if (!entered) return { success:false, required:true, message:'보안번호를 입력해주세요.' };
   if (!loginSecurityCodeValid_(entered)) return { success:false, required:true, message:'보안번호가 올바르지 않습니다.' };
-  const derived = await deriveLoginSecurityHash_(entered, setting.record.salt, setting.record.iterations);
+  if (!safeStr(env && env.KCL_LOGIN_SECURITY_PEPPER)) return { success:false, required:true, message:'로그인 보안 설정이 준비되지 않았습니다. 관리자에게 문의해주세요.' };
+  const derived = await deriveLoginSecurityHash_(env, entered, setting.record.salt);
   if (!timingSafeEqual_(derived, setting.record.hash)) return { success:false, required:true, message:'보안번호가 올바르지 않습니다.' };
   return { success:true, required:true };
 }
@@ -716,14 +713,15 @@ async function setLoginSecurityCode(env, payload, actorArg) {
   const confirmCode = safeStr(payload && payload.confirmCode);
   if (!loginSecurityCodeValid_(code)) return { success:false, message:'보안번호는 숫자 4~8자리로 입력해주세요.' };
   if (code !== confirmCode) return { success:false, message:'보안번호 확인값이 일치하지 않습니다.' };
+  if (!safeStr(env && env.KCL_LOGIN_SECURITY_PEPPER)) return { success:false, message:'로그인 보안 설정이 준비되지 않았습니다. 관리자에게 문의해주세요.' };
   const previous = await loginSecuritySetting_(env);
   const salt = new Uint8Array(16);
   crypto.getRandomValues(salt);
   const saltHex = bytesHex_(salt);
-  const hash = await deriveLoginSecurityHash_(code, saltHex, LOGIN_SECURITY_PBKDF2_ITERATIONS);
+  const hash = await deriveLoginSecurityHash_(env, code, saltHex);
   const actorName = safeStr(actor.name || actor.judgeName || '관리자');
   const savedAt = nowIso();
-  const record = JSON.stringify({ version:1, algorithm:'PBKDF2-SHA256', iterations:LOGIN_SECURITY_PBKDF2_ITERATIONS, salt:saltHex, hash });
+  const record = JSON.stringify({ version:2, algorithm:LOGIN_SECURITY_HMAC_ALGORITHM, salt:saltHex, hash });
   await env.DB.prepare('INSERT OR REPLACE INTO system_settings (setting_key, setting_value, updated_at, updated_by) VALUES (?, ?, ?, ?)')
     .bind(LOGIN_SECURITY_SETTING_KEY, record, savedAt, actorName).run();
   await logSecurityEvent_(env, previous.enabled ? 'LOGIN_SECURITY_CODE_CHANGED' : 'LOGIN_SECURITY_CODE_CREATED', actorName, 'assessment-login', 'SUCCESS', previous.enabled ? '로그인 보안번호 변경' : '로그인 보안번호 생성');

@@ -66,6 +66,7 @@ const env = {
   KCL_ADMIN_PHONE: "01099990000",
   KCL_ADMIN_PASSWORD: "qa-password",
   KCL_ADMIN_SECRET_CODE: "5061",
+  KCL_LOGIN_SECURITY_PEPPER: "qa-login-security-pepper",
 };
 
 let requestNumber = 0;
