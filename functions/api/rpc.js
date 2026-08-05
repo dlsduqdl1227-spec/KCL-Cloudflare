@@ -1738,6 +1738,8 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const assignments = sortParticipantRowsForCompetition_(rows.results || [], code).map(r => {
     const extra = parseJson(r.extra_json, {});
     const competitionDate = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date || extra['예선일'] || extra['날짜']);
+    const operatingDay = safeStr(extra['\uC6B4\uC601\uC77C\uCC28'] || extra.operatingDay || extra.scheduleDay);
+    const scheduleLabel = competitionDate || operatingDay;
     const number = participantRoundNumber_(r, code, currentRound);
     const rawName = code === 'KTCC' ? (r.team_name || r.name || '') : (r.name || '');
     const displayName = hideIdentity ? '' : rawName;
@@ -1763,7 +1765,8 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       roundCupNo: number || '',
       sampleNo: r.sample_no || '',
       competitionDate,
-      display: (code === 'MOB' && competitionDate ? (competitionDate + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? ' · ' + displayAff : '') + (hideIdentity ? ' · 블라인드' : '')
+      operatingDay,
+      display: (scheduleLabel ? (scheduleLabel + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? ' · ' + displayAff : '') + (hideIdentity ? ' · 블라인드' : '')
     };
     if (code === 'IKRC' && hideIdentity) {
       return {
