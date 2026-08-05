@@ -87,7 +87,7 @@ assert.match(assessment, /data-field="useForCalibration"/);
 assert.match(assessment, /data-field="useForCompetition"/);
 assert.match(functionSource(assessment, "renderIkrcStationChoices_"), /useForCalibration/);
 assert.match(functionSource(assessment, "renderIkrcStationChoices_"), /useForCompetition/);
-assert.doesNotMatch(assessment, /<div id="pIkrcBlindManager"/);
+assert.match(assessment, /<div id="pIkrcBlindManager"/);
 assert.match(functionSource(assessment, "loadTeamPanel"), /roleTextForCode_\(cardCode\)/);
 assert.match(functionSource(assessment, "loadTeamPanel"), /전용 메뉴입니다/);
 assert.match(functionSource(assessment, "loadTeamPanel"), /mob-sens-cal/);

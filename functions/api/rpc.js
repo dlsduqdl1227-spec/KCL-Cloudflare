@@ -1811,6 +1811,12 @@ function indexParticipantIdentities_(participantRows, code) {
     rounds.forEach(round => put(round, participantRoundNumber_(r, code, round), identity));
     [r.unique_no, r.cup_no, r.sample_no, r.team_no, r.prelim_cup_no, r.main_cup_no, r.final_cup_no, r.name, r.team_name].forEach(v => put('', v, identity));
     const extra = parseJson(r.extra_json, {});
+    if (code === 'IKRC') {
+      const blindAssignments = extra && extra.ikrcBlindAssignments;
+      if (blindAssignments && typeof blindAssignments === 'object' && !Array.isArray(blindAssignments)) {
+        Object.keys(blindAssignments).forEach(round => put(normalizeRoundForCompetition_('IKRC', round), blindAssignments[round], identity));
+      }
+    }
     Object.keys(extra || {}).forEach(k => {
       if (/번호|No|no|팀명|선수명|참가자명/i.test(k)) put('', extra[k], identity);
     });
@@ -1933,6 +1939,20 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
 function ikrcAssignmentFieldForRound_(round) {
   return ikrcStationRoundKeyServer_(round) === '결선' ? 'final_cup_no' : 'prelim_cup_no';
 }
+function ikrcBlindAssignmentsFromRow_(row) {
+  const extra = parseJson(row && row.extra_json, {});
+  const stored = extra && extra.ikrcBlindAssignments;
+  return stored && typeof stored === 'object' && !Array.isArray(stored) ? Object.assign({}, stored) : {};
+}
+function ikrcBlindUnitFromRow_(row, round, allowed) {
+  const normalizedRound = normalizeRoundForCompetition_('IKRC', round || '예선');
+  const map = ikrcBlindAssignmentsFromRow_(row);
+  const stored = safeStr(map[normalizedRound]).toUpperCase().replace(/\s+/g, '');
+  if (Object.prototype.hasOwnProperty.call(map, normalizedRound)) return stored && (!allowed || allowed.has(stored)) ? stored : '';
+  const legacyField = ikrcAssignmentFieldForRound_(normalizedRound);
+  const legacy = safeStr(row && row[legacyField]).toUpperCase().replace(/\s+/g, '');
+  return legacy && (!allowed || allowed.has(legacy)) ? legacy : '';
+}
 function ikrcUnitsForStationsServer_(stations) {
   const rows = [];
   (stations || []).forEach(station => {
@@ -1954,7 +1974,10 @@ async function getIkrcBlindAssignments(env, actorArg) {
   const allowed = new Set(units.map(item => item.unit));
   const rows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY name, id').bind('IKRC').all();
   const participants = (rows.results || []).map(row => {
-    const unit = safeStr(row[field]);
+    const storedMap = ikrcBlindAssignmentsFromRow_(row);
+    const storedUnit = safeStr(storedMap[round]).toUpperCase().replace(/\s+/g, '');
+    const legacyUnit = safeStr(row[field]).toUpperCase().replace(/\s+/g, '');
+    const unit = Object.prototype.hasOwnProperty.call(storedMap, round) ? storedUnit : legacyUnit;
     return {
       participantId:Number(row.id),
       name:row.name || '',
@@ -2062,16 +2085,30 @@ async function saveIkrcBlindAssignments(env, payload, actorArg) {
     if (usedUnits.has(unit)) return { success:false, message:`동일한 블라인드 코드가 두 선수에게 배정되었습니다: ${unit}` };
     usedUnits.add(unit);
   }
-  const changed = existing.filter(row => safeStr(row[field]).toUpperCase().replace(/\s+/g, '') !== safeStr(byId.get(Number(row.id))).toUpperCase());
+  const changed = existing.filter(row => ikrcBlindUnitFromRow_(row, round, allowed) !== safeStr(byId.get(Number(row.id))).toUpperCase());
   if (changed.length) {
     const scoreCount = await env.DB.prepare('SELECT COUNT(*) AS n FROM scores WHERE competition_code=? AND round=?').bind('IKRC', round).first();
     if (Number(scoreCount && scoreCount.n || 0) > 0) {
-      return { success:false, message:`${round} IKRC 평가 기록이 이미 있어 블라인드 코드와 선수 연결을 변경할 수 없습니다. 점수 백업 후 해당 라운드 데이터를 정리해야 합니다.` };
+      const remapped = changed.filter(row => {
+        const oldUnit = ikrcBlindUnitFromRow_(row, round, allowed);
+        const newUnit = safeStr(byId.get(Number(row.id))).toUpperCase();
+        return oldUnit && oldUnit !== newUnit;
+      });
+      if (remapped.length) {
+        return { success:false, message:`${round} IKRC 평가 기록과 이미 연결된 블라인드코드는 다른 선수로 변경할 수 없습니다. 처음 연결되지 않은 코드만 추가로 연결할 수 있습니다.` };
+      }
     }
   }
   const updatedAt = nowIso();
-  const statements = existing.map(row => env.DB.prepare(`UPDATE participants SET ${field}=?, updated_at=? WHERE id=? AND competition_code='IKRC'`)
-    .bind(byId.get(Number(row.id)) || '', updatedAt, Number(row.id)));
+  const statements = changed.map(row => {
+    const extra = parseJson(row.extra_json, {});
+    const map = ikrcBlindAssignmentsFromRow_(row);
+    const nextUnit = byId.get(Number(row.id)) || '';
+    map[round] = nextUnit;
+    extra.ikrcBlindAssignments = map;
+    return env.DB.prepare("UPDATE participants SET extra_json=?, updated_at=? WHERE id=? AND competition_code='IKRC'")
+      .bind(JSON.stringify(extra), updatedAt, Number(row.id));
+  });
   if (statements.length) await env.DB.batch(statements);
   return {
     success:true,

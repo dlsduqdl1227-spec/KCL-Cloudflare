@@ -437,8 +437,8 @@ const participantSave = await rpc(
     name: "QA 참가자",
     phone: "01022220001",
     uniqueNo: "QA-001",
-    prelimCupNo: "X-1",
-    sampleNo: "X-1",
+    prelimCupNo: "1",
+    sampleNo: "",
   },
   adminActor,
 );
@@ -468,6 +468,30 @@ testDb.raw.prepare("UPDATE scores SET review_status='미검수' WHERE competitio
 const crossStationOfficial = await rpc("submitScores", ikrcPayload(judge, station2));
 assert.equal(crossStationOfficial.success, true, "한 심사위원은 현장 안내에 따라 여러 공식평가 스테이션을 순차 평가할 수 있어야 합니다");
 assert.equal(crossStationOfficial.inserted, 6);
+
+const ikrcBlindBefore = await rpc("getIkrcBlindAssignments", adminActor);
+assert.equal(ikrcBlindBefore.success, true, ikrcBlindBefore.message);
+assert.equal(ikrcBlindBefore.participants.length, 1);
+assert.equal(ikrcBlindBefore.participants[0].validUnit, false, "기존 참가자번호는 스테이션 블라인드코드로 오인하면 안 됩니다");
+const firstBlindLinkAfterScores = await rpc(
+  "saveIkrcBlindAssignments",
+  {
+    currentRound: "예선",
+    assignments: [{ participantId:ikrcBlindBefore.participants[0].participantId, unit:"X-1" }],
+  },
+  adminActor,
+);
+assert.equal(firstBlindLinkAfterScores.success, true, firstBlindLinkAfterScores.message);
+assert.equal(testDb.raw.prepare("SELECT prelim_cup_no FROM participants WHERE competition_code='IKRC'").get().prelim_cup_no, "1", "블라인드코드 연결이 기존 참가자번호를 덮어쓰면 안 됩니다");
+const blockedBlindRemap = await rpc(
+  "saveIkrcBlindAssignments",
+  {
+    currentRound: "예선",
+    assignments: [{ participantId:ikrcBlindBefore.participants[0].participantId, unit:"X-2" }],
+  },
+  adminActor,
+);
+assert.equal(blockedBlindRemap.success, false, "평가 후 이미 연결된 블라인드코드는 다른 선수로 변경되면 안 됩니다");
 
 const duplicateX = await rpc("submitScores", ikrcPayload(judge, station1));
 assert.equal(duplicateX.success, false);
