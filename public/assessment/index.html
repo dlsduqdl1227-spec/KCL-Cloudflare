@@ -9360,12 +9360,15 @@ function renderRanking(res) {
           ? ('블라인드코드 ' + String(displayUnit) + (nameSummary ? ' · ' + nameSummary : ' · 선수 연결 미지정') + (affSummary ? ' · ' + affSummary : ''))
           : (String(displayUnit) + (nameSummary ? ' · ' + nameSummary : '') + (affSummary ? ' · ' + affSummary : '')));
       var ktccMeta = isKtccRank ? ('체크: ' + (item.checkerSummary || '-') + ' · 종료시간 ' + (item.endTimeDisplay || '-') + ' · ') : '';
+      var ikrcMeta = isIkrcRank
+        ? ((item.finalized ? '최종확정' : '진행중') + ' · 확인점수 ' + Number(item.confirmedJudgeCount || 0) + '/' + Number(item.expectedJudgeCount || 4) + ' · ')
+        : '';
 
       row.innerHTML =
         '<div class="rank-num' + rankClass + '">' + escHtml(String(rankLabel)) + '</div>' +
         '<div class="rank-info">' +
           '<div class="rank-unit">' + escHtml(unitText) + '</div>' +
-          '<div class="rank-meta">' + ktccMeta + (item.scoreBasis ? escHtml(item.scoreBasis) + ' 기준 · ' : '') + (item.teamSummary ? (isKtccRank ? '테이블 ' : '평가팀 ') + escHtml(item.teamSummary) + ' · ' : '') + '검수 ' +
+          '<div class="rank-meta">' + ktccMeta + ikrcMeta + (item.scoreBasis ? escHtml(item.scoreBasis) + ' 기준 · ' : '') + (item.teamSummary ? (isKtccRank ? '테이블 ' : '평가팀 ') + escHtml(item.teamSummary) + ' · ' : '') + '검수 ' +
             item.reviewedCount + '/' + item.totalCount + ' (' + reviewedRatio + '%)' + tieText + dqText + '</div>' +
           '<div class="rank-detail-hint">눌러서 상세 점수 / 디브리핑 확인</div>' +
         '</div>' +

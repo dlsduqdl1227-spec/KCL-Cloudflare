@@ -4576,7 +4576,10 @@ function officialRankingBasisLabel_(code, basis) {
   code = safeStr(code).toUpperCase();
   const text = safeStr(basis);
   if (code === 'KCR') return /정규화|Normalized|공식/i.test(text) ? '정규화 총점' : '항목 총점';
-  if (code === 'IKRC') return /Seed to Cup/i.test(text) ? '최종 총점 + Seed to Cup' : '최종 총점';
+  if (code === 'IKRC') {
+    if (/실시간|확인|대기/.test(text)) return text;
+    return /Seed to Cup/i.test(text) ? '최종 총점 + Seed to Cup' : '최종 총점';
+  }
   if (code === 'KBC') return /시간감점|Penalty/i.test(text) ? '최종 총점 - 시간감점' : '최종 총점';
   if (code === 'KCAC') return '최종 총점';
   if (code === 'MOB') return text || '총점 합산';
@@ -4679,12 +4682,20 @@ function ikrcOfficialPanelRows_(rows) {
   const heads = latest.filter(item => isHeadRole_(item && (item['역할'] || item.role || item.judgeRole)));
   const sensory = latest.filter(item => !isHeadRole_(item && (item['역할'] || item.role || item.judgeRole)));
   const complete = heads.length === 1 && sensory.length === 3;
+  const reviewedSensory = sensory.filter(item => reviewCompletedStatus_(item && (item['검수상태'] || item.status)));
+  const liveRows = heads.concat(reviewedSensory);
   return {
     complete,
+    reviewComplete:complete && reviewedSensory.length === 3,
     headCount:heads.length,
     sensoryCount:sensory.length,
+    confirmedHeadCount:heads.length,
+    confirmedSensoryCount:reviewedSensory.length,
+    confirmedJudgeCount:liveRows.length,
     expectedHeadCount:1,
     expectedSensoryCount:3,
+    expectedJudgeCount:4,
+    liveRows,
     rows:complete ? heads.concat(sensory) : []
   };
 }
@@ -4947,27 +4958,36 @@ function aggregateRankingGroup_(code, g, round) {
 
   if (code === 'IKRC') {
     const panel = ikrcOfficialPanelRows_(activeRows);
-    const officialRows = panel.rows;
-    if (!panel.complete) {
+    const officialRows = panel.liveRows;
+    if (!officialRows.length) {
       return {
         score:0,
         total:0,
         sensoryAvg:0,
-        basis:'헤드 1명 + 센서리 3명 검수완료 대기',
+        basis:'확인된 공식점수 대기',
         tie:{ flavor:0, sweetness:0, mouthfeel:0 },
-        panelComplete:false,
+        panelComplete:panel.complete,
+        reviewComplete:panel.reviewComplete,
         headCount:panel.headCount,
         sensoryCount:panel.sensoryCount,
+        confirmedHeadCount:panel.confirmedHeadCount,
+        confirmedSensoryCount:panel.confirmedSensoryCount,
+        confirmedJudgeCount:0,
         expectedJudgeCount:4
       };
     }
     const sensoryAvg = avgRowsBy_(officialRows, ikrcSensoryBaseScoreFromItem_) || 0;
     const score = avgRowsBy_(officialRows, rankingScoreFromItem_) || 0;
+    const liveBasis = panel.reviewComplete ? '전체 확인 평균' : '실시간 평균';
     return {
-      score, total: score, sensoryAvg, basis: '최종 총점' + (roundName_(round, '') === '결선' && officialRows.some(item => firstNumberFromKeys_(item, ['Seed to Cup 가산점','Seed to Cup Bonus','SeedToCup Bonus','Seed to Cup(+3점)','Seed to Cup','시드투컵 가산점']) !== null) ? ' + Seed to Cup' : ''),
-      panelComplete:true,
+      score, total: score, sensoryAvg, basis: liveBasis + (roundName_(round, '') === '결선' && officialRows.some(item => firstNumberFromKeys_(item, ['Seed to Cup 가산점','Seed to Cup Bonus','SeedToCup Bonus','Seed to Cup(+3점)','Seed to Cup','시드투컵 가산점']) !== null) ? ' + Seed to Cup' : ''),
+      panelComplete:panel.complete,
+      reviewComplete:panel.reviewComplete,
       headCount:panel.headCount,
       sensoryCount:panel.sensoryCount,
+      confirmedHeadCount:panel.confirmedHeadCount,
+      confirmedSensoryCount:panel.confirmedSensoryCount,
+      confirmedJudgeCount:panel.confirmedJudgeCount,
       expectedJudgeCount:4,
       tie: {
         flavor: avgRowsBy_(officialRows, item => firstNumberFromKeys_(item, ['Flavor(플레이버) ×3','Flavor(플레이버)','Flavor','플레이버','향미'])) || 0,
@@ -5124,8 +5144,6 @@ async function buildRankingData_(env, competitionCode) {
   });
   const byRound = {};
   Array.from(groups.values()).forEach(g => {
-    // IKRC 공식 순위는 센서리 검수 완료만으로 공개하지 않고, 담당 헤드의 스테이션 최종확정 기록까지 있어야 한다.
-    if (code === 'IKRC' && !ikrcFinalizedUnits.has(roundName_(g.round, '예선') + '::' + safeStr(g.unit))) return;
     if (code === 'MOC') {
       const latest = latestOfficialItem_(g.rows || []) || {};
       g.checkerSummary = latest['심사위원명'] || latest.judgeName || '';
@@ -5143,8 +5161,8 @@ async function buildRankingData_(env, competitionCode) {
       ].filter(Boolean).join(' · ');
     }
     const agg = aggregateRankingGroup_(code, g, g.round);
-    // IKRC는 헤드 1명과 센서리 3명의 검수완료 점수가 모두 갖춰진 뒤에만 실시간 순위에 공개한다.
-    if (code === 'IKRC' && agg && agg.panelComplete === false) return;
+    // IKRC 실시간 순위는 헤드 공식점수와 검수 완료된 센서리 점수를 즉시 누적한다.
+    if (code === 'IKRC' && (!agg || Number(agg.confirmedJudgeCount || 0) < 1)) return;
     const aggregateScore = toNumber(agg && agg.score);
     const aggregateTotal = toNumber(agg && agg.total);
     g.rankingScore = aggregateScore !== null ? roundScoreValue_(aggregateScore) : (aggregateTotal !== null ? roundScoreValue_(aggregateTotal) : 0);
@@ -5152,9 +5170,14 @@ async function buildRankingData_(env, competitionCode) {
     if (code === 'IKRC' && agg && Object.prototype.hasOwnProperty.call(agg, 'sensoryAvg')) g.ikrcSensoryAvg = roundScoreValue_(agg.sensoryAvg);
     if (code === 'IKRC' && agg) {
       g.ikrcPanelComplete = !!agg.panelComplete;
+      g.ikrcReviewComplete = !!agg.reviewComplete;
       g.ikrcHeadCount = Number(agg.headCount || 0);
       g.ikrcSensoryCount = Number(agg.sensoryCount || 0);
+      g.ikrcConfirmedHeadCount = Number(agg.confirmedHeadCount || 0);
+      g.ikrcConfirmedSensoryCount = Number(agg.confirmedSensoryCount || 0);
+      g.ikrcConfirmedJudgeCount = Number(agg.confirmedJudgeCount || 0);
       g.ikrcExpectedJudgeCount = Number(agg.expectedJudgeCount || 4);
+      g.ikrcFinalized = ikrcFinalizedUnits.has(roundName_(g.round, '예선') + '::' + safeStr(g.unit));
     }
     g.scoreBasis = officialRankingBasisLabel_(code, agg && agg.basis);
     g.tie = agg.tie || g.tie;
@@ -5179,8 +5202,13 @@ async function buildRankingData_(env, competitionCode) {
       playerNameSummary: g.name || '', nameSummary: g.name || '', playerAffiliationSummary: g.affiliation || '', teamNameSummary: g.teamName || '', teamSummary: g.team || '',
       totalScore: g.rankingScore, avgScore: code === 'IKRC' && g.ikrcSensoryAvg !== undefined ? g.ikrcSensoryAvg : g.rankingScore, score: g.rankingScore, rankingScore: g.rankingScore,
       panelComplete:code === 'IKRC' ? !!g.ikrcPanelComplete : undefined,
+      reviewComplete:code === 'IKRC' ? !!g.ikrcReviewComplete : undefined,
+      finalized:code === 'IKRC' ? !!g.ikrcFinalized : undefined,
       headCount:code === 'IKRC' ? g.ikrcHeadCount : undefined,
       sensoryCount:code === 'IKRC' ? g.ikrcSensoryCount : undefined,
+      confirmedHeadCount:code === 'IKRC' ? g.ikrcConfirmedHeadCount : undefined,
+      confirmedSensoryCount:code === 'IKRC' ? g.ikrcConfirmedSensoryCount : undefined,
+      confirmedJudgeCount:code === 'IKRC' ? g.ikrcConfirmedJudgeCount : undefined,
       expectedJudgeCount:code === 'IKRC' ? g.ikrcExpectedJudgeCount : undefined,
       scoreBasis: g.scoreBasis || '최종 총점',
       reviewedCount: g.reviewed, totalCount: g.rows.length,
