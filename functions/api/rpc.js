@@ -3274,35 +3274,8 @@ async function submitScores(env, payload, signature, request = null) {
   if (initial.code === 'IKRC') {
     const stationValidation = validateIkrcStationSubmission_(basePayload, cfg);
     if (!stationValidation.ok) return { success:false, message:stationValidation.message };
-    const selectedStation = stationValidation.station;
-    const configuredStations = ikrcStationsForPurposeServer_(cfg, submitRound, 'competition');
-    const assignedStation = ikrcActorAssignedStationServer_(auth.actor, cfg);
-    if (!isCalibrationMode_(basePayload.mode) && assignedStation && safeStr(assignedStation.id) !== safeStr(selectedStation.id)) {
-      return {
-        success:false,
-        message:`현재 계정은 ${assignedStation.label}에 배정되어 있어 ${selectedStation.label} 평가를 제출할 수 없습니다. 운영계정의 IKRC 팀/스테이션 배정을 확인해주세요.`,
-        assignedStationId:assignedStation.id,
-        assignedStationLabel:assignedStation.label
-      };
-    }
-    if (!isCalibrationMode_(basePayload.mode)) {
-      const priorRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? ORDER BY id DESC')
-        .bind('IKRC', submitRound).all();
-      const priorOtherStation = (priorRows.results || []).find(scoreRow => {
-        if (!scoreOwnedByActor_(scoreRow, auth.actor) || isCalibrationMode_(scoreRow.mode)) return false;
-        const priorStation = configuredStations.find(station => ikrcScoreBelongsToStationServer_(scoreRow, station));
-        return priorStation && safeStr(priorStation.id) !== safeStr(selectedStation.id);
-      });
-      if (priorOtherStation) {
-        const priorStation = configuredStations.find(station => ikrcScoreBelongsToStationServer_(priorOtherStation, station));
-        return {
-          success:false,
-          message:`현재 라운드의 대회평가는 이미 ${priorStation ? priorStation.label : '다른 스테이션'}으로 시작되었습니다. 한 심사위원의 공식 평가는 한 스테이션에만 저장됩니다. 배정 변경이 필요하면 운영팀장에게 먼저 확인해주세요.`,
-          lockedStationId:priorStation ? priorStation.id : '',
-          lockedStationLabel:priorStation ? priorStation.label : ''
-        };
-      }
-    }
+    // 현장에서는 같은 심사위원이 운영팀장의 안내에 따라 여러 스테이션을 순차 평가할 수 있습니다.
+    // 제출 기록은 아래 stationId/label/prefix와 샘플 번호로 분리되며, 동일 스테이션의 중복 제출만 차단합니다.
     basePayload.stationId = stationValidation.station.id;
     basePayload.stationLabel = stationValidation.station.label;
     basePayload.stationPrefix = stationValidation.station.prefix;

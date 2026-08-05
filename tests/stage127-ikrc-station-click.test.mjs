@@ -32,12 +32,13 @@ const wrap = { innerHTML: "" };
 const help = { textContent: "" };
 const station = { id: "station1", label: "스테이션 1", prefix: "T", start: 1, end: 3 };
 let started = null;
+let calibrationMode = true;
 const context = {
   _selComp: { code: "IKRC", currentRound: "예선" },
   _evaluationPurpose: { type: "calibration", scope: "station", label: "스테이션 켈리브레이션" },
   document: { getElementById: (id) => id === "ikrc-station-grid" ? wrap : (id === "ikrc-station-help" ? help : null) },
   ikrcStationSettings_: () => [station],
-  isIkrcCalibrationMode_: () => true,
+  isIkrcCalibrationMode_: () => calibrationMode,
   ikrcAssignedStation_: () => null,
   ikrcStationCups_: () => ["T-1", "T-2", "T-3"],
   escapeJsString_: (value) => value,
@@ -63,6 +64,14 @@ context._evaluationPurpose.scope = "all";
 context.renderIkrcStationChoices_();
 assert.match(help.textContent, /동일 샘플 범위/);
 assert.doesNotMatch(help.textContent, /전체 켈리브레이션입니다/);
+
+context._evaluationPurpose = { type: "competition", scope: "", label: "대회평가" };
+calibrationMode = false;
+context.renderIkrcStationChoices_();
+assert.match(help.textContent, /여러 스테이션을 순서대로 평가/);
+assert.match(help.textContent, /스테이션별로 독립 저장/);
+assert.doesNotMatch(functionSource(assessment, "renderIkrcStationChoices_"), /assignedStation/);
+assert.doesNotMatch(functionSource(assessment, "startIkrcStation_"), /assignedStation/);
 
 const selectButtonSource = functionSource(assessment, "updateSelectReviewButton_");
 assert.match(selectButtonSource, /calAllBtn\.style\.display = canCal && !isKcrMenu && !isIkrcMenu/);

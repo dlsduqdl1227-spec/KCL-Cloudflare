@@ -447,19 +447,16 @@ assert.equal(participantSave.success, true, participantSave.message);
 const ikrcX = await rpc("submitScores", ikrcPayload(judge, station1));
 const ikrcZ = await rpc("submitScores", ikrcPayload(judgeZ, station2));
 const ikrcZ2 = await rpc("submitScores", ikrcPayload(judgeZ2, station2));
-const ikrcZ3 = await rpc("submitScores", ikrcPayload(judgeZ3, station2));
 const headOfficialPayload = ikrcPayload(head, station2);
 headOfficialPayload.clientSubmissionId = "QA-IKRC-HEAD-STATION2";
 const ikrcHeadZ = await rpc("submitScores", headOfficialPayload);
 assert.equal(ikrcX.success, true, JSON.stringify(ikrcX));
 assert.equal(ikrcZ.success, true, JSON.stringify(ikrcZ));
 assert.equal(ikrcZ2.success, true, JSON.stringify(ikrcZ2));
-assert.equal(ikrcZ3.success, true, JSON.stringify(ikrcZ3));
 assert.equal(ikrcHeadZ.success, true, JSON.stringify(ikrcHeadZ));
 assert.equal(ikrcX.inserted, 2);
 assert.equal(ikrcZ.inserted, 6);
 assert.equal(ikrcZ2.inserted, 6);
-assert.equal(ikrcZ3.inserted, 6);
 assert.equal(ikrcHeadZ.inserted, 6);
 const ikrcHeadRetry = await rpc("submitScores", headOfficialPayload);
 assert.equal(ikrcHeadRetry.success, true);
@@ -469,8 +466,8 @@ assert.equal(ikrcHeadRetry.inserted, 6);
 testDb.raw.prepare("UPDATE scores SET review_status='미검수' WHERE competition_code='IKRC' AND judge_name='QA 헤드' AND mode NOT LIKE '%켈리브레이션%'").run();
 
 const crossStationOfficial = await rpc("submitScores", ikrcPayload(judge, station2));
-assert.equal(crossStationOfficial.success, false, "한 심사위원의 공식 평가는 현재 라운드에서 한 스테이션에만 속해야 합니다");
-assert.match(crossStationOfficial.message, /스테이션 1|배정/);
+assert.equal(crossStationOfficial.success, true, "한 심사위원은 현장 안내에 따라 여러 공식평가 스테이션을 순차 평가할 수 있어야 합니다");
+assert.equal(crossStationOfficial.inserted, 6);
 
 const duplicateX = await rpc("submitScores", ikrcPayload(judge, station1));
 assert.equal(duplicateX.success, false);
@@ -719,7 +716,7 @@ const judgeOwnReview = await rpc("getReviewList", "IKRC", {
 });
 assert.equal(judgeOwnReview.success, true);
 assert.equal(judgeOwnReview.ownOnly, true);
-assert.equal(judgeOwnReview.list.length, 2, "스테이션 1 심사위원은 자신의 스테이션 공식 평가만 보유해야 합니다");
+assert.equal(judgeOwnReview.list.length, 8, "여러 스테이션을 평가한 심사위원은 각 스테이션의 본인 공식 평가를 모두 검수할 수 있어야 합니다");
 
 const headOwnReview = await rpc("getReviewList", "IKRC", {
   judgeToken: head.judgeToken,

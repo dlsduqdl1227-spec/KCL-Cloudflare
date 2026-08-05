@@ -14494,9 +14494,8 @@ function renderIkrcStationChoices_() {
   if (!wrap) return;
   var allStations = ikrcStationSettings_(_selComp);
   var calibrationMode = isIkrcCalibrationMode_();
-  var assignedStation = calibrationMode ? null : ikrcAssignedStation_(_selComp);
   var purposeStations = allStations.filter(function(station){ return calibrationMode ? station.useForCalibration !== false : station.useForCompetition !== false; });
-  var stations = assignedStation ? purposeStations.filter(function(station){ return station.id === assignedStation.id; }) : purposeStations;
+  var stations = purposeStations;
   wrap.innerHTML = stations.map(function(station){
     var cups = ikrcStationCups_(station);
     return '<button type="button" class="ikrc-station-btn" onclick="startIkrcStation_(\'' + escapeJsString_(station.id) + '\')">' +
@@ -14510,9 +14509,7 @@ function renderIkrcStationChoices_() {
     ? (_evaluationPurpose.scope === 'all'
       ? '현장에서 안내받은 동일 샘플 범위를 선택하세요. 모든 헤드와 센서리 심사위원 결과가 한 그룹으로 집계됩니다.'
       : '현장에서 안내받은 스테이션을 선택하세요. 같은 스테이션의 헤드와 센서리 심사위원 결과가 한 그룹으로 집계됩니다.')
-    : (assignedStation
-      ? assignedStation.label + ' 배정 계정입니다. 이 스테이션의 평가만 제출하고 검수할 수 있으며 다른 스테이션과 섞이지 않습니다.'
-      : '스테이션 미배정 계정은 현재 라운드의 첫 공식 제출 스테이션으로 고정됩니다. 운영계정의 IKRC 팀 항목에 스테이션 번호를 지정하면 처음부터 해당 스테이션만 표시됩니다.');
+    : '운영팀장이 안내한 스테이션을 선택하세요. 한 심사위원이 여러 스테이션을 순서대로 평가할 수 있으며 제출 기록은 스테이션별로 독립 저장됩니다.';
 }
 
 function startIkrcStation_(stationId) {
@@ -14520,8 +14517,6 @@ function startIkrcStation_(stationId) {
   var stations = ikrcStationSettings_(_selComp).filter(function(station){ return calibrationMode ? station.useForCalibration !== false : station.useForCompetition !== false; });
   var station = stations.filter(function(x){ return x.id === stationId; })[0];
   if (!station) { toast('등록된 IKRC 스테이션을 찾지 못했습니다. 운영팀장에게 확인해주세요.', true); return; }
-  var assignedStation = isIkrcCalibrationMode_() ? null : ikrcAssignedStation_(_selComp);
-  if (assignedStation && assignedStation.id !== station.id) { toast(assignedStation.label + ' 배정 계정은 다른 스테이션을 시작할 수 없습니다.', true); return; }
   _ikrcStation = Object.assign({}, station);
   initIkrcSamples(ikrcStationCups_(station), _ikrcStation);
 }
