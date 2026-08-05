@@ -1212,16 +1212,20 @@ function participantPayloadFromRow_(raw, defaultCode='') {
   const sampleNo = safeStr(pickByAliases_(source, ['샘플번호','sample_no','sampleNo','예선샘플번호','결선샘플번호']));
   const number = participantNumberFromRow_(source, code);
   const competitionDate = normalizeEffectiveDate_(pickByAliases_(source, ['대회일','대회날짜','경연일','경연날짜','예선일','일자','competition_date','competitionDate','event_date','eventDate','date']));
+  const operatingDay = safeStr(pickByAliases_(source, ['운영일차','운영 일차','대회일차','operating_day','operatingDay','schedule_day','scheduleDay']));
   const preparationTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['준비시간','준비 시간','preparation_time','preparationTime','prep_time','prepTime']));
-  const performanceTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['시연시간','경연시간','시연 시간','performance_time','performanceTime','presentation_time','presentationTime']));
+  const performanceTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['시연시간','경연시간','로스팅시간','시연 시간','로스팅 시간','performance_time','performanceTime','presentation_time','presentationTime','roasting_time','roastingTime']));
+  const cleanupTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['정리시간','정리 시간','클린업시간','cleanup_time','cleanupTime']));
   const waitingTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['대기시간','대기 시간','waiting_time','waitingTime']));
   const stationNo = safeStr(pickByAliases_(source, ['스테이션번호','스테이션 번호','Station No.','station_no','stationNo']));
   const performanceOrder = safeStr(pickByAliases_(source, ['경연순서','경연 순서','시연순서','순서','performance_order','performanceOrder']));
   const extra = {};
   Object.keys(source).forEach(k => { if (safeStr(source[k]) !== '') extra[k] = source[k]; });
   if (competitionDate) extra['대회일'] = competitionDate;
+  if (operatingDay) extra['운영일차'] = operatingDay;
   if (preparationTime) extra['준비시간'] = preparationTime;
   if (performanceTime) extra['시연시간'] = performanceTime;
+  if (cleanupTime) extra['정리시간'] = cleanupTime;
   if (waitingTime) extra['대기시간'] = waitingTime;
   if (stationNo) extra['스테이션번호'] = stationNo;
   if (performanceOrder) extra['경연순서'] = performanceOrder;
@@ -1239,6 +1243,13 @@ function participantPayloadFromRow_(raw, defaultCode='') {
     teamName,
     teamNo: teamNo || (code === 'KTCC' ? number : ''),
     competitionDate,
+    operatingDay,
+    preparationTime,
+    performanceTime,
+    cleanupTime,
+    waitingTime,
+    stationNo,
+    performanceOrder,
     extra
   };
 }
@@ -1383,8 +1394,10 @@ function participantRowOut_(r) {
     uniqueNo: r.unique_no || '', prelimCupNo: r.prelim_cup_no || '', mainCupNo: r.main_cup_no || '', finalCupNo: r.final_cup_no || '',
     cupNo: r.cup_no || '', sampleNo: r.sample_no || '', teamName: r.team_name || '', teamNo: r.team_no || '', extra: ex,
     competitionDate: normalizeEffectiveDate_(ex['대회일'] || ex.competitionDate || ex.competition_date),
+    operatingDay: safeStr(ex['운영일차'] || ex.operatingDay || ex.operating_day),
     preparationTime: normalizeParticipantScheduleRange_(ex['준비시간'] || ex.preparationTime || ex.preparation_time),
-    performanceTime: normalizeParticipantScheduleRange_(ex['시연시간'] || ex['경연시간'] || ex.performanceTime || ex.performance_time),
+    performanceTime: normalizeParticipantScheduleRange_(ex['시연시간'] || ex['경연시간'] || ex['로스팅시간'] || ex.performanceTime || ex.performance_time || ex.roastingTime || ex.roasting_time),
+    cleanupTime: normalizeParticipantScheduleRange_(ex['정리시간'] || ex.cleanupTime || ex.cleanup_time),
     waitingTime: normalizeParticipantScheduleRange_(ex['대기시간'] || ex.waitingTime || ex.waiting_time),
     stationNo: safeStr(ex['스테이션번호'] || ex.stationNo || ex.station_no),
     performanceOrder: safeStr(ex['경연순서'] || ex.performanceOrder || ex.performance_order),
