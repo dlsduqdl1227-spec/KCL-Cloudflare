@@ -1314,7 +1314,37 @@ async function listParticipants(env, competitionCode, actorArg) {
     const placeholders = codes.map(() => '?').join(',');
     rs = await env.DB.prepare(`SELECT * FROM participants WHERE competition_code IN (${placeholders}) ORDER BY competition_code, id`).bind(...codes).all();
   }
-  return { success: true, participants: (rs.results || []).map(participantRowOut_) };
+  const rows = sortParticipantRowsForCompetition_(rs.results || [], code);
+  return { success: true, participants: rows.map(participantRowOut_) };
+}
+function participantScheduleSortMeta_(row) {
+  const extra = parseJson(row && row.extra_json, {});
+  const date = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date);
+  const orderText = safeStr(extra['경연순서'] || extra.performanceOrder || extra.performance_order);
+  const order = Number(orderText);
+  return {
+    scheduled: !!(date && orderText && Number.isFinite(order)),
+    date: date || '9999-12-31',
+    order: Number.isFinite(order) ? order : 999999,
+    waitingTime: safeStr(extra['대기시간'] || extra.waitingTime || extra.waiting_time),
+  };
+}
+function sortParticipantRowsForCompetition_(rows, competitionCode) {
+  const requestedCode = safeStr(competitionCode).toUpperCase();
+  return (rows || []).slice().sort((a, b) => {
+    const aCode = safeStr(a && a.competition_code || requestedCode).toUpperCase();
+    const bCode = safeStr(b && b.competition_code || requestedCode).toUpperCase();
+    if (aCode !== bCode) return aCode.localeCompare(bCode);
+    if (aCode === 'MOB') {
+      const am = participantScheduleSortMeta_(a);
+      const bm = participantScheduleSortMeta_(b);
+      if (am.scheduled !== bm.scheduled) return am.scheduled ? -1 : 1;
+      if (am.date !== bm.date) return am.date.localeCompare(bm.date);
+      if (am.order !== bm.order) return am.order - bm.order;
+      if (am.waitingTime !== bm.waitingTime) return am.waitingTime.localeCompare(bm.waitingTime);
+    }
+    return Number(a && a.id || 0) - Number(b && b.id || 0);
+  });
 }
 function participantRowOut_(r) {
   const ex = parseJson(r.extra_json, {});
@@ -1617,7 +1647,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const policy = participantRoundPolicy_(code, currentRound);
   const canSeeIdentity = actorCanSeeParticipantIdentity_(actor);
   const hideIdentity = !!(policy.identityHidden && !canSeeIdentity);
-  const assignments = (rows.results || []).map(r => {
+  const assignments = sortParticipantRowsForCompetition_(rows.results || [], code).map(r => {
     const number = participantRoundNumber_(r, code, currentRound);
     const rawName = code === 'KTCC' ? (r.team_name || r.name || '') : (r.name || '');
     const displayName = hideIdentity ? '' : rawName;
