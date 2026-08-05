@@ -4318,14 +4318,20 @@ function roleBadgeClass_(role) {
 }
 function roleText(code) {
   var c = String(code || (_selComp && _selComp.code) || '').toUpperCase();
-  if (_judge && c && _adminRoleOverride && _adminRoleOverride[c]) return normalizeRoleLabel_(_adminRoleOverride[c], _judge.type || _judge.accountType);
-  if (_judge && _judge.roleMap && c && _judge.roleMap[c]) return normalizeRoleLabel_(_judge.roleMap[c], _judge.type || _judge.accountType);
+  if (_judge && c && _adminRoleOverride && _adminRoleOverride[c]) return normalizeRoleLabel_(_adminRoleOverride[c], '');
+  if (_judge && _judge.roleMap && c && _judge.roleMap[c]) {
+    var mappedType = (_judge.accountTypeMap && _judge.accountTypeMap[c]) || '';
+    return normalizeRoleLabel_(_judge.roleMap[c], mappedType);
+  }
   return normalizeRoleLabel_((_judge && _judge.role) || '', _judge && (_judge.type || _judge.accountType));
 }
 function roleTextForCode_(code) {
   var c = String(code || (_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
-  if (_judge && c && _adminRoleOverride && _adminRoleOverride[c]) return normalizeRoleLabel_(_adminRoleOverride[c], _judge.type || _judge.accountType);
-  if (_judge && _judge.roleMap && c && _judge.roleMap[c]) return normalizeRoleLabel_(_judge.roleMap[c], _judge.type || _judge.accountType);
+  if (_judge && c && _adminRoleOverride && _adminRoleOverride[c]) return normalizeRoleLabel_(_adminRoleOverride[c], '');
+  if (_judge && _judge.roleMap && c && _judge.roleMap[c]) {
+    var mappedType = (_judge.accountTypeMap && _judge.accountTypeMap[c]) || '';
+    return normalizeRoleLabel_(_judge.roleMap[c], mappedType);
+  }
   return normalizeRoleLabel_((_judge && _judge.role) || '', _judge && (_judge.type || _judge.accountType));
 }
 function hasRoleWordForCode_(code, word) {
@@ -4335,7 +4341,8 @@ function hasRoleWord(word) {
   if (roleText().indexOf(word) > -1) return true;
   if (_judge && _judge.roleMap) {
     for (var k in _judge.roleMap) {
-      if (normalizeRoleLabel_(_judge.roleMap[k], _judge.type || _judge.accountType).indexOf(word) > -1) return true;
+      var mappedType = (_judge.accountTypeMap && _judge.accountTypeMap[k]) || '';
+      if (normalizeRoleLabel_(_judge.roleMap[k], mappedType).indexOf(word) > -1) return true;
     }
   }
   return false;
@@ -5287,7 +5294,7 @@ function loadTeamPanel() {
                 '<div class="admin-comp-round">현재 라운드: ' + escHtml(c.currentRound || '-') + '</div>' +
                 '<div style="margin-top:6px">' + compTeamBadgeHtml(cardCode) + '</div>' +
               '</div></div>' +
-              '<div class="review-edit-help" style="margin:10px 0">이 대회에서는 ' + escHtml(roleTextForCode_(cardCode) || '심사위원') + ' 권한으로 표시됩니다. 다른 대회의 팀장 권한과 섞이지 않고 해당 심사 기능만 실행합니다.</div>' +
+              '<div class="review-edit-help" style="margin:10px 0">' + escHtml(roleTextForCode_(cardCode) || '심사위원') + ' 전용 메뉴입니다.</div>' +
               '<div class="admin-comp-actions team-actions">' +
                 '<button class="primary" data-act="judge-eval">' + (mobHeadCard ? 'MOB 헤드 켈리브레이션 입력' : '대회평가 시작') + '</button>' +
                 (mobHeadCard ? '' : '<button data-act="judge-review">내 제출 검수</button>') +
@@ -9887,7 +9894,8 @@ function initCuppingEval(cupNumbers, mode, process, isFinalsMode, isCalibrationM
   _cupping.mode = mode;
   _cupping.process = process;
   _cupping.isFinalsMode = isFinalsMode;
-  _cupping.compCode = _selComp.code;
+  // 평가폼의 저장 대상은 현재 선택 전역값이 아니라 KCR로 고정한다.
+  _cupping.compCode = 'KCR';
   _cupping.isCalibrationMode = !!isCalibrationMode;
   _cupping.station = station ? Object.assign({}, station) : null;
   normalizeCuppingCupUiState_();
@@ -10455,7 +10463,7 @@ function cuppingSubmitAll() {
     })
     .withFailureHandler(function(){ hideOverlay(); toast('제출 중 오류 발생', true); })
     .submitScores({
-      competitionCode: _cupping.compCode,
+      competitionCode: 'KCR',
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: roleTextForCode_('KCR'),
@@ -12144,7 +12152,7 @@ function kcacSubmitAll() {
     })
     .withFailureHandler(function(){ hideOverlay(); toast('제출 중 오류 발생', true); })
     .submitScores({
-      competitionCode: _selComp.code,
+      competitionCode: 'KCAC',
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: roleTextForCode_('KCAC'),
@@ -12905,7 +12913,7 @@ function kbcSubmit() {
     })
     .withFailureHandler(function(){ hideOverlay(); toast('오류 발생', true); })
     .submitScores({
-      competitionCode: _selComp.code,
+      competitionCode: 'KBC',
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: roleTextForCode_('KBC'),
@@ -15277,7 +15285,7 @@ function ikrcSubmitAll() {
     })
     .withFailureHandler(function(){ hideOverlay(); _ikrcSubmitting = false; kclSaveActiveEvalDraftNow_(true); toast('네트워크 응답을 확인하지 못했습니다. 새로고침하지 말고 같은 전체제출 버튼을 다시 누르면 중복 없이 저장 상태를 확인합니다.', true); })
     .submitScores({
-      competitionCode: _selComp.code,
+      competitionCode: 'IKRC',
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: roleTextForCode_('IKRC'),
@@ -16066,7 +16074,7 @@ function submitMocFinal(sigBase64) {
       toast('오류 발생', true);
     })
     .submitWithSignature({
-      competitionCode: _selComp.code,
+      competitionCode: 'MOC',
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: mocRoleSubmitLabel_(),
@@ -16512,7 +16520,7 @@ function submitKtccFinal(sigBase64) {
     })
     .withFailureHandler(function(){ hideOverlay(); toast('오류 발생', true); })
     .submitWithSignature({
-      competitionCode: _selComp.code,
+      competitionCode: 'KTCC',
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: roleTextForCode_('KTCC') || '운영진',
