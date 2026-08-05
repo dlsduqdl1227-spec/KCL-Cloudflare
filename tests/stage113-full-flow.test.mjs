@@ -877,6 +877,51 @@ for (const payloadJson of storedPayloads) {
   assert.doesNotMatch(payloadJson, /judgeToken|actorToken|adminToken|sessionToken/);
 }
 
+const initialLoginSecurity = await rpc("getLoginSecurityStatus", adminActor);
+assert.equal(initialLoginSecurity.success, true, initialLoginSecurity.message);
+assert.equal(initialLoginSecurity.enabled, false);
+
+const unauthorizedLoginSecurity = await rpc("getLoginSecurityStatus", { judgeToken: judge.judgeToken });
+assert.equal(unauthorizedLoginSecurity.success, false, "일반 심사위원은 로그인 보안번호 설정을 조회할 수 없어야 합니다");
+
+const createLoginSecurity = await rpc(
+  "setLoginSecurityCode",
+  { code: "2468", confirmCode: "2468" },
+  adminActor,
+);
+assert.equal(createLoginSecurity.success, true, createLoginSecurity.message);
+assert.equal(createLoginSecurity.enabled, true);
+
+const enabledLoginSecurity = await rpc("getLoginSecurityStatus", adminActor);
+assert.equal(enabledLoginSecurity.success, true, enabledLoginSecurity.message);
+assert.equal(enabledLoginSecurity.enabled, true);
+assert.equal("code" in enabledLoginSecurity, false, "보안번호 평문을 상태 응답에 노출하면 안 됩니다");
+assert.equal("hash" in enabledLoginSecurity, false, "보안번호 해시를 상태 응답에 노출하면 안 됩니다");
+
+const loginWithoutSecurity = await rpc("judgeLogin", "QA 센서리", "01011110001");
+assert.equal(loginWithoutSecurity.success, false, "보안번호 사용 중에는 이름과 연락처만으로 로그인되면 안 됩니다");
+const loginWithWrongSecurity = await rpc("judgeLogin", "QA 센서리", "01011110001", "1111");
+assert.equal(loginWithWrongSecurity.success, false, "잘못된 보안번호로 로그인되면 안 됩니다");
+const loginWithSecurity = await rpc("judgeLogin", "QA 센서리", "01011110001", "2468");
+assert.equal(loginWithSecurity.success, true, loginWithSecurity.message);
+
+const changeLoginSecurity = await rpc(
+  "setLoginSecurityCode",
+  { code: "9753", confirmCode: "9753" },
+  adminActor,
+);
+assert.equal(changeLoginSecurity.success, true, changeLoginSecurity.message);
+const loginWithOldSecurity = await rpc("judgeLogin", "QA 센서리", "01011110001", "2468");
+assert.equal(loginWithOldSecurity.success, false, "변경 전 보안번호는 즉시 사용할 수 없어야 합니다");
+const loginWithChangedSecurity = await rpc("judgeLogin", "QA 센서리", "01011110001", "9753");
+assert.equal(loginWithChangedSecurity.success, true, loginWithChangedSecurity.message);
+
+const deleteLoginSecurity = await rpc("deleteLoginSecurityCode", adminActor);
+assert.equal(deleteLoginSecurity.success, true, deleteLoginSecurity.message);
+assert.equal(deleteLoginSecurity.enabled, false);
+const loginAfterSecurityDelete = await rpc("judgeLogin", "QA 센서리", "01011110001");
+assert.equal(loginAfterSecurityDelete.success, true, loginAfterSecurityDelete.message);
+
 const unauthorizedSubmit = await rpc("submitScores", {
   competitionCode: "KBC",
   rows: [{ data: ["UNAUTHORIZED"] }],

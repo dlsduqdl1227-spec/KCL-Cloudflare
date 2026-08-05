@@ -17,6 +17,8 @@ const COMPETITION_ROUNDS = {
   IKRC: ['예선','결선'],
   KCAC: ['예선','결선']
 };
+const LOGIN_SECURITY_SETTING_KEY = 'assessment_login_security_code';
+const LOGIN_SECURITY_PBKDF2_ITERATIONS = 120000;
 
 let __schemaReadyPromise = null;
 let __defaultDataReadyPromise = null;
@@ -403,6 +405,12 @@ async function ensureSchema(db) {
       message TEXT,
       created_at TEXT
     )`,
+    `CREATE TABLE IF NOT EXISTS system_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      updated_by TEXT
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_scores_comp ON scores(competition_code, round)`,
     `CREATE INDEX IF NOT EXISTS idx_scores_comp_id ON scores(competition_code, id)`,
     `CREATE INDEX IF NOT EXISTS idx_scores_submitter_unit ON scores(competition_code, round, judge_name, unit, id DESC)`,
@@ -475,8 +483,11 @@ async function dispatch(action, args, env, request) {
   const handlers = {
     ping: async () => ({ success: true, message: 'KCL Cloudflare API 연결 성공', now: nowIso() }),
     getConfig: () => getConfig(env),
-    judgeLogin: () => judgeLogin(env, args[0], args[1], request),
+    judgeLogin: () => judgeLogin(env, args[0], args[1], args[2], request),
     adminLogin: () => adminLogin(env, args[0], args[1], args[2], request),
+    getLoginSecurityStatus: () => getLoginSecurityStatus(env, args[0]),
+    setLoginSecurityCode: () => setLoginSecurityCode(env, args[0], args[1]),
+    deleteLoginSecurityCode: () => deleteLoginSecurityCode(env, args[0]),
     getAdminConsoleData: () => getAdminConsoleData(env, args[0]),
     updateCompetitionAdminSettings: () => updateCompetitionAdminSettings(env, args[0], args[1]),
     upsertOperatorAccount: () => upsertOperatorAccount(env, args[0], args[1]),
@@ -639,13 +650,107 @@ async function adminLogin(env, adminId, password, secretCode, request = null) {
   return actor;
 }
 
-async function judgeLogin(env, name, phone, request = null) {
+function loginSecurityCodeValid_(code) {
+  return /^\d{4,8}$/.test(safeStr(code));
+}
+function hexBytes_(hex) {
+  const value = safeStr(hex).toLowerCase();
+  if (!value || value.length % 2 || !/^[0-9a-f]+$/.test(value)) return new Uint8Array();
+  const out = new Uint8Array(value.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(value.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+function bytesHex_(value) {
+  return Array.from(value instanceof Uint8Array ? value : new Uint8Array(value || [])).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function deriveLoginSecurityHash_(code, saltHex, iterations = LOGIN_SECURITY_PBKDF2_ITERATIONS) {
+  const enc = new TextEncoder();
+  const material = await crypto.subtle.importKey('raw', enc.encode(safeStr(code)), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({
+    name:'PBKDF2',
+    hash:'SHA-256',
+    salt:hexBytes_(saltHex),
+    iterations:Math.max(100000, Number(iterations || LOGIN_SECURITY_PBKDF2_ITERATIONS))
+  }, material, 256);
+  return bytesHex_(bits);
+}
+async function loginSecuritySetting_(env) {
+  const row = await env.DB.prepare('SELECT setting_value, updated_at, updated_by FROM system_settings WHERE setting_key=?').bind(LOGIN_SECURITY_SETTING_KEY).first();
+  if (!row) return { enabled:false, valid:true, updatedAt:'', updatedBy:'' };
+  const record = parseJson(row.setting_value, {});
+  const valid = !!(record && record.salt && record.hash && Number(record.iterations || 0) >= 100000);
+  return { enabled:true, valid, record, updatedAt:safeStr(row.updated_at), updatedBy:safeStr(row.updated_by) };
+}
+async function verifyLoginSecurityCode_(env, code) {
+  const setting = await loginSecuritySetting_(env);
+  if (!setting.enabled) return { success:true, required:false };
+  if (!setting.valid) return { success:false, required:true, message:'로그인 보안번호 설정을 확인할 수 없습니다. 관리자에게 문의해주세요.' };
+  const entered = safeStr(code);
+  if (!entered) return { success:false, required:true, message:'보안번호를 입력해주세요.' };
+  if (!loginSecurityCodeValid_(entered)) return { success:false, required:true, message:'보안번호가 올바르지 않습니다.' };
+  const derived = await deriveLoginSecurityHash_(entered, setting.record.salt, setting.record.iterations);
+  if (!timingSafeEqual_(derived, setting.record.hash)) return { success:false, required:true, message:'보안번호가 올바르지 않습니다.' };
+  return { success:true, required:true };
+}
+async function logSecurityEvent_(env, action, actorName, target, status, message) {
+  try {
+    await env.DB.prepare('INSERT INTO security_events (action, actor_name, target, status, message, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(safeStr(action), safeStr(actorName), safeStr(target), safeStr(status), safeStr(message), nowIso()).run();
+  } catch (_) {}
+}
+async function getLoginSecurityStatus(env, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!hasAdmin(actor)) return { success:false, message:'전체 관리자 권한이 필요합니다.' };
+  const setting = await loginSecuritySetting_(env);
+  return {
+    success:true,
+    enabled:!!setting.enabled,
+    updatedAt:setting.updatedAt || '',
+    updatedBy:setting.updatedBy || ''
+  };
+}
+async function setLoginSecurityCode(env, payload, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!hasAdmin(actor)) return { success:false, message:'전체 관리자 권한이 필요합니다.' };
+  const code = safeStr(payload && payload.code);
+  const confirmCode = safeStr(payload && payload.confirmCode);
+  if (!loginSecurityCodeValid_(code)) return { success:false, message:'보안번호는 숫자 4~8자리로 입력해주세요.' };
+  if (code !== confirmCode) return { success:false, message:'보안번호 확인값이 일치하지 않습니다.' };
+  const previous = await loginSecuritySetting_(env);
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  const saltHex = bytesHex_(salt);
+  const hash = await deriveLoginSecurityHash_(code, saltHex, LOGIN_SECURITY_PBKDF2_ITERATIONS);
+  const actorName = safeStr(actor.name || actor.judgeName || '관리자');
+  const savedAt = nowIso();
+  const record = JSON.stringify({ version:1, algorithm:'PBKDF2-SHA256', iterations:LOGIN_SECURITY_PBKDF2_ITERATIONS, salt:saltHex, hash });
+  await env.DB.prepare('INSERT OR REPLACE INTO system_settings (setting_key, setting_value, updated_at, updated_by) VALUES (?, ?, ?, ?)')
+    .bind(LOGIN_SECURITY_SETTING_KEY, record, savedAt, actorName).run();
+  await logSecurityEvent_(env, previous.enabled ? 'LOGIN_SECURITY_CODE_CHANGED' : 'LOGIN_SECURITY_CODE_CREATED', actorName, 'assessment-login', 'SUCCESS', previous.enabled ? '로그인 보안번호 변경' : '로그인 보안번호 생성');
+  return { success:true, enabled:true, updatedAt:savedAt, updatedBy:actorName, message:previous.enabled ? '전체 로그인 보안번호를 변경했습니다.' : '전체 로그인 보안번호를 생성했습니다.' };
+}
+async function deleteLoginSecurityCode(env, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!hasAdmin(actor)) return { success:false, message:'전체 관리자 권한이 필요합니다.' };
+  const actorName = safeStr(actor.name || actor.judgeName || '관리자');
+  const previous = await loginSecuritySetting_(env);
+  await env.DB.prepare('DELETE FROM system_settings WHERE setting_key=?').bind(LOGIN_SECURITY_SETTING_KEY).run();
+  await logSecurityEvent_(env, 'LOGIN_SECURITY_CODE_DELETED', actorName, 'assessment-login', 'SUCCESS', '로그인 보안번호 삭제');
+  return { success:true, enabled:false, message:previous.enabled ? '전체 로그인 보안번호를 삭제했습니다.' : '설정된 로그인 보안번호가 없습니다.' };
+}
+
+async function judgeLogin(env, name, phone, securityCode = '', request = null) {
   name = safeStr(name); phone = normalizePhone(phone);
   if (!name) return { success: false, message: '이름을 입력해주세요.' };
   if (!phone) return { success: false, message: '연락처를 입력해주세요.' };
   const phoneLimit = await rateLimit_(env, 'login-phone:' + await sha256Hex_(phone), 20, 10 * 60);
   const ipLimit = await rateLimit_(env, 'login-ip:' + await sha256Hex_(clientIp_(request) || 'unknown'), 80, 10 * 60);
   if (!phoneLimit.ok || !ipLimit.ok) return { success: false, message: '로그인 시도가 많습니다. 잠시 후 다시 시도해주세요.' };
+  const securityCheck = await verifyLoginSecurityCode_(env, securityCode);
+  if (!securityCheck.success) {
+    await logSecurityEvent_(env, 'ASSESSMENT_LOGIN_SECURITY_FAILED', name, await sha256Hex_(phone), 'DENIED', securityCheck.message);
+    return { success:false, message:securityCheck.message, securityCodeRequired:!!securityCheck.required };
+  }
   if (name === '관리자' && phone === '01000000000') {
     return { success: false, message: '기본 관리자 계정은 비활성화되었습니다. 새로 등록한 관리자 계정으로 로그인해주세요.' };
   }
@@ -698,6 +803,7 @@ async function judgeLogin(env, name, phone, request = null) {
     roleMap,
     accountTypeMap,
     permissionDate: koreaDateKey_(),
+    securityCodeRequired: !!securityCheck.required,
     operatorRows: list.map(r => ({
       rowIndex: r.id,
       accountType: normalizeAccountType_(r.account_type || '', r.role || ''),
