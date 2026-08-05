@@ -17,9 +17,13 @@
 html,body{width:100%;overflow-x:hidden}.wrap,.card{max-width:100%}.top{flex-wrap:wrap}.nav{min-width:0}.nav a{white-space:normal}.card{overflow-x:auto}input,select,textarea,button,.btn,.template-link{min-width:0}.btn,.template-link{white-space:normal}.table{min-width:720px}.table th,.table td{word-break:keep-all;overflow-wrap:anywhere}.btnrow{align-items:stretch}@media(max-width:900px){.table{min-width:680px}.top{display:block}.nav a{display:inline-flex;margin-bottom:6px}.brand{line-height:1.16}}@media(max-width:520px){.wrap{width:calc(100% - 14px)}.card{padding:14px}.table{min-width:620px}.brand{font-size:23px}}
 
 .participant-table th,.participant-table td{word-break:keep-all!important;overflow-wrap:normal!important}
+input[type="date"]{color-scheme:dark;cursor:pointer;padding-right:44px;min-height:48px;background-image:linear-gradient(90deg,transparent calc(100% - 42px),rgba(255,255,255,.045) calc(100% - 42px));}
+input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:invert(1);opacity:.9;width:20px;height:20px;padding:6px;margin:-6px -4px -6px 0;}
+.date-field{position:relative}.date-field:after{content:'달력 선택';position:absolute;right:12px;top:4px;color:#777;font-size:9px;font-weight:800;pointer-events:none}.date-field input[type="date"]{padding-top:17px;padding-bottom:9px}
+.operator-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.operator-table-wrap{width:100%;overflow-x:auto}.operator-table{min-width:980px}
 
 @media(max-width:700px){
-  .participant-core-grid,.schedule-grid{grid-template-columns:1fr}.schedule-editor{padding:12px}.schedule-editor-head{align-items:flex-start;flex-direction:column;margin-bottom:10px}
+  .participant-core-grid,.schedule-grid,.operator-form-grid{grid-template-columns:1fr}.schedule-editor{padding:12px}.schedule-editor-head{align-items:flex-start;flex-direction:column;margin-bottom:10px}
   .participant-table-wrap{overflow:visible}.participant-table{display:block;min-width:0}.participant-table tbody{display:block}.participant-table tr:first-child{display:none}.participant-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 12px;margin:12px 0;padding:12px 14px;border:1px solid #2b2b2b;border-radius:16px;background:#0b0b0b}.participant-table td{display:grid;grid-template-columns:88px minmax(0,1fr);align-items:start;gap:10px;grid-column:1/-1;width:auto!important;min-width:0!important;padding:7px 0;border-bottom:1px solid #202020!important;white-space:normal!important;line-height:1.5}.participant-table td:before{content:attr(data-label);color:#888;font-size:11px;font-weight:800}.participant-table td:last-child{border-bottom:0!important}.participant-table .cell-seq{display:none}.participant-table .cell-name,.participant-table .cell-phone{white-space:nowrap!important}.participant-table .cell-actions{padding-top:10px}.participant-table .cell-actions .table-actions{justify-content:flex-end}.participant-table .cell-actions .btn{min-height:38px;padding:8px 13px}.schedule-phase{display:grid;gap:2px}.round-line{white-space:normal}
 }
 
@@ -108,8 +112,7 @@ html,body{width:100%;overflow-x:hidden}.wrap,.card{max-width:100%}.top{flex-wrap
 
     <div class="tabs" role="tablist" aria-label="등록·권한 구분">
       <button type="button" class="tab-btn active" id="tabbtn-players" onclick="switchRegistryTab('players')">선수 등록</button>
-      <button type="button" class="tab-btn" id="tabbtn-operators" onclick="switchRegistryTab('operators')">운영 권한</button>
-      <button type="button" class="tab-btn" id="tabbtn-admins" onclick="switchRegistryTab('admins')">관리자</button>
+      <button type="button" class="tab-btn" id="tabbtn-operators" onclick="switchRegistryTab('operators')">사용자·권한 등록</button>
     </div>
 
     <section id="tab-players" class="tab-section active">
@@ -134,7 +137,7 @@ html,body{width:100%;overflow-x:hidden}.wrap,.card{max-width:100%}.top{flex-wrap
         <div class="schedule-editor field-hidden" id="participantScheduleFields">
           <div class="schedule-editor-head"><div class="schedule-editor-title">예선 일정</div><div class="schedule-editor-note">등록 후 수정할 때도 모든 일정이 그대로 표시됩니다.</div></div>
           <div class="schedule-grid">
-            <label class="form-field"><span class="field-label">대회일</span><input id="mDate" data-manual-field="schedule" type="date" title="대회일"></label>
+            <label class="form-field date-field"><span class="field-label">대회일</span><input id="mDate" data-manual-field="schedule" type="date" title="대회일" onclick="openDatePicker_(this)"></label>
             <label class="form-field"><span class="field-label">운영일차</span><input id="mDay" data-manual-field="schedule" placeholder="예: 1일차"></label>
             <label class="form-field"><span class="field-label">경연순서</span><input id="mOrder" data-manual-field="schedule" placeholder="예: 1"></label>
             <label class="form-field"><span class="field-label">스테이션</span><input id="mStation" data-manual-field="schedule" placeholder="예: A 또는 1"></label>
@@ -167,27 +170,28 @@ html,body{width:100%;overflow-x:hidden}.wrap,.card{max-width:100%}.top{flex-wrap
       <div class="card">
         <div class="section-title">
           <div>
-            <div class="label" id="operatorFormLabel">심사위원·팀장·운영진 개별 추가</div>
-            <div class="hint">선택한 대회의 운영계정을 한 명씩 추가하거나, 아래 등록 목록에서 <b>수정</b>을 눌러 바로 고칠 수 있습니다. <b>적용일</b>을 비우면 상시 권한이며, 날짜를 지정하면 그날의 역할·평가팀이 상시 권한보다 우선합니다. MOB처럼 날짜마다 심사팀이 바뀌는 경우 <b>날짜복제</b>로 같은 계정을 복사해 날짜·역할·팀만 바꾸세요.</div>
+            <div class="label" id="operatorFormLabel">사용자·권한 개별 추가</div>
+            <div class="hint">심사위원·헤드·대회팀장·운영진·관리자를 한 곳에서 등록합니다. 날짜별 역할이 필요한 계정만 <b>적용일</b>을 달력에서 선택하고, 상시 권한은 날짜를 비워두세요.</div>
           </div>
         </div>
-        <div class="grid3">
-          <select id="opType" onchange="syncOperatorRoleOptions()">
-            <option value="JUDGE">심사위원</option>
-            <option value="TEAMLEAD">팀장</option>
+        <div class="operator-form-grid">
+          <label class="form-field"><span class="field-label">계정 유형</span><select id="opType" onchange="syncOperatorRoleOptions()">
+            <option value="JUDGE">심사위원·헤드</option>
+            <option value="TEAMLEAD">대회팀장</option>
             <option value="STAFF">운영진</option>
-          </select>
-          <select id="opRole"></select>
-          <input id="opTeam" placeholder="평가팀 예: A / 1팀 / Head A">
-          <input id="opName" placeholder="이름">
-          <input id="opPhone" placeholder="핸드폰번호" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-          <input id="opAff" placeholder="소속">
-          <input id="opDate" type="date" title="권한 적용일 · 비워두면 상시 권한">
+            <option value="ADMIN">관리자</option>
+          </select></label>
+          <label class="form-field operator-role-field"><span class="field-label">역할</span><select id="opRole"></select></label>
+          <label class="form-field operator-team-field"><span class="field-label">평가팀·스테이션</span><input id="opTeam" placeholder="예: A / 1팀 / Head A"></label>
+          <label class="form-field"><span class="field-label">이름·로그인 아이디</span><input id="opName" placeholder="이름"></label>
+          <label class="form-field"><span class="field-label">연락처·로그인 비밀번호</span><input id="opPhone" placeholder="숫자만 입력" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></label>
+          <label class="form-field"><span class="field-label">소속</span><input id="opAff" placeholder="소속"></label>
+          <label class="form-field date-field operator-date-field"><span class="field-label">심사 적용일</span><input id="opDate" type="date" title="권한 적용일 · 비워두면 상시 권한" onclick="openDatePicker_(this)"></label>
         </div>
         <div class="mode-note compact" id="operatorTeamHelp"></div>
         <div class="edit-state hidden" id="operatorEditState"></div>
         <div class="btnrow">
-          <button class="btn" id="operatorSaveBtn" onclick="saveOneOperator()">운영계정 저장</button>
+          <button class="btn" id="operatorSaveBtn" onclick="saveOneOperator()">사용자·권한 저장</button>
           <button class="btn secondary hidden" id="operatorCancelBtn" onclick="cancelOperatorEdit()">수정 취소</button>
           <button class="btn secondary hidden" id="mobSchedulePresetBtn" onclick="applyMobSchedulePreset()">2026 MOB 예선 8/6·8/7 권한 자동 적용</button>
         </div>
@@ -197,48 +201,18 @@ html,body{width:100%;overflow-x:hidden}.wrap,.card{max-width:100%}.top{flex-wrap
       <div class="card">
         <div class="section-title">
           <div>
-            <div class="label">등록된 심사위원·팀장 목록</div>
+            <div class="label">등록된 사용자·권한 목록</div>
             <div class="status" id="operatorCount"></div>
           </div>
           <button class="btn secondary small" onclick="loadOperators()">권한 목록 새로고침</button>
         </div>
         <div class="bulk-date-tools">
-          <input id="bulkOperatorDate" type="date" title="선택 계정에 추가할 심사 적용일">
+          <label class="form-field date-field"><span class="field-label">일괄 심사 적용일</span><input id="bulkOperatorDate" type="date" title="선택 계정에 추가할 심사 적용일" onclick="openDatePicker_(this)"></label>
           <label class="operator-select-all"><input id="operatorSelectAll" type="checkbox" onchange="toggleAllVisibleOperators_(this.checked)">현재 목록 전체 선택</label>
           <button class="btn small" onclick="applyBulkOperatorDate_()">선택 계정 적용일 저장</button>
         </div>
         <div class="mode-note compact">체크한 계정의 역할·평가팀을 선택한 날짜에 일괄 복제합니다. 기존 상시 권한과 다른 날짜 권한은 유지되므로 날짜별 심사팀을 따로 저장할 수 있습니다.</div>
-        <div style="overflow:auto"><table class="table" id="operatorTable"></table></div>
-      </div>
-    </section>
-
-    <section id="tab-admins" class="tab-section">
-      <div class="card">
-        <div class="label" id="adminFormLabel">관리자 개별 추가</div>
-        <div class="hint">관리자 이름과 핸드폰번호를 입력하면 전체 관리자 권한으로 등록됩니다. 아래 등록 목록에서 <b>수정</b>을 눌러 아이디·비밀번호·소속을 바로 고칠 수 있습니다.</div>
-        <div class="grid3" style="margin-top:12px">
-          <input id="adminName" placeholder="관리자 이름 / 아이디">
-          <input id="adminPhone" placeholder="핸드폰번호 / 비밀번호" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-          <input id="adminAff" placeholder="소속 예: KCL">
-        </div>
-        <div class="edit-state hidden" id="adminEditState"></div>
-        <div class="btnrow">
-          <button class="btn" id="adminSaveBtn" onclick="saveOneAdmin()">관리자 저장</button>
-          <button class="btn secondary hidden" id="adminCancelBtn" onclick="cancelAdminEdit()">수정 취소</button>
-        </div>
-        <div class="msg" id="adminManualMsg"></div>
-      </div>
-
-      <div class="card">
-        <div class="section-title">
-          <div>
-            <div class="label">등록된 관리자 목록</div>
-            <div class="status" id="adminCount"></div>
-          </div>
-          <button class="btn secondary small" onclick="loadOperators()">관리자 목록 새로고침</button>
-        </div>
-        <div style="overflow:auto"><table class="table" id="adminTable"></table></div>
-        <div class="mode-note">마지막 관리자 계정은 서버에서 삭제가 차단됩니다. 운영 초기화 버튼으로도 관리자 계정은 삭제되지 않습니다.</div>
+        <div class="operator-table-wrap"><table class="table operator-table" id="operatorTable"></table></div>
       </div>
     </section>
   </div>
@@ -247,7 +221,7 @@ html,body{width:100%;overflow-x:hidden}.wrap,.card{max-width:100%}.top{flex-wrap
 <script src="/assets/kcl-api-shim.js"></script>
 <script>
 var actor=null, configs=[], templates={}, currentRegistryTab='players', operatorRows=[], participantRows=[];
-var editingParticipantId=null, editingParticipantOriginal=null, editingOperatorId=null, editingAdminId=null;
+var editingParticipantId=null, editingParticipantOriginal=null, editingOperatorId=null;
 var COMP_CODES=['KBC','KTCC','MOC','MOB','KCR','IKRC','KCAC'];
 function isLegacyDefaultActor(actor){
   var n=String((actor&&(actor.name||actor.judgeName))||'').trim();
@@ -328,7 +302,7 @@ function login(){
 function loadRegistry(){rpc('getRegistryData',['ALL',actor],function(res){if(!res.success){alert(res.message);return} configs=res.configs||[];templates=res.templates||{};operatorRows=res.operators||[];var sel=document.getElementById('comp');sel.innerHTML=configs.map(function(c){return '<option value="'+c.code+'">'+c.code+' · '+c.name+'</option>'}).join(''); if(!configs.length){msg('loginMsg','접근 가능한 대회가 없습니다.',true);return;} syncOperatorRoleOptions();fillParticipantTemplate();fillOperatorTemplate();updateManualParticipantFields();updateMobSchedulePresetVisibility_();loadParticipants();renderOperatorTables();updateMainStatus();})}
 function onCompChange(){if(typeof cancelParticipantEdit==='function')cancelParticipantEdit();if(typeof cancelOperatorEdit==='function')cancelOperatorEdit();fillParticipantTemplate();fillOperatorTemplate();updateManualParticipantFields();updateMobSchedulePresetVisibility_();loadParticipants();renderOperatorTables();updateMainStatus();}
 function updateMainStatus(){var el=document.getElementById('mainStatus');if(!el)return;var code=(document.getElementById('comp')&&document.getElementById('comp').value)||'';el.textContent=code?('현재 선택: '+code+' · '+(PARTICIPANT_POLICY_MAP[code]||'')):'';}
-function switchRegistryTab(tab){currentRegistryTab=tab||'players';['players','operators','admins'].forEach(function(k){var sec=document.getElementById('tab-'+k);var btn=document.getElementById('tabbtn-'+k);if(sec)sec.classList.toggle('active',k===currentRegistryTab);if(btn)btn.classList.toggle('active',k===currentRegistryTab);});if(currentRegistryTab==='players')loadParticipants();else loadOperators();}
+function switchRegistryTab(tab){currentRegistryTab=tab==='operators'?'operators':'players';['players','operators'].forEach(function(k){var sec=document.getElementById('tab-'+k);var btn=document.getElementById('tabbtn-'+k);if(sec)sec.classList.toggle('active',k===currentRegistryTab);if(btn)btn.classList.toggle('active',k===currentRegistryTab);});if(currentRegistryTab==='players')loadParticipants();else loadOperators();}
 function reloadCurrentTab(){if(currentRegistryTab==='players')loadParticipants();else loadOperators();}
 function participantHeadersForCode(code){return PARTICIPANT_HEADER_MAP[String(code||'').toUpperCase()]||PARTICIPANT_HEADERS;}
 function participantSampleForCode(code){var c=String(code||'').toUpperCase();return PARTICIPANT_SAMPLE_MAP[c]||[c,'1','테스트 선수','소속','01012345678','1'];}
@@ -563,10 +537,11 @@ function previewFileToCsv(fileInputId,targetTextareaId,kind,mode){
 
 function accessCodesText(v){var s=String(v||'').toUpperCase().trim();if(!s)return [];if(s==='ALL')return ['ALL'];return s.split(',').map(function(x){return x.trim().toUpperCase();}).filter(Boolean);}
 function operatorIsAdminRow(r){var t=String((r&&(r.accountType||r.type))||'').toUpperCase();var role=String((r&&r.role)||'');return t==='ADMIN'||/관리자|admin|총괄/i.test(role);}
-function operatorVisibleForSelectedComp(r){var code=(document.getElementById('comp').value||'').toUpperCase();var codes=accessCodesText(r&&r.access);return code && !operatorIsAdminRow(r) && codes.indexOf(code)>=0;}
+function operatorVisibleForSelectedComp(r){var code=(document.getElementById('comp').value||'').toUpperCase();if(operatorIsAdminRow(r))return true;var codes=accessCodesText(r&&r.access);return code && codes.indexOf(code)>=0;}
 function roleLabelForRow(r){var t=String((r&&(r.accountType||r.type))||'').toUpperCase();if(operatorIsAdminRow(r))return '관리자';if(t==='TEAMLEAD')return '팀장';if(t==='STAFF')return '운영진';return r.role||'심사위원';}
-function syncOperatorRoleOptions(){var type=(document.getElementById('opType')&&document.getElementById('opType').value)||'JUDGE';var role=document.getElementById('opRole');if(!role)return;var roles=type==='TEAMLEAD'?['팀장']:(type==='STAFF'?['운영진']:['센서리 심사위원','테크니컬 심사위원','센서리 헤드 심사위원','테크니컬 헤드 심사위원']);role.innerHTML=roles.map(function(r){return '<option value="'+esc(r)+'">'+esc(r)+'</option>';}).join('');}
+function syncOperatorRoleOptions(){var type=(document.getElementById('opType')&&document.getElementById('opType').value)||'JUDGE';var role=document.getElementById('opRole');if(!role)return;var isAdmin=type==='ADMIN';var roles=isAdmin?['관리자']:(type==='TEAMLEAD'?['팀장']:(type==='STAFF'?['운영진']:['센서리 심사위원','테크니컬 심사위원','센서리 헤드 심사위원','테크니컬 헤드 심사위원']));role.innerHTML=roles.map(function(r){return '<option value="'+esc(r)+'">'+esc(r)+'</option>';}).join('');Array.prototype.forEach.call(document.querySelectorAll('.operator-role-field,.operator-team-field,.operator-date-field'),function(el){el.classList.toggle('field-hidden',isAdmin);});var help=document.getElementById('operatorTeamHelp');if(help)help.textContent=isAdmin?'관리자는 모든 대회의 대회팀장·헤드·운영 기능을 사용할 수 있으며 날짜·평가팀 지정이 필요하지 않습니다.':'평가팀·스테이션은 대회 운영 방식에 맞춰 지정합니다. 적용일을 비우면 상시 권한으로 저장됩니다.';}
 function setHidden_(id, hidden){var el=document.getElementById(id);if(el)el.classList.toggle('hidden',!!hidden);}
+function openDatePicker_(input){if(!input||input.disabled)return;try{if(typeof input.showPicker==='function')input.showPicker();}catch(e){}}
 var MOB_2026_PRELIM_PERMISSION_PRESET = [
   {effectiveDate:'2026-08-06',teamGroup:'A조',role:'센서리 심사위원',name:'최율'},
   {effectiveDate:'2026-08-06',teamGroup:'A조',role:'센서리 심사위원',name:'채보명'},
@@ -616,23 +591,20 @@ function bindOperatorActionButtons(table){if(!table)return;
   Array.prototype.forEach.call(table.querySelectorAll('[data-del-op]'),function(btn){btn.onclick=function(){deleteOperator(Number(this.getAttribute('data-del-op')),this.getAttribute('data-del-name')||'계정');};});
   Array.prototype.forEach.call(table.querySelectorAll('[data-edit-op]'),function(btn){btn.onclick=function(){editOperator(Number(this.getAttribute('data-edit-op')));};});
   Array.prototype.forEach.call(table.querySelectorAll('[data-copy-date-op]'),function(btn){btn.onclick=function(){copyOperatorForDate(Number(this.getAttribute('data-copy-date-op')));};});
-  Array.prototype.forEach.call(table.querySelectorAll('[data-edit-admin]'),function(btn){btn.onclick=function(){editAdmin(Number(this.getAttribute('data-edit-admin')));};});
 }
-function renderOperatorTables(){renderSelectedOperatorsTable();renderAdminTable();}
-function renderSelectedOperatorsTable(){var code=(document.getElementById('comp')&&document.getElementById('comp').value)||'';var rows=(operatorRows||[]).filter(operatorVisibleForSelectedComp);var el=document.getElementById('operatorCount');if(el)el.textContent=code+' 운영계정 '+rows.length+'건 · 날짜 지정 권한은 해당 날짜에 상시 권한보다 우선';var html='<tr><th>선택</th><th>순서</th><th>유형</th><th>이름</th><th>소속</th><th>핸드폰번호</th><th>역할/팀</th><th>적용일</th><th>권한</th><th>관리</th></tr>';html+=rows.map(function(r,i){var date=r.effectiveDate||'';return '<tr><td><input class="operator-select" type="checkbox" data-bulk-op="'+Number(r.rowIndex)+'" aria-label="'+escAttr((r.name||'계정')+' 선택')+'"></td><td>'+(i+1)+'</td><td>'+esc(String(r.accountType||r.type||''))+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>'+esc(roleLabelForRow(r))+' / '+esc(r.teamGroup)+'</td><td>'+esc(date||'상시')+'</td><td>'+esc(r.access)+'</td><td><div class="table-actions"><button class="btn secondary small" data-copy-date-op="'+Number(r.rowIndex)+'">날짜복제</button><button class="btn secondary small" data-edit-op="'+Number(r.rowIndex)+'">수정</button><button class="btn danger small" data-del-op="'+Number(r.rowIndex)+'" data-del-name="'+escAttr(r.name||'계정')+'">삭제</button></div></td></tr>';}).join('');var table=document.getElementById('operatorTable');if(table){table.innerHTML=html;bindOperatorActionButtons(table);}var all=document.getElementById('operatorSelectAll');if(all)all.checked=false;}
+function renderOperatorTables(){renderSelectedOperatorsTable();}
+function renderSelectedOperatorsTable(){var code=(document.getElementById('comp')&&document.getElementById('comp').value)||'';var rows=(operatorRows||[]).filter(operatorVisibleForSelectedComp);var adminCount=rows.filter(operatorIsAdminRow).length;var el=document.getElementById('operatorCount');if(el)el.textContent=code+' 운영계정 '+(rows.length-adminCount)+'건 · 관리자 '+adminCount+'건';var html='<tr><th>선택</th><th>순서</th><th>유형</th><th>이름</th><th>소속</th><th>연락처</th><th>역할/팀</th><th>적용일</th><th>권한</th><th>관리</th></tr>';html+=rows.map(function(r,i){var date=r.effectiveDate||'';var admin=operatorIsAdminRow(r);var select=admin?'<span class="empty-value">-</span>':'<input class="operator-select" type="checkbox" data-bulk-op="'+Number(r.rowIndex)+'" aria-label="'+escAttr((r.name||'계정')+' 선택')+'">';var roleTeam=admin?'관리자':([roleLabelForRow(r),r.teamGroup].filter(Boolean).join(' / '));var actions=(admin?'':'<button class="btn secondary small" data-copy-date-op="'+Number(r.rowIndex)+'">날짜복제</button>')+'<button class="btn secondary small" data-edit-op="'+Number(r.rowIndex)+'">수정</button><button class="btn danger small" data-del-op="'+Number(r.rowIndex)+'" data-del-name="'+escAttr(r.name||'계정')+'">삭제</button>';return '<tr><td>'+select+'</td><td>'+(i+1)+'</td><td>'+esc(admin?'ADMIN':String(r.accountType||r.type||''))+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>'+esc(roleTeam)+'</td><td>'+esc(admin?'상시':(date||'상시'))+'</td><td>'+esc(admin?'ALL':r.access)+'</td><td><div class="table-actions">'+actions+'</div></td></tr>';}).join('');var table=document.getElementById('operatorTable');if(table){table.innerHTML=html;bindOperatorActionButtons(table);}var all=document.getElementById('operatorSelectAll');if(all)all.checked=false;}
 function toggleAllVisibleOperators_(checked){Array.prototype.forEach.call(document.querySelectorAll('#operatorTable [data-bulk-op]'),function(input){input.checked=!!checked;});}
 function applyBulkOperatorDate_(){var code=String((document.getElementById('comp')||{}).value||'').toUpperCase();var date=(document.getElementById('bulkOperatorDate')||{}).value||'';var ids=Array.prototype.map.call(document.querySelectorAll('#operatorTable [data-bulk-op]:checked'),function(input){return Number(input.getAttribute('data-bulk-op'));}).filter(Boolean);if(!date){alert('심사 적용일을 먼저 선택해주세요.');return;}if(!ids.length){alert('날짜를 적용할 계정을 한 명 이상 체크해주세요.');return;}if(!confirm(code+' 선택 계정 '+ids.length+'명에 '+date+' 심사 권한을 저장할까요?\n기존 권한은 유지되고 선택 날짜 권한이 추가됩니다.'))return;msg('opManualMsg','날짜별 심사 권한을 저장하는 중입니다...');rpc('bulkApplyOperatorEffectiveDate',[{competitionCode:code,effectiveDate:date,rowIndexes:ids},actor],function(res){msg('opManualMsg',res.message||'완료',!res.success,res.success);if(res.success)loadOperators();});}
-function renderAdminTable(){var rows=(operatorRows||[]).filter(operatorIsAdminRow);var el=document.getElementById('adminCount');if(el)el.textContent='관리자 '+rows.length+'건';var html='<tr><th>순서</th><th>이름/아이디</th><th>소속</th><th>핸드폰번호/비밀번호</th><th>권한</th><th>관리</th></tr>';html+=rows.map(function(r,i){return '<tr><td>'+(i+1)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>'+esc(r.access||'ALL')+'</td><td><div class="table-actions"><button class="btn secondary small" data-edit-admin="'+Number(r.rowIndex)+'">수정</button><button class="btn danger small" data-del-op="'+Number(r.rowIndex)+'" data-del-name="'+escAttr(r.name||'관리자')+'">삭제</button></div></td></tr>';}).join('');var table=document.getElementById('adminTable');if(table){table.innerHTML=html;bindOperatorActionButtons(table);}}
+function renderAdminTable(){return;}
 function ensureOperatorRoleOption_(value){var role=document.getElementById('opRole');if(!role)return;if(value && !Array.prototype.some.call(role.options,function(o){return o.value===value;})){var opt=document.createElement('option');opt.value=value;opt.textContent=value;role.appendChild(opt);}}
-function fillOperatorForm_(r){r=r||{};var type=String(r.accountType||r.type||'JUDGE').toUpperCase();document.getElementById('opType').value=type==='TEAMLEAD'?'TEAMLEAD':(type==='STAFF'?'STAFF':'JUDGE');syncOperatorRoleOptions();ensureOperatorRoleOption_(r.role||roleLabelForRow(r));document.getElementById('opRole').value=r.role||roleLabelForRow(r);document.getElementById('opTeam').value=r.teamGroup||'';document.getElementById('opName').value=r.name||'';document.getElementById('opPhone').value=r.phone||'';document.getElementById('opAff').value=r.affiliation||'';document.getElementById('opDate').value=r.effectiveDate||'';}
-function editOperator(rowIndex){var r=(operatorRows||[]).find(function(x){return Number(x.rowIndex)===Number(rowIndex);});if(!r)return;editingOperatorId=Number(rowIndex);fillOperatorForm_(r);var el=document.getElementById('operatorEditState');if(el){el.textContent='수정 중: '+(r.name||'운영계정')+' · '+(r.effectiveDate||'상시 권한');}setHidden_('operatorEditState',false);setHidden_('operatorCancelBtn',false);var b=document.getElementById('operatorSaveBtn');if(b)b.textContent='운영계정 수정완료';var lab=document.getElementById('operatorFormLabel');if(lab)lab.textContent='심사위원·팀장·운영진 수정';document.getElementById('opName').focus();}
+function fillOperatorForm_(r){r=r||{};var type=String(r.accountType||r.type||'JUDGE').toUpperCase();document.getElementById('opType').value=type==='ADMIN'?'ADMIN':(type==='TEAMLEAD'?'TEAMLEAD':(type==='STAFF'?'STAFF':'JUDGE'));syncOperatorRoleOptions();ensureOperatorRoleOption_(r.role||roleLabelForRow(r));document.getElementById('opRole').value=r.role||roleLabelForRow(r);document.getElementById('opTeam').value=r.teamGroup||'';document.getElementById('opName').value=r.name||'';document.getElementById('opPhone').value=r.phone||'';document.getElementById('opAff').value=r.affiliation||'';document.getElementById('opDate').value=r.effectiveDate||'';}
+function editOperator(rowIndex){var r=(operatorRows||[]).find(function(x){return Number(x.rowIndex)===Number(rowIndex);});if(!r)return;editingOperatorId=Number(rowIndex);fillOperatorForm_(r);var el=document.getElementById('operatorEditState');if(el){el.textContent='수정 중: '+(r.name||'사용자')+' · '+(operatorIsAdminRow(r)?'전체 관리자':(r.effectiveDate||'상시 권한'));}setHidden_('operatorEditState',false);setHidden_('operatorCancelBtn',false);var b=document.getElementById('operatorSaveBtn');if(b)b.textContent='사용자·권한 수정완료';var lab=document.getElementById('operatorFormLabel');if(lab)lab.textContent='사용자·권한 수정';document.getElementById('opName').focus();}
+function editAdmin(rowIndex){editOperator(rowIndex);}
 function copyOperatorForDate(rowIndex){var r=(operatorRows||[]).find(function(x){return Number(x.rowIndex)===Number(rowIndex);});if(!r)return;editingOperatorId=null;fillOperatorForm_(r);document.getElementById('opDate').value='';var el=document.getElementById('operatorEditState');if(el){el.textContent='날짜별 권한 복제: '+(r.name||'운영계정')+' · 적용일과 역할/팀을 지정해 새 권한으로 저장하세요.';}setHidden_('operatorEditState',false);setHidden_('operatorCancelBtn',false);var b=document.getElementById('operatorSaveBtn');if(b)b.textContent='날짜별 권한 새로 저장';var lab=document.getElementById('operatorFormLabel');if(lab)lab.textContent='날짜별 심사 권한 복제';document.getElementById('opDate').focus();}
-function cancelOperatorEdit(){editingOperatorId=null;['opName','opPhone','opAff','opTeam','opDate'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});syncOperatorRoleOptions();setHidden_('operatorEditState',true);setHidden_('operatorCancelBtn',true);var b=document.getElementById('operatorSaveBtn');if(b)b.textContent='운영계정 저장';var lab=document.getElementById('operatorFormLabel');if(lab)lab.textContent='심사위원·팀장·운영진 개별 추가';msg('opManualMsg','');}
-function editAdmin(rowIndex){var r=(operatorRows||[]).find(function(x){return Number(x.rowIndex)===Number(rowIndex);});if(!r)return;editingAdminId=Number(rowIndex);document.getElementById('adminName').value=r.name||'';document.getElementById('adminPhone').value=r.phone||'';document.getElementById('adminAff').value=r.affiliation||'';var el=document.getElementById('adminEditState');if(el){el.textContent='수정 중: '+(r.name||'관리자');}setHidden_('adminEditState',false);setHidden_('adminCancelBtn',false);var b=document.getElementById('adminSaveBtn');if(b)b.textContent='관리자 수정완료';var lab=document.getElementById('adminFormLabel');if(lab)lab.textContent='관리자 정보 수정';document.getElementById('adminName').focus();}
-function cancelAdminEdit(){editingAdminId=null;['adminName','adminPhone','adminAff'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});setHidden_('adminEditState',true);setHidden_('adminCancelBtn',true);var b=document.getElementById('adminSaveBtn');if(b)b.textContent='관리자 저장';var lab=document.getElementById('adminFormLabel');if(lab)lab.textContent='관리자 개별 추가';msg('adminManualMsg','');}
-function saveOneOperator(){var code=document.getElementById('comp').value;var type=document.getElementById('opType').value;var payload={rowIndex:editingOperatorId||'',accountType:type,role:document.getElementById('opRole').value,name:document.getElementById('opName').value,phone:document.getElementById('opPhone').value,affiliation:document.getElementById('opAff').value,teamGroup:document.getElementById('opTeam').value,effectiveDate:document.getElementById('opDate').value,access:code};msg('opManualMsg','저장 중...');rpc('upsertOperatorAccount',[payload,actor],function(res){msg('opManualMsg',res.message||'완료',!res.success,res.success);if(res.success){cancelOperatorEdit();loadOperators();}})}
-function saveOneAdmin(){var payload={rowIndex:editingAdminId||'',accountType:'ADMIN',role:'관리자',name:document.getElementById('adminName').value,phone:document.getElementById('adminPhone').value,affiliation:document.getElementById('adminAff').value,access:'ALL',teamGroup:''};msg('adminManualMsg','저장 중...');rpc('upsertOperatorAccount',[payload,actor],function(res){msg('adminManualMsg',res.message||'완료',!res.success,res.success);if(res.success){cancelAdminEdit();loadOperators();}})}
-function deleteOperator(rowIndex,name){if(!rowIndex)return;if(!confirm((name||'해당 계정')+' 권한을 삭제할까요?'))return;rpc('deleteOperatorAccount',[rowIndex,actor],function(res){alert(res.message||'완료');if(res.success!==false){if(editingOperatorId===rowIndex)cancelOperatorEdit();if(editingAdminId===rowIndex)cancelAdminEdit();loadOperators();}})}
+function cancelOperatorEdit(){editingOperatorId=null;['opName','opPhone','opAff','opTeam','opDate'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});document.getElementById('opType').value='JUDGE';syncOperatorRoleOptions();setHidden_('operatorEditState',true);setHidden_('operatorCancelBtn',true);var b=document.getElementById('operatorSaveBtn');if(b)b.textContent='사용자·권한 저장';var lab=document.getElementById('operatorFormLabel');if(lab)lab.textContent='사용자·권한 개별 추가';msg('opManualMsg','');}
+function saveOneOperator(){var code=document.getElementById('comp').value;var type=document.getElementById('opType').value;var isAdmin=type==='ADMIN';var payload={rowIndex:editingOperatorId||'',accountType:type,role:isAdmin?'관리자':document.getElementById('opRole').value,name:document.getElementById('opName').value,phone:document.getElementById('opPhone').value,affiliation:document.getElementById('opAff').value,teamGroup:isAdmin?'':document.getElementById('opTeam').value,effectiveDate:isAdmin?'':document.getElementById('opDate').value,access:isAdmin?'ALL':code};if(!String(payload.name||'').trim()||!String(payload.phone||'').trim()){msg('opManualMsg','이름과 연락처(로그인 정보)를 입력해주세요.',true);return;}msg('opManualMsg','저장 중...');rpc('upsertOperatorAccount',[payload,actor],function(res){if(res.success){cancelOperatorEdit();msg('opManualMsg',res.message||'저장 완료',false,true);loadOperators();}else msg('opManualMsg',res.message||'저장 실패',true);})}
+function deleteOperator(rowIndex,name){if(!rowIndex)return;if(!confirm((name||'해당 계정')+' 권한을 삭제할까요?'))return;rpc('deleteOperatorAccount',[rowIndex,actor],function(res){alert(res.message||'완료');if(res.success!==false){if(editingOperatorId===rowIndex)cancelOperatorEdit();loadOperators();}})}
 function escAttr(s){return esc(s).replace(/"/g,'&quot;');}
 
 function readExcelWorkbookFromInput(fileInputId, callback){
@@ -703,6 +675,7 @@ function updateManualParticipantFields(){var code=((document.getElementById('com
   else if(code==='KTCC'){setFieldVisible_('mCup',true,'예선팀번호','예선팀번호');setFieldVisible_('mSample',true,'결선팀번호','결선팀번호');}
   else if(code==='MOB'){setFieldVisible_('mCup',true,'예선번호(선택)','예선번호');setFieldVisible_('mSample',true,'결선번호(선택)','결선번호');}
   else {setFieldVisible_('mCup',true,'예선번호(선택)','예선번호');setFieldVisible_('mSample',true,'본선/결선번호(선택)','본선·결선번호');}
+  syncOperatorRoleOptions();
 }
 function saveOneParticipant(){var code=document.getElementById('comp').value;var no=document.getElementById('mNo').value;var a=document.getElementById('mCup').value;var b=document.getElementById('mSample').value;var competitionDate=participantUsesSchedule_(code)?(document.getElementById('mDate').value||''):'';if(code==='MOB'&&!competitionDate){msg('manualMsg','MOB 선수 등록 시 대회일을 반드시 선택해주세요.',true);document.getElementById('mDate').focus();return;}var original=editingParticipantOriginal||{};var payload={rowIndex:editingParticipantId||'',competitionCode:code,name:document.getElementById('mName').value,phone:document.getElementById('mPhone').value,affiliation:document.getElementById('mAff').value,uniqueNo:no,cupNo:'',sampleNo:'',teamNo:'',teamName:'',competitionDate:competitionDate,extra:Object.assign({},original.extra||{})};
   if(code==='KCR'){payload.prelimCupNo=a;payload.finalCupNo=b;}
@@ -712,7 +685,7 @@ function saveOneParticipant(){var code=document.getElementById('comp').value;var
   else if(code==='MOB'){payload.prelimCupNo=a||no;payload.finalCupNo=b;}
   else {payload.prelimCupNo=a||no;payload.mainCupNo=b;payload.finalCupNo=b;}
   if(participantUsesSchedule_(code)){payload.extra=Object.assign({},payload.extra||{}, {'대회일':competitionDate,'운영일차':document.getElementById('mDay').value||'','경연순서':document.getElementById('mOrder').value||'','스테이션번호':document.getElementById('mStation').value||'','대기시간':document.getElementById('mWaiting').value||'','준비시간':document.getElementById('mPrep').value||'','시연시간':document.getElementById('mPerformance').value||'','정리시간':document.getElementById('mCleanup').value||''});}
-  msg('manualMsg','저장 중...');rpc('upsertParticipant',[payload,actor],function(res){msg('manualMsg',res.message||'완료',!res.success,res.success);if(res.success){cancelParticipantEdit();loadParticipants();}})}
+  msg('manualMsg','저장 중...');rpc('upsertParticipant',[payload,actor],function(res){if(res.success){cancelParticipantEdit();msg('manualMsg',res.message||'저장 완료',false,true);loadParticipants();}else msg('manualMsg',res.message||'저장 실패',true);})}
 function participantTextCell_(label,value,className){var text=String(value==null?'':value);return '<td class="'+escAttr(className||'')+'" data-label="'+escAttr(label)+'">'+(text?esc(text):'<span class="empty-value">미입력</span>')+'</td>';}
 function participantHtmlCell_(label,html,className){return '<td class="'+escAttr(className||'')+'" data-label="'+escAttr(label)+'">'+(html||'<span class="empty-value">미입력</span>')+'</td>';}
 function participantActionHtml_(r){return '<td class="cell-actions" data-label="관리"><div class="table-actions"><button class="btn secondary small" data-edit-part="'+Number(r.rowIndex)+'">수정</button><button class="btn danger small" data-del-part="'+Number(r.rowIndex)+'" data-del-name="'+escAttr(r.name||r.teamName||'선수')+'">삭제</button></div></td>';}

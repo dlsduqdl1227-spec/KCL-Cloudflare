@@ -3870,7 +3870,7 @@ async function getIkrcCalibrationScopeOptions(env, actorArg) {
   const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
   const actorRole = safeStr(roleMap.IKRC || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   const canManageAll = hasManageAccess(auth.actor, 'IKRC');
-  if (!isHeadRole_(actorRole) && !canManageAll) return { success:false, message:'IKRC 켈리브레이션 결과는 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' };
+  if (!isHeadRole_(actorRole) && !canManageAll) return { success:false, message:'켈리브레이션 결과 확인 권한이 없습니다.' };
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
   const stations = ikrcStationsForPurposeServer_(cfg, currentRound, 'calibration');
@@ -3928,7 +3928,7 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
   const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
   const actorRole = safeStr(roleMap.IKRC || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   const canManageAll = hasManageAccess(auth.actor, 'IKRC');
-  if (!isHeadRole_(actorRole) && !canManageAll) return { error: { success:false, message:'IKRC 켈리브레이션 결과는 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' } };
+  if (!isHeadRole_(actorRole) && !canManageAll) return { error: { success:false, message:'켈리브레이션 결과 확인 권한이 없습니다.' } };
   const checkerKey = ikrcCalibrationCheckerKey_(auth.actor);
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
@@ -3940,7 +3940,7 @@ async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
   if (scope.scope === 'station') {
     const requestedStation = scope.station || (!safeStr(requestedScope && requestedScope.stationId) ? allowedStations[0] : null);
     if (!requestedStation || !allowedStations.some(station => safeStr(station.id) === safeStr(requestedStation.id))) {
-      return { error: { success:false, message:'헤드는 직접 팀별 켈리브레이션을 평가한 스테이션만 확인할 수 있습니다. 대회팀장·관리자는 모든 스테이션을 확인할 수 있습니다.' } };
+      return { error: { success:false, message:'확인할 수 있는 스테이션 결과가 아직 없습니다.' } };
     }
     scope = ikrcCalibrationScope_({scope:'station', stationId:requestedStation.id, team:requestedStation.label}, auth.actor, stations);
   }
@@ -4046,7 +4046,7 @@ async function ikrcOfficialCalibrationRows_(env, requestedScope, actorArg) {
   const actorRole = safeStr(roleMap.IKRC || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   const canManageAll = hasManageAccess(auth.actor, 'IKRC');
   if (!isHeadRole_(actorRole) && !canManageAll) {
-    return { error:{ success:false, message:'IKRC 대회평가 스테이션 결과는 헤드 심사위원 또는 대회팀장/관리자만 확인할 수 있습니다.' } };
+    return { error:{ success:false, message:'대회평가 결과 확인 권한이 없습니다.' } };
   }
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
@@ -4059,7 +4059,7 @@ async function ikrcOfficialCalibrationRows_(env, requestedScope, actorArg) {
   if (scope.scope === 'station') {
     const requestedStation = scope.station || (!safeStr(requestedScope && requestedScope.stationId) ? allowedStations[0] : null);
     if (!requestedStation || !allowedStations.some(station => safeStr(station.id) === safeStr(requestedStation.id))) {
-      return { error:{ success:false, message:'헤드는 배정되었거나 공식 대회평가를 제출한 스테이션 결과만 확인할 수 있습니다. 대회팀장·관리자는 모든 스테이션을 확인할 수 있습니다.' } };
+      return { error:{ success:false, message:'확인할 수 있는 스테이션 결과가 아직 없습니다.' } };
     }
     scope = ikrcCalibrationScope_({scope:'station', stationId:requestedStation.id, team:requestedStation.label}, auth.actor, stations);
   }
