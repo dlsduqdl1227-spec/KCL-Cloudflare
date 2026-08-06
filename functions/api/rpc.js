@@ -3916,8 +3916,8 @@ async function getMobCalibrationParticipantNumbers(env, requestedTeam, roleText,
     if (check && check.checkedAt) { cur.checked = true; cur.checkedAt = check.checkedAt; cur.checkerName = check.checkerName || ''; }
     by.set(no, cur);
   });
-  // MOB 켈리브레이션은 헤드가 '검수완료' 처리한 참가자를 목록에서 숨겨 현장 혼선을 줄인다.
-  return Array.from(by.values()).filter(x => !x.checked).sort((a,b) => safeStr(a.participantNo).localeCompare(safeStr(b.participantNo), 'ko', {numeric:true}));
+  // 확인완료 뒤에도 헤드가 점수·코멘트를 다시 열어볼 수 있도록 목록에 유지한다.
+  return Array.from(by.values()).sort((a,b) => safeStr(a.participantNo).localeCompare(safeStr(b.participantNo), 'ko', {numeric:true}));
 }
 async function getMobCalibrationResultsByParticipant(env, participantNo, requestedTeam, roleText, actorArg) {
   const data = await mobCalibrationRows_(env, requestedTeam, roleText, actorArg);

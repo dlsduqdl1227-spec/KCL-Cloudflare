@@ -3240,6 +3240,7 @@ var _participantAssignments = {};
 // 순위 / 인쇄용
 var _ranking = null;
 var _rankingDetail = null;
+var _rankingCacheByCode = {};
 var _reviewState = { code:null, name:null, headers:[], list:[], current:null, backPanel:'pSelect', stationScope:null, stationScopes:[], readOnlyHeadMonitor:false };
 var _kbcGeneratedComment = '', _kbcCommentEdited = true;
 var _mobGeneratedComment = '', _mobCommentEdited = true;
@@ -4511,6 +4512,8 @@ function reviewManageScopeForCode_(code) {
 }
 function shouldHideCompletedReviewRows() {
   var code = String((_reviewState && _reviewState.code) || '').toUpperCase();
+  // MOB 진행 중에는 제출이 검수완료되는 즉시 사라지지 않도록 전체 이력을 유지한다.
+  if (code === 'MOB') return false;
   if (code === 'IKRC' && isHeadRoleForCode_('IKRC') && !reviewManageScopeForCode_('IKRC')) return false;
   return isIkrcHeadMonitor_() ? false : !reviewManageScopeForCode_(code);
 }
@@ -5671,6 +5674,10 @@ function setReviewEditMetric_(item) {
 }
 
 function goReviewByCode(code, name, backPanel) {
+  var normalizedCode = String(code || '').toUpperCase();
+  var cachedMobReview = normalizedCode === 'MOB' && String(_reviewState.code || '').toUpperCase() === 'MOB' && Array.isArray(_reviewState.list) && _reviewState.list.length
+    ? { list:_reviewState.list.slice(), headers:(_reviewState.headers || []).slice(), supersededCount:Number(_reviewState.supersededCount || 0) }
+    : null;
   _reviewState.code = code;
   _reviewState.name = name || code;
   _reviewState.stationScope = null;
@@ -5678,10 +5685,11 @@ function goReviewByCode(code, name, backPanel) {
   _reviewState.readOnlyHeadMonitor = false;
   _reviewState.backPanel = backPanel || (_judge.role === '관리자' ? 'pAdmin' : (isTeamLeaderRole() ? 'pTeam' : 'pSelect'));
   document.getElementById('review-title').textContent = (name || code) + ' 검수';
-  document.getElementById('review-list').innerHTML = '';
-  document.getElementById('review-stat').textContent = '불러오는 중...';
+  if (!cachedMobReview) document.getElementById('review-list').innerHTML = '';
+  document.getElementById('review-stat').textContent = cachedMobReview ? '기존 검수 목록 표시 중 · 최신 정보 확인 중...' : '불러오는 중...';
   setReviewLogo_('review-logo', code);
-  setReviewListMetric_(0, 0, 0, true);
+  if (cachedMobReview) renderReview(cachedMobReview.list, code, cachedMobReview.headers, cachedMobReview.supersededCount);
+  else setReviewListMetric_(0, 0, 0, true);
   showPanel('pReview');
   showOverlay();
 
@@ -5690,7 +5698,9 @@ function goReviewByCode(code, name, backPanel) {
   var timer = setTimeout(function(){
     timedOut = true;
     hideOverlay();
-    document.getElementById('review-stat').textContent = '응답이 지연됩니다. 잠시 후 다시 시도해주세요.';
+    document.getElementById('review-stat').textContent = cachedMobReview
+      ? '기존 검수 목록 표시 중 · 최신 정보 응답이 지연됩니다.'
+      : '응답이 지연됩니다. 잠시 후 다시 시도해주세요.';
   }, 30000);
 
   google.script.run
@@ -5699,12 +5709,13 @@ function goReviewByCode(code, name, backPanel) {
       clearTimeout(timer);
       hideOverlay();
       if (!res || !res.success) {
-        document.getElementById('review-stat').textContent = '오류: ' + ((res && res.message) || '알 수 없는 오류');
+        document.getElementById('review-stat').textContent = (cachedMobReview ? '기존 검수 목록 표시 중 · ' : '') + '오류: ' + ((res && res.message) || '알 수 없는 오류');
         return;
       }
       _reviewState.stationScope = res.stationScope || null;
       _reviewState.stationScopes = Array.isArray(res.stationScopes) ? res.stationScopes : (_reviewState.stationScope ? [_reviewState.stationScope] : []);
       _reviewState.readOnlyHeadMonitor = !!res.readOnlyHeadMonitor;
+      _reviewState.supersededCount = Number(res.supersededCount || 0);
       var scopeText = _reviewState.stationScopes.length ? (' · ' + _reviewState.stationScopes.map(function(scope){ return scope.label; }).join(', ')) : '';
       document.getElementById('review-title').textContent = (name || code) + (_reviewState.readOnlyHeadMonitor ? ' 스테이션 평가 통계' : ' 검수') + scopeText;
       renderReview(res.list || [], code, res.headers || [], Number(res.supersededCount || 0));
@@ -5713,7 +5724,7 @@ function goReviewByCode(code, name, backPanel) {
       if (timedOut) return;
       clearTimeout(timer);
       hideOverlay();
-      document.getElementById('review-stat').textContent = '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
+      document.getElementById('review-stat').textContent = (cachedMobReview ? '기존 검수 목록 표시 중 · ' : '') + '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
     .getReviewList(code, reviewActorPayload_(code));
 }
@@ -9261,13 +9272,20 @@ function renderDetailCard(row, headers, idx, compCode) {
 // 순위 / 디브리핑
 // ══════════════════════════════════════════
 function goRankingByCode(code, name, round) {
+  var rankingCode = String(code || '').toUpperCase();
+  var cachedRanking = _rankingCacheByCode[rankingCode] || null;
   var reportActions = document.getElementById('ranking-report-actions');
   if (reportActions) reportActions.style.display = canPrintRanking(code) ? 'flex' : 'none';
   document.getElementById('ranking-title').textContent = (name || code) + ' 순위';
   document.getElementById('ranking-sub').textContent = '현재 라운드: ' + (round || '-');
-  document.getElementById('ranking-list').innerHTML = '';
+  if (!cachedRanking) document.getElementById('ranking-list').innerHTML = '';
   document.getElementById('rank-summary-title').textContent = '순위표';
-  document.getElementById('rank-summary-sub').textContent = '불러오는 중...';
+  if (cachedRanking) {
+    renderRanking(cachedRanking);
+    document.getElementById('rank-summary-sub').textContent = '기존 순위 표시 중 · 최신 정보 확인 중...';
+  } else {
+    document.getElementById('rank-summary-sub').textContent = '불러오는 중...';
+  }
   document.getElementById('rank-print-title').textContent = (name || code) + ' 순위표';
   var now = new Date();
   document.getElementById('rank-print-date').textContent =
@@ -9279,7 +9297,9 @@ function goRankingByCode(code, name, round) {
   var timer = setTimeout(function(){
     timedOut = true;
     hideOverlay();
-    document.getElementById('rank-summary-sub').textContent = '응답이 지연됩니다. 다시 시도해주세요.';
+    document.getElementById('rank-summary-sub').textContent = cachedRanking
+      ? '기존 순위 표시 중 · 최신 정보 응답이 지연됩니다.'
+      : '응답이 지연됩니다. 다시 시도해주세요.';
   }, 30000);
 
   google.script.run
@@ -9289,10 +9309,11 @@ function goRankingByCode(code, name, round) {
       hideOverlay();
       if (!res || !res.success) {
         document.getElementById('rank-summary-sub').textContent =
-          '오류: ' + ((res && res.message) || '알 수 없는 오류');
+          (cachedRanking ? '기존 순위 표시 중 · ' : '') + '오류: ' + ((res && res.message) || '알 수 없는 오류');
         return;
       }
       _ranking = res;
+      _rankingCacheByCode[rankingCode] = res;
       renderRanking(res);
     })
     .withFailureHandler(function(err){
@@ -9300,7 +9321,7 @@ function goRankingByCode(code, name, round) {
       clearTimeout(timer);
       hideOverlay();
       document.getElementById('rank-summary-sub').textContent =
-        '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
+        (cachedRanking ? '기존 순위 표시 중 · ' : '') + '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
     .getRanking(code, adminActorPayload_());
 }
@@ -13963,7 +13984,7 @@ function loadMobCalibrationTargets() {
   if (isMobHeadCategoryMissing_()) { toast(mobHeadCategoryMessage_(), true); return; }
   if (!_selComp) _selComp = {code:'MOB', name:'MOB', currentRound:''};
   var sub = document.getElementById('mob-cal-sub');
-  if (sub) sub.textContent = judgeLineText() + '  ' + ((_selComp && _selComp.currentRound) || '') + ' · ' + mobCalibrationLabel_() + ' · 확인완료 항목 숨김';
+  if (sub) sub.textContent = judgeLineText() + '  ' + ((_selComp && _selComp.currentRound) || '') + ' · ' + mobCalibrationLabel_() + ' · 전체 제출 항목';
   showPanel('pMobCalList');
   var wrap = document.getElementById('mob-cal-list');
   if (wrap) wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">불러오는 중...</p>';
@@ -13973,7 +13994,7 @@ function loadMobCalibrationTargets() {
       hideOverlay();
       items = (Array.isArray(items) ? items : (items && Array.isArray(items.numbers) ? items.numbers : (items && Array.isArray(items.items) ? items.items : []))).map(mobCalItem_).filter(function(x){ return !!x.participantNo; });
       if (!items.length) {
-        wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">현재 검수확인할 일반 심사위원 제출 데이터가 없습니다. 검수완료된 항목은 목록에서 숨겨집니다.</p>';
+        wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">현재 확인할 일반 심사위원 제출 데이터가 없습니다.</p>';
         return;
       }
       var html = '';
