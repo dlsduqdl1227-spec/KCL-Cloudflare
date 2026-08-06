@@ -1489,6 +1489,11 @@ function sortParticipantRowsForCompetition_(rows, competitionCode) {
       if (am.order !== bm.order) return am.order - bm.order;
       if (am.waitingTime !== bm.waitingTime) return am.waitingTime.localeCompare(bm.waitingTime);
     }
+    if (aCode === 'IKRC') {
+      const aNo = safeStr(a && (a.unique_no || a.prelim_cup_no || a.sample_no));
+      const bNo = safeStr(b && (b.unique_no || b.prelim_cup_no || b.sample_no));
+      if (aNo !== bNo) return aNo.localeCompare(bNo, 'ko', { numeric:true, sensitivity:'base' });
+    }
     return Number(a && a.id || 0) - Number(b && b.id || 0);
   });
 }
