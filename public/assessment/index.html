@@ -4478,6 +4478,7 @@ function canReviewEditDetails() {
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
   if (isAdminRole()) return true;
   if (c === 'IKRC' && isIkrcHeadMonitor_()) return false;
+  if (c === 'MOB' && isTeamLeaderForCode_(c)) return true;
   // MOC·KTCC는 심사위원 없이 운영 스텝이 실제 기록/검수를 맡는 경우가 있어,
   // 팀장뿐 아니라 해당 대회 운영진/스텝도 본인 제출 건에 한해 수정할 수 있게 엽니다.
   // 목록 자체는 서버에서 '본인 제출 건'으로 필터링되므로, 다른 사람의 개인 평가는 열리지 않습니다.
@@ -6890,8 +6891,12 @@ function reviewMobTotalInfo_() {
   var penalty = sec == null ? reviewNumericValueAt_(idx.penalty) : reviewMobTimePenaltyFromSeconds_(sec);
   var manualDq = idx.dq >= 0 && /^(Y|O|TRUE|1|실격)$/i.test(String(reviewFieldValueByIndex_(idx.dq) || '').trim());
   var timeDq = sec != null && sec > reviewMobTimeLimitSeconds_() + 60;
-  var total = (manualDq || timeDq) ? 0 : Math.max(0, roundTotal(grossTotal - penalty));
-  return {idx:idx, total:total, penalty:penalty, dq:(manualDq || timeDq), timeDq:timeDq, technicalTotal:technicalTotal, sensoryTotal:sensoryTotal, creativeTotal:creativeTotal, grossTotal:grossTotal, onlyTech:onlyTech, onlySens:onlySens, creative:creative};
+  var dq = manualDq || timeDq;
+  // MOB 검수의 개별 심사위원 총점은 해당 심사위원이 입력한 평가항목 합계입니다.
+  // 시간감점은 참가자의 센서리·테크니컬 점수를 모두 합산한 뒤 최종 순위에서 한 번만 적용합니다.
+  var total = dq ? 0 : grossTotal;
+  var officialTotal = dq ? 0 : Math.max(0, roundTotal(grossTotal - penalty));
+  return {idx:idx, total:total, officialTotal:officialTotal, penalty:penalty, dq:dq, timeDq:timeDq, technicalTotal:technicalTotal, sensoryTotal:sensoryTotal, creativeTotal:creativeTotal, grossTotal:grossTotal, onlyTech:onlyTech, onlySens:onlySens, creative:creative};
 }
 function reviewSetHiddenDerived_(id, idx, value) {
   if (idx == null || idx < 0) return;
@@ -6926,7 +6931,7 @@ function syncMobReviewTotal_() {
   reviewSetHiddenDerived_('review-mob-sensory-total-input', info.idx.sensoryTotal, info.sensoryTotal);
   reviewSetHiddenDerived_('review-mob-creative-total-input', info.idx.creativeTotal, info.creativeTotal);
   reviewSetHiddenDerived_('review-mob-gross-total-input', info.idx.grossTotal, info.grossTotal);
-  reviewSetHiddenDerived_('review-mob-official-total-input', info.idx.officialTotal, info.total);
+  reviewSetHiddenDerived_('review-mob-official-total-input', info.idx.officialTotal, info.officialTotal);
   if (info.idx.penalty >= 0) {
     var pEl = document.querySelector('#review-edit-fields input[data-col="' + info.idx.penalty + '"]');
     if (pEl) {
@@ -8345,15 +8350,17 @@ function ensureReviewOverallCard_() {
   var h = (_reviewState.headers || [])[idx] || '종합코멘트';
   var item = _reviewState.current || {};
   var val = item[h] != null ? item[h] : (item['_col' + idx] || '');
-  var editable = !isMobManualComment && canReviewEditDetails();
+  var editable = canReviewEditDetails();
   var card = document.createElement('div');
   card.className = 'review-comment-center';
   card.id = 'review-overall-card';
   var title = isMobManualComment ? 'MOB 전체 종합 코멘트' : '전체 코멘트';
-  var sub = isMobManualComment ? '심사위원이 제출한 수기 원문입니다. 검수 화면에서는 확인만 할 수 있습니다.' : '항목별 코멘트가 없을 경우 이 영역의 전체 코멘트만 저장·반영됩니다.';
+  var sub = isMobManualComment
+    ? (editable ? '심사위원이 제출한 수기 원문입니다. 검수 중 수정한 내용이 최종 코멘트로 저장됩니다.' : '심사위원이 제출한 수기 원문입니다.')
+    : '항목별 코멘트가 없을 경우 이 영역의 전체 코멘트만 저장·반영됩니다.';
   var generateButton = isMobManualComment ? '' : '<button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">초안 생성</button>';
   var insights = isMobManualComment ? '' : '<div id="review-comment-insights-wrap"></div><div class="gen-comment-area" id="review-gen-comment-area-' + idx + '"></div>';
-  var inputHandlers = isMobManualComment ? ' readonly aria-readonly="true"' : ' oninput="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave()" onblur="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave(true)"' + (!editable ? ' disabled' : '');
+  var inputHandlers = ' oninput="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave()" onblur="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave(true)"' + (!editable ? ' disabled' : '');
   card.innerHTML =
     '<div class="review-overall-head">' +
       '<div><div class="review-overall-title">' + title + '</div>' +
@@ -13687,6 +13694,7 @@ function mobScoreBreakdown_() {
   var technicalTotal = roundTotal(techBase + signatureTech);
   var grossTotal = roundTotal(technicalTotal + sensory + creative);
   var officialTotal = timeDq ? 0 : Math.max(0, roundTotal(grossTotal - timePenalty));
+  var judgeTotal = timeDq ? 0 : grossTotal;
   return {
     menu: menu,
     onlyTech: onlyTech,
@@ -13700,6 +13708,7 @@ function mobScoreBreakdown_() {
     timePenalty: timePenalty,
     timeDq: timeDq,
     officialTotal: roundTotal(officialTotal),
+    judgeTotal: roundTotal(judgeTotal),
     timeText: timeRaw ? formatTimerMs_(timeMs, true) : ''
   };
 }
@@ -13728,8 +13737,8 @@ function calcMobTotal() {
   }
   if (penaltyWrap) penaltyWrap.style.display = b.onlySens ? 'none' : 'block';
   if (penaltyVal) penaltyVal.textContent = b.timePenalty ? ('-' + b.timePenalty) : '0';
-  document.getElementById('mob-total').textContent = fmtScore(b.officialTotal,1);
-  document.getElementById('mob-final-big').textContent = fmtScore(b.officialTotal,1);
+  document.getElementById('mob-total').textContent = fmtScore(b.judgeTotal,1);
+  document.getElementById('mob-final-big').textContent = fmtScore(b.judgeTotal,1);
   renderMobScoreBreakdown_(b);
   renderMobCommentReference();
 }
@@ -13831,6 +13840,7 @@ function mobSubmit() {
   var mobDqInfo = evalDisqualificationPayload_('MOB', timeDq, '시간 초과');
   var penaltyAppliedTotal = timeDq ? 0 : roundTotal(grossTotal - timePenalty);
   var officialTotal = timeDq ? 0 : Math.max(0, penaltyAppliedTotal);
+  var judgeTotal = timeDq ? 0 : grossTotal;
   var mobExtraFields = {
     '선수명': playerName,
     '경기시간': timeText,
@@ -13862,8 +13872,8 @@ function mobSubmit() {
     var meta = mobAttrTagMeta_(a);
     if (header && meta) mobExtraFields[header] = include ? mobCategoryTags_(meta.group, meta.category).join(', ') : '';
   });
-  // 확인창과 저장 행의 총점도 공식 순위 반영점수와 동일하게 고정한다.
-  total = officialTotal;
+  // 개별 심사행은 평가항목 합계를 저장하고, 시간감점은 참가자 최종 집계에서 한 번만 적용한다.
+  total = judgeTotal;
   var comment = document.getElementById('mob-comment').value.trim();
 
   var timeMsg = timeText ? ('\n경기시간: ' + timeText + (timeDq ? ' · 시간 초과 실격' : (timePenalty ? ' · 시간감점 -' + timePenalty + '점' : ''))) : '';

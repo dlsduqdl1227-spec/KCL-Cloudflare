@@ -2424,6 +2424,10 @@ function canonicalScoreForPayload_(code, payload, rowIndex=0) {
     return fallback();
   }
   if (code === 'MOB') {
+    const mobComp = mobExtraComponents_(extra);
+    // 개별 MOB 심사행의 총점은 역할별 평가항목 합계입니다.
+    // 시간감점은 순위 집계에서 센서리·테크니컬 합산 후 참가자당 한 번만 적용합니다.
+    if (mobComp.hasRaw) return mobComp.isDq ? 0 : mobComp.gross;
     const mob = mobOfficialTotalFromExtra_(extra);
     return mob === null ? fallback() : mob;
   }

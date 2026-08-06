@@ -34,8 +34,8 @@ assert.doesNotMatch(generatorSource, /KCR\|KBC\|KCAC\|MOB/);
 const cardSource = functionSource(assessment, "ensureReviewOverallCard_");
 assert.match(cardSource, /currentCode === 'MOB'/);
 assert.match(cardSource, /MOB 전체 종합 코멘트/);
-assert.match(cardSource, /검수 화면에서는 확인만/);
-assert.match(cardSource, /readonly aria-readonly="true"/);
+assert.match(cardSource, /검수 중 수정한 내용이 최종 코멘트로 저장/);
+assert.doesNotMatch(cardSource, /readonly aria-readonly="true"/);
 assert.match(cardSource, /isMobManualComment \? '' : '<button/);
 
 const wrap = {
@@ -57,7 +57,7 @@ const context = {
     createElement() { return {}; },
   },
   escHtml(value) { return String(value ?? ""); },
-  canReviewEditDetails() { throw new Error("MOB review comment must remain read-only"); },
+  canReviewEditDetails() { return true; },
   updateReviewOverallInsights_() { throw new Error("MOB must not render generated comment insights"); },
 };
 vm.createContext(context);
@@ -71,7 +71,8 @@ context.ensureReviewOverallCard_();
 assert.ok(wrap.card, "MOB review comment card must be inserted");
 assert.match(wrap.card.innerHTML, /MOB 전체 종합 코멘트/);
 assert.match(wrap.card.innerHTML, /향미의 연결성과 밸런스가 안정적으로 표현되었습니다/);
-assert.match(wrap.card.innerHTML, /readonly aria-readonly="true"/);
+assert.match(wrap.card.innerHTML, /scheduleReviewAutoSave/);
+assert.doesNotMatch(wrap.card.innerHTML, /readonly|disabled/);
 assert.doesNotMatch(wrap.card.innerHTML, /초안 생성/);
 
 assert.match(functionSource(assessment, "mobSubmit"), /total, comment, mobDqInfo/);
