@@ -1338,6 +1338,12 @@ function participantPayloadFromRow_(raw, defaultCode='') {
   const inheritedExtra = raw.extra && typeof raw.extra === 'object' && !Array.isArray(raw.extra) ? raw.extra : {};
   const source = Object.assign({}, inheritedExtra, raw);
   delete source.extra;
+  // 관리자 수정 폼의 명시적인 소속 값은 기존 엑셀 extra 필드보다 우선해야 합니다.
+  // 그렇지 않으면 extra['소속']의 과거 값이 raw.affiliation보다 먼저 선택되어
+  // 화면에서는 저장 성공으로 보여도 기본 affiliation 컬럼이 되돌아갑니다.
+  if (Object.prototype.hasOwnProperty.call(raw, 'affiliation')) {
+    ['소속','affiliation','company','업체명'].forEach(alias => { source[alias] = raw.affiliation; });
+  }
   const code = safeStr(pickByAliases_(source, ['대회코드','competition_code','competitionCode','code'], defaultCode === 'ALL' ? '' : defaultCode)).toUpperCase();
   const name = safeStr(pickByAliases_(source, ['선수명','참가자명','이름','name','playerName','participantName']));
   const affiliation = safeStr(pickByAliases_(source, ['소속','affiliation','company','업체명']));
