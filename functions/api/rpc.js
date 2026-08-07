@@ -1514,6 +1514,25 @@ function mobActiveParticipantDateFromConfig_(cfg) {
     : parseJson(cfg && cfg.option_settings, {});
   return normalizeEffectiveDate_(options && (options.mobParticipantDate || options.mobActiveParticipantDate));
 }
+function mobActiveParticipantUnitsFromRows_(cfg, participantRows) {
+  const activeDate = mobActiveParticipantDateFromConfig_(cfg);
+  if (!activeDate) return null;
+  const round = normalizeRoundForCompetition_('MOB', cfg && (cfg.current_round || cfg.currentRound) || '예선');
+  const units = new Set();
+  (participantRows || []).forEach(row => {
+    if (participantScheduleSortMeta_(row).date !== activeDate) return;
+    const unit = safeStr(participantRoundNumber_(row, 'MOB', round));
+    if (unit) units.add(unit);
+  });
+  return units;
+}
+function scopeMobScoreRowsToActiveDate_(code, cfg, participantRows, scoreRows) {
+  if (safeStr(code).toUpperCase() !== 'MOB') return scoreRows || [];
+  const officialRows = (scoreRows || []).filter(row => !isCalibrationMode_(row && row.mode));
+  const activeUnits = mobActiveParticipantUnitsFromRows_(cfg, participantRows);
+  if (!activeUnits) return officialRows;
+  return officialRows.filter(row => activeUnits.has(safeStr(row && row.unit)));
+}
 function sortParticipantRowsForCompetition_(rows, competitionCode) {
   const requestedCode = safeStr(competitionCode).toUpperCase();
   return (rows || []).slice().sort((a, b) => {
@@ -3584,8 +3603,12 @@ async function getReviewList(env, competitionCode, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, code, '검수 조회 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
+  const scopedParticipantRowsRaw = code === 'MOB'
+    ? await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all()
+    : null;
+  const scopedParticipantRows = scopedParticipantRowsRaw ? (scopedParticipantRowsRaw.results || []) : [];
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC').bind(code).all();
-  const rawAll = rowsRaw.results || [];
+  const rawAll = scopeMobScoreRowsToActiveDate_(code, cfg, scopedParticipantRows, rowsRaw.results || []);
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
@@ -3593,7 +3616,7 @@ async function getReviewList(env, competitionCode, actorArg) {
   const headers = mergeHeaders(code, raw);
   let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
   if (manager && list.length) {
-    const pRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
+    const pRows = scopedParticipantRowsRaw || await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
     const pIdx = indexParticipantIdentities_(pRows.results || [], code);
     list = list.map(item => enrichReviewItemWithParticipant_(item, lookupParticipantIdentity_(pIdx, item.round || item['라운드'] || (cfg && cfg.current_round), itemNumber_(item) || item.unit), code));
   }
@@ -5161,11 +5184,12 @@ function aggregateRankingGroup_(code, g, round) {
 async function buildRankingData_(env, competitionCode) {
   const code = safeStr(competitionCode).toUpperCase();
   const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
-  const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind(code).all();
-  const raw = rowsRaw.results || [];
-  const headers = mergeHeaders(code, raw);
   const participantRowsRaw = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
-  const participantIdx = indexParticipantIdentities_(participantRowsRaw.results || [], code);
+  const participantRows = participantRowsRaw.results || [];
+  const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind(code).all();
+  const raw = scopeMobScoreRowsToActiveDate_(code, cfg, participantRows, rowsRaw.results || []);
+  const headers = mergeHeaders(code, raw);
+  const participantIdx = indexParticipantIdentities_(participantRows, code);
   const ikrcSeedMap = code === 'IKRC' ? await loadIkrcSeedResultMap_(env) : null;
   const ikrcFinalizedUnits = new Set();
   if (code === 'IKRC') {
