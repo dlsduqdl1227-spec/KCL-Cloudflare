@@ -3,20 +3,35 @@
 (function () {
   if (typeof window === 'undefined') return;
   var API_TIMEOUT_MS = 60000;
+  var API_MAX_ATTEMPTS = 4;
 
   function isRetrySafeAction_(action) {
     return /^(ping|get|list|load|fetch|search|validate|check|generate)/i.test(String(action || '')) ||
-      action === 'submitScores' || action === 'submitWithSignature';
+      [
+        'submitScores', 'submitWithSignature',
+        'updateReviewRow', 'updateReviewStatus', 'updateReviewStatusBatch',
+        'markMobCalibrationChecked', 'markIkrcCalibrationChecked',
+        'updateCompetitionAdminSettings', 'saveIkrcStationSettings'
+      ].indexOf(String(action || '')) >= 0;
   }
 
-  function retryDelay_() {
-    return new Promise(function(resolve){ setTimeout(resolve, 350); });
+  function retryDelay_(attempt) {
+    var delays = [0, 350, 900, 1800];
+    var delay = delays[Math.min(Math.max(0, Number(attempt) || 0), delays.length - 1)];
+    return new Promise(function(resolve){ setTimeout(resolve, delay); });
   }
 
-  function callRpcOnce_(action, args) {
+  function retryableError_(message, originalError) {
+    var error = new Error(message);
+    error.retryable = true;
+    error.originalError = originalError || null;
+    return error;
+  }
+
+  function callRpcOnce_(action, args, attempt) {
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = controller ? setTimeout(function(){ try { controller.abort(); } catch(e){} }, API_TIMEOUT_MS) : null;
-    return fetch('/api/rpc', {
+    return fetch('/api/rpc?attempt=' + encodeURIComponent(String((Number(attempt) || 0) + 1)) + '&_=' + Date.now(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: action, args: Array.prototype.slice.call(args || []) }),
@@ -29,8 +44,9 @@
         var data;
         try { data = txt ? JSON.parse(txt) : {}; }
         catch (e) {
-          var parseError = new Error('API 응답을 해석하지 못했습니다. 잠시 후 자동으로 다시 연결합니다. (HTTP ' + res.status + ')');
+          var parseError = new Error('서버 연결이 일시적으로 불안정합니다. 입력 내용은 보존되어 있으며 자동으로 다시 연결합니다. (HTTP ' + res.status + ')');
           parseError.retryable = true;
+          parseError.httpStatus = res.status;
           throw parseError;
         }
         if (!res.ok) {
@@ -46,20 +62,26 @@
     }).catch(function (err) {
       if (timer) clearTimeout(timer);
       if (err && err.name === 'AbortError') {
-        throw new Error('요청 시간이 초과되었습니다. 인터넷 연결을 확인한 뒤 다시 시도해주세요.');
+        throw retryableError_('서버 응답이 지연되고 있습니다. 입력 내용은 보존되어 있으며 자동으로 다시 연결합니다.', err);
       }
       if (!navigator.onLine) {
         throw new Error('인터넷 연결이 끊긴 상태입니다. 연결을 확인한 뒤 다시 시도해주세요.');
+      }
+      if (err && (err.retryable || err.name === 'TypeError' || /network|fetch|connection/i.test(String(err.message || '')))) {
+        err.retryable = true;
       }
       throw err;
     });
   }
 
   function callRpc(action, args) {
-    return callRpcOnce_(action, args).catch(function(err){
-      if (!(err && err.retryable) || !isRetrySafeAction_(action)) throw err;
-      return retryDelay_().then(function(){ return callRpcOnce_(action, args); });
-    });
+    function run(attempt) {
+      return callRpcOnce_(action, args, attempt).catch(function(err){
+        if (!(err && err.retryable) || !isRetrySafeAction_(action) || attempt + 1 >= API_MAX_ATTEMPTS) throw err;
+        return retryDelay_(attempt + 1).then(function(){ return run(attempt + 1); });
+      });
+    }
+    return run(0);
   }
 
   function createRunner(successHandler, failureHandler) {

@@ -22,6 +22,7 @@ const LOGIN_SECURITY_HMAC_ALGORITHM = 'HMAC-SHA256';
 
 let __schemaReadyPromise = null;
 let __defaultDataReadyPromise = null;
+const __readRateLimits = new Map();
 function memoOnce_(keyName, factory) {
   if (keyName === 'schema') {
     if (!__schemaReadyPromise) __schemaReadyPromise = Promise.resolve().then(factory).catch(err => { __schemaReadyPromise = null; throw err; });
@@ -84,7 +85,14 @@ export async function onRequestPost(context) {
     if (!action) return json({ success: false, message: 'action이 없습니다.' }, 400, request);
 
     const ip = clientIp_(request);
-    const generalLimit = await rateLimit_(env, 'api:' + action + ':' + await sha256Hex_(ip || 'unknown'), 240, 60);
+    const generalKey = 'api:' + action + ':' + await sha256Hex_(ip || 'unknown');
+    // Live review/ranking screens poll frequently. A D1 write for every safe read
+    // creates avoidable database contention when many judges share the venue Wi-Fi.
+    // Keep the same per-isolate abuse guard for reads; retain durable D1 limiting
+    // for submissions and all state-changing actions.
+    const generalLimit = isReadOnlyRpcAction_(action)
+      ? memoryRateLimit_(generalKey, 240, 60)
+      : await rateLimit_(env, generalKey, 240, 60);
     if (!generalLimit.ok) return json({ success: false, message: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' }, 429, request);
 
     const result = await dispatch(action, args, env, request);
@@ -139,6 +147,25 @@ function isTrustedOrigin_(request) {
 }
 function clientIp_(request) {
   return safeStr(request && (request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || request.headers.get('X-Real-IP'))).split(',')[0].trim() || '0.0.0.0';
+}
+function isReadOnlyRpcAction_(action) {
+  return /^(ping|get|list|load|fetch|search|validate|check|generate)/i.test(safeStr(action));
+}
+function memoryRateLimit_(key, limit, windowSeconds) {
+  const now = Date.now();
+  const current = __readRateLimits.get(key);
+  if (!current || current.resetAt <= now) {
+    __readRateLimits.set(key, { count:1, resetAt:now + windowSeconds * 1000 });
+    if (__readRateLimits.size > 1000) {
+      for (const [storedKey, value] of __readRateLimits) {
+        if (!value || value.resetAt <= now) __readRateLimits.delete(storedKey);
+      }
+    }
+    return { ok:true, remaining:Math.max(0, limit - 1) };
+  }
+  if (current.count >= limit) return { ok:false, remaining:0, resetAt:new Date(current.resetAt).toISOString() };
+  current.count += 1;
+  return { ok:true, remaining:Math.max(0, limit - current.count) };
 }
 function safeStr(v) { return String(v ?? '').trim(); }
 function normalizePhone(v) { return String(v ?? '').replace(/[^0-9]/g, ''); }

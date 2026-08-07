@@ -10,8 +10,9 @@ const shim = fs.readFileSync(path.join(root, 'public', 'assets', 'kcl-api-shim.j
 assert.match(shim, /function isRetrySafeAction_/);
 assert.match(shim, /function callRpcOnce_/);
 assert.match(shim, /parseError\.retryable = true/);
-assert.match(shim, /callRpcOnce_\(action, args\).*retryDelay_/s);
-assert.match(shim, /action === 'submitScores' \|\| action === 'submitWithSignature'/);
+assert.match(shim, /callRpcOnce_\(action, args, attempt\).*retryDelay_/s);
+assert.match(shim, /'submitScores', 'submitWithSignature'/);
+assert.match(shim, /API_MAX_ATTEMPTS = 4/);
 assert.doesNotMatch(shim, /retryable = \[.*429/);
 
 let requestCount = 0;
@@ -38,5 +39,20 @@ const result = await new Promise((resolve, reject) => {
 });
 assert.equal(requestCount, 2, 'a safe read must retry one transient non-JSON response');
 assert.equal(result.success, true);
+
+let extendedRequestCount = 0;
+context.fetch = async () => {
+  extendedRequestCount += 1;
+  if (extendedRequestCount < 4) return { ok:false, status:503, text:async () => '<html>temporary edge error</html>' };
+  return { ok:true, status:200, text:async () => '{"success":true,"list":[]}' };
+};
+const extendedResult = await new Promise((resolve, reject) => {
+  context.window.google.script.run
+    .withSuccessHandler(resolve)
+    .withFailureHandler(reject)
+    .getReviewList('MOB', {});
+});
+assert.equal(extendedRequestCount, 4, 'a live review read must survive three consecutive transient edge responses');
+assert.equal(extendedResult.success, true);
 
 process.stdout.write('Stage146 API response retry tests passed.\n');
