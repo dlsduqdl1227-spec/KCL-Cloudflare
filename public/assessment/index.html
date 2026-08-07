@@ -1139,6 +1139,7 @@ button,input,select,textarea{font-family:'Pretendard', -apple-system, BlinkMacSy
   .rank-summary-sub{color:#444}
   .rank-row{background:#fff !important;color:#000 !important;border:1px solid #ccc !important;
     page-break-inside:avoid;margin-bottom:4px;padding:8px}
+  #pRanking.mob-top12-print .rank-row.mob-print-hidden{display:none!important}
   .rank-unit{color:#000 !important}
   .rank-meta{color:#666 !important}
   .rank-score{color:#000 !important}
@@ -9461,6 +9462,7 @@ function renderRanking(res) {
     byRound[round].forEach(function(item){
       var row = document.createElement('div');
       row.className = 'rank-row' + (item.disqualified ? ' disqualified' : '');
+      row.setAttribute('data-ranking-position', String(item.rank == null ? '' : item.rank));
       var rankClass = '';
       if (!item.disqualified && item.rank === 1) rankClass = ' gold';
       else if (!item.disqualified && item.rank === 2) rankClass = ' silver';
@@ -9819,12 +9821,48 @@ function printRanking() {
   document.querySelectorAll('.panel').forEach(function(p){
     p.classList.remove('print-active');
   });
-  document.getElementById('pRanking').classList.add('print-active');
+  var panel = document.getElementById('pRanking');
+  var isMobTop12 = String((_ranking && _ranking.compCode) || '').toUpperCase() === 'MOB';
+  var summaryTitle = document.getElementById('rank-summary-title');
+  var summarySub = document.getElementById('rank-summary-sub');
+  var printTitle = document.getElementById('rank-print-title');
+  var originalSummaryTitle = summaryTitle ? summaryTitle.textContent : '';
+  var originalSummarySub = summarySub ? summarySub.textContent : '';
+  var originalPrintTitle = printTitle ? printTitle.textContent : '';
+  var roundTitleOriginals = [];
+
+  if (isMobTop12) {
+    panel.classList.add('mob-top12-print');
+    Array.prototype.forEach.call(panel.querySelectorAll('.rank-round-section'), function(section){
+      var rows = Array.prototype.slice.call(section.querySelectorAll('.rank-row'));
+      rows.forEach(function(row, index){ row.classList.toggle('mob-print-hidden', index >= 12); });
+      var title = section.querySelector('.rank-round-title');
+      if (title) {
+        roundTitleOriginals.push({element:title,text:title.textContent});
+        title.textContent = title.textContent.replace(/\s*\(\d+개\)\s*$/, '') + ' (TOP ' + Math.min(12, rows.length) + ')';
+      }
+    });
+    if (summaryTitle) summaryTitle.textContent = 'MOB TOP 12 순위표';
+    if (summarySub) summarySub.textContent = 'Master of Brewing 상위 12위 공식 순위';
+    if (printTitle) printTitle.textContent = originalPrintTitle.replace(/\s*순위표\s*$/, '') + ' TOP 12 순위표';
+  }
+
+  panel.classList.add('print-active');
+  var cleaned = false;
+  function cleanupRankingPrint_(){
+    if (cleaned) return;
+    cleaned = true;
+    panel.classList.remove('print-active','mob-top12-print');
+    Array.prototype.forEach.call(panel.querySelectorAll('.rank-row.mob-print-hidden'), function(row){ row.classList.remove('mob-print-hidden'); });
+    roundTitleOriginals.forEach(function(entry){ entry.element.textContent = entry.text; });
+    if (summaryTitle) summaryTitle.textContent = originalSummaryTitle;
+    if (summarySub) summarySub.textContent = originalSummarySub;
+    if (printTitle) printTitle.textContent = originalPrintTitle;
+  }
+  window.addEventListener('afterprint', cleanupRankingPrint_, {once:true});
   setTimeout(function(){ window.print(); }, 100);
-  // 인쇄 다이얼로그 종료 후 정리는 자동
-  setTimeout(function(){
-    document.getElementById('pRanking').classList.remove('print-active');
-  }, 2000);
+  // 일부 모바일 브라우저는 afterprint를 보내지 않으므로 안전 정리 타이머를 둡니다.
+  setTimeout(cleanupRankingPrint_, 10000);
 }
 
 function openRankingDetail(item) {
