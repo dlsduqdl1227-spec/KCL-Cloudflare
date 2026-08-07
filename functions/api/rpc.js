@@ -1099,6 +1099,12 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
     }
     nextOptions.kcrStations = checked.settings;
   }
+  if (code === 'MOB' && Object.prototype.hasOwnProperty.call(nextOptions, 'mobParticipantDate')) {
+    const rawMobParticipantDate = safeStr(nextOptions.mobParticipantDate);
+    const mobParticipantDate = normalizeEffectiveDate_(rawMobParticipantDate);
+    if (rawMobParticipantDate && !mobParticipantDate) return { success:false, message:'MOB 평가 참가자 표시일을 올바른 날짜로 선택해주세요.' };
+    nextOptions.mobParticipantDate = mobParticipantDate;
+  }
   await env.DB.prepare(`UPDATE competitions SET name=?, current_round=?, is_active=?, debriefing=?, option_settings=?, updated_at=? WHERE code=?`)
     .bind(
       safeStr(payload.name) || current.name,
@@ -1474,6 +1480,12 @@ function participantScheduleSortMeta_(row) {
     order: Number.isFinite(order) ? order : 999999,
     waitingTime: safeStr(extra['대기시간'] || extra.waitingTime || extra.waiting_time),
   };
+}
+function mobActiveParticipantDateFromConfig_(cfg) {
+  const options = cfg && cfg.optionSettings && typeof cfg.optionSettings === 'object'
+    ? cfg.optionSettings
+    : parseJson(cfg && cfg.option_settings, {});
+  return normalizeEffectiveDate_(options && (options.mobParticipantDate || options.mobActiveParticipantDate));
 }
 function sortParticipantRowsForCompetition_(rows, competitionCode) {
   const requestedCode = safeStr(competitionCode).toUpperCase();
@@ -1860,7 +1872,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
   const actor = await getActor(env, actorArg);
   if (!hasAccess(actor, code)) return { success: false, message: '이 대회 참가자 목록 조회 권한이 없습니다.' };
-  const cfg = await env.DB.prepare('SELECT current_round FROM competitions WHERE code=?').bind(code).first();
+  const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first();
   const currentRound = normalizeRoundForCompetition_(code, cfg && cfg.current_round || '예선');
   const rows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind(code).all();
   const policy = participantRoundPolicy_(code, currentRound);
@@ -1873,12 +1885,14 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     : [];
   const mobDatedPermission = !mobManager && mobPermissionRows.some(row => !!normalizeEffectiveDate_(row && (row.effectiveDate || row.effective_date)));
   const mobPermissionDate = normalizeEffectiveDate_(actor && actor.permissionDate) || koreaDateKey_();
+  const mobActiveParticipantDate = code === 'MOB' ? mobActiveParticipantDateFromConfig_(cfg) : '';
+  const mobParticipantScopeDate = mobActiveParticipantDate || (mobDatedPermission ? mobPermissionDate : '');
   const mobActorTeam = safeStr(actor && actor.teamMap && actor.teamMap.MOB || actor && (actor.teamGroup || actor.team));
   const scopedRows = code !== 'MOB' || mobManager ? sourceRows : sourceRows.filter(r => {
     const extra = parseJson(r.extra_json, {});
     const participantDate = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date || extra['예선일'] || extra['날짜']);
     const participantTeam = safeStr(extra['심사조'] || extra.judgeTeam || extra.teamGroup || extra['평가조']);
-    if (mobDatedPermission && participantDate && participantDate !== mobPermissionDate) return false;
+    if (mobParticipantScopeDate && participantDate !== mobParticipantScopeDate) return false;
     if (mobActorTeam && participantTeam && !mobTeamMatchesServer_(mobActorTeam, participantTeam)) return false;
     return true;
   });
@@ -1937,7 +1951,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     currentRound,
     policy,
     assignments,
-    scheduleScope: code === 'MOB' && !mobManager ? { competitionDate:mobDatedPermission ? mobPermissionDate : '', team:mobActorTeam } : null
+    scheduleScope: code === 'MOB' && !mobManager ? { competitionDate:mobParticipantScopeDate, team:mobActorTeam } : null
   };
 }
 
@@ -3317,6 +3331,21 @@ async function submitScores(env, payload, signature, request = null) {
   }
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(initial.code).first();
   const submitRound = safeStr(initial.round || (cfg && cfg.current_round) || '예선');
+  if (initial.code === 'MOB' && !hasManageAccess(auth.actor, 'MOB')) {
+    const mobParticipantDate = mobActiveParticipantDateFromConfig_(cfg);
+    if (mobParticipantDate) {
+      const participantRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('MOB').all();
+      const validParticipant = (participantRows.results || []).some(row => {
+        if (safeStr(participantRoundNumber_(row, 'MOB', submitRound)) !== safeStr(initial.unit)) return false;
+        const extra = parseJson(row.extra_json, {});
+        const rowDate = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date || extra['예선일'] || extra['날짜']);
+        return rowDate === mobParticipantDate;
+      });
+      if (!validParticipant) {
+        return { success:false, message:`현재 MOB 평가 참가자 표시일은 ${mobParticipantDate}입니다. 평가 화면을 새로고침하고 오늘 참가자를 다시 선택해주세요.` };
+      }
+    }
+  }
   if (initial.code === 'IKRC') {
     const stationValidation = validateIkrcStationSubmission_(basePayload, cfg);
     if (!stationValidation.ok) return { success:false, message:stationValidation.message };

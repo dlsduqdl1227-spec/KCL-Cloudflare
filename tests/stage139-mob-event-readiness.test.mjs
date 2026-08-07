@@ -58,7 +58,7 @@ assert.notEqual(kcrCalibration, context.kclDraftContextKey_("KCR"), "station dra
 
 const assignments = functionSource(rpc, "getParticipantAssignments");
 assert.match(assignments, /code !== 'MOB' \|\| mobManager \? sourceRows : sourceRows\.filter/, "MOB judge assignments must be filtered");
-assert.match(assignments, /participantDate !== mobPermissionDate/, "MOB dated permission must filter the timetable date");
+assert.match(assignments, /participantDate !== mobParticipantScopeDate/, "MOB active or dated permission must filter the timetable date");
 assert.match(assignments, /mobTeamMatchesServer_\(mobActorTeam, participantTeam\)/, "MOB team permission must filter the timetable team");
 assert.match(assignments, /actorCanSeeParticipantIdentity_\(actor, code\)/, "participant identity access must use the selected competition");
 
