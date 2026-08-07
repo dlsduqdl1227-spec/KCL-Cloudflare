@@ -4,7 +4,16 @@
   if (typeof window === 'undefined') return;
   var API_TIMEOUT_MS = 60000;
 
-  function callRpc(action, args) {
+  function isRetrySafeAction_(action) {
+    return /^(ping|get|list|load|fetch|search|validate|check|generate)/i.test(String(action || '')) ||
+      action === 'submitScores' || action === 'submitWithSignature';
+  }
+
+  function retryDelay_() {
+    return new Promise(function(resolve){ setTimeout(resolve, 350); });
+  }
+
+  function callRpcOnce_(action, args) {
     var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     var timer = controller ? setTimeout(function(){ try { controller.abort(); } catch(e){} }, API_TIMEOUT_MS) : null;
     return fetch('/api/rpc', {
@@ -19,12 +28,18 @@
       return res.text().then(function (txt) {
         var data;
         try { data = txt ? JSON.parse(txt) : {}; }
-        catch (e) { throw new Error('API 응답을 해석하지 못했습니다. 새로고침 후 다시 시도해주세요.'); }
+        catch (e) {
+          var parseError = new Error('API 응답을 해석하지 못했습니다. 잠시 후 자동으로 다시 연결합니다. (HTTP ' + res.status + ')');
+          parseError.retryable = true;
+          throw parseError;
+        }
         if (!res.ok) {
           if (res.status === 404 || res.status === 405) {
             throw new Error('Cloudflare Pages Functions가 연결되지 않았습니다. public 폴더만 정적 업로드하지 말고, functions 폴더가 포함된 프로젝트 전체를 GitHub/Cloudflare Pages로 배포해주세요. (/api/rpc ' + res.status + ')');
           }
-          throw new Error(data && data.message ? data.message : ('HTTP ' + res.status));
+          var httpError = new Error(data && data.message ? data.message : ('HTTP ' + res.status));
+          httpError.retryable = [408, 425, 500, 502, 503, 504].indexOf(res.status) >= 0;
+          throw httpError;
         }
         return data;
       });
@@ -37,6 +52,13 @@
         throw new Error('인터넷 연결이 끊긴 상태입니다. 연결을 확인한 뒤 다시 시도해주세요.');
       }
       throw err;
+    });
+  }
+
+  function callRpc(action, args) {
+    return callRpcOnce_(action, args).catch(function(err){
+      if (!(err && err.retryable) || !isRetrySafeAction_(action)) throw err;
+      return retryDelay_().then(function(){ return callRpcOnce_(action, args); });
     });
   }
 
