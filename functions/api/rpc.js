@@ -1514,8 +1514,8 @@ function mobActiveParticipantDateFromConfig_(cfg) {
     : parseJson(cfg && cfg.option_settings, {});
   return normalizeEffectiveDate_(options && (options.mobParticipantDate || options.mobActiveParticipantDate));
 }
-function mobActiveParticipantUnitsFromRows_(cfg, participantRows) {
-  const activeDate = mobActiveParticipantDateFromConfig_(cfg);
+function mobActiveParticipantUnitsFromRows_(cfg, participantRows, requestedDate = '') {
+  const activeDate = normalizeEffectiveDate_(requestedDate) || mobActiveParticipantDateFromConfig_(cfg);
   if (!activeDate) return null;
   const round = normalizeRoundForCompetition_('MOB', cfg && (cfg.current_round || cfg.currentRound) || '예선');
   const units = new Set();
@@ -1526,10 +1526,13 @@ function mobActiveParticipantUnitsFromRows_(cfg, participantRows) {
   });
   return units;
 }
-function scopeMobScoreRowsToActiveDate_(code, cfg, participantRows, scoreRows) {
+function mobParticipantDatesFromRows_(participantRows) {
+  return Array.from(new Set((participantRows || []).map(row => participantScheduleSortMeta_(row).date).filter(date => date && date !== '9999-12-31'))).sort();
+}
+function scopeMobScoreRowsToActiveDate_(code, cfg, participantRows, scoreRows, requestedDate = '') {
   if (safeStr(code).toUpperCase() !== 'MOB') return scoreRows || [];
   const officialRows = (scoreRows || []).filter(row => !isCalibrationMode_(row && row.mode));
-  const activeUnits = mobActiveParticipantUnitsFromRows_(cfg, participantRows);
+  const activeUnits = mobActiveParticipantUnitsFromRows_(cfg, participantRows, requestedDate);
   if (!activeUnits) return officialRows;
   return officialRows.filter(row => activeUnits.has(safeStr(row && row.unit)));
 }
@@ -3607,8 +3610,11 @@ async function getReviewList(env, competitionCode, actorArg) {
     ? await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all()
     : null;
   const scopedParticipantRows = scopedParticipantRowsRaw ? (scopedParticipantRowsRaw.results || []) : [];
+  const mobReviewDate = code === 'MOB'
+    ? (normalizeEffectiveDate_(actorArg && actorArg.mobReviewDate) || mobActiveParticipantDateFromConfig_(cfg))
+    : '';
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC').bind(code).all();
-  const rawAll = scopeMobScoreRowsToActiveDate_(code, cfg, scopedParticipantRows, rowsRaw.results || []);
+  const rawAll = scopeMobScoreRowsToActiveDate_(code, cfg, scopedParticipantRows, rowsRaw.results || [], mobReviewDate);
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
@@ -3652,6 +3658,8 @@ async function getReviewList(env, competitionCode, actorArg) {
     ownOnly: !manager,
     readOnlyHeadMonitor:false,
     supersededCount,
+    mobReviewDate,
+    mobReviewDates:code === 'MOB' ? mobParticipantDatesFromRows_(scopedParticipantRows) : [],
     stationScope:managerStation ? {id:managerStation.id, label:managerStation.label, prefix:managerStation.prefix} : null,
     stationScopes:(managerStation ? [managerStation] : []).map(station => ({id:station.id, label:station.label, prefix:station.prefix}))
   };
@@ -5187,7 +5195,11 @@ async function buildRankingData_(env, competitionCode) {
   const participantRowsRaw = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
   const participantRows = participantRowsRaw.results || [];
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind(code).all();
-  const raw = scopeMobScoreRowsToActiveDate_(code, cfg, participantRows, rowsRaw.results || []);
+  // MOB 순위는 양일 기록을 모두 유지합니다. 켈리브레이션만 제외하고
+  // 실제 평가 참가자 선택 화면의 활성 날짜 제한과 분리합니다.
+  const raw = code === 'MOB'
+    ? (rowsRaw.results || []).filter(row => !isCalibrationMode_(row && row.mode))
+    : (rowsRaw.results || []);
   const headers = mergeHeaders(code, raw);
   const participantIdx = indexParticipantIdentities_(participantRows, code);
   const ikrcSeedMap = code === 'IKRC' ? await loadIkrcSeedResultMap_(env) : null;

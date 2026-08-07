@@ -5714,22 +5714,91 @@ function goReviewByCode(code, name, backPanel) {
       : '응답이 지연됩니다. 잠시 후 다시 시도해주세요.';
   }, 30000);
 
+  function applyReviewResponse_(res, loadedDates) {
+    if (timedOut) return;
+    clearTimeout(timer);
+    hideOverlay();
+    _reviewState.stationScope = res.stationScope || null;
+    _reviewState.stationScopes = Array.isArray(res.stationScopes) ? res.stationScopes : (_reviewState.stationScope ? [_reviewState.stationScope] : []);
+    _reviewState.readOnlyHeadMonitor = !!res.readOnlyHeadMonitor;
+    _reviewState.supersededCount = Number(res.supersededCount || 0);
+    var scopeText = _reviewState.stationScopes.length ? (' · ' + _reviewState.stationScopes.map(function(scope){ return scope.label; }).join(', ')) : '';
+    document.getElementById('review-title').textContent = (name || code) + (_reviewState.readOnlyHeadMonitor ? ' 스테이션 평가 통계' : ' 검수') + scopeText;
+    renderReview(res.list || [], code, res.headers || [], Number(res.supersededCount || 0));
+    if (normalizedCode === 'MOB' && Array.isArray(loadedDates) && loadedDates.length > 1) {
+      var dateLabel = loadedDates.slice().sort().map(function(date){ return String(date).replace(/^\d{4}-/, '').replace('-', '/'); }).join(' · ');
+      document.getElementById('review-stat').textContent += ' · 조회일 ' + dateLabel;
+    }
+  }
+
+  function mergeMobReviewResponses_(responses) {
+    var base = responses[0] || {success:true,list:[],headers:[]};
+    var headers = [];
+    var list = [];
+    var seen = {};
+    responses.forEach(function(response){
+      (response.headers || []).forEach(function(header){ if (headers.indexOf(header) < 0) headers.push(header); });
+      (response.list || []).forEach(function(item){
+        var key = String(item && (item.rowIndex || item._rowRef || item.id || '')) + '|' + String(item && (item.unit || item['참가자번호'] || ''));
+        if (seen[key]) return;
+        seen[key] = true;
+        list.push(item);
+      });
+    });
+    list.sort(function(a,b){
+      var av = parseInt(String(a && (a.rowIndex || a._rowRef || 0)).split(':')[0], 10) || 0;
+      var bv = parseInt(String(b && (b.rowIndex || b._rowRef || 0)).split(':')[0], 10) || 0;
+      return bv - av;
+    });
+    base.headers = headers;
+    base.list = list;
+    return base;
+  }
+
   google.script.run
     .withSuccessHandler(function(res) {
       if (timedOut) return;
-      clearTimeout(timer);
-      hideOverlay();
       if (!res || !res.success) {
+        clearTimeout(timer);
+        hideOverlay();
         document.getElementById('review-stat').textContent = (cachedMobReview ? '기존 검수 목록 표시 중 · ' : '') + '오류: ' + ((res && res.message) || '알 수 없는 오류');
         return;
       }
-      _reviewState.stationScope = res.stationScope || null;
-      _reviewState.stationScopes = Array.isArray(res.stationScopes) ? res.stationScopes : (_reviewState.stationScope ? [_reviewState.stationScope] : []);
-      _reviewState.readOnlyHeadMonitor = !!res.readOnlyHeadMonitor;
-      _reviewState.supersededCount = Number(res.supersededCount || 0);
-      var scopeText = _reviewState.stationScopes.length ? (' · ' + _reviewState.stationScopes.map(function(scope){ return scope.label; }).join(', ')) : '';
-      document.getElementById('review-title').textContent = (name || code) + (_reviewState.readOnlyHeadMonitor ? ' 스테이션 평가 통계' : ' 검수') + scopeText;
+      var dates = normalizedCode === 'MOB' && Array.isArray(res.mobReviewDates) ? res.mobReviewDates.filter(Boolean) : [];
+      var otherDates = dates.filter(function(date){ return date !== res.mobReviewDate; });
+      if (!otherDates.length) {
+        applyReviewResponse_(res, res.mobReviewDate ? [res.mobReviewDate] : []);
+        return;
+      }
+
+      // MOB의 각 날짜를 따로 조회해 한 응답이 비대해지는 것을 막고,
+      // 화면에서는 양일 기록을 하나의 검수 목록으로 다시 합칩니다.
+      hideOverlay();
       renderReview(res.list || [], code, res.headers || [], Number(res.supersededCount || 0));
+      document.getElementById('review-stat').textContent += ' · 이전 날짜 기록 불러오는 중...';
+      var responses = [res];
+      var remaining = otherDates.length;
+      var loadedDates = [res.mobReviewDate];
+      otherDates.forEach(function(reviewDate){
+        var datedActor = reviewActorPayload_(code);
+        datedActor.mobReviewDate = reviewDate;
+        google.script.run
+          .withSuccessHandler(function(datedRes){
+            if (timedOut) return;
+            if (datedRes && datedRes.success) {
+              responses.push(datedRes);
+              loadedDates.push(reviewDate);
+            }
+            remaining--;
+            if (remaining <= 0) applyReviewResponse_(mergeMobReviewResponses_(responses), loadedDates);
+          })
+          .withFailureHandler(function(){
+            if (timedOut) return;
+            remaining--;
+            if (remaining <= 0) applyReviewResponse_(mergeMobReviewResponses_(responses), loadedDates);
+          })
+          .getReviewList(code, datedActor);
+      });
     })
     .withFailureHandler(function(err) {
       if (timedOut) return;

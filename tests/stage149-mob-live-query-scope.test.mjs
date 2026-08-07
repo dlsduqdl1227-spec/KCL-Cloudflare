@@ -16,11 +16,12 @@ assert.match(rpc, /officialRows\.filter\(row => activeUnits\.has\(safeStr\(row &
 const reviewStart = rpc.indexOf('async function getReviewList');
 const reviewEnd = rpc.indexOf('async function updateReviewRow', reviewStart);
 const review = rpc.slice(reviewStart, reviewEnd);
-assert.match(review, /scopeMobScoreRowsToActiveDate_\(code, cfg, scopedParticipantRows, rowsRaw\.results \|\| \[\]\)/);
+assert.match(review, /scopeMobScoreRowsToActiveDate_\(code, cfg, scopedParticipantRows, rowsRaw\.results \|\| \[\], mobReviewDate\)/);
 
 const rankingStart = rpc.indexOf('async function buildRankingData_');
 const rankingEnd = rpc.indexOf('async function getRanking\(', rankingStart);
 const ranking = rpc.slice(rankingStart, rankingEnd);
-assert.match(ranking, /scopeMobScoreRowsToActiveDate_\(code, cfg, participantRows, rowsRaw\.results \|\| \[\]\)/);
+assert.match(ranking, /code === 'MOB'[\s\S]*filter\(row => !isCalibrationMode_\(row && row\.mode\)\)/);
+assert.doesNotMatch(ranking, /scopeMobScoreRowsToActiveDate_/);
 
 process.stdout.write('Stage149 MOB live query-scope tests passed.\n');
