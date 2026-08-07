@@ -3557,6 +3557,22 @@ async function submitScores(env, payload, signature, request = null) {
         };
       }
     }
+    if (x.code === 'MOB' && !isCalibrationMode_(x.mode)) {
+      const existingMobRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
+        .bind(x.code, x.round, x.role, x.unit).all();
+      const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
+      const existingMob = (existingMobRows.results || []).find(row =>
+        scoreOwnedByActor_(row, auth.actor) &&
+        scoreEvaluationCategoryKey_(row.mode) === submittedCategory
+      );
+      if (existingMob && existingMob.id) {
+        return {
+          success:false,
+          message:'이미 제출된 MOB 평가입니다. 새로 제출하지 말고 내 제출 검수에서 확인·수정해주세요.',
+          duplicateId:existingMob.id
+        };
+      }
+    }
     if (x.code === 'KBC') {
       const existingKbcRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=?`)
         .bind(x.code, x.round, x.role, x.unit).all();
