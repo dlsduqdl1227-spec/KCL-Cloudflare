@@ -3,7 +3,7 @@
 (function () {
   if (typeof window === 'undefined') return;
   var API_TIMEOUT_MS = 60000;
-  var API_MAX_ATTEMPTS = 4;
+  var API_MAX_ATTEMPTS = 6;
 
   function isRetrySafeAction_(action) {
     return /^(ping|get|list|load|fetch|search|validate|check|generate)/i.test(String(action || '')) ||
@@ -15,10 +15,20 @@
       ].indexOf(String(action || '')) >= 0;
   }
 
-  function retryDelay_(attempt) {
-    var delays = [0, 350, 900, 1800];
+  function retryDelay_(attempt, serverDelayMs) {
+    var delays = [0, 350, 900, 1800, 3000, 5000];
     var delay = delays[Math.min(Math.max(0, Number(attempt) || 0), delays.length - 1)];
+    if (Number(serverDelayMs) > delay) delay = Math.min(8000, Number(serverDelayMs));
     return new Promise(function(resolve){ setTimeout(resolve, delay); });
+  }
+
+  function retryAfterMs_(res) {
+    var raw = res && res.headers && typeof res.headers.get === 'function' ? res.headers.get('Retry-After') : '';
+    if (!raw) return 0;
+    var seconds = Number(raw);
+    if (isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    var dateMs = Date.parse(raw);
+    return isNaN(dateMs) ? 0 : Math.max(0, dateMs - Date.now());
   }
 
   function retryableError_(message, originalError) {
@@ -54,7 +64,8 @@
             throw new Error('Cloudflare Pages Functions가 연결되지 않았습니다. public 폴더만 정적 업로드하지 말고, functions 폴더가 포함된 프로젝트 전체를 GitHub/Cloudflare Pages로 배포해주세요. (/api/rpc ' + res.status + ')');
           }
           var httpError = new Error(data && data.message ? data.message : ('HTTP ' + res.status));
-          httpError.retryable = [408, 425, 500, 502, 503, 504].indexOf(res.status) >= 0;
+          httpError.retryable = [408, 425, 429, 500, 502, 503, 504].indexOf(res.status) >= 0;
+          httpError.retryAfterMs = retryAfterMs_(res);
           throw httpError;
         }
         return data;
@@ -78,7 +89,7 @@
     function run(attempt) {
       return callRpcOnce_(action, args, attempt).catch(function(err){
         if (!(err && err.retryable) || !isRetrySafeAction_(action) || attempt + 1 >= API_MAX_ATTEMPTS) throw err;
-        return retryDelay_(attempt + 1).then(function(){ return run(attempt + 1); });
+        return retryDelay_(attempt + 1, err && err.retryAfterMs).then(function(){ return run(attempt + 1); });
       });
     }
     return run(0);

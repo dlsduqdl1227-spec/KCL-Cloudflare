@@ -12,8 +12,8 @@ assert.match(shim, /function callRpcOnce_/);
 assert.match(shim, /parseError\.retryable = true/);
 assert.match(shim, /callRpcOnce_\(action, args, attempt\).*retryDelay_/s);
 assert.match(shim, /'submitScores', 'submitWithSignature'/);
-assert.match(shim, /API_MAX_ATTEMPTS = 4/);
-assert.doesNotMatch(shim, /retryable = \[.*429/);
+assert.match(shim, /API_MAX_ATTEMPTS = 6/);
+assert.match(shim, /retryable = \[.*429/);
 
 let requestCount = 0;
 const context = {

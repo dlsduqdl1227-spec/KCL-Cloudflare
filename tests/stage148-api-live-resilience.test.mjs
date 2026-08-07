@@ -16,7 +16,7 @@ assert.doesNotMatch(shim, /API 응답을 해석하지 못했습니다/);
 
 for (const page of ['assessment', 'registry', 'debriefing', 'admin']) {
   const html = fs.readFileSync(path.join(root, 'public', page, 'index.html'), 'utf8');
-  assert.match(html, /kcl-api-shim\.js\?v=stage148/);
+  assert.match(html, /kcl-api-shim\.js\?v=stage154/);
 }
 
 process.stdout.write('Stage148 live API resilience tests passed.\n');

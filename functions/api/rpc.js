@@ -91,7 +91,7 @@ export async function onRequestPost(context) {
     // Keep the same per-isolate abuse guard for reads; retain durable D1 limiting
     // for submissions and all state-changing actions.
     const generalLimit = isReadOnlyRpcAction_(action)
-      ? memoryRateLimit_(generalKey, 240, 60)
+      ? memoryRateLimit_(generalKey, 2400, 60)
       : await rateLimit_(env, generalKey, 240, 60);
     if (!generalLimit.ok) return json({ success: false, message: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' }, 429, request);
 
