@@ -6108,7 +6108,8 @@ function renderReview(list, code, headers, supersededCount) {
   }
 
   visibleList.forEach(function(item) {
-    var isKtccReview = String(code || '').toUpperCase() === 'KTCC';
+    var reviewCode = String(code || '').toUpperCase();
+    var isKtccReview = reviewCode === 'KTCC';
     var groupItems = reviewGroupItems_(item);
     var isReviewGroup = groupItems.length > 1;
     var unit = item['컵번호'] || item['참가자번호'] || item['샘플번호'] || item['팀번호'] || item._col7 || '-';
@@ -6136,17 +6137,29 @@ function renderReview(list, code, headers, supersededCount) {
     var team = item['팀'] || item._col4 || '팀 미지정';
     var role = item['역할'] || item._col5 || '';
     var mode = item['모드'] || item._col6 || '';
-    var titleText = isReviewGroup ? reviewGroupTitle_(item, code) : (isKtccReview ? ('팀번호 ' + unit + ' · ' + who) : (String(unit) + ' · ' + String(who)));
+    var mobParticipantName = reviewCode === 'MOB' ? reviewItemValue_(item, ['선수명','참가자명','이름','PlayerName','ParticipantName'], 45) : '';
+    var titleText = isReviewGroup
+      ? reviewGroupTitle_(item, code)
+      : (isKtccReview
+        ? ('팀번호 ' + unit + ' · ' + who)
+        : (reviewCode === 'MOB'
+          ? ('참가자 ' + unit + '번' + (mobParticipantName ? ' · ' + mobParticipantName : ' · 선수명 미입력'))
+          : (String(unit) + ' · ' + String(who))));
     var ktccExtra = isKtccReview ? ('체크: ' + checkedBy + ' · 종료시간 ' + (timeStr || '-')) : '';
     var groupExtra = isReviewGroup ? reviewGroupSummaryText_(item, code) : '';
     var stdText = canShowStddevButton_(code, item) ? stddevListText_(getItemStddev_(item)) : '';
     var mobListSummary = String(code || '').toUpperCase() === 'MOB' ? mobReviewListSummary_(item) : '';
     var ikrcListSummary = String(code || '').toUpperCase() === 'IKRC' && isReviewGroup ? (groupItems.length + '개 샘플 · 모두 탭에서 확인') : '';
+    var reviewMetaText = isKtccReview && !isReviewGroup
+      ? ktccExtra
+      : (isReviewGroup
+        ? groupExtra
+        : ((reviewCode === 'MOB' ? ('심사: ' + checkedBy + ' · ') : '') + String(team) + (reviewCode === 'MOB' ? '' : (role ? ' · ' + String(role) : '')) + (mode ? ' · ' + String(mode) : '') + ' · ' + timeStr));
     row.innerHTML =
       '<div style="min-width:0;flex:1">' +
         reviewCategoryBadgeHtml_(item, code) +
         '<div class="review-info-name">' + escHtml(titleText) + '</div>' +
-        '<div class="review-info-sub">' + (ikrcListSummary ? escHtml(ikrcListSummary) : (mobListSummary ? escHtml(mobListSummary) : ('총점 ' + escHtml(String(total)) + '점'))) + escHtml(stdText) + ' &middot; ' + (isKtccReview && !isReviewGroup ? escHtml(ktccExtra) : (isReviewGroup ? escHtml(groupExtra) : (escHtml(String(team)) + (role ? ' &middot; ' + escHtml(String(role)) : '') + (mode ? ' &middot; ' + escHtml(String(mode)) : '') + ' &middot; ' + escHtml(timeStr)))) + '</div>' +
+        '<div class="review-info-sub">' + (ikrcListSummary ? escHtml(ikrcListSummary) : (mobListSummary ? escHtml(mobListSummary) : ('총점 ' + escHtml(String(total)) + '점'))) + escHtml(stdText) + ' &middot; ' + escHtml(reviewMetaText) + '</div>' +
       '</div>' +
       '<div class="review-actions">' + actionHtml + '</div>';
 
@@ -8814,6 +8827,9 @@ function openReviewEdit(item) {
     document.getElementById('review-edit-sub').textContent = '팀번호 ' + (item['팀번호'] || '-') + ' · ' + (item['팀명'] || '-') + ' · 현재 상태: ' + (item.status || '미검수') + categorySuffix;
   } else if (String(_reviewState.code || '').toUpperCase() === 'KCAC' && item._kcacGroupItems) {
     document.getElementById('review-edit-sub').textContent = '참가자 ' + (item['참가자번호'] || '-') + '번 · ' + (item['선수명'] || '선수명 미입력') + ' · ' + kcacReviewTabLabel_(item) + ' · 현재 상태: ' + (item.status || '미검수') + categorySuffix;
+  } else if (String(_reviewState.code || '').toUpperCase() === 'MOB') {
+    var mobReviewJudge = displayJudgeLabel_(item['심사위원명'] || item._col3 || '', item['역할'] || item._col5 || '', '심사위원');
+    document.getElementById('review-edit-sub').textContent = reviewGroupTitle_(item, 'MOB') + ' · 심사: ' + mobReviewJudge + ' · 현재 상태: ' + (item.status || '미검수') + categorySuffix;
   } else {
     document.getElementById('review-edit-sub').textContent = '행 ' + item.rowIndex + ' · 현재 상태: ' + (item.status || '미검수') + categorySuffix;
   }
