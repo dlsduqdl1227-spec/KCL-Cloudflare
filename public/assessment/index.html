@@ -79,6 +79,14 @@ select{
   line-height:1.55;
   margin:-4px 0 12px;
 }
+.participant-refresh-row{display:grid;grid-template-columns:minmax(0,1fr) 40px;gap:8px;align-items:stretch;margin-bottom:10px}
+.participant-refresh-row .participant-picker{margin-bottom:0;min-width:0}
+.list-refresh-btn{width:40px;min-width:40px;height:40px;padding:0;border:1px solid var(--border-lt);border-radius:8px;background:var(--card);color:var(--text-2);font-size:20px;font-weight:800;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.list-refresh-btn:hover{border-color:#777;color:#fff}
+.list-refresh-btn:disabled{opacity:.45;cursor:wait}
+.review-nav .list-refresh-btn{height:56px;margin-left:auto}
+.station-list-refresh-head{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:8px;align-items:center;margin-bottom:4px}
+.station-list-refresh-head .station-list-refresh-title{text-align:center;font-size:17px;font-weight:700;color:var(--text-2)}
 textarea{min-height:90px;resize:vertical;line-height:1.6;-webkit-appearance:none}
 input:focus,select:focus,textarea:focus{border-color:var(--border-lt)}
 input[type=checkbox]{width:auto;margin:0;-webkit-appearance:checkbox;appearance:checkbox}
@@ -1962,6 +1970,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <span class="cup-btn-num">검수 목록</span>
       <span class="cup-btn-score" id="review-nav-summary">대기 -</span>
     </button>
+    <button type="button" class="list-refresh-btn" id="review-list-refresh" onclick="refreshCurrentReviewList_()" aria-label="검수 목록 새로고침" title="검수 목록 새로고침">↻</button>
     <button type="button" id="review-back-btn" hidden aria-hidden="true" tabindex="-1">뒤로가기</button>
   </div>
   <div class="eval-content">
@@ -2050,7 +2059,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <p style="text-align:center;color:var(--text-3);margin-bottom:24px;font-size:14px" id="cupping-setup-sub"></p>
 
   <div class="finals-container" id="kcr-station-setup">
-    <div style="text-align:center;font-size:17px;font-weight:700;margin-bottom:4px;color:var(--text-2)" id="cupping-round-label">평가 스테이션 선택</div>
+    <div class="station-list-refresh-head"><span aria-hidden="true"></span><div class="station-list-refresh-title" id="cupping-round-label">평가 스테이션 선택</div><button type="button" class="list-refresh-btn station-list-refresh" data-code="KCR" onclick="refreshStationEvaluationList_('KCR')" aria-label="평가 스테이션 목록 새로고침" title="평가 스테이션 목록 새로고침">↻</button></div>
     <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px">대회팀장이 현재 라운드에 오픈한 스테이션을 선택하면 컵 번호와 프로세스가 자동 적용됩니다.</div>
     <div id="cuppingCalibrationWrap" class="kcr-calibration-control" style="display:block;margin-bottom:14px">
       <div style="font-weight:800;color:var(--text-2);margin-bottom:6px">선택한 평가 목적</div>
@@ -2159,7 +2168,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <div class="eval-content">
     <div class="eval-hero-logo" data-comp-logo="KCAC"></div>
     <div class="section-label">참가자 정보</div>
-    <select id="kcac-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KCAC','kcac-participant-select','kcac-num','kcac-name')"></select>
+    <div class="participant-refresh-row"><select id="kcac-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KCAC','kcac-participant-select','kcac-num','kcac-name')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="KCAC" onclick="refreshEvaluationList_('KCAC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="kcac-participant-help" class="participant-picker-help"></div>
     <input type="number" id="kcac-num" placeholder="참가자 번호" inputmode="numeric" oninput="applyParticipantNumberInput_('KCAC','kcac-num','kcac-name')">
     <input type="text" id="kcac-name" placeholder="선수명 (선택)">
@@ -2253,7 +2262,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <div class="eval-content">
     <div class="eval-hero-logo" data-comp-logo="KBC"></div>
     <div class="section-label">참가자 번호</div>
-    <select id="kbc-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KBC','kbc-participant-select','kbc-num','kbc-name')"></select>
+    <div class="participant-refresh-row"><select id="kbc-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KBC','kbc-participant-select','kbc-num','kbc-name')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="KBC" onclick="refreshEvaluationList_('KBC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="kbc-participant-help" class="participant-picker-help"></div>
     <input type="number" id="kbc-num" placeholder="참가자 번호" inputmode="numeric" oninput="applyParticipantNumberInput_('KBC','kbc-num','kbc-name')">
     <input type="text" id="kbc-name" placeholder="참가자명">
@@ -2337,7 +2346,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <button class="btn" onclick="loadMobCalibrationTargets()">켈리브레이션 검수확인</button>
     </div>
     <div class="section-label">참가자 정보</div>
-    <select id="mob-participant-select" class="participant-picker" onchange="applyParticipantSelect_('MOB','mob-participant-select','mob-num','mob-name')"></select>
+    <div class="participant-refresh-row"><select id="mob-participant-select" class="participant-picker" onchange="applyParticipantSelect_('MOB','mob-participant-select','mob-num','mob-name')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="MOB" onclick="refreshEvaluationList_('MOB')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="mob-participant-help" class="participant-picker-help"></div>
     <input type="number" id="mob-num" placeholder="선수를 선택하면 참가자번호 자동입력" inputmode="numeric" oninput="applyParticipantNumberInput_('MOB','mob-num','mob-name')">
     <input type="text" id="mob-name" placeholder="참가자명">
@@ -2424,7 +2433,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <p style="text-align:center;color:var(--text-3);margin-bottom:24px;font-size:14px" id="ikrc-setup-sub"></p>
 
   <div class="finals-container">
-    <div style="text-align:center;font-size:17px;font-weight:700;margin-bottom:4px;color:var(--text-2)">스테이션 선택</div>
+    <div class="station-list-refresh-head"><span aria-hidden="true"></span><div class="station-list-refresh-title">스테이션 선택</div><button type="button" class="list-refresh-btn station-list-refresh" data-code="IKRC" onclick="refreshStationEvaluationList_('IKRC')" aria-label="평가 스테이션 목록 새로고침" title="평가 스테이션 목록 새로고침">↻</button></div>
     <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:16px">운영팀장이 등록한 스테이션만 선택할 수 있습니다. 샘플 번호는 자동으로 적용됩니다.</div>
     <div id="ikrcCalibrationNotice" class="review-edit-help" style="display:none;margin-bottom:14px">헤드 심사위원 평가도 실제 순위·총점에 반영됩니다.</div>
     <div class="ikrc-station-grid" id="ikrc-station-grid"></div>
@@ -2578,7 +2587,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <button class="btn-outline" onclick="startMocRange()">범위 평가 시작</button>
     <div class="divider"></div>
     <div class="section-label">개별 번호 지정</div>
-    <select id="mocSetupParticipantSelect" class="participant-picker" onchange="applyParticipantSelect_('MOC','mocSetupParticipantSelect','mocSetupSingleInput','')"></select>
+    <div class="participant-refresh-row"><select id="mocSetupParticipantSelect" class="participant-picker" onchange="applyParticipantSelect_('MOC','mocSetupParticipantSelect','mocSetupSingleInput','')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="MOC" onclick="refreshEvaluationList_('MOC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="mocSetupParticipantHelp" class="participant-picker-help"></div>
     <div class="finals-add-row">
       <input type="number" id="mocSetupSingleInput" placeholder="참가자 번호" inputmode="numeric" onkeydown="if(event.key==='Enter'){addMocTarget();event.preventDefault()}">
@@ -2602,7 +2611,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <p style="font-size:12px;color:var(--text-3);line-height:1.6;margin-bottom:10px">
       KTCC는 평가할 팀을 개별번호로만 추가합니다. 참가자 팀번호와 팀명을 함께 입력하면 평가 화면과 순위/검수 화면에 그대로 표시됩니다.
     </p>
-    <select id="ktccSetupParticipantSelect" class="participant-picker" onchange="applyParticipantSelect_('KTCC','ktccSetupParticipantSelect','ktccSetupSingleInput','ktccSetupTeamNameInput')"></select>
+    <div class="participant-refresh-row"><select id="ktccSetupParticipantSelect" class="participant-picker" onchange="applyParticipantSelect_('KTCC','ktccSetupParticipantSelect','ktccSetupSingleInput','ktccSetupTeamNameInput')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="KTCC" onclick="refreshEvaluationList_('KTCC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="ktccSetupParticipantHelp" class="participant-picker-help"></div>
     <input type="text" id="ktccSetupTeamNameInput" placeholder="팀명 (예: 월간커피A)">
     <div class="finals-add-row">
@@ -3464,9 +3473,9 @@ function renderParticipantControl_(code, cfg) {
   if (numInput && code === 'MOB') {
     numInput.readOnly = true;
     numInput.placeholder = '선수를 선택하면 참가자번호 자동입력';
-    var selectedIndex = list.findIndex(function(a){ return participantNumberMatches_(a.number || a.roundCupNo, numInput.value); });
-    if (selectedIndex >= 0) sel.value = String(selectedIndex);
   }
+  var selectedIndex = numInput ? list.findIndex(function(a){ return participantNumberMatches_(a.number || a.roundCupNo || a.teamNo, numInput.value); }) : -1;
+  if (selectedIndex >= 0) sel.value = String(selectedIndex);
   if (help) {
     var policy = st.policy || {};
     help.style.display = 'block';
@@ -3488,12 +3497,20 @@ function renderParticipantControl_(code, cfg) {
 function renderParticipantControls_(code) {
   participantControlsForCode_(code).forEach(function(cfg){ renderParticipantControl_(code, cfg); });
 }
+function setParticipantRefreshState_(code, loading) {
+  code = String(code || '').toUpperCase();
+  document.querySelectorAll('.participant-list-refresh[data-code="' + code + '"]').forEach(function(button){
+    button.disabled = !!loading;
+    button.textContent = loading ? '…' : '↻';
+  });
+}
 function loadParticipantAssignmentsForCode_(code) {
   code = String(code || '').toUpperCase();
-  if (!code || !(_judge && _judge.judgeToken)) { renderParticipantControls_(code); return; }
+  if (!code || !(_judge && _judge.judgeToken)) { renderParticipantControls_(code); setParticipantRefreshState_(code, false); return; }
   var st = participantStateForCode_(code);
   st.loading = true;
   st.message = '';
+  setParticipantRefreshState_(code, true);
   renderParticipantControls_(code);
   google.script.run
     .withSuccessHandler(function(res){
@@ -3511,6 +3528,7 @@ function loadParticipantAssignmentsForCode_(code) {
         cur.message = (res && res.message) || '선수등록 목록을 불러오지 못했습니다. 직접 입력하세요.';
       }
       renderParticipantControls_(code);
+      setParticipantRefreshState_(code, false);
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
     })
@@ -3523,6 +3541,7 @@ function loadParticipantAssignmentsForCode_(code) {
       cur.scheduleScope = null;
       cur.message = '선수등록 목록을 불러오지 못했습니다. 직접 입력하세요.';
       renderParticipantControls_(code);
+      setParticipantRefreshState_(code, false);
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
     })
@@ -3533,6 +3552,48 @@ function refreshParticipantAssignmentsForActiveComp_(code) {
   if (!code) return;
   renderParticipantControls_(code);
   loadParticipantAssignmentsForCode_(code);
+}
+function refreshEvaluationList_(code) {
+  code = String(code || (_selComp && _selComp.code) || '').toUpperCase();
+  if (!code) return;
+  var st = participantStateForCode_(code);
+  if (st.loading) { toast('평가 목록을 불러오는 중입니다.'); return; }
+  toast('평가 참가자 목록을 새로고침합니다.');
+  refreshParticipantAssignmentsForActiveComp_(code);
+}
+function setStationEvaluationRefreshState_(code, loading) {
+  code = String(code || '').toUpperCase();
+  document.querySelectorAll('.station-list-refresh[data-code="' + code + '"]').forEach(function(button){
+    button.disabled = !!loading;
+    button.textContent = loading ? '…' : '↻';
+  });
+}
+function refreshStationEvaluationList_(code) {
+  code = String(code || '').toUpperCase();
+  var button = document.querySelector('.station-list-refresh[data-code="' + code + '"]');
+  if (!code || (button && button.disabled)) return;
+  setStationEvaluationRefreshState_(code, true);
+  google.script.run
+    .withSuccessHandler(function(res){
+      setStationEvaluationRefreshState_(code, false);
+      if (!res || !res.success) { toast((res && res.message) || '스테이션 목록을 불러오지 못했습니다.', true); return; }
+      _configs = Array.isArray(res.configs) ? res.configs : _configs;
+      var latest = _configs.filter(function(cfg){ return String(cfg.code || '').toUpperCase() === code; })[0];
+      if (!latest) { toast(code + ' 대회 설정을 찾지 못했습니다.', true); return; }
+      _selComp = latest;
+      if (code === 'KCR') {
+        renderKcrStationChoices_();
+        loadParticipantAssignmentsForCode_('KCR');
+      } else if (code === 'IKRC') {
+        renderIkrcStationChoices_();
+      }
+      toast('평가 스테이션 목록을 새로고침했습니다.');
+    })
+    .withFailureHandler(function(err){
+      setStationEvaluationRefreshState_(code, false);
+      toast('스테이션 목록을 불러오지 못했습니다: ' + ((err && err.message) || '서버 오류'), true);
+    })
+    .getConfig();
 }
 
 function competitionOptionSettings_(cfg) {
@@ -5592,6 +5653,17 @@ function goReview() {
   document.getElementById('review-back-btn').onclick = goHomePanel_;
   goReviewByCode(_selComp.code, _selComp.name);
 }
+function setReviewRefreshState_(loading) {
+  var button = document.getElementById('review-list-refresh');
+  if (!button) return;
+  button.disabled = !!loading;
+  button.textContent = loading ? '…' : '↻';
+}
+function refreshCurrentReviewList_() {
+  var button = document.getElementById('review-list-refresh');
+  if (!_reviewState || !_reviewState.code || (button && button.disabled)) return;
+  goReviewByCode(_reviewState.code, _reviewState.name, _reviewState.backPanel);
+}
 
 function goCalibration(scope) {
   if (!_selComp) { toast('먼저 대회를 선택해주세요', true); return; }
@@ -5742,6 +5814,7 @@ function goReviewByCode(code, name, backPanel) {
   if (cachedMobReview) renderReview(cachedMobReview.list, code, cachedMobReview.headers, cachedMobReview.supersededCount);
   else setReviewListMetric_(0, 0, 0, true);
   showPanel('pReview');
+  setReviewRefreshState_(true);
   showOverlay();
 
   // 30초 타임아웃 안전망
@@ -5749,6 +5822,7 @@ function goReviewByCode(code, name, backPanel) {
   var timer = setTimeout(function(){
     timedOut = true;
     hideOverlay();
+    setReviewRefreshState_(false);
     document.getElementById('review-stat').textContent = cachedMobReview
       ? '기존 검수 목록 표시 중 · 최신 정보 응답이 지연됩니다.'
       : '응답이 지연됩니다. 잠시 후 다시 시도해주세요.';
@@ -5758,6 +5832,7 @@ function goReviewByCode(code, name, backPanel) {
     if (timedOut) return;
     clearTimeout(timer);
     hideOverlay();
+    setReviewRefreshState_(false);
     _reviewState.stationScope = res.stationScope || null;
     _reviewState.stationScopes = Array.isArray(res.stationScopes) ? res.stationScopes : (_reviewState.stationScope ? [_reviewState.stationScope] : []);
     _reviewState.readOnlyHeadMonitor = !!res.readOnlyHeadMonitor;
@@ -5801,6 +5876,7 @@ function goReviewByCode(code, name, backPanel) {
       if (!res || !res.success) {
         clearTimeout(timer);
         hideOverlay();
+        setReviewRefreshState_(false);
         document.getElementById('review-stat').textContent = (cachedMobReview ? '기존 검수 목록 표시 중 · ' : '') + '오류: ' + ((res && res.message) || '알 수 없는 오류');
         return;
       }
@@ -5844,6 +5920,7 @@ function goReviewByCode(code, name, backPanel) {
       if (timedOut) return;
       clearTimeout(timer);
       hideOverlay();
+      setReviewRefreshState_(false);
       document.getElementById('review-stat').textContent = (cachedMobReview ? '기존 검수 목록 표시 중 · ' : '') + '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
     .getReviewList(code, reviewActorPayload_(code));
@@ -5947,6 +6024,7 @@ function getItemStddev_(item) { return (item && (item._stddev || item._kbcStddev
 function canShowStddevButton_(code, item) {
   var c = String(code || '').toUpperCase();
   if (c === 'IKRC' && isHeadRoleForCode_(c)) return true;
+  if (c === 'MOB' && (isAdminRole() || isTeamLeaderForCode_(c))) return false;
   if (!(isAdminRole() || isTeamLeaderForCode_(c))) return false;
   return true;
 }
