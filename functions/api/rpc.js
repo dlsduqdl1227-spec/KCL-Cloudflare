@@ -23,6 +23,12 @@ const LOGIN_SECURITY_HMAC_ALGORITHM = 'HMAC-SHA256';
 let __schemaReadyPromise = null;
 let __defaultDataReadyPromise = null;
 const __readRateLimits = new Map();
+const RUNTIME_SCHEMA_OBJECTS = [
+  'competitions', 'operators', 'sessions', 'participants', 'scores', 'otps', 'sms_logs', 'rate_limits', 'security_events', 'system_settings',
+  'idx_scores_comp', 'idx_scores_comp_id', 'idx_scores_submitter_unit', 'idx_participants_comp', 'idx_operators_phone',
+  'idx_participants_lookup', 'idx_participants_unit', 'idx_scores_unit', 'idx_otps_lookup', 'idx_sessions_kind',
+  'idx_sms_logs_comp', 'idx_security_events_action', 'idx_scores_client_submission_unit', 'idx_operators_effective_date'
+];
 function memoOnce_(keyName, factory) {
   if (keyName === 'schema') {
     if (!__schemaReadyPromise) __schemaReadyPromise = Promise.resolve().then(factory).catch(err => { __schemaReadyPromise = null; throw err; });
@@ -31,9 +37,47 @@ function memoOnce_(keyName, factory) {
   if (!__defaultDataReadyPromise) __defaultDataReadyPromise = Promise.resolve().then(factory).catch(err => { __defaultDataReadyPromise = null; throw err; });
   return __defaultDataReadyPromise;
 }
+async function runtimeSchemaReady_(db) {
+  try {
+    const placeholders = RUNTIME_SCHEMA_OBJECTS.map(() => '?').join(',');
+    const found = await db.prepare(`SELECT name FROM sqlite_master WHERE name IN (${placeholders})`)
+      .bind(...RUNTIME_SCHEMA_OBJECTS).all();
+    const names = new Set((found.results || []).map(row => safeStr(row && row.name)));
+    if (RUNTIME_SCHEMA_OBJECTS.some(name => !names.has(name))) return false;
+    // sqlite_master에는 열 정보가 없으므로 현장 권한 날짜 필드까지 한 번 더 확인합니다.
+    await db.prepare('SELECT effective_date FROM operators LIMIT 0').all();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+async function runtimeDefaultDataReady_(env) {
+  try {
+    const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM competitions').first();
+    if (!count || Number(count.n || 0) < COMPETITION_CODES.length) return false;
+    const adminName = safeStr(env.KCL_ADMIN_NAME);
+    const adminPhone = normalizePhone(env.KCL_ADMIN_PHONE);
+    const adminAffiliation = safeStr(env.KCL_ADMIN_AFFILIATION) || 'KCL';
+    const isLegacyDefaultAdmin = adminName === '관리자' && adminPhone === '01000000000';
+    if (!adminName || !adminPhone || isLegacyDefaultAdmin) return true;
+    const admin = await env.DB.prepare(`SELECT id FROM operators
+      WHERE name=? AND phone=? AND account_type='ADMIN' AND access='ALL' AND role='관리자' AND affiliation=? LIMIT 1`)
+      .bind(adminName, adminPhone, adminAffiliation).first();
+    return !!(admin && admin.id);
+  } catch (_) {
+    return false;
+  }
+}
 async function ensureRuntimeReady_(env) {
-  await memoOnce_('schema', () => ensureSchema(env.DB));
-  await memoOnce_('defaultData', () => ensureDefaultData(env));
+  // Cloudflare의 새 Worker isolate마다 CREATE TABLE/INDEX를 반복하면 대회 동시 접속 시
+  // D1 쓰기 잠금과 초기 응답 지연이 생길 수 있습니다. 완성된 스키마는 읽기 확인만 하고,
+  // 실제 누락이 있을 때에만 안전한 IF NOT EXISTS 마이그레이션을 수행합니다.
+  await memoOnce_('schema', async () => {
+    if (!await runtimeSchemaReady_(env.DB)) await ensureSchema(env.DB);
+  });
+  await memoOnce_('defaultData', async () => {
+    if (!await runtimeDefaultDataReady_(env)) await ensureDefaultData(env);
+  });
 }
 
 function normalizeRoundForCompetition_(code, round) {
@@ -3523,8 +3567,10 @@ async function submitScores(env, payload, signature, request = null) {
       };
     }
     if (x.code === 'IKRC') {
-      const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
-        .bind(x.code, x.round, x.role, x.unit).all();
+      // 운영 중 역할 표기가 수정되더라도 동일 인물의 동일 샘플 공식평가가 두 표로 저장되면 안 됩니다.
+      // 로그인 계정 식별값으로 소유자를 확인하므로 역할 문자열은 중복 조회 조건에서 제외합니다.
+      const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND unit=? ORDER BY id DESC`)
+        .bind(x.code, x.round, x.unit).all();
       const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
       const existingSameCategory = (existingRows.results || []).find(existing =>
         scoreOwnedByActor_(existing, auth.actor) &&
@@ -4776,6 +4822,10 @@ function officialJudgeRoleKey_(item) {
   item = item || {};
   const judge = itemJudgeIdentityKey_(item);
   const role = safeStr(item['역할'] || item.role || item.judgeRole || '').replace(/\s+/g, '').toLowerCase();
+  const competitionCode = safeStr(item.competitionCode || item['대회코드'] || '').toUpperCase();
+  // IKRC 최종평균은 한 심사위원당 한 표입니다. 현장 권한 변경으로 역할명이 달라져도
+  // 같은 계정의 최신 제출만 남겨 헤드/센서리 수와 평균이 중복되지 않게 합니다.
+  if (competitionCode === 'IKRC' && judge) return judge;
   if (judge || role) return judge + ':' + role;
   return 'row:' + safeStr(item.scoreRowId || item._scoreId || item.rowIndex || Math.random());
 }

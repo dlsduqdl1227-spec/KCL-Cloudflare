@@ -5798,9 +5798,11 @@ function setReviewEditMetric_(item) {
 
 function goReviewByCode(code, name, backPanel) {
   var normalizedCode = String(code || '').toUpperCase();
-  var cachedMobReview = normalizedCode === 'MOB' && String(_reviewState.code || '').toUpperCase() === 'MOB' && Array.isArray(_reviewState.list) && _reviewState.list.length
+  var cachedReview = normalizedCode === String(_reviewState.code || '').toUpperCase() && Array.isArray(_reviewState.list) && _reviewState.list.length
     ? { list:_reviewState.list.slice(), headers:(_reviewState.headers || []).slice(), supersededCount:Number(_reviewState.supersededCount || 0) }
     : null;
+  // MOB 날짜 병합 로직과의 기존 호환 이름은 유지하되, 화면 보존은 IKRC를 포함한 모든 대회에 적용합니다.
+  var cachedMobReview = normalizedCode === 'MOB' ? cachedReview : null;
   _reviewState.code = code;
   _reviewState.name = name || code;
   _reviewState.stationScope = null;
@@ -5808,10 +5810,10 @@ function goReviewByCode(code, name, backPanel) {
   _reviewState.readOnlyHeadMonitor = false;
   _reviewState.backPanel = backPanel || (_judge.role === '관리자' ? 'pAdmin' : (isTeamLeaderRole() ? 'pTeam' : 'pSelect'));
   document.getElementById('review-title').textContent = (name || code) + ' 검수';
-  if (!cachedMobReview) document.getElementById('review-list').innerHTML = '';
-  document.getElementById('review-stat').textContent = cachedMobReview ? '기존 검수 목록 표시 중 · 최신 정보 확인 중...' : '불러오는 중...';
+  if (!cachedReview) document.getElementById('review-list').innerHTML = '';
+  document.getElementById('review-stat').textContent = cachedReview ? '기존 검수 목록 표시 중 · 최신 정보 확인 중...' : '불러오는 중...';
   setReviewLogo_('review-logo', code);
-  if (cachedMobReview) renderReview(cachedMobReview.list, code, cachedMobReview.headers, cachedMobReview.supersededCount);
+  if (cachedReview) renderReview(cachedReview.list, code, cachedReview.headers, cachedReview.supersededCount);
   else setReviewListMetric_(0, 0, 0, true);
   showPanel('pReview');
   setReviewRefreshState_(true);
@@ -5823,7 +5825,7 @@ function goReviewByCode(code, name, backPanel) {
     timedOut = true;
     hideOverlay();
     setReviewRefreshState_(false);
-    document.getElementById('review-stat').textContent = cachedMobReview
+    document.getElementById('review-stat').textContent = cachedReview
       ? '기존 검수 목록 표시 중 · 최신 정보 응답이 지연됩니다.'
       : '응답이 지연됩니다. 잠시 후 다시 시도해주세요.';
   }, 30000);
@@ -5877,7 +5879,7 @@ function goReviewByCode(code, name, backPanel) {
         clearTimeout(timer);
         hideOverlay();
         setReviewRefreshState_(false);
-        document.getElementById('review-stat').textContent = (cachedMobReview ? '기존 검수 목록 표시 중 · ' : '') + '오류: ' + ((res && res.message) || '알 수 없는 오류');
+        document.getElementById('review-stat').textContent = (cachedReview ? '기존 검수 목록 표시 중 · ' : '') + '오류: ' + ((res && res.message) || '알 수 없는 오류');
         return;
       }
       var dates = normalizedCode === 'MOB' && Array.isArray(res.mobReviewDates) ? res.mobReviewDates.filter(Boolean) : [];
@@ -5921,7 +5923,7 @@ function goReviewByCode(code, name, backPanel) {
       clearTimeout(timer);
       hideOverlay();
       setReviewRefreshState_(false);
-      document.getElementById('review-stat').textContent = (cachedMobReview ? '기존 검수 목록 표시 중 · ' : '') + '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
+      document.getElementById('review-stat').textContent = (cachedReview ? '기존 검수 목록 표시 중 · ' : '') + '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
     .getReviewList(code, reviewActorPayload_(code));
 }
@@ -15178,7 +15180,13 @@ var _ikrcCalibrationAllowedStations = [];
 var _ikrcCalibrationScopeReady = false;
 var _ikrcCalibrationScopeLoading = false;
 var _ikrcCalibrationCanViewOverall = false;
+var _ikrcCalibrationRequestSeq = 0;
+var _ikrcCalibrationRenderedKey = '';
 function isIkrcOfficialStationView_() { return _ikrcCalibrationViewMode === 'official'; }
+function ikrcCalibrationListKey_() {
+  var req = ikrcCalibrationRequest_();
+  return [isIkrcOfficialStationView_() ? 'official' : 'precalibration', ((_selComp && _selComp.currentRound) || ''), req.stationId || ''].join('|');
+}
 function renderIkrcResultViewMode_() {
   var officialBtn = document.getElementById('ikrc-result-mode-official');
   var stationBtn = document.getElementById('ikrc-result-mode-station');
@@ -15254,6 +15262,8 @@ function setIkrcCalibrationStation_(stationId) {
 }
 function loadIkrcCalibrationCups(scopeReady) {
   if (!_selComp) _selComp = {code:'IKRC', name:'IKRC', currentRound:''};
+  if (!scopeReady && _ikrcCalibrationScopeLoading) return;
+  var requestSeq = ++_ikrcCalibrationRequestSeq;
   var officialView = isIkrcOfficialStationView_();
   var title = document.getElementById('ikrc-cal-list-title');
   var help = document.getElementById('ikrc-cal-list-help');
@@ -15270,21 +15280,23 @@ function loadIkrcCalibrationCups(scopeReady) {
   if (sub) sub.textContent = judgeLineText() + '  ' + ((_selComp && _selComp.currentRound) || '') + ' · ' + ikrcCalibrationScopeLabel_() + ' · 미확인 우선';
   showPanel('pIkrcCalList');
   var wrap = document.getElementById('ikrc-cal-list');
-  if (wrap) wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">불러오는 중...</p>';
+  var requestListKey = ikrcCalibrationListKey_();
+  var preserveLoadedList = !!(wrap && _ikrcCalibrationRenderedKey === requestListKey && wrap.innerHTML.trim());
+  if (wrap && !preserveLoadedList) wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">불러오는 중...</p>';
   if (!scopeReady) {
-    if (_ikrcCalibrationScopeLoading) return;
     _ikrcCalibrationScopeLoading = true;
     _ikrcCalibrationScopeReady = false;
     renderIkrcCalibrationScope_();
     showOverlay();
     var runner = google.script.run
       .withSuccessHandler(function(res){
+        if (requestSeq !== _ikrcCalibrationRequestSeq) return;
         hideOverlay();
         _ikrcCalibrationScopeLoading = false;
         if (!res || res.success === false) {
           _ikrcCalibrationScopeReady = false;
           renderIkrcCalibrationScope_();
-          if (wrap) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">' + escHtml((res && res.message) || '켈리브레이션 열람 권한이 없습니다.') + '</p>';
+          if (wrap && !preserveLoadedList) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">' + escHtml((res && res.message) || '켈리브레이션 열람 권한이 없습니다.') + '</p>';
           toast((res && res.message) || '켈리브레이션 열람 권한이 없습니다.', true);
           return;
         }
@@ -15295,7 +15307,7 @@ function loadIkrcCalibrationCups(scopeReady) {
         if (!_ikrcCalibrationAllowedStations.some(function(station){ return station.id === _ikrcCalibrationStationId; })) _ikrcCalibrationStationId = _ikrcCalibrationAllowedStations[0] ? _ikrcCalibrationAllowedStations[0].id : '';
         loadIkrcCalibrationCups(true);
       })
-      .withFailureHandler(function(err){ hideOverlay(); _ikrcCalibrationScopeLoading = false; _ikrcCalibrationScopeReady = false; renderIkrcCalibrationScope_(); if (wrap) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">권한 확인 실패</p>'; toast('IKRC 결과 확인 권한 오류: ' + ((err && err.message) || err || ''), true); });
+      .withFailureHandler(function(err){ if (requestSeq !== _ikrcCalibrationRequestSeq) return; hideOverlay(); _ikrcCalibrationScopeLoading = false; _ikrcCalibrationScopeReady = false; renderIkrcCalibrationScope_(); if (wrap && !preserveLoadedList) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">권한 확인 실패</p>'; toast('IKRC 결과 확인 권한 오류: ' + ((err && err.message) || err || ''), true); });
     if (officialView) runner.getIkrcOfficialCalibrationScopeOptions((_judge && _judge.judgeToken) || '');
     else runner.getIkrcCalibrationScopeOptions((_judge && _judge.judgeToken) || '');
     return;
@@ -15305,8 +15317,9 @@ function loadIkrcCalibrationCups(scopeReady) {
   showOverlay();
   var cupRunner = google.script.run
     .withSuccessHandler(function(cups){
+      if (requestSeq !== _ikrcCalibrationRequestSeq) return;
       hideOverlay();
-      if (cups && cups.success === false) { if (wrap) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">' + escHtml(cups.message || '불러오기 실패') + '</p>'; toast(cups.message || '켈리브레이션 목록을 불러오지 못했습니다.', true); return; }
+      if (cups && cups.success === false) { if (wrap && !preserveLoadedList) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">' + escHtml(cups.message || '불러오기 실패') + '</p>'; toast(cups.message || '켈리브레이션 목록을 불러오지 못했습니다.', true); return; }
       var stationFinalization = officialView && cups && !Array.isArray(cups) ? cups.finalization : null;
       if (officialView && finalizeStatus) {
         finalizeStatus.textContent = stationFinalization && stationFinalization.confirmedAt
@@ -15320,9 +15333,11 @@ function loadIkrcCalibrationCups(scopeReady) {
         return compareCupIds_(a.sampleNo, b.sampleNo);
       });
       if (!cups.length) {
+        _ikrcCalibrationRenderedKey = requestListKey;
         if (wrap) wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">아직 제출된 센서리 심사 데이터가 없습니다.</p>';
         return;
       }
+      _ikrcCalibrationRenderedKey = requestListKey;
       if (wrap) wrap.innerHTML = cups.map(function(item){
         var badge = officialView
           ? (item.reviewComplete
@@ -15340,7 +15355,7 @@ function loadIkrcCalibrationCups(scopeReady) {
           '</div></div>';
       }).join('');
     })
-    .withFailureHandler(function(err){ hideOverlay(); if (wrap) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">불러오기 실패</p>'; toast('IKRC 결과 목록 오류: ' + ((err && err.message) || err || ''), true); });
+    .withFailureHandler(function(err){ if (requestSeq !== _ikrcCalibrationRequestSeq) return; hideOverlay(); if (wrap && !preserveLoadedList) wrap.innerHTML = '<p style="text-align:center;color:#ff7777;padding:24px">불러오기 실패</p>'; toast('IKRC 결과 목록 오류: ' + ((err && err.message) || err || ''), true); });
   if (officialView) cupRunner.getIkrcOfficialCalibrationCupNumbers(ikrcCalibrationRequest_(), _judge.judgeToken || '');
   else cupRunner.getIkrcCalibrationCupNumbers(ikrcCalibrationRequest_(), _judge.judgeToken || '');
 }
