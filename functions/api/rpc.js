@@ -1641,6 +1641,18 @@ async function upsertParticipant(env, payload, actorArg) {
   let id = Number(payload && (payload.rowIndex || payload.id));
   const bind = [code, data.name, data.affiliation, data.phone, data.uniqueNo, data.prelimCupNo, data.mainCupNo, data.finalCupNo, data.cupNo, data.sampleNo, data.teamName, data.teamNo, JSON.stringify(data.extra || {}), nowIso()];
 
+  // 편집 중 대회 선택이 바뀌거나 오래된 화면의 행 번호가 전달되어도
+  // 다른 대회 참가자를 현재 대회로 이동시키지 않습니다. 참가자 행은
+  // 생성된 대회 안에서만 수정할 수 있고 대회 변경은 새 행 등록으로 처리합니다.
+  if (id) {
+    const current = await env.DB.prepare('SELECT competition_code FROM participants WHERE id=?').bind(id).first();
+    if (!current) return { success:false, message:'수정할 선수를 찾을 수 없습니다. 목록을 새로고침해주세요.' };
+    const currentCode = safeStr(current.competition_code).toUpperCase();
+    if (currentCode !== code) {
+      return { success:false, message:`${currentCode} 선수는 ${code} 선수로 변경할 수 없습니다. 각 대회에서 별도로 등록해주세요.` };
+    }
+  }
+
   // 같은 엑셀을 다시 업로드해도 중복 선수가 쌓이지 않도록 대회+연락처+이름 또는 대회+번호 기준으로 갱신합니다.
   if (!id && data.phone && (data.name || data.teamName)) {
     const existing = await env.DB.prepare(`SELECT id FROM participants WHERE competition_code=? AND phone=? AND COALESCE(name,'')=? ORDER BY id LIMIT 1`)
@@ -1666,8 +1678,8 @@ async function upsertParticipant(env, payload, actorArg) {
   }
 
   if (id) {
-    await env.DB.prepare(`UPDATE participants SET competition_code=?, name=?, affiliation=?, phone=?, unique_no=?, prelim_cup_no=?, main_cup_no=?, final_cup_no=?, cup_no=?, sample_no=?, team_name=?, team_no=?, extra_json=?, updated_at=? WHERE id=?`)
-      .bind(...bind, id).run();
+    await env.DB.prepare(`UPDATE participants SET competition_code=?, name=?, affiliation=?, phone=?, unique_no=?, prelim_cup_no=?, main_cup_no=?, final_cup_no=?, cup_no=?, sample_no=?, team_name=?, team_no=?, extra_json=?, updated_at=? WHERE id=? AND competition_code=?`)
+      .bind(...bind, id, code).run();
   } else {
     await env.DB.prepare(`INSERT INTO participants (competition_code, name, affiliation, phone, unique_no, prelim_cup_no, main_cup_no, final_cup_no, cup_no, sample_no, team_name, team_no, extra_json, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -1679,8 +1691,9 @@ async function deleteParticipant(env, rowIndex, actorArg) {
   const actor = await getActor(env, actorArg);
   if (!hasAdmin(actor) && !hasTeamLead(actor)) return { success: false, message: '선수 삭제 권한이 없습니다.' };
   const row = await env.DB.prepare('SELECT competition_code FROM participants WHERE id=?').bind(Number(rowIndex)).first();
+  if (!row) return { success: false, message: '이미 삭제되었거나 존재하지 않는 선수입니다.' };
   if (row && !hasManageAccess(actor, row.competition_code)) return { success: false, message: '해당 대회 선수 삭제 권한이 없습니다.' };
-  await env.DB.prepare('DELETE FROM participants WHERE id=?').bind(Number(rowIndex)).run();
+  await env.DB.prepare('DELETE FROM participants WHERE id=? AND competition_code=?').bind(Number(rowIndex), row.competition_code).run();
   return { success: true, message: '선수 삭제 완료' };
 }
 async function clearParticipants(env, competitionCode, actorArg) {

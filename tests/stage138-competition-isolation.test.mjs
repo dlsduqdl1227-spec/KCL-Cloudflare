@@ -116,6 +116,8 @@ const serverChecks = {
   buildRankingData_: /scores WHERE competition_code=\?/,
   updateReviewRow: /WHERE id=\? AND competition_code=\?/,
   deleteReviewRow: /WHERE id=\? AND competition_code=\?/,
+  upsertParticipant: /WHERE id=\? AND competition_code=\?/,
+  deleteParticipant: /DELETE FROM participants WHERE id=\? AND competition_code=\?/,
   clearScores: /DELETE FROM scores WHERE competition_code=\?/,
   clearParticipants: /DELETE FROM participants WHERE competition_code=\?/,
 };

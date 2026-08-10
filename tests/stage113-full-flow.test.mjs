@@ -365,6 +365,41 @@ assert.equal(adminMobAssignments.assignments.length, 3, "MOB manager must retain
 
 const multiRoleJudge = await rpc("judgeLogin", "QA 다중권한", "01011110012");
 assert.equal(multiRoleJudge.success, true, multiRoleJudge.message);
+assert.deepEqual([...multiRoleJudge.accessCodes].sort(), ["KCR", "MOC"], "동일 심사위원의 대회 접근 권한은 모두 유지되어야 합니다");
+assert.equal(multiRoleJudge.accountTypeMap.MOC, "TEAMLEAD", "MOC 팀장 권한은 MOC에만 유지되어야 합니다");
+assert.equal(multiRoleJudge.roleMap.MOC, "대회팀장");
+assert.equal(multiRoleJudge.accountTypeMap.KCR, "JUDGE", "KCR 심사위원 권한은 MOC 팀장 권한과 섞이면 안 됩니다");
+assert.equal(multiRoleJudge.roleMap.KCR, "센서리 심사위원");
+assert.equal(multiRoleJudge.teamMap.KCR, "KCR 스테이션 1");
+
+const duplicateMobParticipant = await rpc("upsertParticipant", {
+  competitionCode:"MOB", name:"QA 중복 참가자", phone:"01022228888", uniqueNo:"DUPLICATE-IDENTITY",
+  prelimCupNo:"990", competitionDate:currentKstDate, extra:{심사조:"A조", 경연순서:"99"},
+}, adminActor);
+assert.equal(duplicateMobParticipant.success, true, duplicateMobParticipant.message);
+const duplicateKcrParticipant = await rpc("upsertParticipant", {
+  competitionCode:"KCR", name:"QA 중복 참가자", phone:"01022228888", uniqueNo:"DUPLICATE-IDENTITY", prelimCupNo:"990",
+}, adminActor);
+assert.equal(duplicateKcrParticipant.success, true, duplicateKcrParticipant.message);
+assert.deepEqual(
+  testDb.raw.prepare("SELECT competition_code, name, phone, prelim_cup_no FROM participants WHERE name='QA 중복 참가자' ORDER BY competition_code").all().map(row => ({ ...row })),
+  [
+    { competition_code:"KCR", name:"QA 중복 참가자", phone:"01022228888", prelim_cup_no:"990" },
+    { competition_code:"MOB", name:"QA 중복 참가자", phone:"01022228888", prelim_cup_no:"990" },
+  ],
+  "동일 이름·연락처·참가번호라도 대회가 다르면 별도 참가자로 저장되어야 합니다",
+);
+const duplicateMobId = testDb.raw.prepare("SELECT id FROM participants WHERE competition_code='MOB' AND name='QA 중복 참가자'").get().id;
+const crossCompetitionEdit = await rpc("upsertParticipant", {
+  rowIndex:duplicateMobId, competitionCode:"KCR", name:"QA 중복 참가자", phone:"01022228888", uniqueNo:"DUPLICATE-IDENTITY", prelimCupNo:"990",
+}, adminActor);
+assert.equal(crossCompetitionEdit.success, false, "다른 대회 참가자 행을 현재 대회에서 수정할 수 없어야 합니다");
+assert.match(crossCompetitionEdit.message, /각 대회에서 별도로 등록/);
+assert.equal(
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM participants WHERE name='QA 중복 참가자'").get().n,
+  2,
+  "차단된 교차 대회 수정 이후에도 두 대회 참가자 행이 모두 보존되어야 합니다",
+);
 for (const participant of [
   { name:"QA 블라인드 선수1", phone:"01022229999", uniqueNo:"KCR-BLIND-01", prelimCupNo:"1" },
   { name:"QA 블라인드 선수2", phone:"01022229998", uniqueNo:"KCR-BLIND-02", prelimCupNo:"2" },
