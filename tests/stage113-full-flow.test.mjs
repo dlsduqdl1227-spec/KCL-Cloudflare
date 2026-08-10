@@ -611,8 +611,8 @@ assert.equal(officialStationBeforeReview.items.length, 6);
 assert.ok(officialStationBeforeReview.items.every((item) => item.headCount === 1 && item.judgeCount === 3 && item.sensoryReviewCount === 0));
 const headOnlyLiveRanking = await rpc("getRanking", "IKRC", adminActor);
 const headOnlyZ1 = headOnlyLiveRanking.ranking.find((item) => item.unit === "Z-1");
-assert.ok(headOnlyZ1, "헤드 공식점수는 별도 검수 없이 제출 즉시 실시간 순위에 표시되어야 합니다");
-assert.equal(headOnlyZ1.confirmedJudgeCount, 1);
+assert.ok(headOnlyZ1, "현재 제출된 헤드·센서리 공식점수는 별도 완료 버튼 없이 실시간 순위에 표시되어야 합니다");
+assert.equal(headOnlyZ1.confirmedJudgeCount, 4);
 assert.equal(headOnlyZ1.finalized, false);
 
 const preReviewIkrcList = await rpc("getReviewList", "IKRC", adminActor);
@@ -622,8 +622,8 @@ assert.equal(firstSensoryReview.success, true, firstSensoryReview.message);
 const twoJudgeLiveRanking = await rpc("getRanking", "IKRC", adminActor);
 const twoJudgeZ1 = twoJudgeLiveRanking.ranking.find((item) => item.unit === "Z-1");
 assert.ok(twoJudgeZ1, "센서리 심사위원 검수 완료 점수는 즉시 실시간 순위에 합산되어야 합니다");
-assert.equal(twoJudgeZ1.confirmedJudgeCount, 2);
-assert.equal(twoJudgeZ1.scoreBasis, "실시간 평균");
+assert.equal(twoJudgeZ1.confirmedJudgeCount, 4);
+assert.equal(twoJudgeZ1.scoreBasis, "현재 제출 평균");
 const resetFirstSensoryReview = await rpc("updateReviewStatusBatch", "IKRC", firstSensoryStationRows.map((item) => item.rowIndex), "미검수", "관리자", adminActor);
 assert.equal(resetFirstSensoryReview.success, true, resetFirstSensoryReview.message);
 const officialZ1Detail = await rpc("getIkrcOfficialCalibrationResultsByCup", "Z-1", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
@@ -633,8 +633,8 @@ assert.equal(officialZ1Detail.headCount, 1);
 assert.equal(officialZ1Detail.headScoreHidden, true);
 assert.ok(officialZ1Detail.rows.every((item) => !/헤드|head/i.test(item.role)));
 const prematureFinalization = await rpc("finalizeIkrcStationEvaluation", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
-assert.equal(prematureFinalization.success, false, "센서리 검수 전에는 헤드가 스테이션을 최종확정할 수 없어야 합니다");
-assert.match(prematureFinalization.message, /센서리 검수 0\/3/);
+assert.equal(prematureFinalization.success, true, "현장 심사 인원수나 별도 검수완료 상태를 최종확정 조건으로 강제하면 안 됩니다");
+assert.match(prematureFinalization.message, /심사 인원수는 강제하지 않으며/);
 
 const mobReviewComment = "향미의 연결성과 밸런스를 확인한 MOB 전체 종합 코멘트";
 const mobReviewPayload = genericPayload(judge, "MOB", "MOB-1", 55);
@@ -927,8 +927,8 @@ const judgeZOwnReopened = await rpc("getReviewList", "IKRC", { judgeToken:judgeZ
 assert.equal(judgeZOwnReopened.list.length, 6, "재평가 허용 후 센서리 심사위원의 내 제출 검수에 다시 보여야 합니다");
 const rankingAfterReopen = await rpc("getRanking", "IKRC", adminActor);
 const reopenedZ1 = rankingAfterReopen.ranking.find((item) => item.unit === "Z-1");
-assert.ok(reopenedZ1, "재검수 중에도 나머지 확인점수의 실시간 평균은 유지되어야 합니다");
-assert.equal(reopenedZ1.confirmedJudgeCount, 3);
+assert.ok(reopenedZ1, "재수정 중에도 현재 제출점수의 실시간 평균은 유지되어야 합니다");
+assert.equal(reopenedZ1.confirmedJudgeCount, 4);
 assert.equal(reopenedZ1.finalized, false, "재평가 허용 시 기존 스테이션 최종확정은 해제되어야 합니다");
 const completeJudgeZAgain = await rpc("updateReviewStatusBatch", "IKRC", judgeZRows.map((item) => item.rowIndex), "검수완료", "센서리 심사위원", { judgeToken:judgeZ.judgeToken, reviewScope:"own", manageReview:false });
 assert.equal(completeJudgeZAgain.success, true, completeJudgeZAgain.message);
@@ -1065,6 +1065,34 @@ assert.equal(deleteLoginSecurity.success, true, deleteLoginSecurity.message);
 assert.equal(deleteLoginSecurity.enabled, false);
 const loginAfterSecurityDelete = await rpc("judgeLogin", "QA 센서리", "01011110001");
 assert.equal(loginAfterSecurityDelete.success, true, loginAfterSecurityDelete.message);
+
+const selectiveParticipantSave = await rpc("upsertParticipant", {
+  competitionCode:"KBC", name:"QA 선택삭제 선수", phone:"01099990001", uniqueNo:"KBC-SELECTIVE", prelimCupNo:"KBC-SELECTIVE",
+}, adminActor);
+assert.equal(selectiveParticipantSave.success, true, selectiveParticipantSave.message);
+const selectiveBefore = await rpc("getSelectiveResetOptions", "KBC", adminActor);
+assert.equal(selectiveBefore.success, true, selectiveBefore.message);
+const selectiveParticipant = selectiveBefore.participants.find((item) => item.name === "QA 선택삭제 선수");
+assert.ok(selectiveParticipant, "선택 초기화 선수 목록에 신규 선수가 표시되어야 합니다");
+const selectiveParticipantDelete = await rpc("deleteSelectedParticipantData", {
+  competitionCode:"KBC", participantId:selectiveParticipant.participantId,
+}, adminActor);
+assert.equal(selectiveParticipantDelete.success, true, selectiveParticipantDelete.message);
+assert.equal(testDb.raw.prepare("SELECT COUNT(*) AS n FROM participants WHERE competition_code='KBC' AND name='QA 선택삭제 선수'").get().n, 0);
+
+const selectiveScorePayload = genericPayload(judge, "KBC", "KBC-SELECTIVE-SCORE", 77);
+selectiveScorePayload.clientSubmissionId = "QA-KBC-SELECTIVE-SCORE";
+const selectiveScoreSubmit = await rpc("submitScores", selectiveScorePayload);
+assert.equal(selectiveScoreSubmit.success, true, selectiveScoreSubmit.message);
+const selectiveScoreOptions = await rpc("getSelectiveResetOptions", "KBC", adminActor);
+const selectiveScore = selectiveScoreOptions.scoreTargets.find((item) => item.unit === "KBC-SELECTIVE-SCORE" && item.category === "competition");
+assert.ok(selectiveScore, "선택 초기화 점수 목록은 참가자·라운드·평가구분별로 표시되어야 합니다");
+const selectiveScoreDelete = await rpc("deleteSelectedScoreData", {
+  competitionCode:"KBC", round:selectiveScore.round, unit:selectiveScore.unit, category:selectiveScore.category,
+}, adminActor);
+assert.equal(selectiveScoreDelete.success, true, selectiveScoreDelete.message);
+assert.equal(testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KBC' AND unit='KBC-SELECTIVE-SCORE'").get().n, 0);
+assert.equal(testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KBC' AND unit='KBC-1'").get().n, 1, "선택 점수 삭제가 다른 참가자 점수에 영향을 주면 안 됩니다");
 
 const unauthorizedSubmit = await rpc("submitScores", {
   competitionCode: "KBC",

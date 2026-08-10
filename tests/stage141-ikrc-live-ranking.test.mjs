@@ -40,7 +40,7 @@ assert.match(panel, /confirmedJudgeCount/);
 
 const aggregate = functionSource(rpc, "aggregateRankingGroup_");
 assert.match(aggregate, /const officialRows = panel\.liveRows/);
-assert.match(aggregate, /실시간 평균/);
+assert.match(aggregate, /현재 제출 평균/);
 
 const ranking = functionSource(rpc, "buildRankingData_");
 assert.match(ranking, /confirmedJudgeCount \|\| 0\) < 1/);
@@ -52,7 +52,7 @@ assert.match(countable, /isCalibrationMode_/);
 assert.match(countable, /ikrcOfficialHeadItem_/);
 
 const render = functionSource(assessment, "renderRanking");
-assert.match(render, /확인점수/);
+assert.match(render, /반영 심사/);
 assert.match(render, /item\.finalized \? '최종확정' : '진행중'/);
 
 process.stdout.write("Stage141 IKRC live incremental ranking tests passed.\n");

@@ -19,5 +19,9 @@ assert.match(assessment, /var _ikrcCalibrationRequestSeq = 0;/, 'IKRC 결과 조
 assert.match(assessment, /requestSeq !== _ikrcCalibrationRequestSeq/, '이전 스테이션의 늦은 응답이 현재 화면을 덮어쓰면 안 됩니다.');
 assert.match(assessment, /preserveLoadedList/, 'IKRC 결과 재조회 실패 시 직전 정상 목록을 유지해야 합니다.');
 assert.match(assessment, /if \(_ikrcSubmitting\)/, 'IKRC 전체 제출은 연속 클릭을 차단해야 합니다.');
+assert.match(assessment, /var autoStatus = reviewIsCalibration_\(item, _reviewState\.code\)[\s\S]*?'수정완료'/, '심사위원 검수 수정은 별도 완료 버튼 없이 수정완료로 저장되어야 합니다.');
+assert.match(assessment, /if \(!reviewManageScopeForCode_\(c\)\) return false;/, '검수 상태 전환은 팀장·관리자 운영 화면에만 남겨야 합니다.');
+assert.match(rpc, /submittedStationId[\s\S]*?IKRC_STATION_FINALIZATION/, '최종확정 후 새 제출이 들어오면 기존 스테이션 확정을 자동 해제해야 합니다.');
+assert.match(rpc, /if \(safeStr\(code\)\.toUpperCase\(\) === 'IKRC'\) return true;/, 'IKRC 공식 제출은 별도 검수완료 버튼 없이 실시간 순위에 반영되어야 합니다.');
 
 process.stdout.write('Stage157 IKRC live readiness tests passed.\n');

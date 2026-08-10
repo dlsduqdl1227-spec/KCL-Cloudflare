@@ -43,4 +43,9 @@ const stddevGuard = assessment.slice(stddevStart, stddevEnd);
 assert.match(stddevGuard, /c === 'IKRC' && isHeadRoleForCode_\(c\)\) return true/);
 assert.match(stddevGuard, /c === 'MOB' && \(isAdminRole\(\) \|\| isTeamLeaderForCode_\(c\)\)\) return false/);
 
+const renderReviewStart = assessment.indexOf('function renderReview(list, code, headers, supersededCount)');
+const renderReviewEnd = assessment.indexOf('function isReviewEditableHeader', renderReviewStart);
+const renderReview = assessment.slice(renderReviewStart, renderReviewEnd);
+assert.doesNotMatch(renderReview, /stddev-btn|>표준편차<|toggleStddevPanel_/);
+
 process.stdout.write('Stage156 list refresh and MOB stddev visibility tests passed.\n');

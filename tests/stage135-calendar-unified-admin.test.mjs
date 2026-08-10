@@ -52,6 +52,7 @@ assert.match(functionSource(registry, "renderSelectedOperatorsTable"), /관리�
 assert.match(functionSource(assessment, "isTeamLeaderForCode_"), /if \(isAdminRole\(\)\) return true/);
 assert.match(functionSource(assessment, "adminRenderRunCards_"), /station-settings/);
 assert.match(functionSource(assessment, "adminRenderRunCards_"), /ikrc-head-input/);
+assert.match(functionSource(assessment, "adminRenderRunCards_"), /ikrc-cal-input/);
 assert.match(functionSource(assessment, "adminRenderRunCards_"), /mob-sens-head/);
 assert.match(functionSource(assessment, "managementOpenKcrCalibration_"), /scope === 'station' \? 'station'/);
 assert.match(functionSource(assessment, "adminOpenCompetitionSettings_"), /adminSwitchSection\('config'\)/);
@@ -59,5 +60,14 @@ assert.match(functionSource(assessment, "adminOpenCompetitionSettings_"), /admin
 const forbiddenNotice = /헤드는 직접 팀별 켈리브레이션을 평가한 스테이션만|대회팀장·관리자는 모든 스테이션|헤드는 배정되었거나 공식 대회평가를 제출한 스테이션/;
 assert.doesNotMatch(assessment, forbiddenNotice);
 assert.doesNotMatch(rpc, forbiddenNotice);
+
+assert.match(registry, /id="selectiveParticipant"/);
+assert.match(registry, /id="selectiveScore"/);
+assert.match(functionSource(registry, "loadSelectiveResetOptions"), /getSelectiveResetOptions/);
+assert.match(functionSource(registry, "deleteSelectedParticipantReset"), /deleteSelectedParticipantData/);
+assert.match(functionSource(registry, "deleteSelectedScoreReset"), /deleteSelectedScoreData/);
+assert.match(functionSource(rpc, "getSelectiveResetOptions"), /hasAdmin\(actor\)/);
+assert.match(functionSource(rpc, "deleteSelectedParticipantData"), /competition_code=\?/);
+assert.match(functionSource(rpc, "deleteSelectedScoreData"), /competition_code=\?/);
 
 process.stdout.write("Stage135 calendar, unified account registration, and admin-superset tests passed.\n");

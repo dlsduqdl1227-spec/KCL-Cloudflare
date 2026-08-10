@@ -28,7 +28,7 @@ function functionSource(source, name) {
   throw new Error(`${name} function incomplete`);
 }
 
-const buttonIds = ["btn-review", "btn-calibration", "btn-calibration-all", "btn-calibration-team", "btn-eval", "btn-ikrc-seed-vote"];
+const buttonIds = ["btn-review", "btn-calibration", "btn-calibration-station", "btn-calibration-all", "btn-calibration-team", "btn-eval", "btn-ikrc-seed-vote"];
 const buttons = Object.fromEntries(buttonIds.map((id) => [id, { style: {}, textContent: "", disabled: false }]));
 let headRole = true;
 const menuContext = {
@@ -54,6 +54,8 @@ assert.equal(buttons["btn-eval"].textContent, "대회평가 시작");
 assert.equal(buttons["btn-review"].textContent, "내 제출 검수");
 assert.equal(buttons["btn-calibration"].textContent, "켈리브레이션 확인");
 assert.equal(buttons["btn-calibration"].style.display, "block");
+assert.equal(buttons["btn-calibration-station"].style.display, "block");
+assert.equal(buttons["btn-calibration-station"].textContent, "스테이션 켈리브레이션 시작");
 assert.equal(buttons["btn-calibration-all"].style.display, "none");
 assert.equal(buttons["btn-calibration-team"].style.display, "none");
 
@@ -63,6 +65,7 @@ assert.equal(buttons["btn-eval"].style.display, "block");
 assert.equal(buttons["btn-review"].textContent, "내 제출 검수");
 assert.equal(buttons["btn-review"].style.display, "block");
 assert.equal(buttons["btn-calibration"].style.display, "none");
+assert.equal(buttons["btn-calibration-station"].style.display, "block");
 assert.equal(buttons["btn-calibration-all"].style.display, "none");
 assert.equal(buttons["btn-calibration-team"].style.display, "none");
 
@@ -82,5 +85,6 @@ assert.match(functionSource(rpc, "getIkrcCalibrationScopeOptions"), /canViewOver
 assert.match(functionSource(rpc, "getIkrcOfficialCalibrationScopeOptions"), /canViewOverall:false/);
 assert.match(functionSource(rpc, "getIkrcOfficialCalibrationResultsByCup"), /rows:sensory\.map\(ikrcScoreObjectFromItem_\)/);
 assert.match(functionSource(rpc, "ikrcScoreObjectFromItem_"), /comment: extraComment/);
+assert.doesNotMatch(functionSource(rpc, "finalizeIkrcStationEvaluation"), /reviewed !== 3|sensoryCount\}\/3|headCount\}\/1/);
 
 process.stdout.write("Stage134 IKRC role UI and station-only calibration tests passed.\n");

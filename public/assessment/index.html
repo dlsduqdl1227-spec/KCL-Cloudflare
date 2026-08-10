@@ -1888,6 +1888,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <div class="divider"></div>
   <button class="btn" id="btn-eval" onclick="goEval()">대회평가 시작</button>
   <button class="btn-outline" id="btn-review" style="display:none" onclick="goReview()">검수 / 현황 보기</button>
+  <button class="btn-outline" id="btn-calibration-station" style="display:none" onclick="goCalibration('station')">스테이션 켈리브레이션 시작</button>
   <button class="btn-outline" id="btn-calibration-team" style="display:none" onclick="goCalibration('team')">팀별 켈리브레이션 시작</button>
   <button class="btn-outline" id="btn-calibration-all" style="display:none" onclick="goCalibration('all')">전체 켈리브레이션</button>
   <button class="btn-outline" id="btn-calibration" style="display:none" onclick="goCalibrationResults()">켈리브레이션 결과 확인</button>
@@ -4666,6 +4667,7 @@ function shouldHideCompletedReviewRows() {
 }
 function canReviewToggleStatus_(code, item) {
   var c = String(code || (_reviewState && _reviewState.code) || '').toUpperCase();
+  if (!reviewManageScopeForCode_(c)) return false;
   if (c === 'IKRC' && isIkrcHeadMonitor_()) return false;
   if (c === 'IKRC' && /헤드|head/i.test(String(item && (item['역할'] || item.role || item._col5) || ''))) return false;
   if (c === 'IKRC' && item && item.status === '검수완료' && !(isAdminRole() || isTeamLeaderForCode_(c))) return false;
@@ -4676,6 +4678,7 @@ function updateSelectReviewButton_() {
   var calBtn = document.getElementById('btn-calibration');
   var calAllBtn = document.getElementById('btn-calibration-all');
   var calTeamBtn = document.getElementById('btn-calibration-team');
+  var calStationBtn = document.getElementById('btn-calibration-station');
   var evalBtn = document.getElementById('btn-eval');
   var seedVoteBtn = document.getElementById('btn-ikrc-seed-vote');
   var code = _selComp && _selComp.code;
@@ -4689,6 +4692,10 @@ function updateSelectReviewButton_() {
     evalBtn.textContent = isMobHeadEntry ? 'MOB 헤드 켈리브레이션 입력' : '대회평가 시작';
   }
   var canCal = !!(_selComp && canCalibrationCode_(code));
+  if (calStationBtn) {
+    calStationBtn.style.display = canCal && isIkrcMenu ? 'block' : 'none';
+    calStationBtn.textContent = '스테이션 켈리브레이션 시작';
+  }
   if (calAllBtn) {
     calAllBtn.style.display = canCal && !isKcrMenu && !isIkrcMenu && !isMobMenu ? 'block' : 'none';
     calAllBtn.textContent = isKcrMenu ? '켈리브레이션(전체)' : '전체 켈리브레이션 시작';
@@ -5091,6 +5098,11 @@ function managementOpenKcrCalibration_(cfg, scope) {
   clearAdminRoleOverride_('KCR');
   goCalibration(scope === 'station' ? 'station' : (scope === 'team' ? 'team' : 'all'));
 }
+function managementOpenIkrcCalibrationInput_(cfg) {
+  _selComp = cfg;
+  clearAdminRoleOverride_('IKRC');
+  goCalibration('station');
+}
 function managementOpenKcrCalibrationResults_(cfg, backPanel) {
   _selComp = cfg;
   clearAdminRoleOverride_('KCR');
@@ -5290,9 +5302,9 @@ function adminRenderRunCards_() {
     var extra = '';
     if (code === 'KCR') extra += '<button data-act="station-settings">스테이션 설정</button><button data-act="kcr-cal-station">켈리브레이션(스테이션)</button><button data-act="kcr-cal-all">켈리브레이션(전체)</button><button data-act="kcr-cal-result">켈리브레이션 확인</button>';
     if (isIkrcFinalConfig_(c)) {
-      extra += '<button data-act="station-settings">스테이션 설정</button><button data-act="ikrc-blind">블라인드코드 · 선수 연결</button><button data-act="ikrc-seed">Seed to Cup 운영 / 결과</button><button data-act="ikrc-head-input">센서리 헤드 심사위원 입력</button><button data-act="ikrc-cal">켈리브레이션 확인</button>';
+      extra += '<button data-act="station-settings">스테이션 설정</button><button data-act="ikrc-blind">블라인드코드 · 선수 연결</button><button data-act="ikrc-seed">Seed to Cup 운영 / 결과</button><button data-act="ikrc-head-input">센서리 헤드 심사위원 입력</button><button data-act="ikrc-cal-input">스테이션 켈리브레이션 시작</button><button data-act="ikrc-cal">켈리브레이션 확인</button>';
     } else if (code === 'IKRC') {
-      extra += '<button data-act="station-settings">스테이션 설정</button><button data-act="ikrc-blind">블라인드코드 · 선수 연결</button><button data-act="ikrc-head-input">센서리 헤드 심사위원 입력</button><button data-act="ikrc-cal">켈리브레이션 확인</button>';
+      extra += '<button data-act="station-settings">스테이션 설정</button><button data-act="ikrc-blind">블라인드코드 · 선수 연결</button><button data-act="ikrc-head-input">센서리 헤드 심사위원 입력</button><button data-act="ikrc-cal-input">스테이션 켈리브레이션 시작</button><button data-act="ikrc-cal">켈리브레이션 확인</button>';
     } else if (code === 'MOB') {
       extra += '<button data-act="mob-sens-head">센서리 헤드 켈리브레이션 입력</button><button data-act="mob-tech-head">테크니컬 헤드 켈리브레이션 입력</button><button data-act="mob-sens-cal">센서리 켈리브레이션 확인</button><button data-act="mob-tech-cal">테크니컬 켈리브레이션 확인</button>';
     }
@@ -5320,6 +5332,7 @@ function adminRenderRunCards_() {
     b = div.querySelector('[data-act="ikrc-seed"]'); if (b) b.onclick = function(){ openIkrcSeedToCup_(c); };
     b = div.querySelector('[data-act="ikrc-blind"]'); if (b) b.onclick = function(){ openIkrcBlindManager_(c, 'pAdmin'); };
     b = div.querySelector('[data-act="ikrc-head-input"]'); if (b) b.onclick = function(){ adminOpenIkrcHeadInput_(c); };
+    b = div.querySelector('[data-act="ikrc-cal-input"]'); if (b) b.onclick = function(){ managementOpenIkrcCalibrationInput_(c); };
     b = div.querySelector('[data-act="ikrc-cal"]'); if (b) b.onclick = function(){ adminOpenIkrcCalibration_(c); };
     b = div.querySelector('[data-act="station-settings"]'); if (b) b.onclick = function(){ adminOpenCompetitionSettings_(c); };
     b = div.querySelector('[data-act="kcr-cal-station"]'); if (b) b.onclick = function(){ managementOpenKcrCalibration_(c, 'station'); };
@@ -5481,11 +5494,14 @@ function loadTeamPanel() {
               '<div class="admin-comp-actions team-actions">' +
                 '<button class="primary" data-act="judge-eval">' + (mobHeadCard ? 'MOB 헤드 켈리브레이션 입력' : '대회평가 시작') + '</button>' +
                 (mobHeadCard ? '' : '<button data-act="judge-review">내 제출 검수</button>') +
+                (cardCode === 'IKRC' ? '<button data-act="judge-cal-input">스테이션 켈리브레이션 시작</button>' : '') +
                 (cardHead && (cardCode === 'MOB' || cardCode === 'IKRC' || cardCode === 'KCR') ? '<button data-act="judge-cal-result">' + (cardCode === 'MOB' ? 'MOB 켈리브레이션 확인' : '켈리브레이션 확인') + '</button>' : '') +
               '</div>';
             judgeCard.querySelector('[data-act="judge-eval"]').onclick = (function(cfg){ return function(){ _selComp = cfg; goEval(); }; })(c);
             var judgeReview = judgeCard.querySelector('[data-act="judge-review"]');
             if (judgeReview) judgeReview.onclick = (function(cfg){ return function(){ _selComp = cfg; goReview(); }; })(c);
+            var judgeCalInput = judgeCard.querySelector('[data-act="judge-cal-input"]');
+            if (judgeCalInput) judgeCalInput.onclick = (function(cfg){ return function(){ managementOpenIkrcCalibrationInput_(cfg); }; })(c);
             var judgeCalResult = judgeCard.querySelector('[data-act="judge-cal-result"]');
             if (judgeCalResult) judgeCalResult.onclick = (function(cfg){ return function(){ _selComp = cfg; goCalibrationResults(); }; })(c);
             wrap.appendChild(judgeCard);
@@ -5495,7 +5511,7 @@ function loadTeamPanel() {
           var blindButton = cardCode === 'IKRC' ? '<button data-act="ikrc-blind">블라인드코드 · 선수 연결</button>' : '';
           var teamLeadHeadButtons = cardCode === 'MOB'
             ? '<button data-act="mob-sens-cal">센서리 켈리브레이션 확인</button><button data-act="mob-tech-cal">테크니컬 켈리브레이션 확인</button>'
-            : (cardCode === 'IKRC' ? '<button data-act="ikrc-cal-result">켈리브레이션 확인</button>' : '');
+            : (cardCode === 'IKRC' ? '<button data-act="ikrc-cal-input">스테이션 켈리브레이션 시작</button><button data-act="ikrc-cal-result">켈리브레이션 확인</button>' : '');
           var kcrCalibrationButtons = String(c.code || '').toUpperCase() === 'KCR'
             ? '<button data-act="kcr-cal-station">켈리브레이션(스테이션)</button><button data-act="kcr-cal-all">켈리브레이션(전체)</button><button data-act="kcr-cal-result">켈리브레이션 확인</button>'
             : '';
@@ -5565,6 +5581,8 @@ function loadTeamPanel() {
           if (mobTechCalBtn) mobTechCalBtn.onclick = (function(cfg){ return function(){ adminOpenMobCalibration_(cfg, 'technical'); }; })(c);
           var ikrcCalResultBtn = div.querySelector('[data-act="ikrc-cal-result"]');
           if (ikrcCalResultBtn) ikrcCalResultBtn.onclick = (function(cfg){ return function(){ _selComp = cfg; goCalibrationResults(); }; })(c);
+          var ikrcCalInputBtn = div.querySelector('[data-act="ikrc-cal-input"]');
+          if (ikrcCalInputBtn) ikrcCalInputBtn.onclick = (function(cfg){ return function(){ managementOpenIkrcCalibrationInput_(cfg); }; })(c);
           var kcrStationCalBtn = div.querySelector('[data-act="kcr-cal-station"]');
           if (kcrStationCalBtn) kcrStationCalBtn.onclick = (function(cfg){ return function(){ managementOpenKcrCalibration_(cfg, 'station'); }; })(c);
           var kcrAllCalBtn = div.querySelector('[data-act="kcr-cal-all"]');
@@ -6371,11 +6389,10 @@ function renderReview(list, code, headers, supersededCount) {
     var canToggleStatus = canReviewToggleStatus_(code, item) && !isCalibrationReview;
     var disabledTitle = isCalibrationReview ? '켈리브레이션은 실제평가 검수완료로 전환하지 않습니다' : '검수완료 후 미검수 전환은 팀장만 가능합니다';
     if (canOpenReviewDetails_()) actionHtml += '<button class="review-edit-btn">' + (isIkrcHeadMonitor_() ? '상세보기' : '검수/수정') + '</button>';
-    if (canShowStddevButton_(code, item)) actionHtml += '<button class="review-edit-btn stddev-btn">표준편차</button>';
     if (canReviewDelete()) actionHtml += '<button class="review-delete-btn">삭제</button>';
     var isIkrcHeadItem = String(code || '').toUpperCase() === 'IKRC' && /헤드|head/i.test(String(item && (item['역할'] || item.role || item._col5) || ''));
     var statusActionText = String(code || '').toUpperCase() === 'IKRC' && !isIkrcHeadItem && item.status === '검수완료' && reviewManageScopeForCode_('IKRC') ? '재평가 허용' : item.status;
-    if (!isIkrcHeadMonitor_()) actionHtml += '<button class="review-status-btn status-' + item.status + '"' + (canToggleStatus ? '' : ' disabled title="' + escHtml(disabledTitle) + '"') + '>' + statusActionText + '</button>';
+    if (reviewManageScopeForCode_(code) && !isIkrcHeadMonitor_()) actionHtml += '<button class="review-status-btn status-' + item.status + '"' + (canToggleStatus ? '' : ' disabled title="' + escHtml(disabledTitle) + '"') + '>' + statusActionText + '</button>';
 
     var team = item['팀'] || item._col4 || '팀 미지정';
     var role = item['역할'] || item._col5 || '';
@@ -6390,7 +6407,6 @@ function renderReview(list, code, headers, supersededCount) {
           : (String(unit) + ' · ' + String(who))));
     var ktccExtra = isKtccReview ? ('체크: ' + checkedBy + ' · 종료시간 ' + (timeStr || '-')) : '';
     var groupExtra = isReviewGroup ? reviewGroupSummaryText_(item, code) : '';
-    var stdText = canShowStddevButton_(code, item) ? stddevListText_(getItemStddev_(item)) : '';
     var mobListSummary = String(code || '').toUpperCase() === 'MOB' ? mobReviewListSummary_(item) : '';
     var ikrcListSummary = String(code || '').toUpperCase() === 'IKRC' && isReviewGroup ? (groupItems.length + '개 샘플 · 모두 탭에서 확인') : '';
     var reviewMetaText = isKtccReview && !isReviewGroup
@@ -6402,16 +6418,14 @@ function renderReview(list, code, headers, supersededCount) {
       '<div style="min-width:0;flex:1">' +
         reviewCategoryBadgeHtml_(item, code) +
         '<div class="review-info-name">' + escHtml(titleText) + '</div>' +
-        '<div class="review-info-sub">' + (ikrcListSummary ? escHtml(ikrcListSummary) : (mobListSummary ? escHtml(mobListSummary) : ('총점 ' + escHtml(String(total)) + '점'))) + escHtml(stdText) + ' &middot; ' + escHtml(reviewMetaText) + '</div>' +
+        '<div class="review-info-sub">' + (ikrcListSummary ? escHtml(ikrcListSummary) : (mobListSummary ? escHtml(mobListSummary) : ('총점 ' + escHtml(String(total)) + '점'))) + ' &middot; ' + escHtml(reviewMetaText) + '</div>' +
       '</div>' +
       '<div class="review-actions">' + actionHtml + '</div>';
 
-    var editBtn = row.querySelector('.review-edit-btn:not(.stddev-btn)');
-    var stdBtn = row.querySelector('.stddev-btn');
+    var editBtn = row.querySelector('.review-edit-btn');
     var delBtn = row.querySelector('.review-delete-btn');
     var statusBtn = row.querySelector('.review-status-btn');
     if (editBtn) editBtn.onclick = function() { openReviewEdit(item); };
-    if (stdBtn) stdBtn.onclick = function() { toggleStddevPanel_(row, item); };
     if (delBtn) delBtn.onclick = function() { deleteReviewItem(item); };
     if (statusBtn) statusBtn.onclick = function() {
       if (isCalibrationReview) { toast('켈리브레이션은 실제평가 검수완료로 전환하지 않습니다.', true); return; }
@@ -8664,7 +8678,7 @@ function renderReviewTopActionsV4_() {
   state.style.cssText = 'font-size:11px;color:var(--text-3);text-align:center;line-height:1.5';
   state.textContent = isIkrcHeadMonitor_()
     ? '읽기 전용 · 해당 스테이션의 점수·코멘트·평균·표준편차를 확인합니다.'
-    : '현재 상태: ' + statusText + ' · 수정 내용은 자동 저장됩니다.';
+    : '현재 상태: ' + statusText + ' · 수정하면 자동으로 수정완료 처리됩니다.';
 }
 function generateReviewOverallComment(commentIdx) {
   var code = reviewCommentGeneratorCode_();
@@ -9214,15 +9228,18 @@ function openReviewEdit(item) {
     otherItems.forEach(function(o){ appendReviewSimpleField(wrap, o.h, o.idx, o.val, true); });
   }
   document.getElementById('review-edit-enable').style.display = 'none';
+  var allowManualComplete = reviewManageScopeForCode_(_reviewState.code) && !readOnlyHeadMonitor && item.status !== '검수완료';
   var saveOnlyBtn = document.getElementById('review-edit-save-only');
   if (saveOnlyBtn) saveOnlyBtn.style.display = readOnlyHeadMonitor ? 'none' : 'block';
-  document.getElementById('review-edit-save-complete').style.display = readOnlyHeadMonitor || item.status === '검수완료' ? 'none' : 'block';
+  document.getElementById('review-edit-save-complete').style.display = allowManualComplete ? 'block' : 'none';
   document.getElementById('review-edit-delete').style.display = !readOnlyHeadMonitor && canReviewDelete() ? 'block' : 'none';
   var stickyActions = document.getElementById('review-edit-sticky-actions');
   if (stickyActions) stickyActions.style.display = readOnlyHeadMonitor ? 'none' : 'grid';
+  var stickyComplete = stickyActions && stickyActions.querySelector('.complete-primary');
+  if (stickyComplete) stickyComplete.style.display = allowManualComplete ? 'block' : 'none';
   renderReviewTopActionsV4_();
   ensureReviewOverallCard_();
-  setReviewAutoSaveState(readOnlyHeadMonitor ? '읽기 전용 · 평가값과 검수 상태는 변경되지 않습니다.' : '수정 내용은 자동 저장됩니다.', 'review-autosaved');
+  setReviewAutoSaveState(readOnlyHeadMonitor ? '읽기 전용 · 평가값과 검수 상태는 변경되지 않습니다.' : '수정하면 자동으로 수정완료 처리됩니다.', 'review-autosaved');
   syncReviewDerivedTotals_();
   showPanel('pReviewEdit');
 }
@@ -9235,7 +9252,11 @@ function enableReviewEdit() {
   document.getElementById('review-edit-enable').style.display = 'none';
   var saveOnlyBtn = document.getElementById('review-edit-save-only');
   if (saveOnlyBtn) saveOnlyBtn.style.display = 'block';
-  document.getElementById('review-edit-save-complete').style.display = 'block';
+  var allowManualComplete = reviewManageScopeForCode_(_reviewState.code);
+  document.getElementById('review-edit-save-complete').style.display = allowManualComplete ? 'block' : 'none';
+  var stickyActions = document.getElementById('review-edit-sticky-actions');
+  var stickyComplete = stickyActions && stickyActions.querySelector('.complete-primary');
+  if (stickyComplete) stickyComplete.style.display = allowManualComplete ? 'block' : 'none';
   var _revCompleteBtn=document.getElementById('review-edit-complete'); if(_revCompleteBtn) _revCompleteBtn.style.display='none';
   toast('수정 모드입니다. 점수는 0.2점 단위로 저장됩니다.');
 }
@@ -9271,6 +9292,7 @@ function autoSaveReviewEdit(cb) {
   if (!normalizeReviewNumbers()) { if (cb) cb(false); return; }
   _reviewAutoSaving = true;
   setReviewAutoSaveState('수정 내용을 자동 저장하는 중입니다.', 'review-autosaving');
+  var autoStatus = reviewIsCalibration_(item, _reviewState.code) ? (item.status || '켈리브레이션') : '수정완료';
   google.script.run
     .withSuccessHandler(function(res){
       _reviewAutoSaving = false;
@@ -9285,7 +9307,9 @@ function autoSaveReviewEdit(cb) {
         if (h) item[h] = updates[k];
         item['_col' + k] = updates[k];
       });
-      setReviewAutoSaveState('자동 저장 완료', 'review-autosaved');
+      item.status = autoStatus;
+      item['검수상태'] = autoStatus;
+      setReviewAutoSaveState('수정완료 · 자동 저장됨', 'review-autosaved');
       if (_reviewAutoSaveQueued) {
         _reviewAutoSaveQueued = false;
         scheduleReviewAutoSave(true);
@@ -9297,7 +9321,7 @@ function autoSaveReviewEdit(cb) {
       setReviewAutoSaveState('자동 저장 중 오류가 발생했습니다.', 'review-autosave-error');
       if (cb) cb(false);
     })
-    .updateReviewRow(_reviewState.code, item.rowIndex, collectReviewUpdates(), item.status || '미검수', roleTextForCode_(_reviewState.code), reviewActorPayload_(_reviewState.code));
+    .updateReviewRow(_reviewState.code, item.rowIndex, collectReviewUpdates(), autoStatus, roleTextForCode_(_reviewState.code), reviewActorPayload_(_reviewState.code));
 }
 
 function collectReviewUpdates() {
@@ -9336,7 +9360,8 @@ function saveReviewEdit(complete) {
   if (!normalizeReviewNumbers()) return;
   var item = _reviewState.current;
   if (!item) return;
-  var status = complete ? '검수완료' : item.status;
+  if (complete && !reviewManageScopeForCode_(_reviewState.code)) complete = false;
+  var status = complete ? '검수완료' : (reviewIsCalibration_(item, _reviewState.code) ? (item.status || '켈리브레이션') : '수정완료');
   if (complete && !confirm('현재 수정 내용을 저장하고 검수완료 처리할까요?')) return;
   showOverlay();
   google.script.run
@@ -9666,15 +9691,17 @@ function renderRanking(res) {
           : (String(displayUnit) + (nameSummary ? ' · ' + nameSummary : '') + (affSummary ? ' · ' + affSummary : '')));
       var ktccMeta = isKtccRank ? ('체크: ' + (item.checkerSummary || '-') + ' · 종료시간 ' + (item.endTimeDisplay || '-') + ' · ') : '';
       var ikrcMeta = isIkrcRank
-        ? ((item.finalized ? '최종확정' : '진행중') + ' · 확인점수 ' + Number(item.confirmedJudgeCount || 0) + '/' + Number(item.expectedJudgeCount || 4) + ' · ')
+        ? ((item.finalized ? '최종확정' : '진행중') + ' · 반영 심사 ' + Number(item.confirmedJudgeCount || 0) + '명 · ')
         : '';
+      var reviewProgressMeta = isIkrcRank
+        ? '공식 제출 반영'
+        : ('검수 ' + item.reviewedCount + '/' + item.totalCount + ' (' + reviewedRatio + '%)');
 
       row.innerHTML =
         '<div class="rank-num' + rankClass + '">' + escHtml(String(rankLabel)) + '</div>' +
         '<div class="rank-info">' +
           '<div class="rank-unit">' + escHtml(unitText) + '</div>' +
-          '<div class="rank-meta">' + ktccMeta + ikrcMeta + (item.scoreBasis ? escHtml(item.scoreBasis) + ' 기준 · ' : '') + (item.teamSummary ? (isKtccRank ? '테이블 ' : '평가팀 ') + escHtml(item.teamSummary) + ' · ' : '') + '검수 ' +
-            item.reviewedCount + '/' + item.totalCount + ' (' + reviewedRatio + '%)' + tieText + dqText + '</div>' +
+          '<div class="rank-meta">' + ktccMeta + ikrcMeta + (item.scoreBasis ? escHtml(item.scoreBasis) + ' 기준 · ' : '') + (item.teamSummary ? (isKtccRank ? '테이블 ' : '평가팀 ') + escHtml(item.teamSummary) + ' · ' : '') + reviewProgressMeta + tieText + dqText + '</div>' +
           '<div class="rank-detail-hint">눌러서 상세 점수 / 디브리핑 확인</div>' +
         '</div>' +
         '<div class="rank-score">' + scoreLabel + '</div>';
@@ -15312,7 +15339,7 @@ function renderIkrcCalibrationScope_() {
     if (!stations.length) note.textContent = _ikrcCalibrationScopeLoading
       ? '확인 가능한 스테이션을 불러오고 있습니다.'
       : '확인할 수 있는 스테이션 결과가 아직 없습니다.';
-    else if (isIkrcOfficialStationView_()) note.textContent = '공식 대회평가 기준입니다. 센서리 3명의 항목별 점수·코멘트와 표준편차를 표시하며 헤드 개인점수는 표시하지 않습니다.';
+    else if (isIkrcOfficialStationView_()) note.textContent = '공식 대회평가 기준입니다. 현재 제출된 센서리 항목별 점수·코멘트와 표준편차를 표시하며 헤드 개인점수는 표시하지 않습니다.';
     else note.textContent = '대회 전 스테이션 켈리브레이션 데이터만 비교합니다. 검수나 순위에는 연결되지 않습니다.';
   }
 }
@@ -15342,10 +15369,10 @@ function loadIkrcCalibrationCups(scopeReady) {
   var finalizeStatus = document.getElementById('ikrc-official-station-status');
   if (title) title.textContent = 'IKRC 켈리브레이션 확인';
   if (help) help.textContent = officialView
-    ? '대회평가용 스테이션을 기준으로 센서리 3명의 점수·코멘트와 평균·표준편차를 확인합니다. 헤드 개인점수는 숨기지만 최종점수에는 포함됩니다.'
+    ? '대회평가용 스테이션을 기준으로 현재 제출된 센서리 점수·코멘트와 평균·표준편차를 확인합니다. 헤드 개인점수는 숨기지만 공식 평균에는 포함됩니다.'
     : '켈리브레이션용 스테이션의 결과입니다. 자체 기준 확인용이며 검수·공식점수·순위에 반영되지 않습니다.';
   if (finalizeBtn) finalizeBtn.style.display = officialView && _ikrcCalibrationScope === 'station' ? 'block' : 'none';
-  if (finalizeStatus) { finalizeStatus.style.display = officialView ? 'block' : 'none'; finalizeStatus.textContent = officialView ? '센서리 3명 모두 내 제출 검수를 완료한 뒤 헤드가 스테이션 최종확정을 누릅니다.' : ''; }
+  if (finalizeStatus) { finalizeStatus.style.display = officialView ? 'block' : 'none'; finalizeStatus.textContent = officialView ? '현재 제출·수정 상태를 확인한 뒤 헤드가 마지막에 눌러주세요. 심사 인원수는 강제하지 않습니다.' : ''; }
   var sub = document.getElementById('ikrc-cal-sub');
   renderIkrcCalibrationScope_();
   if (sub) sub.textContent = judgeLineText() + '  ' + ((_selComp && _selComp.currentRound) || '') + ' · ' + ikrcCalibrationScopeLabel_() + ' · 미확인 우선';
@@ -15395,7 +15422,7 @@ function loadIkrcCalibrationCups(scopeReady) {
       if (officialView && finalizeStatus) {
         finalizeStatus.textContent = stationFinalization && stationFinalization.confirmedAt
           ? ('최종확정 완료 · ' + String(stationFinalization.confirmedAt).replace('T',' ').slice(0,16) + ' · ' + String(stationFinalization.confirmedBy || '확인자'))
-          : '센서리 3명 모두 내 제출 검수를 완료한 뒤 헤드가 스테이션 최종확정을 누릅니다.';
+          : '현재 제출·수정 상태를 확인한 뒤 헤드가 마지막에 눌러주세요. 심사 인원수는 강제하지 않습니다.';
       }
       if (officialView && finalizeBtn) finalizeBtn.textContent = stationFinalization ? '스테이션 다시 최종확정' : '스테이션 최종확정';
       cups = (Array.isArray(cups) ? cups : (cups && Array.isArray(cups.cups) ? cups.cups : (cups && Array.isArray(cups.items) ? cups.items : []))).map(ikrcCalItem_).filter(function(x){ return !!x.sampleNo; });
@@ -15411,12 +15438,10 @@ function loadIkrcCalibrationCups(scopeReady) {
       _ikrcCalibrationRenderedKey = requestListKey;
       if (wrap) wrap.innerHTML = cups.map(function(item){
         var badge = officialView
-          ? (item.reviewComplete
-            ? '<span style="display:inline-block;padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid var(--border);color:var(--text-3);font-size:11px;font-weight:800">검수완료</span>'
-            : '<span style="display:inline-block;padding:4px 9px;border-radius:999px;background:#fff;color:#000;font-size:11px;font-weight:900">제출 대기</span>')
+          ? '<span style="display:inline-block;padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid var(--border);color:var(--text-3);font-size:11px;font-weight:800">현재 제출 ' + Number((item.judgeCount || 0) + (item.headCount || 0)) + '명</span>'
           : '<span style="display:inline-block;padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid var(--border);color:var(--text-3);font-size:11px;font-weight:800">기준 확인용</span>';
         var meta = officialView
-          ? ('센서리 ' + (item.judgeCount || 0) + '/3명 · 센서리 검수 ' + (item.sensoryReviewCount || 0) + '/3명 · 헤드 제출 ' + (item.headCount || 0) + '/1명')
+          ? ('센서리 제출 ' + (item.judgeCount || 0) + '명 · 수정완료 ' + (item.sensoryReviewCount || 0) + '명 · 헤드 제출 ' + (item.headCount || 0) + '명')
           : ('일반 심사 ' + (item.judgeCount || 0) + '명 · 헤드 ' + (item.headCount || 0) + '명 · 공식점수 미반영');
         return '<div class="review-item" onclick="loadIkrcCalibrationDetail(\'' + escapeJsString_(item.sampleNo) + '\')">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">' +
@@ -15433,7 +15458,7 @@ function loadIkrcCalibrationCups(scopeReady) {
 function confirmIkrcOfficialStation_() {
   var req = ikrcCalibrationRequest_();
   if (!isIkrcOfficialStationView_() || req.scope !== 'station' || !req.stationId) { toast('최종확정할 스테이션을 먼저 선택해주세요.', true); return; }
-  if (!window.confirm(req.team + '의 모든 센서리 검수 완료 여부를 확인하고 최종확정하시겠습니까?\n확정 후 헤드 1명과 센서리 3명의 평균점수가 실시간 순위에 반영됩니다.')) return;
+  if (!window.confirm(req.team + '의 현재 제출·수정 상태를 확인하고 최종확정하시겠습니까?\n심사 인원수는 강제하지 않으며 이후 제출이나 수정이 생기면 확정은 자동 해제됩니다.')) return;
   showOverlay();
   google.script.run
     .withSuccessHandler(function(res){
@@ -15456,7 +15481,7 @@ function loadIkrcCalibrationDetail(sampleNo) {
       var sub = document.getElementById('ikrc-cal-detail-sub');
       if (title) title.textContent = 'Cup ' + sampleNo + (officialView ? ' 대회평가 확인 · ' : ' 켈리브레이션 표준편차 · ') + ikrcCalibrationScopeLabel_();
       if (sub) {
-        if (officialView) sub.textContent = judgeLineText() + '  센서리 ' + Number(detail.judgeCount || 0) + '/3명 · 센서리 검수 ' + Number(detail.sensoryReviewCount || 0) + '/3명 · 헤드 제출 ' + Number(detail.headCount || 0) + '/1명' + (detail.reviewComplete ? ' · 검수완료' : ' · 검수 대기');
+        if (officialView) sub.textContent = judgeLineText() + '  센서리 제출 ' + Number(detail.judgeCount || 0) + '명 · 수정완료 ' + Number(detail.sensoryReviewCount || 0) + '명 · 헤드 제출 ' + Number(detail.headCount || 0) + '명';
         else {
           var calibrationRows = Array.isArray(detail) ? detail : [];
           sub.textContent = judgeLineText() + '  켈리브레이션 참여 ' + calibrationRows.length + '명 · 공식점수 미반영';
@@ -15494,11 +15519,11 @@ function buildIkrcCalibrationHtml_(sampleNo, detail) {
   }
   detail = detail || {};
   var sensoryRows = Array.isArray(detail.rows) ? detail.rows.slice() : [];
-  var html = '<div class="review-edit-help" style="margin-bottom:12px">공식 대회평가 기준입니다. 헤드 개인점수는 표시하지 않고 담당 센서리 3명의 항목별 점수·코멘트와 표준편차를 확인합니다. 최종점수에는 헤드 1명 점수가 포함됩니다.</div>';
-  html += '<div class="overall-summary-box"><div class="overall-summary-title">4인 최종평균 반영 상태</div>' +
-    '<div class="overall-summary-row"><span class="overall-summary-label">구성</span><span class="overall-summary-value">헤드 ' + Number(detail.headCount || 0) + '/1명 · 센서리 ' + Number(detail.judgeCount || sensoryRows.length) + '/3명</span></div>' +
-    '<div class="overall-summary-row"><span class="overall-summary-label">현재 상태</span><span class="overall-summary-value">' + (detail.panelComplete ? '4인 구성 완료' : '제출 대기') + '</span></div>' +
-    (detail.panelComplete && detail.finalAverage !== null && detail.finalAverage !== undefined ? '<div class="overall-summary-row"><span class="overall-summary-label">현재 4인 평균</span><span class="overall-summary-value">' + fmtAverageFixedScore_(detail.finalAverage,2) + '</span></div>' : '') +
+  var html = '<div class="review-edit-help" style="margin-bottom:12px">공식 대회평가 기준입니다. 헤드 개인점수는 표시하지 않고 현재 제출된 센서리 항목별 점수·코멘트와 표준편차를 확인합니다. 헤드 점수도 공식 평균에 포함됩니다.</div>';
+  html += '<div class="overall-summary-box"><div class="overall-summary-title">현재 공식평균 반영 상태</div>' +
+    '<div class="overall-summary-row"><span class="overall-summary-label">제출 구성</span><span class="overall-summary-value">헤드 ' + Number(detail.headCount || 0) + '명 · 센서리 ' + Number(detail.judgeCount || sensoryRows.length) + '명</span></div>' +
+    '<div class="overall-summary-row"><span class="overall-summary-label">현재 상태</span><span class="overall-summary-value">' + (detail.panelComplete ? '제출 점수 반영 중' : '제출 대기') + '</span></div>' +
+    (detail.panelComplete && detail.finalAverage !== null && detail.finalAverage !== undefined ? '<div class="overall-summary-row"><span class="overall-summary-label">현재 제출자 평균</span><span class="overall-summary-value">' + fmtAverageFixedScore_(detail.finalAverage,2) + '</span></div>' : '') +
     '</div>';
   if (!sensoryRows.length) {
     html += '<p style="text-align:center;color:var(--muted);padding:24px">아직 이 스테이션의 공식 센서리 심사 제출 데이터가 없습니다.</p>';
