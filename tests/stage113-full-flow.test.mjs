@@ -152,7 +152,7 @@ function kcrStationSettings(stations) {
 
 function kcrStationPayload(login, stationInfo, scores, mode = "judge") {
   const rows = Array.from({ length: stationInfo.end - stationInfo.start + 1 }, (_, index) => {
-    const unit = `${stationInfo.prefix}-${stationInfo.start + index}`;
+    const unit = String(stationInfo.start + index);
     const score = scores[index] ?? scores[0] ?? 70;
     return { data: [unit, mode.includes("켈리브레이션") ? "켈리브레이션" : stationInfo.process], extraFields: { Total: score } };
   });
@@ -365,10 +365,13 @@ assert.equal(adminMobAssignments.assignments.length, 3, "MOB manager must retain
 
 const multiRoleJudge = await rpc("judgeLogin", "QA 다중권한", "01011110012");
 assert.equal(multiRoleJudge.success, true, multiRoleJudge.message);
-const blindKcrParticipant = await rpc("upsertParticipant", {
-  competitionCode:"KCR", name:"QA 블라인드 선수", phone:"01022229999", uniqueNo:"KCR-BLIND-01", prelimCupNo:"KCR-BLIND-01"
-}, adminActor);
-assert.equal(blindKcrParticipant.success, true, blindKcrParticipant.message);
+for (const participant of [
+  { name:"QA 블라인드 선수1", phone:"01022229999", uniqueNo:"KCR-BLIND-01", prelimCupNo:"1" },
+  { name:"QA 블라인드 선수2", phone:"01022229998", uniqueNo:"KCR-BLIND-02", prelimCupNo:"2" },
+]) {
+  const saved = await rpc("upsertParticipant", { competitionCode:"KCR", ...participant }, adminActor);
+  assert.equal(saved.success, true, saved.message);
+}
 const multiRoleKcrAssignments = await rpc("getParticipantAssignments", "KCR", { judgeToken:multiRoleJudge.judgeToken });
 assert.equal(multiRoleKcrAssignments.success, true, multiRoleKcrAssignments.message);
 assert.equal(multiRoleKcrAssignments.assignments[0].identityHidden, true, "MOC teamlead must not unlock KCR participant identity");
@@ -394,7 +397,7 @@ const stationLeadActor = managedActor(stationLead);
 const station1 = station("station1", "스테이션 1", "X", 1, 2);
 const station2 = station("station2", "스테이션 2", "Z", 1, 6);
 const station3 = station("station3", "스테이션 3", "Y", 1, 2);
-const kcrStation1 = { id:"kcr-station1", label:"KCR 스테이션 1", prefix:"KCR", start:1, end:2, process:"Washed" };
+const kcrStation1 = { id:"kcr-station1", label:"스테이션 1", prefix:"KCR", start:1, end:2, process:"Washed", useForCalibration:true, useForCompetition:true, numberMode:"participant" };
 
 const initialStationSave = await rpc(
   "updateCompetitionAdminSettings",
@@ -427,8 +430,8 @@ const partialKcrPayload = kcrStationPayload(judge, kcrStation1, [70, 72]);
 partialKcrPayload.rows.pop();
 partialKcrPayload.stationSampleCount = 1;
 const partialKcrSubmit = await rpc("submitScores", partialKcrPayload);
-assert.equal(partialKcrSubmit.success, false, "KCR station submission must reject a missing cup");
-assert.match(partialKcrSubmit.message, /2개 컵이 모두 있어야/);
+assert.equal(partialKcrSubmit.success, false, "KCR station submission must reject a missing participant");
+assert.match(partialKcrSubmit.message, /2명이 모두 있어야/);
 
 const participantSave = await rpc(
   "upsertParticipant",
@@ -656,7 +659,7 @@ for (const [mode, team] of [
   assert.equal(submitted.success, true, `${mode}: ${submitted.message}`);
 }
 assert.equal(
-  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%스테이션 켈리브레이션%' AND team='KCR 스테이션 1'").get().n,
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%스테이션 켈리브레이션%' AND team='스테이션 1'").get().n,
   2,
 );
 assert.equal(
@@ -670,15 +673,15 @@ const independentKcrRows = testDb.raw
 assert.deepEqual(
   independentKcrRows.map((row) => [row.judge_name, row.unit, row.total_score]),
   [
-    ["QA 센서리", "KCR-1", 70],
-    ["QA 센서리", "KCR-2", 72],
-    ["QA 센서리2", "KCR-1", 66],
-    ["QA 센서리2", "KCR-2", 68],
+    ["QA 센서리", "1", 70],
+    ["QA 센서리", "2", 72],
+    ["QA 센서리2", "1", 66],
+    ["QA 센서리2", "2", 68],
   ],
   "같은 컵의 심사위원별 평가와 같은 심사위원의 컵별 평가는 각각 독립 행으로 저장되어야 합니다.",
 );
 assert.equal(
-  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode NOT LIKE '%켈리브레이션%' AND team='KCR 스테이션 1'").get().n,
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode NOT LIKE '%켈리브레이션%' AND team='스테이션 1'").get().n,
   4,
   "KCR official scores must use the selected station instead of a mutable judge team",
 );

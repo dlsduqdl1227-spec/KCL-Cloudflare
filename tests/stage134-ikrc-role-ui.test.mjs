@@ -75,7 +75,7 @@ assert.match(functionSource(assessment, "ikrcCalibrationRequest_"), /scope:'stat
 
 const reviewSource = functionSource(rpc, "getReviewList");
 assert.match(reviewSource, /ownOnly: !manager/);
-assert.match(reviewSource, /readOnlyHeadMonitor:false/);
+assert.match(reviewSource, /readOnlyHeadMonitor:calibrationOnly/);
 assert.doesNotMatch(reviewSource, /headMonitor/);
 assert.match(functionSource(rpc, "submitScores"), /IKRC 전체 켈리브레이션은 운영하지 않습니다/);
 assert.match(functionSource(rpc, "getIkrcCalibrationScopeOptions"), /canViewOverall:false/);

@@ -33,16 +33,20 @@ assert.match(functionSource(assessment, "renderKcrStationChoices_"), /kcrStation
 assert.match(functionSource(assessment, "renderKcrStationChoices_"), /startKcrStation_/);
 assert.match(functionSource(assessment, "startKcrStation_"), /initCuppingEval\(cups/);
 assert.match(functionSource(assessment, "startKcrStation_"), /station\.process/);
+assert.match(functionSource(assessment, "startKcrStation_"), /registeredTargetsForRange_\('KCR'/);
 assert.match(functionSource(assessment, "showCuppingSetup"), /renderKcrStationChoices_/);
 assert.doesNotMatch(functionSource(assessment, "showCuppingSetup"), /switchCuppingFinalsTab/);
 
 const configHtml = functionSource(assessment, "configSelectableOptionsHtml_");
 const configPayload = functionSource(assessment, "configSelectableOptionsPayload_");
-assert.match(configHtml, /KCR 스테이션별 프로세스와 컵 범위/);
+assert.match(configHtml, /선수등록의 참가자번호/);
 assert.match(configHtml, /kcrStations/);
 assert.match(configPayload, /out\.kcrStations/);
 assert.match(configPayload, /kcrProcess/);
-assert.match(configPayload, /최대 20개 컵/);
+assert.match(configPayload, /최대 20명의 참가자/);
+assert.match(configPayload, /useForCalibration/);
+assert.match(configPayload, /useForCompetition/);
+assert.match(configPayload, /numberMode:'participant'/);
 assert.match(functionSource(assessment, "ikrcRenderStationConfigForRound_"), /code === 'KCR' \? kcrStationSettings_/);
 
 assert.match(assessment, /data-kcr-mode="cal-station"/);
@@ -63,6 +67,7 @@ assert.match(rpc, /function validateKcrStationOptionSettings_/);
 assert.match(rpc, /function validateKcrStationSubmission_/);
 assert.match(rpc, /function kcrStationSettingsServer_/);
 assert.match(functionSource(rpc, "submitScores"), /validateKcrStationSubmission_\(basePayload, cfg\)/);
+assert.match(functionSource(rpc, "submitScores"), /missingParticipantNumbers/);
 assert.match(functionSource(rpc, "submitScores"), /stationTeam/);
 assert.match(functionSource(rpc, "rowToReviewItem"), /normalizedCode === 'IKRC' \|\| normalizedCode === 'KCR'/);
 assert.match(functionSource(rpc, "scoreEvaluationCategoryKey_"), /calibration:station/);

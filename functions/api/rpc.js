@@ -2710,7 +2710,7 @@ function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0) {
   if (!item['참가자번호']) item['참가자번호'] = unit; if (!item['참가자 번호']) item['참가자 번호'] = unit; if (!item['컵번호']) item['컵번호'] = unit; if (!item['샘플번호']) item['샘플번호'] = unit; if (!item['팀번호']) item['팀번호'] = unit;
   if (!item['선수명']) item['선수명'] = participantName; if (!item['참가자명']) item['참가자명'] = participantName; if (!item['팀명'] && code === 'KTCC') item['팀명'] = participantName;
   item['총점'] = totalScore; item['최종점수'] = totalScore; item['실격여부'] = r.disqualified ? 'Y' : (item['실격여부'] || ''); item['실격사유'] = r.disqualification_reason || item['실격사유'] || ''; item['검수상태'] = r.review_status || item['검수상태'] || '미검수';
-  // MOB 과거/검수 수정 데이터 호환: 시간감점은 화면·검수·최종정리에서 항상 양수 감점값으로 표시한다.
+  // MOB 과거/검수 수정 데이터 호환: 시간감점은 화면·검수·최종디브리핑에서 항상 양수 감점값으로 표시한다.
   // 예전 데이터에 -6처럼 저장된 경우에도 점수가 가산되는 것처럼 보이지 않게 6으로 정규화한다.
   if (safeStr(code).toUpperCase() === 'MOB' && item['시간감점'] !== undefined && item['시간감점'] !== null && safeStr(item['시간감점']) !== '') {
     item['시간감점'] = positivePenaltyValue_(item['시간감점']);
@@ -2841,6 +2841,50 @@ function ikrcOfficialReviewComparison_(targetItem, officialItems) {
     totalStddev:totalStats.stddev,
     metrics,
     judges:scoreRows
+  };
+}
+
+function kcrCalibrationReviewComparison_(targetItem, calibrationItems) {
+  if (!targetItem) return null;
+  const targetRound = safeStr(targetItem.round || targetItem['라운드']).replace(/\s+/g, '').toLowerCase();
+  const targetUnit = safeStr(targetItem.unit || targetItem['컵번호'] || targetItem['참가자번호']).replace(/\s+/g, '').toUpperCase();
+  if (!targetUnit) return null;
+  const peers = latestOfficialJudgeRows_((calibrationItems || []).filter(item => {
+    if (!item || !isCalibrationMode_(item.mode || item['모드'])) return false;
+    const itemRound = safeStr(item.round || item['라운드']).replace(/\s+/g, '').toLowerCase();
+    const itemUnit = safeStr(item.unit || item['컵번호'] || item['참가자번호']).replace(/\s+/g, '').toUpperCase();
+    return itemRound === targetRound && itemUnit === targetUnit && ikrcReviewStationMatches_(targetItem, item);
+  }));
+  if (!peers.length) return null;
+  const specs = [
+    ['flavor', ['Flavor(플레이버)','Flavor','플레이버']],
+    ['aftertaste', ['Aftertaste(애프터테이스트)','Aftertaste','애프터테이스트']],
+    ['acidity', ['Acidity(산미)','Acidity','산미']],
+    ['sweetness', ['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness','스윗니스','단맛']],
+    ['mouthfeel', ['Mouthfeel(마우스필)','Mouthfeel','마우스필','질감']],
+    ['overall', ['Overall(오버롤)','Overall','오버롤']]
+  ];
+  const scoreRows = peers.map(item => {
+    const row = {
+      judgeName:safeStr(item.judgeName || item['심사위원명']) || '심사위원',
+      role:safeStr(item.role || item['역할']),
+      total:rankingScoreFromItem_(item) || 0,
+      comment:safeStr(item['종합코멘트'] || item['Overall Comment(종합 코멘트)'] || item['Overall Comment'] || item['코멘트'])
+    };
+    specs.forEach(([key, labels]) => { row[key] = firstNumberFromKeys_(item, labels) || 0; });
+    return row;
+  });
+  const totalStats = reviewPopulationStats_(scoreRows.map(row => row.total));
+  const metrics = specs.map(([key, labels]) => {
+    const stat = reviewPopulationStats_(scoreRows.map(row => row[key]));
+    return { key, label:labels[0], avg:stat.avg, stddev:stat.stddev, count:stat.count };
+  });
+  return {
+    competitionCode:'KCR', purpose:'calibration-review', scope:'station',
+    station:ikrcReviewStationLabel_(targetItem), team:ikrcReviewStationLabel_(targetItem),
+    round:safeStr(targetItem.round || targetItem['라운드']), participantNo:targetUnit,
+    judgeCount:scoreRows.length, totalAvg:totalStats.avg, totalStddev:totalStats.stddev,
+    metrics, judges:scoreRows
   };
 }
 
@@ -2981,10 +3025,10 @@ async function getScoreBackupReport(env, competitionCode, actorArg) {
 }
 async function getFinalReport(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
-  const auth = await requireManageActorForCode_(env, actorArg, code, '최종정리파일 다운로드 권한이 없습니다. 관리자 또는 대회팀장 권한으로 로그인해주세요.');
+  const auth = await requireManageActorForCode_(env, actorArg, code, '최종디브리핑 파일 다운로드 권한이 없습니다. 관리자 또는 대회팀장 권한으로 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const data = await buildRankingData_(env, code);
-  // 최종정리 파일은 순위 반영 기준과 동일하게, 검수완료·수정완료이면서 순위 제외 대상이 아닌 데이터만 내려보냅니다.
+  // 최종디브리핑 파일은 순위 반영 기준과 동일하게, 검수완료·수정완료이면서 순위 제외 대상이 아닌 데이터만 내려보냅니다.
   const finalItems = officialScoreItemsForOutput_(code, data.rows.filter(item => officialReviewCompleted_(code, item) && shouldCountItemInRanking_(code, item)));
   const approvedRows = finalItems.map(item => reportRowOut_(item, data.headers));
   const rows = approvedRows.slice();
@@ -3053,6 +3097,7 @@ function ikrcDefaultStationPrefixServer_(index) {
 function normalizeIkrcStationListServer_(source, strict=false, competitionCode='IKRC') {
   const code = String(competitionCode || '').trim().toUpperCase() || 'IKRC';
   const maxPerStation = code === 'KCR' ? 20 : 50;
+  const maxRangeNumber = code === 'KCR' ? 999 : 99;
   const purposeFlag = (value, fallback=true) => {
     if (value === undefined || value === null || value === '') return !!fallback;
     if (typeof value === 'boolean') return value;
@@ -3079,8 +3124,8 @@ function normalizeIkrcStationListServer_(source, strict=false, competitionCode='
     let prefix = safeStr(item.prefix).toUpperCase().replace(/[^0-9A-Z가-힣]/g, '').slice(0, 8) || fallback;
     let start = Math.floor(Number(item.start));
     let end = Math.floor(Number(item.end));
-    if (!Number.isFinite(start) || start < 1 || start > 99) start = 1;
-    if (!Number.isFinite(end) || end < 1 || end > 99) end = 10;
+    if (!Number.isFinite(start) || start < 1 || start > maxRangeNumber) start = 1;
+    if (!Number.isFinite(end) || end < 1 || end > maxRangeNumber) end = 10;
     if (strict && used.has(prefix)) return { ok:false, message:`${code} 스테이션 코드는 서로 달라야 합니다: ${prefix}`, list:[] };
     if (strict && end < start) return { ok:false, message:`스테이션 ${index + 1}의 끝 번호는 시작 번호보다 작을 수 없습니다.`, list:[] };
     if (strict && end - start + 1 > maxPerStation) return { ok:false, message:`${code} 스테이션 ${index + 1}은 최대 ${maxPerStation}개 ${code === 'KCR' ? '컵' : '샘플'}까지 지정할 수 있습니다.`, list:[] };
@@ -3092,13 +3137,14 @@ function normalizeIkrcStationListServer_(source, strict=false, competitionCode='
     if (end < start) end = start;
     if (end - start + 1 > maxPerStation) end = start + maxPerStation - 1;
     used.add(prefix);
-    const useForCalibration = code === 'IKRC' ? purposeFlag(item.useForCalibration, true) : true;
-    const useForCompetition = code === 'IKRC' ? purposeFlag(item.useForCompetition, true) : true;
-    if (strict && code === 'IKRC' && !useForCalibration && !useForCompetition) {
+    const stationPurposeEnabled = code === 'IKRC' || code === 'KCR';
+    const useForCalibration = stationPurposeEnabled ? purposeFlag(item.useForCalibration, true) : true;
+    const useForCompetition = stationPurposeEnabled ? purposeFlag(item.useForCompetition, true) : true;
+    if (strict && stationPurposeEnabled && !useForCalibration && !useForCompetition) {
       return { ok:false, message:`${label}은 켈리브레이션용 또는 대회용 중 하나 이상을 선택해야 합니다.`, list:[] };
     }
-    list.push(code === 'IKRC'
-      ? { id, label, prefix, start, end, useForCalibration, useForCompetition }
+    list.push(stationPurposeEnabled
+      ? { id, label:code === 'KCR' ? `스테이션 ${index + 1}` : label, prefix, start, end, useForCalibration, useForCompetition, ...(code === 'KCR' ? {numberMode:'participant'} : {}) }
       : { id, label, prefix, start, end });
   }
   return { ok:true, list };
@@ -3259,7 +3305,11 @@ function normalizeKcrStationListServer_(source, strict=false) {
   const checked = normalizeIkrcStationListServer_(source, strict, 'KCR');
   if (!checked.ok) return checked;
   checked.list = checked.list.map((station, index) => Object.assign({}, station, {
-    process:kcrStationProcessServer_(source && source[index] && source[index].process, index)
+    label:`스테이션 ${index + 1}`,
+    process:kcrStationProcessServer_(source && source[index] && source[index].process, index),
+    useForCalibration:station.useForCalibration !== false,
+    useForCompetition:station.useForCompetition !== false,
+    numberMode:'participant'
   }));
   return checked;
 }
@@ -3301,18 +3351,24 @@ function kcrStationSettingsServer_(cfg, roundOverride) {
   return normalized.ok ? normalized.list : normalizeKcrStationListServer_(defaults, false).list;
 }
 function kcrStationFingerprintServer_(stations) {
-  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end, station.process].join(':')).join('|');
+  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end, station.process, station.useForCalibration !== false, station.useForCompetition !== false, station.numberMode || 'participant'].join(':')).join('|');
+}
+
+function kcrStationsForPurposeServer_(cfg, roundOverride, purpose) {
+  const calibration = safeStr(purpose).toLowerCase() === 'calibration';
+  return kcrStationSettingsServer_(cfg, roundOverride).filter(station => calibration ? station.useForCalibration !== false : station.useForCompetition !== false);
 }
 
 function validateKcrStationSubmission_(payload, cfg) {
   const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
-  const settings = kcrStationSettingsServer_(cfg);
+  const purpose = isCalibrationMode_(payload && payload.mode) ? 'calibration' : 'competition';
+  const settings = kcrStationsForPurposeServer_(cfg, payload && payload.round, purpose);
   const stationId = safeStr(payload && payload.stationId).toLowerCase();
   const station = settings.find(item => safeStr(item.id).toLowerCase() === stationId);
-  if (!station) return { ok:false, message:'KCR 스테이션을 다시 선택해주세요.' };
-  const expectedUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => `${station.prefix}-${station.start + idx}`);
+  if (!station) return { ok:false, message:`현재 ${purpose === 'calibration' ? '켈리브레이션' : '대회평가'}용으로 열린 KCR 스테이션을 다시 선택해주세요.` };
+  const expectedUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => String(station.start + idx));
   if (rows.length !== expectedUnits.length) {
-    return { ok:false, message:`${station.label} 평가는 ${expectedUnits[0]}부터 ${expectedUnits[expectedUnits.length - 1]}까지 ${expectedUnits.length}개 컵이 모두 있어야 저장됩니다.` };
+    return { ok:false, message:`${station.label} 평가는 참가자번호 ${expectedUnits[0]}부터 ${expectedUnits[expectedUnits.length - 1]}까지 ${expectedUnits.length}명이 모두 있어야 저장됩니다.` };
   }
   const actualUnits = rows.map(row => {
     const inferred = inferScorePayload(Object.assign({}, payload, {rows:[row]}));
@@ -3322,7 +3378,7 @@ function validateKcrStationSubmission_(payload, cfg) {
   const missing = expectedUnits.filter(unit => !actualUnits.includes(unit));
   const unexpected = actualUnits.filter(unit => !expectedUnits.includes(unit));
   if (actualUnits.some(unit => !unit) || duplicates.length || missing.length || unexpected.length) {
-    return {ok:false, message:`${station.label} 컵 번호가 올바르지 않습니다. ${expectedUnits.join(', ')}를 빠짐없이 확인해주세요.`};
+    return {ok:false, message:`${station.label} 참가자번호가 올바르지 않습니다. ${expectedUnits.join(', ')}를 빠짐없이 확인해주세요.`};
   }
   const payloadPrefix = safeStr(payload && payload.stationPrefix).toUpperCase().replace(/\s+/g, '');
   if (payloadPrefix && payloadPrefix !== station.prefix) return {ok:false, message:'KCR 스테이션 설정이 변경되었습니다. 평가 화면을 새로 열어 다시 선택해주세요.'};
@@ -3465,6 +3521,17 @@ async function submitScores(env, payload, signature, request = null) {
   if (initial.code === 'KCR') {
     const stationValidation = validateKcrStationSubmission_(basePayload, cfg);
     if (!stationValidation.ok) return {success:false, message:stationValidation.message};
+    const participantRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('KCR').all();
+    const registeredNumbers = new Set((participantRows.results || [])
+      .map(row => safeStr(participantRoundNumber_(row, 'KCR', submitRound)))
+      .filter(Boolean));
+    const missingParticipantNumbers = stationValidation.expectedUnits.filter(unit => !registeredNumbers.has(safeStr(unit)));
+    if (missingParticipantNumbers.length) {
+      return {
+        success:false,
+        message:`${stationValidation.station.label}에 선수등록과 일치하지 않는 참가자번호가 있습니다: ${missingParticipantNumbers.join(', ')}. 참가자번호 범위를 다시 저장해주세요.`
+      };
+    }
     basePayload.stationId = stationValidation.station.id;
     basePayload.stationLabel = stationValidation.station.label;
     basePayload.stationPrefix = stationValidation.station.prefix;
@@ -3684,9 +3751,14 @@ async function getReviewList(env, competitionCode, actorArg) {
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC').bind(code).all();
   const rawAll = scopeMobScoreRowsToActiveDate_(code, cfg, scopedParticipantRows, rowsRaw.results || [], mobReviewDate);
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
+  const calibrationOnly = code === 'KCR' && !!(actorArg && actorArg.calibrationOnly);
+  const actorRoleForCode = safeStr(auth.actor && auth.actor.roleMap && auth.actor.roleMap[code] || auth.actor && (auth.actor.role || auth.actor.judgeRole));
+  if (calibrationOnly && !manager && !isHeadRole_(actorRoleForCode)) {
+    return { success:false, message:'KCR 켈리브레이션 결과는 헤드 심사위원 또는 대회팀장·관리자만 확인할 수 있습니다.' };
+  }
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
-  const raw = manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false));
+  const raw = calibrationOnly ? managerRows : (manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
   const headers = mergeHeaders(code, raw);
   let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
   if (manager && list.length) {
@@ -3694,9 +3766,19 @@ async function getReviewList(env, competitionCode, actorArg) {
     const pIdx = indexParticipantIdentities_(pRows.results || [], code);
     list = list.map(item => enrichReviewItemWithParticipant_(item, lookupParticipantIdentity_(pIdx, item.round || item['라운드'] || (cfg && cfg.current_round), itemNumber_(item) || item.unit), code));
   }
-  // 명시적인 켈리브레이션 데이터는 공식 검수에서 분리한다. 역할만으로는 켈리브레이션을 추론하지 않는다.
-  if (['KCR','KCAC','KBC','MOB','IKRC'].includes(code)) list = list.filter(item => !isCalibrationMode_(item['모드'] || item.mode));
+  // 명시적인 켈리브레이션 데이터는 공식 검수에서 분리한다. KCR 결과 확인 화면에서만 읽기 전용으로 노출한다.
+  if (calibrationOnly) list = list.filter(item => isCalibrationMode_(item['모드'] || item.mode));
+  else if (['KCR','KCAC','KBC','MOB','IKRC'].includes(code)) list = list.filter(item => !isCalibrationMode_(item['모드'] || item.mode));
   let supersededCount = 0;
+  if (calibrationOnly) {
+    const latest = latestIkrcReviewItems_(list);
+    list = latest.list;
+    supersededCount = latest.supersededCount;
+    list = list.map(item => {
+      item._stddev = kcrCalibrationReviewComparison_(item, list);
+      return item;
+    });
+  }
   if (code === 'IKRC') {
     const latest = latestIkrcReviewItems_(list);
     list = latest.list.map(item => {
@@ -3724,7 +3806,8 @@ async function getReviewList(env, competitionCode, actorArg) {
     list,
     headers,
     ownOnly: !manager,
-    readOnlyHeadMonitor:false,
+    readOnlyHeadMonitor:calibrationOnly,
+    calibrationOnly,
     supersededCount,
     mobReviewDate,
     mobReviewDates:code === 'MOB' ? mobParticipantDatesFromRows_(scopedParticipantRows) : [],
