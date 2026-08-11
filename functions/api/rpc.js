@@ -3819,7 +3819,7 @@ async function submitScores(env, payload, signature, request = null) {
       if (existingMob && existingMob.id) {
         return {
           success:false,
-          message:'이미 제출된 MOB 평가입니다. 새로 제출하지 말고 내 제출 검수에서 확인·수정해주세요.',
+          message:'이미 제출된 MOB 평가입니다. 새로 제출하지 말고 내평가검수에서 확인·수정해주세요.',
           duplicateId:existingMob.id
         };
       }
@@ -3838,7 +3838,7 @@ async function submitScores(env, payload, signature, request = null) {
         .bind(x.code, x.round, x.judgeName, x.unit, payloadJson, duplicateCutoff).first();
       if (dup && dup.id) { skipped++; continue; }
     }
-    // IKRC 헤드 공식점수는 제출 즉시 반영 대상이며 센서리 심사위원은 '내 제출 검수'에서 수정할 수 있습니다.
+    // IKRC 헤드 공식점수는 제출 즉시 반영 대상이며 센서리 심사위원은 '내평가검수'에서 수정할 수 있습니다.
     // 제출 인원은 현장 구성에 따라 달라질 수 있으므로 스테이션 확정과 집계에서 고정 인원수를 강제하지 않습니다.
     const ikrcOfficialHead = x.code === 'IKRC' && !isCalibrationMode_(x.mode) && isHeadRole_(x.role);
     const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (ikrcOfficialHead ? '검수완료' : '미검수');
@@ -4257,7 +4257,7 @@ function mobScoreObjectFromItem_(item) {
   };
 }
 async function mobCalibrationRows_(env, requestedTeam, roleText, actorArg) {
-  const auth = await requireActorForCode_(env, actorArg, 'MOB', 'MOB 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
+  const auth = await requireActorForCode_(env, actorArg, 'MOB', 'MOB 심사 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return { error: auth.res };
   const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
   const actorRole = safeStr(roleMap.MOB || (auth.actor && auth.actor.role));
@@ -4394,12 +4394,12 @@ function ikrcHeadOfficialStations_(scoreRows, actor, stations, currentRound) {
   }));
 }
 async function getIkrcCalibrationScopeOptions(env, actorArg) {
-  const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
+  const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 심사 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
   const actorRole = safeStr(roleMap.IKRC || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   const canManageAll = hasManageAccess(auth.actor, 'IKRC');
-  if (!isHeadRole_(actorRole) && !canManageAll) return { success:false, message:'켈리브레이션 결과 확인 권한이 없습니다.' };
+  if (!isHeadRole_(actorRole) && !canManageAll) return { success:false, message:'심사 켈리브레이션 확인 권한이 없습니다.' };
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);
   const stations = ikrcStationsForPurposeServer_(cfg, currentRound, 'calibration');
@@ -4452,12 +4452,12 @@ function ikrcSensoryBaseScoreFromItem_(item) {
   return roundScoreValue_(Math.max(0, direct - seed));
 }
 async function ikrcCalibrationRows_(env, requestedScope, actorArg) {
-  const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
+  const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 심사 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return { error: auth.res };
   const roleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
   const actorRole = safeStr(roleMap.IKRC || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   const canManageAll = hasManageAccess(auth.actor, 'IKRC');
-  if (!isHeadRole_(actorRole) && !canManageAll) return { error: { success:false, message:'켈리브레이션 결과 확인 권한이 없습니다.' } };
+  if (!isHeadRole_(actorRole) && !canManageAll) return { error: { success:false, message:'심사 켈리브레이션 확인 권한이 없습니다.' } };
   const checkerKey = ikrcCalibrationCheckerKey_(auth.actor);
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind('IKRC').first();
   const currentRound = safeStr(cfg && cfg.current_round);

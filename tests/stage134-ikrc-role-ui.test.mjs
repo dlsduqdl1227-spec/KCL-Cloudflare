@@ -50,19 +50,19 @@ vm.createContext(menuContext);
 vm.runInContext(functionSource(assessment, "updateSelectReviewButton_"), menuContext);
 
 menuContext.updateSelectReviewButton_();
-assert.equal(buttons["btn-eval"].textContent, "대회평가 시작");
-assert.equal(buttons["btn-review"].textContent, "내 제출 검수");
-assert.equal(buttons["btn-calibration"].textContent, "켈리브레이션 확인");
+assert.equal(buttons["btn-eval"].textContent, "대회평가시작");
+assert.equal(buttons["btn-review"].textContent, "내평가검수");
+assert.equal(buttons["btn-calibration"].textContent, "심사 켈리브레이션");
 assert.equal(buttons["btn-calibration"].style.display, "block");
 assert.equal(buttons["btn-calibration-station"].style.display, "block");
-assert.equal(buttons["btn-calibration-station"].textContent, "스테이션 켈리브레이션 시작");
+assert.equal(buttons["btn-calibration-station"].textContent, "전체 켈리브레이션");
 assert.equal(buttons["btn-calibration-all"].style.display, "none");
 assert.equal(buttons["btn-calibration-team"].style.display, "none");
 
 headRole = false;
 menuContext.updateSelectReviewButton_();
 assert.equal(buttons["btn-eval"].style.display, "block");
-assert.equal(buttons["btn-review"].textContent, "내 제출 검수");
+assert.equal(buttons["btn-review"].textContent, "내평가검수");
 assert.equal(buttons["btn-review"].style.display, "block");
 assert.equal(buttons["btn-calibration"].style.display, "none");
 assert.equal(buttons["btn-calibration-station"].style.display, "block");
@@ -70,7 +70,7 @@ assert.equal(buttons["btn-calibration-all"].style.display, "none");
 assert.equal(buttons["btn-calibration-team"].style.display, "none");
 
 assert.match(assessment, /id="ikrc-result-mode-official"[^>]*>대회평가</);
-assert.match(assessment, /id="ikrc-result-mode-station"[^>]*>스테이션 켈리브레이션</);
+assert.match(assessment, /id="ikrc-result-mode-station"[^>]*>전체 켈리브레이션</);
 assert.doesNotMatch(assessment, /id="ikrc-cal-scope-all"/);
 assert.match(functionSource(assessment, "goCalibration"), /IKRC 전체 켈리브레이션은 사용하지 않습니다/);
 assert.match(functionSource(assessment, "setIkrcResultViewMode_"), /_ikrcCalibrationScope = 'station'/);

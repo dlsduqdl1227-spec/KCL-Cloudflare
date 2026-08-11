@@ -28,15 +28,17 @@ function extractFunction(source, name) {
   throw new Error(`${name} function incomplete`);
 }
 
-assert.match(assessment, /id="btn-eval"[^>]*>대회평가 시작/);
+assert.match(assessment, /id="btn-eval"[^>]*>대회평가시작/);
 assert.match(assessment, /id="btn-calibration-all"[^>]*>전체 켈리브레이션</);
-assert.match(assessment, /id="btn-calibration-team"[^>]*>팀별 켈리브레이션 시작/);
-assert.ok(assessment.indexOf('id="btn-review"') < assessment.indexOf('id="btn-calibration-team"'), "Review must appear before KCR calibration entry buttons");
+assert.match(assessment, /id="btn-calibration-team"[^>]*>팀별 켈리브레이션</);
+assert.ok(assessment.indexOf('id="btn-calibration-station"') < assessment.indexOf('id="btn-eval"'), "Calibration entry must appear before evaluation");
+assert.ok(assessment.indexOf('id="btn-eval"') < assessment.indexOf('id="btn-review"'), "Evaluation must appear before personal review");
+assert.ok(assessment.indexOf('id="btn-review"') < assessment.indexOf('id="btn-calibration"'), "Personal review must appear before calibration results");
 assert.match(extractFunction(assessment, "evaluationTeamForSubmit_"), /전체 켈리브레이션팀/);
 assert.match(extractFunction(assessment, "goCalibration"), /setEvaluationPurpose_\('calibration', scope\)/);
-assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /켈리브레이션\(스테이션\)/);
-assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /켈리브레이션\(전체\)/);
-assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /대회검수/);
+assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /스테이션 켈리브레이션/);
+assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /전체 켈리브레이션/);
+assert.match(extractFunction(assessment, "updateSelectReviewButton_"), /내평가검수/);
 
 const purposeContext = { _selComp:{code:"IKRC"}, judgeTeamForSubmit:()=>"2팀" };
 vm.createContext(purposeContext);
