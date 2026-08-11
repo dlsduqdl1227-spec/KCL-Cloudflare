@@ -1307,7 +1307,9 @@ async function assignRegistrySchedule(env, payload, actorArg) {
     const result = await bulkApplyOperatorEffectiveDate(env, {
       competitionCode:context.code,
       effectiveDate:schedule.date,
-      teamGroupOverride:schedule.station || '',
+      // IKRC 선수 일정의 위치는 로스팅 운영 정보다. 센서리 심사위원의
+      // 담당 스테이션은 운영팀장이 별도로 정하므로 일정 배정으로 덮지 않는다.
+      teamGroupOverride:context.code === 'IKRC' ? '' : (schedule.station || ''),
       rowIndexes
     }, actorArg);
     if (!result || !result.success) return result || { success:false, message:'심사위원 일정 배정에 실패했습니다.' };
@@ -1331,12 +1333,10 @@ async function assignRegistrySchedule(env, payload, actorArg) {
     extra['일정명'] = schedule.name;
     extra['일정구분'] = schedule.round;
     extra['대회일'] = schedule.date;
-    extra['운영일차'] = schedule.operatingDay || '';
-    extra['스테이션번호'] = schedule.station || '';
-    extra['대기시간'] = schedule.waitingTime || '';
+    if (context.code === 'IKRC') extra['로스팅위치'] = schedule.station || '';
+    else extra['스테이션번호'] = schedule.station || '';
     extra['준비시간'] = schedule.preparationTime || '';
     extra['시연시간'] = schedule.performanceTime || '';
-    extra['정리시간'] = schedule.cleanupTime || '';
     return env.DB.prepare('UPDATE participants SET extra_json=?, updated_at=? WHERE id=? AND competition_code=?')
       .bind(JSON.stringify(extra), updatedAt, row.id, context.code);
   });
@@ -1345,7 +1345,7 @@ async function assignRegistrySchedule(env, payload, actorArg) {
   } else {
     for (const statement of statements) await statement.run();
   }
-  return { success:true, message:`${schedule.name}에 선수 ${rows.length}명 배정 완료 · 기존 선수번호와 점수 유지`, schedule, applied:rows.length };
+  return { success:true, message:`${schedule.name} 일정으로 선수 ${rows.length}명 변경 완료 · 기존 선수번호와 점수 유지`, schedule, applied:rows.length };
 }
 
 async function upsertOperatorAccount(env, payload, actorArg) {
@@ -1558,7 +1558,7 @@ function participantPayloadFromRow_(raw, defaultCode='') {
   const performanceTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['시연시간','경연시간','로스팅시간','시연 시간','로스팅 시간','performance_time','performanceTime','presentation_time','presentationTime','roasting_time','roastingTime']));
   const cleanupTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['정리시간','정리 시간','클린업시간','cleanup_time','cleanupTime']));
   const waitingTime = normalizeParticipantScheduleRange_(pickByAliases_(source, ['대기시간','대기 시간','waiting_time','waitingTime']));
-  const stationNo = safeStr(pickByAliases_(source, ['스테이션번호','스테이션 번호','Station No.','station_no','stationNo']));
+  const stationNo = safeStr(pickByAliases_(source, ['로스팅위치','로스팅 위치','로스팅스테이션','로스팅 스테이션','스테이션번호','스테이션 번호','Station No.','station_no','stationNo']));
   const performanceOrder = safeStr(pickByAliases_(source, ['경연순서','경연 순서','시연순서','순서','performance_order','performanceOrder']));
   const extra = {};
   Object.keys(source).forEach(k => { if (safeStr(source[k]) !== '') extra[k] = source[k]; });
@@ -1568,7 +1568,7 @@ function participantPayloadFromRow_(raw, defaultCode='') {
   if (performanceTime) extra['시연시간'] = performanceTime;
   if (cleanupTime) extra['정리시간'] = cleanupTime;
   if (waitingTime) extra['대기시간'] = waitingTime;
-  if (stationNo) extra['스테이션번호'] = stationNo;
+  if (stationNo) extra[code === 'IKRC' ? '로스팅위치' : '스테이션번호'] = stationNo;
   if (performanceOrder) extra['경연순서'] = performanceOrder;
   return {
     competitionCode: code,
@@ -1773,7 +1773,7 @@ function participantRowOut_(r) {
     performanceTime: normalizeParticipantScheduleRange_(ex['시연시간'] || ex['경연시간'] || ex['로스팅시간'] || ex.performanceTime || ex.performance_time || ex.roastingTime || ex.roasting_time),
     cleanupTime: normalizeParticipantScheduleRange_(ex['정리시간'] || ex.cleanupTime || ex.cleanup_time),
     waitingTime: normalizeParticipantScheduleRange_(ex['대기시간'] || ex.waitingTime || ex.waiting_time),
-    stationNo: safeStr(ex['스테이션번호'] || ex.stationNo || ex.station_no),
+    stationNo: safeStr(r.competition_code === 'IKRC' ? (ex['로스팅위치'] || ex['로스팅스테이션'] || ex['스테이션번호'] || ex.stationNo || ex.station_no) : (ex['스테이션번호'] || ex.stationNo || ex.station_no)),
     performanceOrder: safeStr(ex['경연순서'] || ex.performanceOrder || ex.performance_order),
     displayNo: r.team_no || r.final_cup_no || r.main_cup_no || r.prelim_cup_no || r.cup_no || r.sample_no || r.unique_no || String(r.id)
   };

@@ -89,7 +89,7 @@ assert.doesNotMatch(saveScheduleSource, /DELETE FROM (participants|operators|sco
 
 const assignScheduleSource = functionSource(rpc, "assignRegistrySchedule");
 assert.match(assignScheduleSource, /bulkApplyOperatorEffectiveDate/);
-assert.match(assignScheduleSource, /teamGroupOverride:schedule\.station/);
+assert.match(assignScheduleSource, /teamGroupOverride:context\.code === 'IKRC' \? ''/);
 assert.match(assignScheduleSource, /extra\['일정ID'\]/);
 assert.match(assignScheduleSource, /extra\['일정명'\]/);
 assert.match(assignScheduleSource, /extra\['일정구분'\]/);
