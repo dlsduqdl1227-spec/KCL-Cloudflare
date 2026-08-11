@@ -581,6 +581,9 @@ async function dispatch(action, args, env, request) {
     importOperators: () => importOperators(env, args[0], args[1]),
     applyOperatorDateSchedule: () => applyOperatorDateSchedule(env, args[0], args[1]),
     bulkApplyOperatorEffectiveDate: () => bulkApplyOperatorEffectiveDate(env, args[0], args[1]),
+    saveRegistrySchedule: () => saveRegistrySchedule(env, args[0], args[1]),
+    deleteRegistrySchedule: () => deleteRegistrySchedule(env, args[0], args[1]),
+    assignRegistrySchedule: () => assignRegistrySchedule(env, args[0], args[1]),
     getRegistrationTemplates: () => getRegistrationTemplates(),
     getParticipantAssignments: () => getParticipantAssignments(env, args[0], args[1]),
     getIkrcBlindAssignments: () => getIkrcBlindAssignments(env, args[0]),
@@ -1200,6 +1203,151 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
   };
 }
 
+function registryScheduleText_(value, maxLength = 80) {
+  return safeStr(value).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+function registrySchedulesFromOptions_(options, code) {
+  const source = options && Array.isArray(options.registrySchedules) ? options.registrySchedules : [];
+  const seen = new Set();
+  return source.map((item, index) => {
+    const rawId = registryScheduleText_(item && item.id, 80).replace(/[^a-zA-Z0-9_-]/g, '');
+    const id = rawId || `schedule-${index + 1}`;
+    if (seen.has(id)) return null;
+    seen.add(id);
+    const round = normalizeRoundForCompetition_(code, item && item.round);
+    const date = normalizeEffectiveDate_(item && item.date);
+    if (!date) return null;
+    return {
+      id,
+      name: registryScheduleText_(item && item.name, 80) || `${round} ${date}`,
+      round,
+      date,
+      operatingDay: registryScheduleText_(item && item.operatingDay, 30),
+      station: registryScheduleText_(item && item.station, 40),
+      waitingTime: normalizeParticipantScheduleRange_(item && item.waitingTime),
+      preparationTime: normalizeParticipantScheduleRange_(item && item.preparationTime),
+      performanceTime: normalizeParticipantScheduleRange_(item && item.performanceTime),
+      cleanupTime: normalizeParticipantScheduleRange_(item && item.cleanupTime),
+      updatedAt: registryScheduleText_(item && item.updatedAt, 40)
+    };
+  }).filter(Boolean).slice(0, 100);
+}
+async function registryScheduleContext_(env, payload, actorArg) {
+  const actor = await getActor(env, actorArg);
+  const checked = strictCompetitionCode_(payload && payload.competitionCode, '일정 관리');
+  if (checked.error) return { error:checked.error };
+  const code = checked.code;
+  if (!actor || !hasManageAccess(actor, code)) return { error:{ success:false, message:code + ' 일정 관리 권한이 없습니다.' } };
+  const competition = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
+  if (!competition) return { error:{ success:false, message:'대회를 찾을 수 없습니다: ' + code } };
+  const options = parseJson(competition.option_settings, {});
+  const schedules = registrySchedulesFromOptions_(options, code);
+  return { actor, code, competition, options, schedules };
+}
+async function saveRegistrySchedule(env, payload, actorArg) {
+  const context = await registryScheduleContext_(env, payload, actorArg);
+  if (context.error) return context.error;
+  const rawDate = safeStr(payload && payload.date);
+  const date = normalizeEffectiveDate_(rawDate);
+  if (!date) return { success:false, message:'일정 날짜를 달력에서 선택해주세요.' };
+  const round = normalizeRoundForCompetition_(context.code, payload && payload.round);
+  const allowedRounds = COMPETITION_ROUNDS[context.code] || ['예선','결선'];
+  if (!allowedRounds.includes(round)) return { success:false, message:'해당 대회에서 사용할 수 없는 라운드입니다.' };
+  let id = registryScheduleText_(payload && payload.id, 80).replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!id) id = `schedule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  if (!context.schedules.some(item => item.id === id) && context.schedules.length >= 100) {
+    return { success:false, message:'대회별 일정은 최대 100개까지 만들 수 있습니다. 사용하지 않는 일정 정의를 먼저 정리해주세요.' };
+  }
+  const schedule = registrySchedulesFromOptions_({ registrySchedules:[{
+    id,
+    name:payload && payload.name,
+    round,
+    date,
+    operatingDay:payload && payload.operatingDay,
+    station:payload && payload.station,
+    waitingTime:payload && payload.waitingTime,
+    preparationTime:payload && payload.preparationTime,
+    performanceTime:payload && payload.performanceTime,
+    cleanupTime:payload && payload.cleanupTime,
+    updatedAt:nowIso()
+  }] }, context.code)[0];
+  if (!schedule) return { success:false, message:'일정 정보를 확인해주세요.' };
+  const next = context.schedules.filter(item => item.id !== id);
+  next.push(schedule);
+  next.sort((a, b) => a.date.localeCompare(b.date) || (COMPETITION_ROUNDS[context.code] || []).indexOf(a.round) - (COMPETITION_ROUNDS[context.code] || []).indexOf(b.round) || a.name.localeCompare(b.name, 'ko'));
+  context.options.registrySchedules = next;
+  await env.DB.prepare('UPDATE competitions SET option_settings=?, updated_at=? WHERE code=?')
+    .bind(JSON.stringify(context.options), nowIso(), context.code).run();
+  return { success:true, message:`${context.code} ${schedule.round} 일정 저장 완료`, schedule, schedules:next };
+}
+async function deleteRegistrySchedule(env, payload, actorArg) {
+  const context = await registryScheduleContext_(env, payload, actorArg);
+  if (context.error) return context.error;
+  const id = registryScheduleText_(payload && payload.scheduleId, 80).replace(/[^a-zA-Z0-9_-]/g, '');
+  const target = context.schedules.find(item => item.id === id);
+  if (!target) return { success:false, message:'삭제할 일정을 찾을 수 없습니다. 목록을 새로고침해주세요.' };
+  const next = context.schedules.filter(item => item.id !== id);
+  context.options.registrySchedules = next;
+  await env.DB.prepare('UPDATE competitions SET option_settings=?, updated_at=? WHERE code=?')
+    .bind(JSON.stringify(context.options), nowIso(), context.code).run();
+  return { success:true, message:'일정 정의를 삭제했습니다. 이미 배정된 선수 정보·심사 권한·점수는 유지됩니다.', schedules:next };
+}
+async function assignRegistrySchedule(env, payload, actorArg) {
+  const context = await registryScheduleContext_(env, payload, actorArg);
+  if (context.error) return context.error;
+  const scheduleId = registryScheduleText_(payload && payload.scheduleId, 80).replace(/[^a-zA-Z0-9_-]/g, '');
+  const schedule = context.schedules.find(item => item.id === scheduleId);
+  if (!schedule) return { success:false, message:'배정할 일정을 찾을 수 없습니다. 일정 목록을 새로고침해주세요.' };
+  const targetType = safeStr(payload && payload.targetType).toLowerCase();
+  const rowIndexes = Array.from(new Set((Array.isArray(payload && payload.rowIndexes) ? payload.rowIndexes : [])
+    .map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0))).slice(0, 500);
+  if (!rowIndexes.length) return { success:false, message:'일정에 배정할 사람을 한 명 이상 선택해주세요.' };
+
+  if (targetType === 'operators') {
+    const result = await bulkApplyOperatorEffectiveDate(env, {
+      competitionCode:context.code,
+      effectiveDate:schedule.date,
+      teamGroupOverride:schedule.station || '',
+      rowIndexes
+    }, actorArg);
+    if (!result || !result.success) return result || { success:false, message:'심사위원 일정 배정에 실패했습니다.' };
+    return Object.assign({}, result, {
+      message:`${schedule.name}에 심사위원 ${Number(result.applied || 0)}명 배정 완료 · 기존 권한 유지`,
+      schedule
+    });
+  }
+  if (targetType !== 'participants') return { success:false, message:'일정 배정 대상을 확인해주세요.' };
+
+  const placeholders = rowIndexes.map(() => '?').join(',');
+  const rs = await env.DB.prepare(`SELECT * FROM participants WHERE id IN (${placeholders}) ORDER BY id`).bind(...rowIndexes).all();
+  const rows = rs.results || [];
+  if (rows.length !== rowIndexes.length || rows.some(row => safeStr(row.competition_code).toUpperCase() !== context.code)) {
+    return { success:false, message:'선택한 선수 목록이 변경되었거나 다른 대회 선수가 포함되어 있습니다. 목록을 새로고침해주세요.' };
+  }
+  const updatedAt = nowIso();
+  const statements = rows.map(row => {
+    const extra = parseJson(row.extra_json, {});
+    extra['일정ID'] = schedule.id;
+    extra['일정명'] = schedule.name;
+    extra['일정구분'] = schedule.round;
+    extra['대회일'] = schedule.date;
+    extra['운영일차'] = schedule.operatingDay || '';
+    extra['스테이션번호'] = schedule.station || '';
+    extra['대기시간'] = schedule.waitingTime || '';
+    extra['준비시간'] = schedule.preparationTime || '';
+    extra['시연시간'] = schedule.performanceTime || '';
+    extra['정리시간'] = schedule.cleanupTime || '';
+    return env.DB.prepare('UPDATE participants SET extra_json=?, updated_at=? WHERE id=? AND competition_code=?')
+      .bind(JSON.stringify(extra), updatedAt, row.id, context.code);
+  });
+  if (statements.length && typeof env.DB.batch === 'function') {
+    for (let i = 0; i < statements.length; i += 50) await env.DB.batch(statements.slice(i, i + 50));
+  } else {
+    for (const statement of statements) await statement.run();
+  }
+  return { success:true, message:`${schedule.name}에 선수 ${rows.length}명 배정 완료 · 기존 선수번호와 점수 유지`, schedule, applied:rows.length };
+}
+
 async function upsertOperatorAccount(env, payload, actorArg) {
   const actor = await getActor(env, actorArg);
   if (!hasAdmin(actor)) return { success: false, message: '계정 관리 권한이 없습니다.' };
@@ -1640,7 +1788,6 @@ async function upsertParticipant(env, payload, actorArg) {
   const participantDateSource = Object.assign({}, payload && payload.extra && typeof payload.extra === 'object' ? payload.extra : {}, payload || {});
   const rawCompetitionDate = safeStr(pickByAliases_(participantDateSource, ['대회일','대회날짜','경연일','경연날짜','예선일','일자','competition_date','competitionDate','event_date','eventDate','date']));
   if (rawCompetitionDate && !data.competitionDate) return { success:false, message:'대회일은 YYYY-MM-DD 형식의 올바른 날짜로 입력해주세요.' };
-  if (code === 'MOB' && !data.competitionDate) return { success:false, message:'MOB 선수 등록 시 대회일을 반드시 선택해주세요.' };
   let id = Number(payload && (payload.rowIndex || payload.id));
   const bind = [code, data.name, data.affiliation, data.phone, data.uniqueNo, data.prelimCupNo, data.mainCupNo, data.finalCupNo, data.cupNo, data.sampleNo, data.teamName, data.teamNo, JSON.stringify(data.extra || {}), nowIso()];
 
@@ -1947,6 +2094,7 @@ async function bulkApplyOperatorEffectiveDate(env, payload, actorArg) {
   if (!hasManageAccess(actor, code)) return { success:false, message:code + ' 심사 적용일 관리 권한이 없습니다.' };
   const effectiveDate = normalizeEffectiveDate_(payload && payload.effectiveDate);
   if (!effectiveDate) return { success:false, message:'심사 적용일을 올바른 날짜로 선택해주세요.' };
+  const teamGroupOverride = registryScheduleText_(payload && payload.teamGroupOverride, 40);
   const ids = Array.from(new Set((Array.isArray(payload && payload.rowIndexes) ? payload.rowIndexes : [])
     .map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0))).slice(0, 200);
   if (!ids.length) return { success:false, message:'날짜를 적용할 계정을 한 명 이상 선택해주세요.' };
@@ -1968,18 +2116,19 @@ async function bulkApplyOperatorEffectiveDate(env, payload, actorArg) {
   const timestamp = nowIso();
   let created = 0, updated = 0;
   for (const source of sourceRows) {
+    const assignedTeamGroup = teamGroupOverride || source.team_group || '';
     const existing = await env.DB.prepare(`SELECT id FROM operators WHERE name=? AND phone=? AND COALESCE(access,'')=? AND COALESCE(effective_date,'')=? ORDER BY id LIMIT 1`)
       .bind(source.name || '', normalizePhone(source.phone), code, effectiveDate).first();
     if (existing && Number(existing.id) === Number(source.id)) {
-      await env.DB.prepare('UPDATE operators SET updated_at=? WHERE id=?').bind(timestamp, source.id).run();
+      await env.DB.prepare('UPDATE operators SET team_group=?, updated_at=? WHERE id=?').bind(assignedTeamGroup, timestamp, source.id).run();
       updated++;
     } else if (existing && existing.id) {
       await env.DB.prepare(`UPDATE operators SET account_type=?, affiliation=?, team_group=?, role=?, updated_at=? WHERE id=?`)
-        .bind(source.account_type || 'JUDGE', source.affiliation || '', source.team_group || '', source.role || '', timestamp, existing.id).run();
+        .bind(source.account_type || 'JUDGE', source.affiliation || '', assignedTeamGroup, source.role || '', timestamp, existing.id).run();
       updated++;
     } else {
       await env.DB.prepare(`INSERT INTO operators (account_type, name, affiliation, phone, access, team_group, role, effective_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(source.account_type || 'JUDGE', source.name || '', source.affiliation || '', normalizePhone(source.phone), code, source.team_group || '', source.role || '', effectiveDate, timestamp, timestamp).run();
+        .bind(source.account_type || 'JUDGE', source.name || '', source.affiliation || '', normalizePhone(source.phone), code, assignedTeamGroup, source.role || '', effectiveDate, timestamp, timestamp).run();
       created++;
     }
   }

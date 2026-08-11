@@ -3984,6 +3984,7 @@ function ikrcRenderStationConfigForRound_(prefix, cfg, round) {
 function configSelectableOptionsHtml_(cfg, prefix) {
   var code = String(cfg && cfg.code || '').toUpperCase();
   if (code === 'MOB') {
+    if (prefix === 'admin-cfg') return '';
     var mobParticipantDate = String(competitionOptionSettings_(cfg).mobParticipantDate || '').trim();
     return '<div class="review-edit-help" style="margin:10px 0 8px">MOB 심사위원·헤드 평가 화면에 표시할 참가자 날짜를 선택합니다. 날짜를 바꿔도 이전 날짜의 선수·점수·검수 자료는 삭제되지 않습니다.</div>' +
       '<div class="admin-form-grid"><label class="admin-field"><span>평가 참가자 표시일</span><input type="date" id="' + prefix + '-mob-participant-date-' + code + '" value="' + escHtml(mobParticipantDate) + '"></label></div>';
@@ -4035,6 +4036,7 @@ function configSelectableOptionsPayload_(code, prefix, cfg) {
   code = String(code || '').toUpperCase();
   if (code === 'MOB') {
     var mobDateEl = document.getElementById(prefix + '-mob-participant-date-' + code);
+    if (!mobDateEl) return null;
     var mobParticipantDate = mobDateEl ? String(mobDateEl.value || '').trim() : '';
     if (mobParticipantDate && !/^\d{4}-\d{2}-\d{2}$/.test(mobParticipantDate)) { toast('MOB 평가 참가자 표시일을 달력에서 선택해주세요.', true); return false; }
     return {mobParticipantDate:mobParticipantDate};

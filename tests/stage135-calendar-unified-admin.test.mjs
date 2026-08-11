@@ -41,13 +41,15 @@ let pickerOpenCount = 0;
 pickerContext.openDatePicker_({ disabled:false, showPicker(){ pickerOpenCount += 1; } });
 assert.equal(pickerOpenCount, 1);
 
-assert.match(registry, /id="tabbtn-operators"[^>]*>사용자·권한 등록</);
-assert.doesNotMatch(registry, /id="tabbtn-admins"/);
-assert.doesNotMatch(registry, /id="tab-admins"/);
-assert.match(registry, /<option value="ADMIN">관리자<\/option>/);
-assert.match(functionSource(registry, "saveOneOperator"), /isAdmin\?'ALL':code/);
-assert.match(functionSource(registry, "operatorVisibleForSelectedComp"), /operatorIsAdminRow\(r\)\)return true/);
-assert.match(functionSource(registry, "renderSelectedOperatorsTable"), /관리자/);
+assert.match(registry, /id="tabbtn-players"[^>]*>선수·일정</);
+assert.match(registry, /id="tabbtn-operators"[^>]*>심사위원</);
+assert.match(registry, /id="tabbtn-admins"[^>]*>관리자</);
+assert.match(registry, /id="tab-admins"/);
+assert.doesNotMatch(registry, /<option value="ADMIN">관리자<\/option>/);
+assert.match(functionSource(registry, "saveOneAdmin"), /accountType:'ADMIN'/);
+assert.match(functionSource(registry, "saveOneAdmin"), /access:'ALL'/);
+assert.match(functionSource(registry, "operatorVisibleForSelectedComp"), /operatorIsAdminRow\(r\)\)return false/);
+assert.match(functionSource(registry, "renderAdminTable"), /전체 관리자/);
 
 assert.match(functionSource(assessment, "isTeamLeaderForCode_"), /if \(isAdminRole\(\)\) return true/);
 assert.match(functionSource(assessment, "adminRenderRunCards_"), /station-settings/);

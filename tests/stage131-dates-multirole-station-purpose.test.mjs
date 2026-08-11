@@ -75,7 +75,7 @@ assert.equal(stationContext.normalizeIkrcStationListServer_([
   { id:"closed", prefix:"X", start:1, end:2, useForCalibration:false, useForCompetition:false },
 ], true, "IKRC").ok, false);
 
-assert.match(functionSource(rpc, "upsertParticipant"), /MOB 선수 등록 시 대회일을 반드시 선택/);
+assert.doesNotMatch(functionSource(rpc, "upsertParticipant"), /MOB 선수 등록 시 대회일을 반드시 선택/);
 assert.match(functionSource(rpc, "participantPayloadFromRow_"), /competitionDate/);
 assert.match(rpc, /bulkApplyOperatorEffectiveDate/);
 assert.match(registry, /id="bulkOperatorDate"/);
