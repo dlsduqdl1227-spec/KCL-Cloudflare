@@ -81,8 +81,9 @@ assert.match(rankingDetailSource, /var detailTotalLine = '<br>총점:/);
 assert.doesNotMatch(rankingDetailSource, /buildMobRankingBreakdownHtml_\(rankInfo\)/);
 
 const mobDescSource = functionSource("mobGetDesc");
-assert.match(mobDescSource, /MOB_SCORE_SUBLABELS/);
-assert.match(assessment, /1=아주나쁨 · 2=나쁨 · 3=보통 · 4=좋음 · 5=아주좋음/);
+assert.match(mobDescSource, /scoreGuideLabel_/);
+assert.doesNotMatch(assessment, /MOB_SCORE_SUBLABELS/);
+assert.match(assessment, /점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수/);
 assert.match(assessment, /점수 고정 \(슬라이더 잠금\)/);
 assert.match(functionSource("toggleMobScoreLock_"), /slider\.disabled/);
 assert.match(assessment, /MOB 전체 종합 코멘트/);

@@ -334,6 +334,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .score-display{text-align:center;font-size:54px;font-weight:700;margin-bottom:4px;
   line-height:1;letter-spacing:-2px}
 .score-desc-text{text-align:center;font-size:14px;color:var(--text-3);font-weight:600;margin-bottom:14px}
+.score-guide-line{font-size:11px;color:var(--muted);line-height:1.55;margin:0 0 12px;word-break:keep-all;overflow-wrap:anywhere}
 .score-slider{-webkit-appearance:none;width:100%;height:10px;border-radius:5px;
   background:#333;outline:none;margin-bottom:8px;touch-action:pan-y;-ms-touch-action:pan-y}
 .score-slider::-webkit-slider-thumb{-webkit-appearance:none;width:36px;height:36px;
@@ -2147,6 +2148,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="attr-tab" data-attr="comment" onclick="switchCuppingAttr('comment')">전체 코멘트</div>
     </div>
     <div class="review-edit-help">물 붓기 10분 경과 후 Flavor → Aftertaste → Acidity → Sweetness → Mouthfeel → Overall 순으로 평가하며, 30분 내 모든 평가를 종료합니다.</div>
+    <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
     <div id="cupping-attr-card"></div>
     <div class="divider"></div>
     <button class="btn" onclick="cuppingSubmitAll()">평가완료</button>
@@ -2285,9 +2287,10 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       시간은 00분00초 형식으로만 입력되며, 제한시간 초과 시 5초마다 1점씩 자동 감점됩니다.
     </div>
 
+    <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
+
     <div id="kbc-service-block">
       <div class="sub-section"><div class="sub-section-title">Service Professionalism (서비스의 전문성, 0~5점, 0.2단위)</div></div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">0=수용불가 / 1=수용 / 2=보통 / 3=좋음 / 4=아주좋음 / 5=훌륭함</p>
       <div id="kbc-service-rows"></div>
     </div>
 
@@ -2359,9 +2362,10 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <option value="창작">창작 음료 (본/결선)</option>
     </select>
 
+    <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
+
     <div id="mob-tech-block">
       <div class="sub-section"><div class="sub-section-title">기술 심사 (1~5점, 0.2단위)</div></div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:10px">1=아주나쁨 · 2=나쁨 · 3=보통 · 4=좋음 · 5=아주좋음 · 각 점수 사이는 0.2단위</p>
       <div class="timer-box" id="mob-time-box">
         <div class="timer-help">MOB 규정 기준 시연시간을 입력하세요. 예선 10분, 결선 15분 기준으로 감점·실격을 표시합니다.</div>
         <input type="text" id="mob-end-time" placeholder="00분 00.00초 또는 10.08" oninput="onMobTimeInput()" style="margin-bottom:0">
@@ -2519,6 +2523,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div class="eval-hero-logo" data-comp-logo="IKRC"></div>
     <div class="section-label" id="ikrc-sample-label">Cup A-1</div>
     <div class="sub-section"><div class="sub-section-title">Sensory (0~10점, 0.2단위 · 가중치 적용)</div></div>
+    <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
     <p style="font-size:11px;color:var(--muted);margin-bottom:10px">평가 순서: Flavor×3 → Clean Cup×2 → Sweetness×2 → Acidity → Mouthfeel×2</p>
     <p style="font-size:11px;color:var(--muted);margin-bottom:10px">커핑 기준: 11g 홀빈 / 200g 물 / 93℃ / 600~700µm / 4분 브레이킹 / 9~35분 평가</p>
     <div class="attr-tabs" id="ikrc-attr-tabs"></div>
@@ -2864,26 +2869,35 @@ function getIntensityText_(value) {
   return item.label || '';
 }
 
-var KCR_MEANINGS = {
-  0:'매우 부정적',0.2:'매우 부정적',0.4:'매우 부정적',0.6:'매우 부정적',0.8:'매우 부정적',
-  1:'부정적',1.2:'부정적',1.4:'부정적',1.6:'부정적',1.8:'부정적',
-  2:'다소 부족',2.2:'다소 부족',2.4:'다소 부족',2.6:'다소 부족',2.8:'다소 부족',
-  3:'보통',3.2:'보통',3.4:'보통',3.6:'보통',3.8:'좋음',
-  4:'좋음',4.2:'좋음',4.4:'좋음',4.6:'매우 우수',4.8:'매우 우수',5:'매우 우수'
-};
+var SCORE_GUIDE_LABELS_ = ['매우 미흡','미흡','보완 필요','기준점','안정적','양호','우수','매우 우수'];
+
+// 대회별 실제 점수 범위는 유지하고, IKRC의 단계 위치(20/40/50/60/70/80/90%)에 맞춰 표시 명칭만 통일한다.
+function scoreGuideLabel_(value, min, max) {
+  var n = parseFloat(value);
+  var lo = parseFloat(min);
+  var hi = parseFloat(max);
+  if (!isFinite(n)) n = lo;
+  if (!isFinite(lo)) lo = 0;
+  if (!isFinite(hi) || hi <= lo) hi = lo + 1;
+  var ratio = Math.max(0, Math.min(1, (n - lo) / (hi - lo))) + 1e-9;
+  if (ratio >= 0.9) return SCORE_GUIDE_LABELS_[7];
+  if (ratio >= 0.8) return SCORE_GUIDE_LABELS_[6];
+  if (ratio >= 0.7) return SCORE_GUIDE_LABELS_[5];
+  if (ratio >= 0.6) return SCORE_GUIDE_LABELS_[4];
+  if (ratio >= 0.5) return SCORE_GUIDE_LABELS_[3];
+  if (ratio >= 0.4) return SCORE_GUIDE_LABELS_[2];
+  if (ratio >= 0.2) return SCORE_GUIDE_LABELS_[1];
+  return SCORE_GUIDE_LABELS_[0];
+}
+
+function scoreGuideScaleLabels_(min, max) {
+  var labels = {};
+  for (var i = min; i <= max; i += 1) labels[i] = scoreGuideLabel_(i, min, max);
+  return labels;
+}
 
 function kcacGetDesc(v) {
-  v = parseFloat(v);
-  if (v >= 5)   return '완벽구현(5)';
-  if (v >= 4.5) return '매우 우수';
-  if (v >= 4)   return '우수(4)';
-  if (v >= 3.5) return '양호';
-  if (v >= 3)   return '기준충족(3)';
-  if (v >= 2.5) return '평이';
-  if (v >= 2)   return '일부결함(2)';
-  if (v >= 1)   return '미흡(1)';
-  if (v > 0)    return '매우 미흡';
-  return '미구현(0)';
+  return scoreGuideLabel_(v, 0, 5);
 }
 
 var SMART_TAGS = {
@@ -3087,13 +3101,7 @@ function smartTagDedupeList_(list, rejectFn) {
 }
 
 function kcrGetMeaning(v) {
-  v = parseFloat(v) || 0;
-  if (v >= 4.6) return '매우 우수';
-  if (v >= 3.8) return '좋음';
-  if (v >= 3.0) return '보통';
-  if (v >= 2.0) return '다소 부족';
-  if (v >= 1.0) return '부정적';
-  return '매우 부정적';
+  return scoreGuideLabel_(v, 0, 5);
 }
 function roundScore02(v) { return Math.round(((parseFloat(v) || 0) * 5) + 1e-8) / 5; }
 function roundTotal(v) { return Math.round(((parseFloat(v) || 0) * 5) + 1e-8) / 5; }
@@ -11472,7 +11480,7 @@ function loadKcacJar(idx) {
   if (preEval) preEval.innerHTML = renderKcacQualPatternSelector_(j);
 
   var html = '<div class="sub-section"><div class="sub-section-title">평가 항목 (0~5점, 0.2단위)</div></div>';
-  html += '<p style="font-size:11px;color:var(--muted);margin-bottom:12px">0=미구현 / 1=미흡 / 2=일부결함 / 3=기준충족 / 4=우수 / 5=완벽구현</p>';
+  html += '<p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>';
 
   attrs.forEach(function(a) {
     var v = j.scores[a.key] != null ? j.scores[a.key] : 3.0;
@@ -12665,15 +12673,9 @@ function setTimeRuleGuide_(id, text) {
 // ══════════════════════════════════════════
 // KBC 바리스타
 // ══════════════════════════════════════════
-var KBC_DESCS = {0:'수용불가', 1:'수용', 2:'보통', 3:'좋음', 4:'아주좋음', 5:'훌륭함'};
+var KBC_DESCS = scoreGuideScaleLabels_(0, 5);
 function kbcGetDesc(v) {
-  v = parseFloat(v) || 0;
-  if (v >= 4.5) return '훌륭함';
-  if (v >= 3.5) return '아주좋음';
-  if (v >= 2.5) return '좋음';
-  if (v >= 1.5) return '보통';
-  if (v >= 0.5) return '수용';
-  return '수용불가';
+  return scoreGuideLabel_(v, 0, 5);
 }
 var KBC_QUAL_TIME_LIMIT_MS = 7 * 60 * 1000;
 var KBC_MAIN_FINAL_TIME_LIMIT_MS = 10 * 60 * 1000;
@@ -13341,16 +13343,11 @@ function kbcSubmit() {
 // ══════════════════════════════════════════
 // MOB 브루잉
 // ══════════════════════════════════════════
-var MOB_SCORE_LABELS = {1:'아주나쁨', 2:'나쁨', 3:'보통', 4:'좋음', 5:'아주좋음'};
-var MOB_SCORE_SUBLABELS = {2:'나쁨', 4:'보통', 6:'좋음', 8:'아주좋음'};
+var MOB_SCORE_LABELS = scoreGuideScaleLabels_(1, 5);
 var MOB_QUAL_TIME_LIMIT_MS = 10 * 60 * 1000;
 var MOB_FINAL_TIME_LIMIT_MS = 15 * 60 * 1000;
 function mobGetDesc(v) {
-  v = Math.max(1, Math.min(5, roundScore02(v)));
-  var base = Math.floor(v + 0.0001);
-  var fraction = Math.round((v - base) * 10);
-  if (!fraction || base >= 5) return MOB_SCORE_LABELS[base] || '보통';
-  return (MOB_SCORE_LABELS[base] || '보통') + ' 중 ' + (MOB_SCORE_SUBLABELS[fraction] || '보통');
+  return scoreGuideLabel_(Math.max(1, Math.min(5, roundScore02(v))), 1, 5);
 }
 
 var MOB_TECH = [
@@ -14853,15 +14850,7 @@ function ikrcSmartTagHeader_(attrKey) {
 function ikrcIntensityKey_(attr) { return attr + 'Intensity'; }
 function ikrcLockKey_(attr) { return attr + 'Locked'; }
 function ikrcGetMeaning(v) {
-  v = parseFloat(v) || 0;
-  if (v >= 9) return '매우 우수';
-  if (v >= 8) return '우수';
-  if (v >= 7) return '양호';
-  if (v >= 6) return '안정적';
-  if (v >= 5) return '기준점';
-  if (v >= 4) return '보완 필요';
-  if (v >= 2) return '미흡';
-  return '매우 미흡';
+  return scoreGuideLabel_(v, 0, 10);
 }
 function makeIkrcSampleData(no) {
   var obj = { no:normalizeCupId_(no), activeAttr:'flavor', comment:'', generatedComment:'', commentEdited:true };
