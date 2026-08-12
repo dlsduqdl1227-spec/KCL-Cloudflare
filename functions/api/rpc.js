@@ -6474,7 +6474,7 @@ function generateKbcComment(payload) {
     };
   });
   const detailSentences = items.map(item => {
-    let sentence = `${item.label}은 ${_fmt(item.score)}점(${item.rating})`;
+    let sentence = `${item.label}${_topicParticle_(item.label)} ${_fmt(item.score)}점(${item.rating})`;
     if (item.weight > 1) sentence += `, 가중 반영 ${_fmt(item.weightedScore)}점`;
     sentence += '으로 평가되었습니다.';
     if (item.tags.length) sentence += ` 선택 스마트태그는 ${item.tags.join(', ')}입니다.`;
@@ -6484,7 +6484,7 @@ function generateKbcComment(payload) {
   const sectionOrder = ['서비스','에스프레소','창작음료','운영'];
   const sectionText = sectionOrder.map(section => {
     const detail = items.filter(item => item.section === section).map(item => detailSentences[items.indexOf(item)]);
-    return detail.length ? `${section} 영역에서는 ${detail.join(' ')}` : '';
+    return detail.length ? `${section} 영역 평가: ${detail.join(' ')}` : '';
   }).filter(Boolean).join(' ');
   const overallAvg = _avg(items.map(item => item.score));
   const scoreItems = items.map(item => ({name:item.label, score:item.score}));
@@ -6492,7 +6492,7 @@ function generateKbcComment(payload) {
   const high = spread.high ? spread.high.name : '';
   const low = spread.low && spread.low !== spread.high ? spread.low.name : '';
   const comparison = high && low
-    ? `${high}이 상대적으로 가장 높고, ${low}이 상대적으로 가장 낮게 평가되었습니다.`
+    ? `항목별 비교에서는 ${high} 점수가 상대적으로 가장 높고, ${low} 점수가 상대적으로 가장 낮게 평가되었습니다.`
     : '항목 간 점수 차이는 크지 않게 기록되었습니다.';
   const subtotal = _num(payload.subtotalScore);
   const timePenalty = Math.max(0, _num(payload.timePenalty));
