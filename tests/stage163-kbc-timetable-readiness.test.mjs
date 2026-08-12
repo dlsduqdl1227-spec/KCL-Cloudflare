@@ -85,7 +85,27 @@ for (const marker of [
 const submitScores = functionSource(rpc, "submitScores");
 assert.match(submitScores, /x\.code === 'KBC'/);
 assert.match(submitScores, /이미 제출된 KBC 평가입니다/);
+assert.match(submitScores, /initial\.code === 'KBC'[\s\S]*requestedEvaluationCategory !== 'competition'/);
+assert.match(submitScores, /KBC는 별도 켈리브레이션 없이 공식 대회평가만 저장합니다/);
 assert.match(functionSource(rpc, "getReviewList"), /\['KCR','KCAC','KBC','MOB','IKRC'\]/);
 assert.match(functionSource(rpc, "aggregateRankingGroup_"), /code === 'KBC'/);
+
+const calibrationContext = {
+  _selComp: { code:"KBC" },
+  isHeadRoleForCode_: () => true,
+  isTeamLeaderForCode_: () => false,
+  isAdminRole: () => false,
+};
+vm.createContext(calibrationContext);
+vm.runInContext(functionSource(assessment, "canCalibrationCode_"), calibrationContext);
+assert.equal(calibrationContext.canCalibrationCode_("KBC"), false, "KBC calibration entry must stay hidden");
+assert.equal(calibrationContext.canCalibrationCode_("KCAC"), true, "Removing KBC calibration must not affect KCAC");
+assert.match(functionSource(assessment, "goCalibration"), /code === 'KBC'[\s\S]*공식 대회평가만 진행합니다/);
+assert.match(functionSource(assessment, "startKbc"), /setEvaluationPurpose_\('competition'\)/);
+const kbcSubmit = functionSource(assessment, "kbcSubmit");
+assert.match(kbcSubmit, /mode:\s*'judge'/);
+assert.match(kbcSubmit, /team:\s*judgeTeamForSubmit\(\)/);
+assert.match(kbcSubmit, /kbcExtraFields\['평가구분'\]\s*=\s*'대회평가'/);
+assert.doesNotMatch(kbcSubmit, /evaluationModeValue_\(|evaluationPurposeExtraFields_\(/);
 
 process.stdout.write("Stage163 KBC timetable and event-readiness tests passed.\n");

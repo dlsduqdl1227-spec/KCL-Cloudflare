@@ -3772,6 +3772,10 @@ async function submitScores(env, payload, signature, request = null) {
   const actorTeamMap = auth.actor && auth.actor.teamMap && typeof auth.actor.teamMap === 'object' ? auth.actor.teamMap : {};
   const actorRole = safeStr(actorRoleMap[initial.code] || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   const actorTeam = safeStr(actorTeamMap[initial.code] || (auth.actor && (auth.actor.teamGroup || auth.actor.team)));
+  const requestedEvaluationCategory = scoreEvaluationCategoryKey_(basePayload.mode || basePayload.evalMode || initial.mode);
+  if (initial.code === 'KBC' && requestedEvaluationCategory !== 'competition') {
+    return { success:false, message:'KBC는 별도 켈리브레이션 없이 공식 대회평가만 저장합니다. 대회평가 화면에서 다시 제출해주세요.' };
+  }
   const receiptInfo = await scoreSubmissionReceipt_(env, initial.code, basePayload.clientSubmissionId, actorIdentityKey);
   if (receiptInfo.receipt && Number(receiptInfo.receipt.inserted || 0) > 0) {
     return {

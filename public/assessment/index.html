@@ -4782,7 +4782,8 @@ function canCalibrationCode_(code) {
   // 센서리/테크니컬 헤드가 각자의 기준 입력과 결과 확인을 담당하고,
   // 운영팀장·관리자는 전용 운영 카드에서 두 헤드 영역을 관리한다.
   if (c === 'MOB') return isHeadRoleForCode_(c) || isTeamLeaderForCode_(c) || isAdminRole();
-  return ['KCR','KCAC','KBC','IKRC'].indexOf(c) > -1;
+  // KBC 예선은 헤드 심사위원 2명의 공식 평가만 운영하며 별도 켈리브레이션 진입을 사용하지 않는다.
+  return ['KCR','KCAC','IKRC'].indexOf(c) > -1;
 }
 function calibrationButtonLabel_(code) {
   var c = String(code || '').toUpperCase();
@@ -5954,6 +5955,7 @@ function refreshCurrentReviewList_() {
 function goCalibration(scope) {
   if (!_selComp) { toast('먼저 대회를 선택해주세요', true); return; }
   var code = String(_selComp.code || '').toUpperCase();
+  if (code === 'KBC') { setEvaluationPurpose_('competition'); toast('KBC는 별도 켈리브레이션 없이 공식 대회평가만 진행합니다.', true); return; }
   if (!canCalibrationCode_(code)) { toast('이 대회 켈리브레이션 권한이 없습니다.', true); return; }
   if (!assertCanEvaluate(code)) return;
   if (code === 'IKRC' && scope === 'all') { toast('IKRC 전체 켈리브레이션은 사용하지 않습니다. 스테이션 켈리브레이션만 이용해주세요.', true); return; }
@@ -13567,6 +13569,8 @@ function kbcSetAutoDqDisplay_(flag, penalty, dq) {
 }
 
 function startKbc() {
+  // KBC는 공유 평가목적 상태가 이전 화면에서 남아 있어도 항상 공식 대회평가로 시작합니다.
+  setEvaluationPurpose_('competition');
   cancelKbcCommentGeneration_();
   document.getElementById('kbc-round-badge').textContent = _selComp.currentRound;
   document.getElementById('kbc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + roleText() + ' · ' + evaluationPurposeDisplayLabel_() + evaluationTeamContextText_() + (isActiveCalibrationMode_() ? ' · 공식 점수·순위 제외' : ' · 공식 점수 반영');
@@ -13757,7 +13761,8 @@ function kbcSubmit() {
     '실격사유': kbcDqInfo.reason,
     '검수상태': '미검수'
   };
-  Object.assign(kbcExtraFields, evaluationPurposeExtraFields_());
+  kbcExtraFields['평가구분'] = '대회평가';
+  kbcExtraFields['켈리브레이션범위'] = '';
   KBC_SERVICE.concat(KBC_ESPRESSO).concat(KBC_SIGNATURE_SENSORY).concat(KBC_MACHINE).forEach(function(a) {
     var include = isMain || KBC_SIGNATURE_SENSORY.indexOf(a) < 0;
     kbcExtraFields[a.commentHeader] = include ? kbcCommentValue_(a) : '';
@@ -13779,8 +13784,8 @@ function kbcSubmit() {
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: roleTextForCode_('KBC'),
-      team: evaluationTeamForSubmit_(),
-      mode: evaluationModeValue_('judge'),
+      team: judgeTeamForSubmit(),
+      mode: 'judge',
       rows: [{ data: [
         num
       ], extraFields: kbcExtraFields }]

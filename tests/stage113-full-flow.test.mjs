@@ -762,6 +762,17 @@ const duplicateKbc = await rpc("submitScores", genericPayload(judge, "KBC", "KBC
 assert.equal(duplicateKbc.success, false);
 assert.ok(duplicateKbc.duplicateId);
 
+const disabledKbcCalibrationPayload = genericPayload(judge, "KBC", "KBC-CAL-DISABLED", 75);
+disabledKbcCalibrationPayload.mode = "KBC 전체 켈리브레이션";
+const disabledKbcCalibration = await rpc("submitScores", disabledKbcCalibrationPayload);
+assert.equal(disabledKbcCalibration.success, false, "KBC calibration submissions must be rejected");
+assert.match(disabledKbcCalibration.message, /공식 대회평가만 저장/);
+assert.equal(
+  testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KBC' AND mode LIKE '%켈리브레이션%'").get().n,
+  0,
+  "KBC calibration rows must not be newly stored",
+);
+
 const kbcCommentEvidence = [
   { id:"kbc-presentation", label:"서비스 전문성", section:"서비스", score:3.0, rating:"안정적", weight:1, weightedScore:3.0, tags:["커피 지식 전달", "자신감"], comment:"테스트입니다." },
   { id:"kbc-espresso-taste", label:"에스프레소 맛과 설계", section:"에스프레소", score:2.6, rating:"기준점", weight:2, weightedScore:5.2, tags:[], comment:"" },
