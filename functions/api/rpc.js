@@ -6521,13 +6521,13 @@ function generateKbcComment(payload) {
     if (!item.tags.length) return '';
     const tags = item.tags.join(', ');
     const id = safeStr(item.id);
-    if (/presentation/.test(id)) return `서비스 관찰의 핵심은 ${tags}로 정리되며, 안정된 설명 태도와 전달력을 뒷받침했습니다.`;
-    if (/taste/.test(id)) return `맛의 설계에서는 ${tags} 특성이 음료 구성과 균형을 판단하는 근거로 확인되었습니다.`;
-    if (/clean/.test(id)) return `클린컵에서는 ${tags} 특성이 컵의 정돈감과 마무리를 형성했습니다.`;
-    if (/mouth/.test(id)) return `마우스필에서는 ${tags} 특성이 질감의 밀도와 촉감에 반영되었습니다.`;
+    if (/presentation/.test(id)) return `서비스 관찰의 핵심은 ${tags}입니다. 이러한 요소는 안정된 설명 태도와 전달력을 뒷받침했습니다.`;
+    if (/taste/.test(id)) return `맛의 설계에서 확인된 특성은 ${tags}입니다. 이는 음료 구성과 균형을 판단하는 근거가 되었습니다.`;
+    if (/clean/.test(id)) return `클린컵에서 확인된 특성은 ${tags}입니다. 이는 컵의 정돈감과 마무리에 반영되었습니다.`;
+    if (/mouth/.test(id)) return `마우스필에서 확인된 특성은 ${tags}입니다. 이는 질감의 밀도와 촉감에 반영되었습니다.`;
     if (/flavor/.test(id)) return `향미 관찰은 ${tags} 중심으로 정리되어 플레이버의 구체적인 인상을 뒷받침합니다.`;
-    if (/machine/.test(id)) return `장비 운용에서는 ${tags} 특성이 동선과 작업대 관리의 완성도에 반영되었습니다.`;
-    return `${tags} 특성이 해당 항목의 구체적인 관찰 내용으로 반영되었습니다.`;
+    if (/machine/.test(id)) return `장비 운용에서 확인된 특성은 ${tags}입니다. 이는 동선과 작업대 관리의 완성도에 반영되었습니다.`;
+    return `해당 항목에서 확인된 특성은 ${tags}입니다. 이는 구체적인 관찰 내용으로 반영되었습니다.`;
   }
   function directFeedback(item) {
     if (!item.comment) return '';
