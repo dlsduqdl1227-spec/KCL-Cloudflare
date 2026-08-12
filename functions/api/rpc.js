@@ -6441,19 +6441,68 @@ function generateKbcComment(payload) {
   const sigVals = Array.isArray(payload.sigVals) ? payload.sigVals.map(_num) : [];
   const machine = _num(payload.machineVal);
   const isMain = !!payload.isMain;
-  const espressoAvg = _avg(espressoVals);
-  const sigAvg = _avg(sigVals);
-  const comments = _briefComments(payload.attributeComments, 2);
-  const overallAvg = _avg([presentation].concat(espressoVals, sigVals, [machine]));
-  const tagSummary = _tagSummary_(payload.tags, '선택된 수행 특성');
-  const serviceText = presentation >= 5 ? '서비스의 전문성과 운영 흐름이 안정적으로 구축되었습니다' : presentation >= 3.5 ? '서비스 흐름은 기준 범위 안에서 진행되었고 설명과 동선의 밀도 차이가 함께 확인되었습니다' : '서비스의 전문성과 운영 안정성에서 낮은 평가가 확인되었습니다';
-  const espressoText = espressoAvg >= 5 ? '에스프레소는 맛의 설계, 클린컵, 질감, 플레이버가 자연스럽게 연결되었습니다' : espressoAvg >= 4 ? '에스프레소는 전반적으로 안정적인 구조를 보였으며 향미와 균형이 주요 평가 요소로 작용했습니다' : '에스프레소는 추출 안정성, 향미 표현, 질감의 일관성에서 낮은 평가가 반영되었습니다';
-  const sigText = !isMain ? '' : (sigAvg >= 5 ? '창작음료는 에스프레소와 부재료의 연결성이 분명하고 메뉴 설계 의도가 잘 드러났습니다' : sigAvg >= 4 ? '창작음료는 구성의 안정성이 확인되며 핵심 향미 포인트의 표현 정도가 평가에 반영되었습니다' : '창작음료는 의도 전달, 향미 균형, 질감 연결성에서 낮은 평가가 확인되었습니다');
-  const machineText = machine >= 5 ? '장비 운용과 작업대 관리는 전체 수행의 완성도를 뒷받침했습니다' : machine >= 3.5 ? '장비 운용은 기준 범위 안에서 진행되었고 세부 동작과 작업대 정리 상태가 평가에 반영되었습니다' : '장비 운용과 작업대 관리에서는 낮은 평가가 확인되었습니다';
-  return _optionSet([
-    `${serviceText}. ${espressoText}. ${isMain ? sigText + '. ' : ''}${machineText}. 전체 평가는 음료 완성도와 서비스 전달 흐름을 함께 반영합니다.`,
-    `이번 수행은 서비스 전달, 에스프레소 완성도${isMain ? ', 창작음료 설계' : ''}, 장비 운용의 연결성을 중심으로 평가되었습니다. 스마트태그 기준으로는 ${tagSummary}이 확인됩니다${comments.length ? ', 세부 코멘트에서는 ' + comments.join(' / ') + '가 함께 기록되었습니다.' : '.'}`,
-    `항목 평균 ${_fmt(overallAvg)}점의 흐름을 기준으로 추출 결과, 향미 설명, 서비스 동선의 연결성을 평가했습니다. ${isMain ? '창작음료는 콘셉트와 실제 향미의 일치도가 종합 인상에 반영되었습니다.' : '에스프레소의 향미 표현과 서비스 흐름이 종합 인상에 반영되었습니다.'}`
+  const legacy = [
+    {id:'kbc-presentation', label:'서비스 전문성', section:'서비스', score:presentation, weight:1},
+    {id:'kbc-espresso-taste', label:'에스프레소 맛과 설계', section:'에스프레소', score:espressoVals[0], weight:2},
+    {id:'kbc-espresso-clean', label:'에스프레소 클린컵', section:'에스프레소', score:espressoVals[1], weight:1},
+    {id:'kbc-espresso-mouth', label:'에스프레소 마우스필', section:'에스프레소', score:espressoVals[2], weight:1},
+    {id:'kbc-espresso-flavor', label:'에스프레소 플레이버', section:'에스프레소', score:espressoVals[3], weight:1},
+    {id:'kbc-signature-taste', label:'창작음료 맛과 설계', section:'창작음료', score:sigVals[0], weight:2},
+    {id:'kbc-signature-clean', label:'창작음료 클린컵', section:'창작음료', score:sigVals[1], weight:1},
+    {id:'kbc-signature-mouth', label:'창작음료 마우스필', section:'창작음료', score:sigVals[2], weight:1},
+    {id:'kbc-signature-flavor', label:'창작음료 플레이버', section:'창작음료', score:sigVals[3], weight:1},
+    {id:'kbc-machine', label:'머신 및 기물 운용 전문성', section:'운영', score:machine, weight:1}
+  ].filter(item => isMain || item.section !== '창작음료');
+  const sourceItems = Array.isArray(payload.evaluatedItems) && payload.evaluatedItems.length ? payload.evaluatedItems : legacy;
+  const items = sourceItems.map((item, index) => {
+    item = item || {};
+    const fallback = legacy[index] || {};
+    const score = _num(item.score !== undefined ? item.score : fallback.score);
+    const weight = Math.max(1, _num(item.weight || fallback.weight || 1));
+    const rawTags = Array.isArray(item.tags) ? item.tags : (item.tags ? String(item.tags).split(/[,;\n]/) : []);
+    const tags = Array.from(new Set(rawTags.map(_cleanTagText_).filter(Boolean)));
+    return {
+      id:safeStr(item.id || fallback.id),
+      label:safeStr(item.label || fallback.label || `평가 항목 ${index + 1}`),
+      section:safeStr(item.section || fallback.section || '평가'),
+      score,
+      rating:safeStr(item.rating || _toneByScore_(score, 5)),
+      weight,
+      weightedScore:_num(item.weightedScore !== undefined ? item.weightedScore : score * weight),
+      tags,
+      comment:safeStr(item.comment).replace(/\s+/g, ' ').trim()
+    };
+  });
+  const detailSentences = items.map(item => {
+    let sentence = `${item.label}은 ${_fmt(item.score)}점(${item.rating})`;
+    if (item.weight > 1) sentence += `, 가중 반영 ${_fmt(item.weightedScore)}점`;
+    sentence += '으로 평가되었습니다.';
+    if (item.tags.length) sentence += ` 선택 스마트태그는 ${item.tags.join(', ')}입니다.`;
+    if (item.comment) sentence += ` 심사위원 직접 기록은 “${item.comment}”입니다.`;
+    return sentence;
+  });
+  const sectionOrder = ['서비스','에스프레소','창작음료','운영'];
+  const sectionText = sectionOrder.map(section => {
+    const detail = items.filter(item => item.section === section).map(item => detailSentences[items.indexOf(item)]);
+    return detail.length ? `${section} 영역에서는 ${detail.join(' ')}` : '';
+  }).filter(Boolean).join(' ');
+  const overallAvg = _avg(items.map(item => item.score));
+  const scoreItems = items.map(item => ({name:item.label, score:item.score}));
+  const spread = _lowHighScore(scoreItems);
+  const high = spread.high ? spread.high.name : '';
+  const low = spread.low && spread.low !== spread.high ? spread.low.name : '';
+  const comparison = high && low
+    ? `${high}이 상대적으로 가장 높고, ${low}이 상대적으로 가장 낮게 평가되었습니다.`
+    : '항목 간 점수 차이는 크지 않게 기록되었습니다.';
+  const subtotal = _num(payload.subtotalScore);
+  const timePenalty = Math.max(0, _num(payload.timePenalty));
+  const total = payload.totalScore !== undefined && payload.totalScore !== null ? _num(payload.totalScore) : Math.max(0, subtotal - timePenalty);
+  const totalText = `항목 합계 ${_fmt(subtotal)}점${timePenalty ? `에서 시간감점 ${_fmt(timePenalty)}점을 적용해 ` : '이며, '}최종 ${_fmt(total)}점으로 기록되었습니다.`;
+  const conclusion = `전 항목 평균은 ${_fmt(overallAvg)}점이며, ${comparison} 종합적으로 서비스 전달, 음료 완성도${isMain ? ', 창작음료 설계' : ''}, 장비 운용의 연결성을 함께 반영한 결과입니다.`;
+  return _sensoryOptionSet_([
+    `${sectionText} ${totalText} ${conclusion}`,
+    `KBC 수행의 모든 평가 근거를 항목별로 정리했습니다. ${sectionText} ${comparison} ${totalText} 전체 수행은 ${_toneByScore_(overallAvg, 5)} 수준으로 평가됩니다.`,
+    `점수, 점수 수준, 선택 스마트태그와 직접 기록을 함께 반영하면 다음과 같습니다. ${sectionText} ${totalText} ${conclusion}`
   ], _commentVariationKey_(payload, 'KBC'));
 }
 

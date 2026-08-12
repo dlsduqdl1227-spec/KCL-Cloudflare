@@ -661,6 +661,7 @@ input[type=range].kcl-range,
 .ikrc-cal-judge-name{font-size:10px;color:var(--muted);font-weight:600;margin-top:2px;max-width:86px;overflow:hidden;text-overflow:ellipsis}
 .ikrc-comment-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .ikrc-comment-actions .btn-gen-comment,.ikrc-comment-actions .btn-outline{margin:0}
+.ikrc-comment-actions [aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 @media(max-width:420px){.ikrc-comment-actions{grid-template-columns:1fr}}
 .review-score-input{margin-top:10px!important;text-align:center;font-weight:700}
 .review-readonly-block{background:rgba(255,255,255,.035);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px}
@@ -2314,10 +2315,16 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="big-final-num" id="kbc-final-big">0.0</div>
     </div>
     <div class="section-label">종합 코멘트</div>
-    <button class="btn-gen-comment" onclick="generateKbcComment()">종합 코멘트 자동 생성</button>
+    <div id="kbc-comment-reference"></div>
+    <div class="section-label" style="margin-top:16px">AI 자동 코멘트 사용 여부</div>
+    <div class="ikrc-comment-actions">
+      <button id="kbc-auto-comment-generate" class="btn-gen-comment" type="button" onclick="generateKbcComment()">AI 자동 코멘트 생성</button>
+      <button id="kbc-auto-comment-disable" class="btn-outline" type="button" onclick="clearKbcGeneratedComment()">AI 코멘트 사용 안 함</button>
+    </div>
+    <div id="kbc-comment-mode-note" class="review-edit-help" style="margin-bottom:10px">자동 생성을 사용하지 않고 아래 종합 의견을 직접 작성할 수 있습니다.</div>
     <div class="gen-comment-area" id="kbc-comment-gen"></div>
     <div id="kbc-comment-warning" class="comment-edit-warning" style="display:none"></div>
-    <textarea id="kbc-comment" placeholder="종합 의견을 입력하세요" oninput="onKbcCommentInput()"></textarea>
+    <textarea id="kbc-comment" placeholder="위 평가 내용을 참고해 종합 의견을 입력하세요" oninput="onKbcCommentInput()"></textarea>
     <button class="btn" onclick="kbcSubmit()">제출</button>
     <div class="divider"></div>
     <button class="btn-danger" onclick="backToSelect()">대회 선택으로</button>
@@ -3312,7 +3319,7 @@ var _rankingDetail = null;
 var _rankingCacheByCode = {};
 var _reviewState = { code:null, name:null, headers:[], list:[], current:null, backPanel:'pSelect', stationScope:null, stationScopes:[], readOnlyHeadMonitor:false };
 var _reviewCalibrationOnly = false;
-var _kbcGeneratedComment = '', _kbcCommentEdited = true;
+var _kbcGeneratedComment = '', _kbcCommentEdited = true, _kbcAutoCommentEnabled = false;
 var _mobGeneratedComment = '', _mobCommentEdited = true;
 
 var KCR_PROCESS_OPTIONS = [
@@ -8625,6 +8632,20 @@ function reviewBuildKbcCommentPayload_() {
   if (isMain) subtotalScore += (sigVals[0] || 0) * 2 + (sigVals[1] || 0) + (sigVals[2] || 0) + (sigVals[3] || 0);
   subtotalScore = roundTotal(subtotalScore);
   var totalScore = reviewNumberByPatterns_([/^총점$|Total/i], subtotalScore);
+  var evaluatedItems = visible.map(function(a){
+    var score = reviewScoreAttrValue_(a);
+    return {
+      id:a.id,
+      label:kbcSummaryLabel_(a),
+      section:kbcSummarySection_(a),
+      score:score,
+      rating:kbcGetDesc(score),
+      weight:a.weight || 1,
+      weightedScore:roundTotal(score * (a.weight || 1)),
+      tags:attrTags(a).map(smartTagLeaf_).filter(function(tag){ return !!tag; }),
+      comment:reviewCommentAttrText_(a)
+    };
+  });
   return {
     presentationVal: presentationVal,
     espressoVals: espressoVals,
@@ -8635,7 +8656,8 @@ function reviewBuildKbcCommentPayload_() {
     timePenalty: reviewNumberByPatterns_([/시간\s*감점|시간감점|Time\s*Penalty/i], Math.max(0, subtotalScore - totalScore)),
     isMain: isMain,
     attributeComments: attrComments,
-    tags: tags
+    tags: tags,
+    evaluatedItems: evaluatedItems
   };
 }
 function reviewKcacTypeScoreDefs_(type) {
@@ -13104,7 +13126,9 @@ function kbcScoreValue_(id) {
 }
 function kbcRenderScoreRows_(items) {
   return items.map(function(a) {
-    return makeScoreRow(a.id, a.name, '', 0, 5, 0.2, '3.0', kbcGetDesc, 'calcKbcTotal()', kbcCommentId_(a.id), a.name.replace(' ×2', '') + ' 코멘트', renderKbcInlineTagSection_(a));
+    var commentId = kbcCommentId_(a.id);
+    var row = makeScoreRow(a.id, a.name, '', 0, 5, 0.2, '3.0', kbcGetDesc, 'calcKbcTotal()', commentId, a.name.replace(' ×2', '') + ' 코멘트', renderKbcInlineTagSection_(a));
+    return row.replace('id="' + commentId + '"', 'id="' + commentId + '" oninput="refreshKbcCommentReference_()"');
   }).join('');
 }
 function kbcUpdateScoreDisplay_(items) {
@@ -13157,9 +13181,6 @@ function kbcInlineTagSelectionId_(group, category) {
 }
 function kbcInlineTagButtonsId_(group, category) {
   return 'kbc-inline-btns-' + group + '-' + kbcCategoryId_(category);
-}
-function kbcInlineCustomTagId_(group, category) {
-  return 'kbc-inline-custom-tag-' + group + '-' + kbcCategoryId_(category);
 }
 function kbcOpenSmartTagKey_(group, category) {
   return String(group || '') + '::' + String(category || '');
@@ -13242,7 +13263,6 @@ function renderKbcInlineTagSection_(attr) {
   if (smartTagHasSelectableFamilies_(KBC_SMART_TAGS[group][category])) html += '<div class="smart-tags-hint">계열 버튼만 선택해도 저장되며, 세부 특성을 고르면 같은 계열 선택을 대체합니다.</div>';
   html += '<div class="selected-tags mob-inline-selected-tags" id="' + kbcInlineTagSelectionId_(group, category) + '">' + kbcSelectedTagsHtml_(group, category) + '</div>';
   html += '<div class="mob-inline-tag-buttons" id="' + kbcInlineTagButtonsId_(group, category) + '">' + kbcTagButtonsHtml_(group, category) + '</div>';
-  html += '<div class="custom-tag-row"><input type="text" id="' + kbcInlineCustomTagId_(group, category) + '" placeholder="' + escHtml(category) + ' 직접 입력" onkeydown="if(event.key===\'Enter\'){addKbcInlineCustomTag(\'' + group + '\',\'' + escapeJsString_(category) + '\');event.preventDefault()}"><button onclick="addKbcInlineCustomTag(\'' + group + '\',\'' + escapeJsString_(category) + '\')">추가</button></div>';
   html += '</div>';
   return html;
 }
@@ -13275,6 +13295,7 @@ function kbcToggleTagValue_(group, category, tag) {
   if (next.length > MAX_TAGS) { toast(category + ' 항목은 최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return false; }
   var data = (KBC_SMART_TAGS[group] && KBC_SMART_TAGS[group][category]) || [];
   _kbcTags[group][category] = smartTagNormalizeSelection_(next, data, 'path');
+  refreshKbcCommentReference_();
   return true;
 }
 function kbcOpenInlinePrimary_(group, category, primaryIndex, button) {
@@ -13313,17 +13334,6 @@ function toggleKbcInlineTag(group, category, tag) {
   if (!kbcToggleTagValue_(group, category, tag)) return;
   kbcRefreshInlineTagCategory_(group, category);
 }
-function addKbcInlineCustomTag(group, category) {
-  var input = document.getElementById(kbcInlineCustomTagId_(group, category));
-  if (!input) return;
-  var tag = input.value.trim().replace(/[<>"]/g, '');
-  if (!tag) return;
-  if (kbcCategoryTags_(group, category).indexOf(tag) < 0 && KBC_SMART_TAGS[group] && Array.isArray(KBC_SMART_TAGS[group][category])) {
-    KBC_SMART_TAGS[group][category].push(tag);
-  }
-  input.value = '';
-  toggleKbcInlineTag(group, category, tag);
-}
 function kbcCollectTagPayload_() {
   var out = { service:{}, espresso:{}, signature:{}, operation:{} };
   kbcVisibleItems_().forEach(function(a) {
@@ -13334,6 +13344,93 @@ function kbcCollectTagPayload_() {
 function kbcSmartTagValue_(attr) {
   if (!attr || !attr.tagGroup || !attr.tagCategory || !kbcHasSmartTagData_(attr.tagGroup, attr.tagCategory)) return '';
   return kbcCategoryTags_(attr.tagGroup, attr.tagCategory).join(', ');
+}
+function kbcSummaryLabel_(attr) {
+  var labels = {
+    'kbc-presentation':'서비스 전문성',
+    'kbc-espresso-taste':'에스프레소 맛과 설계',
+    'kbc-espresso-clean':'에스프레소 클린컵',
+    'kbc-espresso-mouth':'에스프레소 마우스필',
+    'kbc-espresso-flavor':'에스프레소 플레이버',
+    'kbc-signature-taste':'창작음료 맛과 설계',
+    'kbc-signature-clean':'창작음료 클린컵',
+    'kbc-signature-mouth':'창작음료 마우스필',
+    'kbc-signature-flavor':'창작음료 플레이버',
+    'kbc-machine':'머신 및 기물 운용 전문성'
+  };
+  return labels[(attr && attr.id) || ''] || String((attr && attr.name) || '').replace(' ×2', '');
+}
+function kbcSummarySection_(attr) {
+  var group = String((attr && attr.tagGroup) || '');
+  if (group === 'espresso') return '에스프레소';
+  if (group === 'signature') return '창작음료';
+  if (group === 'service') return '서비스';
+  return '운영';
+}
+function kbcCommentEvidenceItems_() {
+  return kbcVisibleItems_().map(function(attr) {
+    var score = kbcScoreValue_(attr.id);
+    return {
+      id:attr.id,
+      label:kbcSummaryLabel_(attr),
+      section:kbcSummarySection_(attr),
+      score:score,
+      rating:kbcGetDesc(score),
+      weight:attr.weight || 1,
+      weightedScore:roundTotal(score * (attr.weight || 1)),
+      tags:kbcCategoryTags_(attr.tagGroup, attr.tagCategory).map(smartTagLeaf_).filter(function(tag){ return !!tag; }),
+      comment:kbcCommentValue_(attr)
+    };
+  });
+}
+function buildKbcCommentReferenceHtml_() {
+  var items = kbcCommentEvidenceItems_();
+  var subtotal = roundTotal(kbcWeightedSum_(KBC_SERVICE) + kbcWeightedSum_(KBC_ESPRESSO) + (kbcIsMainRound_() ? kbcWeightedSum_(KBC_SIGNATURE_SENSORY) : 0) + kbcWeightedSum_(KBC_MACHINE));
+  var penalty = kbcTimePenalty_();
+  var total = Math.max(0, roundTotal(subtotal - penalty));
+  var cards = items.map(function(item) {
+    var scoreText = fmtScore(item.score, 1) + '점 · ' + (item.rating || '-');
+    if (item.weight > 1) scoreText += ' · ×' + item.weight + ' 반영 ' + fmtScore(item.weightedScore, 1) + '점';
+    var tagText = item.tags.length ? ('선택 스마트태그: ' + item.tags.join(', ')) : '선택 스마트태그 없음';
+    var commentText = item.comment ? ('직접 코멘트: ' + item.comment) : '직접 코멘트 없음';
+    return '<div class="mob-comment-reference-card" data-kbc-comment-item="' + escHtml(item.id) + '">' +
+      '<div class="mob-comment-reference-title">' + escHtml(item.section + ' · ' + item.label) + '</div>' +
+      '<div class="mob-comment-reference-text">' + escHtml(scoreText) + '</div>' +
+      '<div class="mob-comment-reference-text">' + escHtml(tagText) + '</div>' +
+      '<div class="mob-comment-reference-text">' + escHtml(commentText) + '</div></div>';
+  }).join('');
+  var summary = '현재 평가한 모든 항목을 종합 코멘트 생성 전에 확인할 수 있습니다. 자동 생성을 사용하지 않아도 선택값은 유지됩니다. · 항목 합계 ' + fmtScore(subtotal, 1) + '점';
+  if (penalty) summary += ' · 시간감점 -' + fmtScore(penalty, 1) + '점';
+  summary += ' · 반영 총점 ' + fmtScore(total, 1) + '점';
+  return '<div class="review-edit-help" style="margin-bottom:10px">' + escHtml(summary) + '</div>' +
+    '<div class="kcr-comment-reference" data-kbc-comment-reference="true">' + cards + '</div>';
+}
+function refreshKbcCommentReference_() {
+  var wrap = document.getElementById('kbc-comment-reference');
+  if (wrap) wrap.innerHTML = buildKbcCommentReferenceHtml_();
+}
+function setKbcAutoCommentModeUi_() {
+  var generate = document.getElementById('kbc-auto-comment-generate');
+  var disable = document.getElementById('kbc-auto-comment-disable');
+  var note = document.getElementById('kbc-comment-mode-note');
+  if (generate) generate.setAttribute('aria-pressed', _kbcAutoCommentEnabled ? 'true' : 'false');
+  if (disable) disable.setAttribute('aria-pressed', _kbcAutoCommentEnabled ? 'false' : 'true');
+  if (note) note.textContent = _kbcAutoCommentEnabled
+    ? 'AI 초안을 선택하면 심사위원의 판단으로 직접 수정해야 제출할 수 있습니다.'
+    : '자동 생성을 사용하지 않고 위 평가 내용을 참고해 종합 의견을 직접 작성할 수 있습니다.';
+}
+function clearKbcGeneratedComment() {
+  var textarea = document.getElementById('kbc-comment');
+  var current = textarea ? textarea.value.trim() : '';
+  if (_kbcGeneratedComment && current === _kbcGeneratedComment.trim() && textarea) textarea.value = '';
+  _kbcGeneratedComment = '';
+  _kbcCommentEdited = true;
+  _kbcAutoCommentEnabled = false;
+  setCommentWarning('kbc-comment-warning', '', true);
+  var area = document.getElementById('kbc-comment-gen');
+  if (area) { area.innerHTML = ''; area.classList.remove('active'); }
+  setKbcAutoCommentModeUi_();
+  toast('KBC AI 자동 코멘트 사용을 해제했습니다. 종합 의견을 직접 작성할 수 있습니다.');
 }
 function kbcSetAutoDqDisplay_(flag, penalty, dq) {
   var auto = document.getElementById('kbc-auto-disq-display');
@@ -13367,10 +13464,11 @@ function startKbc() {
   resetEvaluationDisqualification_('KBC');
   updateKbcTimeStatus_();
   document.getElementById('kbc-comment').value = '';
-  _kbcGeneratedComment = ''; _kbcCommentEdited = true; setCommentWarning('kbc-comment-warning', '', true);
+  _kbcGeneratedComment = ''; _kbcCommentEdited = true; _kbcAutoCommentEnabled = false; setCommentWarning('kbc-comment-warning', '', true);
   var ga = document.getElementById('kbc-comment-gen');
   if (ga) { ga.innerHTML = ''; ga.classList.remove('active'); }
   calcKbcTotal();
+  setKbcAutoCommentModeUi_();
   showEval('evalKbc');
   renderEvaluationDisqualification_('KBC', 'evalKbc', 'button[onclick="kbcSubmit()"]');
 }
@@ -13399,11 +13497,14 @@ function calcKbcTotal() {
   var finalBig = document.getElementById('kbc-final-big');
   finalBig.textContent = fmtScore(total,1);
   finalBig.style.fontSize = '';
+  refreshKbcCommentReference_();
 }
 
 // KBC 자동 코멘트
 function generateKbcComment() {
   var area = document.getElementById('kbc-comment-gen');
+  _kbcAutoCommentEnabled = true;
+  setKbcAutoCommentModeUi_();
   area.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:10px">생성 중...</p>';
   area.classList.add('active');
 
@@ -13439,7 +13540,8 @@ function generateKbcComment() {
       timePenalty: timePenalty,
       isMain: isMain,
       attributeComments: kbcCollectAttributeCommentText_(),
-      tags: kbcCollectTagPayload_()
+      tags: kbcCollectTagPayload_(),
+      evaluatedItems: kbcCommentEvidenceItems_()
     });
 }
 
@@ -13447,6 +13549,8 @@ function useKbcComment(text) {
   document.getElementById('kbc-comment').value = text;
   _kbcGeneratedComment = String(text || '');
   _kbcCommentEdited = false;
+  _kbcAutoCommentEnabled = true;
+  setKbcAutoCommentModeUi_();
   onKbcCommentInput();
   toast('자동 생성 코멘트가 적용되었습니다. 반드시 직접 수정해주세요.');
 }
@@ -13506,6 +13610,7 @@ function kbcSubmit() {
     '시간감점': timePenalty || '',
     '총점': total,
     '종합코멘트': comment,
+    '종합코멘트 사용여부': _kbcAutoCommentEnabled ? 'AI 자동 생성 사용' : '직접 작성',
     '실격여부': kbcDqInfo.disqualified ? 'Y' : 'N',
     '실격사유': kbcDqInfo.reason,
     '검수상태': '미검수'

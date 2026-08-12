@@ -762,6 +762,39 @@ const duplicateKbc = await rpc("submitScores", genericPayload(judge, "KBC", "KBC
 assert.equal(duplicateKbc.success, false);
 assert.ok(duplicateKbc.duplicateId);
 
+const kbcCommentEvidence = [
+  { id:"kbc-presentation", label:"서비스 전문성", section:"서비스", score:3.2, rating:"안정적", weight:1, weightedScore:3.2, tags:["설명 명확"], comment:"설명 흐름이 안정적임" },
+  { id:"kbc-espresso-taste", label:"에스프레소 맛과 설계", section:"에스프레소", score:3.4, rating:"안정적", weight:2, weightedScore:6.8, tags:["균형"], comment:"단맛과 산미가 연결됨" },
+  { id:"kbc-espresso-clean", label:"에스프레소 클린컵", section:"에스프레소", score:3.0, rating:"기준점", weight:1, weightedScore:3.0, tags:["클린"], comment:"후미가 정돈됨" },
+  { id:"kbc-espresso-mouth", label:"에스프레소 마우스필", section:"에스프레소", score:2.8, rating:"기준점", weight:1, weightedScore:2.8, tags:["실키"], comment:"질감 밀도는 보완 필요" },
+  { id:"kbc-espresso-flavor", label:"에스프레소 플레이버", section:"에스프레소", score:3.6, rating:"양호", weight:1, weightedScore:3.6, tags:["베리"], comment:"베리 향미가 선명함" },
+  { id:"kbc-machine", label:"머신 및 기물 운용 전문성", section:"운영", score:3.2, rating:"안정적", weight:1, weightedScore:3.2, tags:["작업대 청결"], comment:"도구 정리가 안정적임" },
+];
+const generatedKbc = await rpc("generateKbcComment", {
+  judgeName:"QA 심사위원",
+  variationSeed:"KBC-all-evidence",
+  presentationVal:3.2,
+  espressoVals:[3.4, 3.0, 2.8, 3.6],
+  sigVals:[],
+  machineVal:3.2,
+  subtotalScore:22.6,
+  totalScore:21.6,
+  timePenalty:1,
+  isMain:false,
+  evaluatedItems:kbcCommentEvidence,
+});
+assert.equal(generatedKbc.success, true);
+assert.equal(generatedKbc.comments.length, 2);
+generatedKbc.comments.forEach((comment) => {
+  kbcCommentEvidence.forEach((item) => {
+    assert.ok(comment.includes(item.label), `KBC generated comment omitted ${item.label}`);
+    assert.ok(comment.includes(item.tags[0]), `KBC generated comment omitted ${item.tags[0]}`);
+    assert.ok(comment.includes(item.comment), `KBC generated comment omitted direct note for ${item.label}`);
+  });
+  assert.match(comment, /시간감점 1(?:\.0)?점/);
+  assert.match(comment, /최종 21\.6점/);
+});
+
 const reviewExpectedMinimums = {
   KBC: 1,
   KCAC: 2,
