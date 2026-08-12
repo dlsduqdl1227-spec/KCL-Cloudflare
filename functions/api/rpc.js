@@ -19,6 +19,7 @@ const COMPETITION_ROUNDS = {
 };
 const LOGIN_SECURITY_SETTING_KEY = 'assessment_login_security_code';
 const LOGIN_SECURITY_HMAC_ALGORITHM = 'HMAC-SHA256';
+const REGISTRY_REVISION_SETTING_KEY = 'registry_live_revision';
 
 let __schemaReadyPromise = null;
 let __defaultDataReadyPromise = null;
@@ -27,7 +28,9 @@ const RUNTIME_SCHEMA_OBJECTS = [
   'competitions', 'operators', 'sessions', 'participants', 'scores', 'otps', 'sms_logs', 'rate_limits', 'security_events', 'system_settings',
   'idx_scores_comp', 'idx_scores_comp_id', 'idx_scores_submitter_unit', 'idx_participants_comp', 'idx_operators_phone',
   'idx_participants_lookup', 'idx_participants_unit', 'idx_scores_unit', 'idx_otps_lookup', 'idx_sessions_kind',
-  'idx_sms_logs_comp', 'idx_security_events_action', 'idx_scores_client_submission_unit', 'idx_operators_effective_date'
+  'idx_sms_logs_comp', 'idx_security_events_action', 'idx_scores_client_submission_unit', 'idx_operators_effective_date',
+  'trg_participants_registry_revision_insert', 'trg_participants_registry_revision_update', 'trg_participants_registry_revision_delete',
+  'trg_operators_registry_revision_insert', 'trg_operators_registry_revision_update', 'trg_operators_registry_revision_delete'
 ];
 function memoOnce_(keyName, factory) {
   if (keyName === 'schema') {
@@ -496,7 +499,18 @@ async function ensureSchema(db) {
     `CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events(action, created_at)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_client_submission_unit
       ON scores(competition_code, judge_name, json_extract(payload_json, '$.clientSubmissionId'), unit)
-      WHERE COALESCE(json_extract(payload_json, '$.clientSubmissionId'), '') <> ''`
+      WHERE COALESCE(json_extract(payload_json, '$.clientSubmissionId'), '') <> ''`,
+    ...['INSERT','UPDATE','DELETE'].flatMap(operation => ['participants','operators'].map(table => `
+      CREATE TRIGGER IF NOT EXISTS trg_${table}_registry_revision_${operation.toLowerCase()}
+      AFTER ${operation} ON ${table}
+      BEGIN
+        INSERT INTO system_settings (setting_key, setting_value, updated_at, updated_by)
+        VALUES ('${REGISTRY_REVISION_SETTING_KEY}', '1', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'database')
+        ON CONFLICT(setting_key) DO UPDATE SET
+          setting_value=CAST(COALESCE(setting_value,'0') AS INTEGER)+1,
+          updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+          updated_by='database';
+      END`))
   ];
   for (const sql of statements) await db.prepare(sql).run();
   const operatorColumns = await db.prepare('PRAGMA table_info(operators)').all();
@@ -604,6 +618,7 @@ async function dispatch(action, args, env, request) {
     verifyOTP: () => verifyOTP(env, args[0], args[1], args[2], args[3], request),
     sendTestSMS: () => sendTestSMS(env, args[0], args[1], request),
     refreshAdminActor: () => refreshAdminActor(env, args[0]),
+    getRegistryLiveState: () => getRegistryLiveState(env, args[0], args[1], args[2]),
     getSystemStatus: () => getSystemStatus(env, args[0]),
     generateCuppingComment: () => generateCuppingComment(args[0]),
     generateKbcComment: () => generateKbcComment(args[0]),
@@ -921,7 +936,7 @@ async function hydrateActorFromOperators_(env, actor) {
     const highest = bestOperatorRow_(list);
     const primary = admin || highest || {};
     const primaryType = admin ? 'ADMIN' : normalizeAccountType_(highest && highest.account_type, highest && highest.role);
-    const primaryRole = admin ? '관리자' : safeStr((highest && highest.role) || primary.role || actor.role || '');
+    const primaryRole = admin ? '관리자' : safeStr((highest && highest.role) || primary.role || '');
 
     const accessSet = new Set();
     const teamMap = {}, roleMap = {}, accountTypeMap = {};
@@ -951,17 +966,19 @@ async function hydrateActorFromOperators_(env, actor) {
       ...actor,
       name: primary.name || name,
       judgeName: primary.name || name,
-      affiliation: primary.affiliation || actor.affiliation || '',
+      affiliation: primary.affiliation || '',
       phone,
       type: primaryType,
       accountType: primaryType,
       role: primaryRole,
       access,
       accessCodes: access === 'ALL' ? ['ALL'] : access.split(',').filter(Boolean),
-      teamGroup: primary.team_group || actor.teamGroup || '',
-      teamMap: { ...(actor.teamMap || {}), ...teamMap },
-      roleMap: { ...(actor.roleMap || {}), ...roleMap },
-      accountTypeMap: { ...(actor.accountTypeMap || {}), ...accountTypeMap },
+      teamGroup: primary.team_group || '',
+      // 관리자 등록값이 최종 기준입니다. 세션에 남아 있던 삭제 전 역할·팀을 합치면
+      // 권한을 수정하거나 제거해도 오래된 메뉴가 계속 보일 수 있으므로 최신 DB 맵으로 교체합니다.
+      teamMap,
+      roleMap,
+      accountTypeMap,
       permissionDate: koreaDateKey_(),
       operatorRows: list.map(r => ({
         rowIndex: r.id,
@@ -5869,6 +5886,27 @@ async function refreshAdminActor(env, actorArg) {
     actor.judgeToken = await issueSession(env, 'judge', actor, 21600);
   }
   return { success: true, actor };
+}
+
+async function getRegistryLiveState(env, competitionCode, actorArg, knownRevision) {
+  const actor = await getActor(env, actorArg);
+  if (!actor) return { success:false, message:'관리자가 등록한 최신 로그인 정보가 확인되지 않습니다. 다시 로그인해주세요.' };
+  const revisionRow = await env.DB.prepare('SELECT setting_value, updated_at FROM system_settings WHERE setting_key=?')
+    .bind(REGISTRY_REVISION_SETTING_KEY).first();
+  const revision = safeStr(revisionRow && revisionRow.setting_value || '0');
+  const code = safeStr(competitionCode).toUpperCase();
+  const response = {
+    success:true,
+    actor,
+    revision,
+    updatedAt:safeStr(revisionRow && revisionRow.updated_at),
+    participantChanged:false
+  };
+  if (!code || !COMPETITION_CODES.includes(code) || !hasAccess(actor, code)) return response;
+  if (safeStr(knownRevision) === revision) return response;
+  const assignments = await getParticipantAssignments(env, code, actor);
+  if (!assignments || !assignments.success) return Object.assign(response, assignments || {});
+  return Object.assign(response, assignments, { actor, revision, participantChanged:true });
 }
 
 async function getSystemStatus(env, actorArg) {

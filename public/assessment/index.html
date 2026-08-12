@@ -3302,6 +3302,9 @@ var _ikrcSamples = [], _ikrcIdx = 0, _ikrcStation = null;
 var _ikrcClientSubmissionId = '', _ikrcSubmitting = false;
 var _ikrcBlindState = { data:null, backPanel:'pTeam' };
 var _participantAssignments = {};
+var _registryLiveRevisionByCode = {};
+var _registryLiveSyncTimer = null;
+var _registryLiveSyncInFlight = false;
 
 // 순위 / 인쇄용
 var _ranking = null;
@@ -3578,6 +3581,125 @@ function refreshEvaluationList_(code) {
   if (st.loading) { toast('평가 목록을 불러오는 중입니다.'); return; }
   toast('평가 참가자 목록을 새로고침합니다.');
   refreshParticipantAssignmentsForActiveComp_(code);
+}
+function actorAuthoritySignature_(actor) {
+  actor = actor || {};
+  return JSON.stringify({
+    type:actor.accountType || actor.type || '', role:actor.role || '', access:actor.access || '',
+    teamMap:actor.teamMap || {}, roleMap:actor.roleMap || {}, accountTypeMap:actor.accountTypeMap || {}
+  });
+}
+function actorCanAccessCodeClient_(actor, code) {
+  actor = actor || {}; code = String(code || '').toUpperCase();
+  var type = String(actor.accountType || actor.type || '').toUpperCase();
+  if (type === 'ADMIN' || /관리자|admin|총괄/i.test(String(actor.role || ''))) return true;
+  var access = String(actor.access || '').toUpperCase().split(',').map(function(value){ return value.trim(); }).filter(Boolean);
+  return access.indexOf('ALL') >= 0 || access.indexOf('*') >= 0 || access.indexOf(code) >= 0;
+}
+function participantLiveListSignature_(list) {
+  return JSON.stringify((list || []).map(function(item){
+    return [item.rowIndex,item.number,item.roundCupNo,item.name,item.teamName,item.affiliation,item.competitionDate,item.scheduleTeam];
+  }));
+}
+function applyLiveParticipantAssignments_(code, res) {
+  if (!res || !res.participantChanged || !Array.isArray(res.assignments)) return false;
+  var st = participantStateForCode_(code);
+  var controls = participantControlsForCode_(code);
+  var selected = controls.map(function(cfg){
+    var select = document.getElementById(cfg.selectId);
+    var index = select ? parseInt(select.value, 10) : NaN;
+    var item = !isNaN(index) && st.list && st.list[index] ? st.list[index] : null;
+    return {cfg:cfg,rowIndex:item && item.rowIndex};
+  });
+  var before = participantLiveListSignature_(st.list || []);
+  st.loading = false;
+  st.loaded = true;
+  st.list = res.assignments || [];
+  st.policy = res.policy || {};
+  st.scheduleScope = res.scheduleScope || null;
+  st.message = res.message || '';
+  renderParticipantControls_(code);
+  selected.forEach(function(saved){
+    if (!saved.rowIndex) return;
+    var nextIndex = st.list.findIndex(function(item){ return Number(item.rowIndex) === Number(saved.rowIndex); });
+    var select = document.getElementById(saved.cfg.selectId);
+    if (nextIndex >= 0) {
+      if (select) select.value = String(nextIndex);
+      applyParticipantAssignmentToInputs_(st.list[nextIndex], saved.cfg.numId, saved.cfg.nameId);
+    } else {
+      if (select) select.value = '';
+      var num = saved.cfg.numId ? document.getElementById(saved.cfg.numId) : null;
+      var name = saved.cfg.nameId ? document.getElementById(saved.cfg.nameId) : null;
+      if (num) num.value = '';
+      if (name) name.value = '';
+    }
+  });
+  if (code === 'MOC') renderMocSetupList();
+  if (code === 'KTCC') renderKtccSetupList();
+  return before !== participantLiveListSignature_(st.list || []);
+}
+function routeAfterLiveAuthorityChange_(oldActor, newActor, code) {
+  var oldAuthority = actorAuthoritySignature_(oldActor);
+  var nextAuthority = actorAuthoritySignature_(newActor);
+  var oldProfile = JSON.stringify([oldActor && oldActor.name,oldActor && oldActor.affiliation,oldActor && oldActor.phone]);
+  var nextProfile = JSON.stringify([newActor && newActor.name,newActor && newActor.affiliation,newActor && newActor.phone]);
+  if (oldAuthority === nextAuthority && oldProfile === nextProfile) return;
+  var activeCode = String(code || (_selComp && _selComp.code) || '').toUpperCase();
+  var lostActiveAccess = !!activeCode && !actorCanAccessCodeClient_(newActor, activeCode);
+  var oldRole = oldActor && oldActor.roleMap && oldActor.roleMap[activeCode] || oldActor && oldActor.role || '';
+  var nextRole = newActor && newActor.roleMap && newActor.roleMap[activeCode] || newActor && newActor.role || '';
+  var activeEval = document.querySelector('.eval-wrap.active');
+  var activeEvalAffected = !!(activeEval && (lostActiveAccess || String(oldRole) !== String(nextRole)));
+  if (activeEvalAffected) {
+    try { kclSaveActiveEvalDraftNow_(true); } catch(e) {}
+    hideEval();
+    _selComp = null;
+  }
+  var activePanel = document.querySelector('.panel.active');
+  var homeVisible = activePanel && ['pAdmin','pTeam','pSelect'].indexOf(activePanel.id) >= 0;
+  if (lostActiveAccess || homeVisible || activeEvalAffected) {
+    if (isAdminRole()) loadAdminPanel();
+    else if (isTeamLeaderRole()) loadTeamPanel();
+    else loadSelectPanel();
+  }
+  toast('관리자가 변경한 최신 권한을 반영했습니다.');
+}
+function refreshRegistryLiveState_(force) {
+  if (_registryLiveSyncInFlight || !(_judge && _judge.judgeToken)) return;
+  if (!force && typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  var code = String((_selComp && _selComp.code) || '').toUpperCase();
+  var knownRevision = _registryLiveRevisionByCode[code || 'ALL'] || '';
+  _registryLiveSyncInFlight = true;
+  google.script.run
+    .withSuccessHandler(function(res){
+      _registryLiveSyncInFlight = false;
+      if (!res || !res.success || !res.actor) {
+        var message = (res && res.message) || '';
+        if (/로그인|권한|등록한 최신/.test(message)) { stopRegistryLiveSync_(); doLogout(); toast(message || '관리자 변경으로 다시 로그인이 필요합니다.', true); }
+        return;
+      }
+      var oldActor = _judge;
+      _judge = res.actor;
+      if (isAdminRole()) { try { localStorage.setItem('kclAdminActor', JSON.stringify(_judge)); } catch(e) {} }
+      else if (oldActor && String(oldActor.accountType || oldActor.type || '').toUpperCase() === 'ADMIN') { try { localStorage.removeItem('kclAdminActor'); } catch(e) {} }
+      if (res.revision !== undefined) _registryLiveRevisionByCode[code || 'ALL'] = String(res.revision);
+      var participantChanged = code ? applyLiveParticipantAssignments_(code, res) : false;
+      routeAfterLiveAuthorityChange_(oldActor, _judge, code);
+      if (participantChanged) toast('관리자가 변경한 최신 선수 명단을 반영했습니다.');
+    })
+    .withFailureHandler(function(){ _registryLiveSyncInFlight = false; })
+    .getRegistryLiveState(code, {judgeToken:_judge.judgeToken || ''}, knownRevision);
+}
+function startRegistryLiveSync_() {
+  stopRegistryLiveSync_();
+  _registryLiveRevisionByCode = {};
+  _registryLiveSyncTimer = setInterval(function(){ refreshRegistryLiveState_(false); }, 8000);
+  setTimeout(function(){ refreshRegistryLiveState_(true); }, 300);
+}
+function stopRegistryLiveSync_() {
+  if (_registryLiveSyncTimer) clearInterval(_registryLiveSyncTimer);
+  _registryLiveSyncTimer = null;
+  _registryLiveSyncInFlight = false;
 }
 function setStationEvaluationRefreshState_(code, loading) {
   code = String(code || '').toUpperCase();
@@ -4959,6 +5081,7 @@ function doLogin() {
       hideOverlay();
       if (!res || !res.success) { toast((res && res.message) || '로그인에 실패했습니다', true); return; }
       _judge = res;
+      startRegistryLiveSync_();
       if (isAdminRole()) loadAdminPanel();
       else if (isTeamLeaderRole()) loadTeamPanel();
       else loadSelectPanel();
@@ -4972,7 +5095,9 @@ function doLogin() {
 }
 
 function doLogout() {
+  stopRegistryLiveSync_();
   _judge = {}; _configs = []; _selComp = null;
+  _participantAssignments = {}; _registryLiveRevisionByCode = {};
   document.getElementById('inp-name').value = '';
   document.getElementById('inp-phone').value = '';
   document.getElementById('inp-security-code').value = '';
@@ -17526,7 +17651,7 @@ function bootAdminCenterEntry_() {
     google.script.run
       .withSuccessHandler(function(res){
         hideOverlay();
-        if (res && res.success && res.actor) { _judge = res.actor; try{localStorage.setItem('kclAdminActor', JSON.stringify(res.actor));}catch(e){} }
+        if (res && res.success && res.actor) { _judge = res.actor; try{localStorage.setItem('kclAdminActor', JSON.stringify(res.actor));}catch(e){} startRegistryLiveSync_(); }
         else { showPanel('pLogin'); toast((res && res.message) || '관리자 권한을 다시 확인해주세요.', true); return; }
         if (isAdminRole()) loadAdminPanel();
         else if (isTeamLeaderRole()) loadTeamPanel();
@@ -17542,6 +17667,8 @@ function bootAdminCenterEntry_() {
 
 renderLogoSlots();
 installBrowserBackGuard_();
+window.addEventListener('focus', function(){ refreshRegistryLiveState_(true); });
+document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') refreshRegistryLiveState_(true); });
 setTimeout(bootAdminCenterEntry_, 0);
 </script>
 </body>

@@ -412,6 +412,43 @@ assert.equal(multiRoleKcrAssignments.success, true, multiRoleKcrAssignments.mess
 assert.equal(multiRoleKcrAssignments.assignments[0].identityHidden, true, "MOC teamlead must not unlock KCR participant identity");
 assert.equal(multiRoleKcrAssignments.assignments[0].name, "");
 
+// 관리자가 역할·팀을 수정하거나 권한 행을 삭제하면 로그인 당시 세션보다 최신 D1 값이 우선되어야 합니다.
+const liveStateBeforeAdminEdit = await rpc("getRegistryLiveState", "KCR", { judgeToken:multiRoleJudge.judgeToken }, "");
+assert.equal(liveStateBeforeAdminEdit.success, true, liveStateBeforeAdminEdit.message);
+assert.equal(liveStateBeforeAdminEdit.participantChanged, true);
+const multiRoleKcrRow = testDb.raw.prepare("SELECT * FROM operators WHERE name='QA 다중권한' AND access='KCR'").get();
+const liveRoleEdit = await rpc("upsertOperatorAccount", {
+  rowIndex:multiRoleKcrRow.id, accountType:"JUDGE", name:multiRoleKcrRow.name, phone:multiRoleKcrRow.phone,
+  affiliation:multiRoleKcrRow.affiliation, access:"KCR", teamGroup:"KCR 스테이션 2", role:"센서리 헤드 심사위원",
+}, adminActor);
+assert.equal(liveRoleEdit.success, true, liveRoleEdit.message);
+const liveStateAfterRoleEdit = await rpc("getRegistryLiveState", "KCR", { judgeToken:multiRoleJudge.judgeToken }, liveStateBeforeAdminEdit.revision);
+assert.equal(liveStateAfterRoleEdit.success, true, liveStateAfterRoleEdit.message);
+assert.notEqual(liveStateAfterRoleEdit.revision, liveStateBeforeAdminEdit.revision);
+assert.equal(liveStateAfterRoleEdit.actor.roleMap.KCR, "센서리 헤드 심사위원");
+assert.equal(liveStateAfterRoleEdit.actor.teamMap.KCR, "KCR 스테이션 2");
+const multiRoleMocRow = testDb.raw.prepare("SELECT id FROM operators WHERE name='QA 다중권한' AND access='MOC'").get();
+const removedMocRole = await rpc("deleteOperatorAccount", multiRoleMocRow.id, adminActor);
+assert.equal(removedMocRole.success, true, removedMocRole.message);
+const liveStateAfterRoleDelete = await rpc("getRegistryLiveState", "KCR", { judgeToken:multiRoleJudge.judgeToken }, liveStateAfterRoleEdit.revision);
+assert.equal(liveStateAfterRoleDelete.success, true, liveStateAfterRoleDelete.message);
+assert.deepEqual([...liveStateAfterRoleDelete.actor.accessCodes], ["KCR"]);
+assert.equal(liveStateAfterRoleDelete.actor.roleMap.MOC, undefined, "삭제한 MOC 역할이 로그인 당시 역할 맵에서 되살아나면 안 됩니다");
+
+// 선수 수정도 같은 변경 버전으로 감지되고 새 번호·이름·소속이 즉시 다시 전달되어야 합니다.
+const liveParticipantRow = testDb.raw.prepare("SELECT id FROM participants WHERE competition_code='KCR' AND unique_no='KCR-BLIND-01'").get();
+const liveParticipantEdit = await rpc("upsertParticipant", {
+  rowIndex:liveParticipantRow.id, competitionCode:"KCR", name:"QA 블라인드 선수1 수정", phone:"01022229999",
+  affiliation:"관리자 최신 소속", uniqueNo:"KCR-BLIND-01", prelimCupNo:"1",
+}, adminActor);
+assert.equal(liveParticipantEdit.success, true, liveParticipantEdit.message);
+const liveAdminParticipants = await rpc("getRegistryLiveState", "KCR", adminActor, liveStateAfterRoleDelete.revision);
+assert.equal(liveAdminParticipants.success, true, liveAdminParticipants.message);
+assert.equal(liveAdminParticipants.participantChanged, true);
+const refreshedParticipant = liveAdminParticipants.assignments.find(item => Number(item.rowIndex) === Number(liveParticipantRow.id));
+assert.equal(refreshedParticipant.name, "QA 블라인드 선수1 수정");
+assert.equal(refreshedParticipant.affiliation, "관리자 최신 소속");
+
 const judge = await rpc("judgeLogin", "QA 센서리", "01011110001");
 const judge2 = await rpc("judgeLogin", "QA 센서리2", "01011110004");
 const judgeZ = await rpc("judgeLogin", "QA 센서리Z", "01011110007");
