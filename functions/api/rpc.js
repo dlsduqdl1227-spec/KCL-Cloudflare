@@ -1743,7 +1743,9 @@ function sortParticipantRowsForCompetition_(rows, competitionCode) {
     const aCode = safeStr(a && a.competition_code || requestedCode).toUpperCase();
     const bCode = safeStr(b && b.competition_code || requestedCode).toUpperCase();
     if (aCode !== bCode) return aCode.localeCompare(bCode);
-    if (aCode === 'MOB') {
+    // MOB와 KBC 참가자 목록은 DB 등록 순서가 아니라 확정 타임테이블 순서로 표시합니다.
+    // 특히 KBC는 참가자를 역순으로 일괄 등록해도 관리자 목록과 심사 화면이 경연순서 1번부터 보여야 합니다.
+    if (aCode === 'MOB' || aCode === 'KBC') {
       const am = participantScheduleSortMeta_(a);
       const bm = participantScheduleSortMeta_(b);
       if (am.scheduled !== bm.scheduled) return am.scheduled ? -1 : 1;
