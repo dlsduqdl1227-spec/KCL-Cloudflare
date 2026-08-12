@@ -6521,13 +6521,13 @@ function generateKbcComment(payload) {
     if (!item.tags.length) return '';
     const tags = item.tags.join(', ');
     const id = safeStr(item.id);
-    if (/presentation/.test(id)) return `서비스 관찰의 주요 근거는 ${tags}이며, 설명 태도와 전달력 판단에 반영되었습니다.`;
-    if (/taste/.test(id)) return `맛의 설계에 대한 관찰 근거는 ${tags}이며, 음료 구성과 균형 판단에 함께 반영되었습니다.`;
-    if (/clean/.test(id)) return `클린컵 관찰에서는 ${tags} 특성이 기록되어 컵의 정돈감과 마무리 판단에 반영되었습니다.`;
-    if (/mouth/.test(id)) return `마우스필 관찰에서는 ${tags} 특성이 기록되어 질감의 밀도와 촉감 판단에 반영되었습니다.`;
+    if (/presentation/.test(id)) return `서비스 관찰의 핵심은 ${tags}로 정리되며, 안정된 설명 태도와 전달력을 뒷받침했습니다.`;
+    if (/taste/.test(id)) return `맛의 설계에서는 ${tags} 특성이 음료 구성과 균형을 판단하는 근거로 확인되었습니다.`;
+    if (/clean/.test(id)) return `클린컵에서는 ${tags} 특성이 컵의 정돈감과 마무리를 형성했습니다.`;
+    if (/mouth/.test(id)) return `마우스필에서는 ${tags} 특성이 질감의 밀도와 촉감에 반영되었습니다.`;
     if (/flavor/.test(id)) return `향미 관찰은 ${tags} 중심으로 정리되어 플레이버의 구체적인 인상을 뒷받침합니다.`;
-    if (/machine/.test(id)) return `장비 운용 관찰의 주요 근거는 ${tags}이며, 동선과 작업대 관리 판단에 반영되었습니다.`;
-    return `선택된 관찰 근거는 ${tags}이며, 해당 항목의 판단에 반영되었습니다.`;
+    if (/machine/.test(id)) return `장비 운용에서는 ${tags} 특성이 동선과 작업대 관리의 완성도에 반영되었습니다.`;
+    return `${tags} 특성이 해당 항목의 구체적인 관찰 내용으로 반영되었습니다.`;
   }
   function directFeedback(item) {
     if (!item.comment) return '';
@@ -6535,13 +6535,13 @@ function generateKbcComment(payload) {
     return `심사위원의 직접 기록에는 “${text}”라고 남아 있습니다.`;
   }
   function feedbackSentence(item) {
-    return `${item.label}${_topicParticle_(item.label)} ${qualityText(item)}. ${tagFeedback(item)} ${directFeedback(item)}`.replace(/\s+/g, ' ').trim();
+    return `${item.label} 평가에서는 ${qualityText(item)}. ${tagFeedback(item)} ${directFeedback(item)}`.replace(/\s+/g, ' ').trim();
   }
   const sectionOrder = ['서비스','에스프레소','창작음료','운영'];
   const sectionParagraphs = sectionOrder.map(section => {
     const detail = items.filter(item => item.section === section).map(feedbackSentence);
     if (!detail.length) return '';
-    const lead = section === '서비스' ? '서비스 측면에서는' : section === '운영' ? '장비 운용 측면에서는' : `${section} 평가에서는`;
+    const lead = section === '서비스' ? '먼저' : section === '운영' ? '마지막으로' : section === '에스프레소' ? '이어서' : '다음으로';
     return `${lead} ${detail.join(' ')}`;
   }).filter(Boolean);
   const sectionText = sectionParagraphs.join(' ');
