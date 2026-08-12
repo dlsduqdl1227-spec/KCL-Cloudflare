@@ -68,6 +68,11 @@ assert.match(generateServer, /item\.tags\.length/);
 assert.match(generateServer, /item\.comment/);
 assert.match(generateServer, /sectionText/);
 assert.match(generateServer, /timePenalty/);
+assert.match(generateServer, /function feedbackSentence/);
+assert.match(generateServer, /function qualityText/);
+assert.match(generateServer, /상대적인 강점/);
+assert.match(generateServer, /핵심 보완 지점/);
+assert.doesNotMatch(generateServer, /항목 합계.*최종.*점으로 기록/s);
 assert.match(generateServer, /_sensoryOptionSet_/);
 
 assert.match(functionSource(assessment, "kbcSubmit"), /'종합코멘트 사용여부':\s*_kbcAutoCommentEnabled/);

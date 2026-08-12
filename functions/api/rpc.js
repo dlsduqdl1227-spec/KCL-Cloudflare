@@ -6473,36 +6473,107 @@ function generateKbcComment(payload) {
       comment:safeStr(item.comment).replace(/\s+/g, ' ').trim()
     };
   });
-  const detailSentences = items.map(item => {
-    let sentence = `${item.label}${_topicParticle_(item.label)} ${_fmt(item.score)}점(${item.rating})`;
-    if (item.weight > 1) sentence += `, 가중 반영 ${_fmt(item.weightedScore)}점`;
-    sentence += '으로 평가되었습니다.';
-    if (item.tags.length) sentence += ` 선택 스마트태그는 ${item.tags.join(', ')}입니다.`;
-    if (item.comment) sentence += ` 심사위원 직접 기록은 “${item.comment}”입니다.`;
-    return sentence;
-  });
+  function ratingLevel(item) {
+    const rating = safeStr(item.rating);
+    if (/매우\s*우수/.test(rating)) return 7;
+    if (/우수/.test(rating)) return 6;
+    if (/양호/.test(rating)) return 5;
+    if (/안정/.test(rating)) return 4;
+    if (/기준/.test(rating)) return 3;
+    if (/보완/.test(rating)) return 2;
+    if (/매우\s*미흡/.test(rating)) return 0;
+    if (/미흡/.test(rating)) return 1;
+    const ratio = _num(item.score) / 5;
+    if (ratio >= .88) return 7;
+    if (ratio >= .76) return 6;
+    if (ratio >= .64) return 5;
+    if (ratio >= .52) return 3;
+    if (ratio >= .38) return 2;
+    return ratio >= .24 ? 1 : 0;
+  }
+  function focusText(item) {
+    const id = safeStr(item.id);
+    if (/presentation/.test(id)) return '설명의 명확성, 전달 태도와 서비스 흐름';
+    if (/taste/.test(id)) return '맛의 구조, 균형과 설계 의도';
+    if (/clean/.test(id)) return '컵의 정돈감, 선명도와 마무리';
+    if (/mouth/.test(id)) return '질감의 밀도, 균일성과 촉감';
+    if (/flavor/.test(id)) return '향미의 구분, 선명도와 연결성';
+    if (/machine/.test(id)) return '장비 사용, 작업 동선과 기물 관리';
+    return '평가 요소의 완성도와 일관성';
+  }
+  function qualityText(item) {
+    const focus = focusText(item);
+    const subject = focus + _subjectParticle_(focus);
+    const topic = focus + _topicParticle_(focus);
+    const phrases = [
+      `${subject} 충분히 구현되지 않아 전반적인 재정비가 필요합니다`,
+      `${subject} 제한적으로 나타나 우선적인 개선이 필요합니다`,
+      `${topic} 부분적으로 확인되지만 완성도와 일관성을 보완해야 합니다`,
+      `${topic} 기본 기준을 충족했지만 요소 간 연결과 표현의 선명도는 더 다듬을 여지가 있습니다`,
+      `${subject} 안정적으로 구현되어 수행의 기본 완성도를 뒷받침했습니다`,
+      `${subject} 고르게 드러나 전체 수행의 강점으로 작용했습니다`,
+      `${subject} 분명하고 일관되게 구현되어 높은 완성도를 보였습니다`,
+      `${subject} 매우 선명하고 정교하게 구현되어 탁월한 완성도를 보였습니다`
+    ];
+    return phrases[ratingLevel(item)];
+  }
+  function tagFeedback(item) {
+    if (!item.tags.length) return '';
+    const tags = item.tags.join(', ');
+    const id = safeStr(item.id);
+    if (/presentation/.test(id)) return `서비스 관찰의 주요 근거는 ${tags}이며, 설명 태도와 전달력 판단에 반영되었습니다.`;
+    if (/taste/.test(id)) return `맛의 설계에 대한 관찰 근거는 ${tags}이며, 음료 구성과 균형 판단에 함께 반영되었습니다.`;
+    if (/clean/.test(id)) return `클린컵 관찰에서는 ${tags} 특성이 기록되어 컵의 정돈감과 마무리 판단에 반영되었습니다.`;
+    if (/mouth/.test(id)) return `마우스필 관찰에서는 ${tags} 특성이 기록되어 질감의 밀도와 촉감 판단에 반영되었습니다.`;
+    if (/flavor/.test(id)) return `향미 관찰은 ${tags} 중심으로 정리되어 플레이버의 구체적인 인상을 뒷받침합니다.`;
+    if (/machine/.test(id)) return `장비 운용 관찰의 주요 근거는 ${tags}이며, 동선과 작업대 관리 판단에 반영되었습니다.`;
+    return `선택된 관찰 근거는 ${tags}이며, 해당 항목의 판단에 반영되었습니다.`;
+  }
+  function directFeedback(item) {
+    if (!item.comment) return '';
+    const text = item.comment.replace(/[.!?]+$/, '');
+    return `심사위원의 직접 기록에는 “${text}”라고 남아 있습니다.`;
+  }
+  function feedbackSentence(item) {
+    return `${item.label}${_topicParticle_(item.label)} ${qualityText(item)}. ${tagFeedback(item)} ${directFeedback(item)}`.replace(/\s+/g, ' ').trim();
+  }
   const sectionOrder = ['서비스','에스프레소','창작음료','운영'];
-  const sectionText = sectionOrder.map(section => {
-    const detail = items.filter(item => item.section === section).map(item => detailSentences[items.indexOf(item)]);
-    return detail.length ? `${section} 영역 평가: ${detail.join(' ')}` : '';
-  }).filter(Boolean).join(' ');
-  const overallAvg = _avg(items.map(item => item.score));
+  const sectionParagraphs = sectionOrder.map(section => {
+    const detail = items.filter(item => item.section === section).map(feedbackSentence);
+    if (!detail.length) return '';
+    const lead = section === '서비스' ? '서비스 측면에서는' : section === '운영' ? '장비 운용 측면에서는' : `${section} 평가에서는`;
+    return `${lead} ${detail.join(' ')}`;
+  }).filter(Boolean);
+  const sectionText = sectionParagraphs.join(' ');
   const scoreItems = items.map(item => ({name:item.label, score:item.score}));
   const spread = _lowHighScore(scoreItems);
   const high = spread.high ? spread.high.name : '';
   const low = spread.low && spread.low !== spread.high ? spread.low.name : '';
-  const comparison = high && low
-    ? `항목별 비교에서는 ${high} 점수가 상대적으로 가장 높고, ${low} 점수가 상대적으로 가장 낮게 평가되었습니다.`
-    : '항목 간 점수 차이는 크지 않게 기록되었습니다.';
-  const subtotal = _num(payload.subtotalScore);
+  const scoreGap = spread.high && spread.low ? _num(spread.high.score) - _num(spread.low.score) : 0;
+  const comparison = high && low && scoreGap >= .4
+    ? `${high}${_topicParticle_(high)} 이번 수행의 상대적인 강점으로 확인됩니다. 반면 ${low}${_topicParticle_(low)} 전체 완성도를 제한한 핵심 보완 지점입니다.`
+    : '항목별 완성도 차이는 크지 않았으며, 각 요소를 하나의 흐름으로 연결하는 일관성이 종합 인상을 좌우했습니다.';
   const timePenalty = Math.max(0, _num(payload.timePenalty));
-  const total = payload.totalScore !== undefined && payload.totalScore !== null ? _num(payload.totalScore) : Math.max(0, subtotal - timePenalty);
-  const totalText = `항목 합계 ${_fmt(subtotal)}점${timePenalty ? `에서 시간감점 ${_fmt(timePenalty)}점을 적용해 ` : '이며, '}최종 ${_fmt(total)}점으로 기록되었습니다.`;
-  const conclusion = `전 항목 평균은 ${_fmt(overallAvg)}점이며, ${comparison} 종합적으로 서비스 전달, 음료 완성도${isMain ? ', 창작음료 설계' : ''}, 장비 운용의 연결성을 함께 반영한 결과입니다.`;
+  const timeText = timePenalty ? '제한시간 운영에서는 시간 감점이 발생했으므로, 시연 흐름과 마무리 동작을 정해진 시간 안에 안정적으로 완결하는 연습이 필요합니다.' : '';
+  const lowItem = items.filter(item => item.label === low)[0] || null;
+  const recommendationMap = {
+    'kbc-presentation':'설명의 핵심을 더 명확하게 구조화하고 서비스 동선을 안정화하면 음료에 대한 설득력이 높아질 수 있습니다.',
+    'kbc-espresso-taste':'에스프레소의 중심 향미와 설계 의도를 더 선명하게 연결하면 맛의 완성도가 높아질 수 있습니다.',
+    'kbc-espresso-clean':'추출 후반부의 정돈감과 마무리를 안정화하면 향미의 선명도를 더 잘 유지할 수 있습니다.',
+    'kbc-espresso-mouth':'질감의 밀도와 균일성을 보완하면 향미와 촉감의 연결성이 더 자연스러워질 수 있습니다.',
+    'kbc-espresso-flavor':'핵심 향미를 더 명확히 구분하고 설명과 실제 인상을 일치시키는 보완이 필요합니다.',
+    'kbc-signature-taste':'창작음료의 재료 역할과 설계 의도를 더 분명히 연결하면 전체 균형이 개선될 수 있습니다.',
+    'kbc-signature-clean':'창작음료의 후반부 정돈감과 재료 간 충돌을 줄이면 클린한 인상을 강화할 수 있습니다.',
+    'kbc-signature-mouth':'창작음료의 질감 밀도와 재료 간 촉감 연결을 다듬으면 완성도가 높아질 수 있습니다.',
+    'kbc-signature-flavor':'창작음료의 핵심 향미를 선명하게 설정하고 각 재료가 그 방향을 뒷받침하도록 조정할 필요가 있습니다.',
+    'kbc-machine':'장비 운용 순서, 작업 동선과 기물 정리를 안정화하면 서비스와 음료 평가가 더 일관되게 연결될 수 있습니다.'
+  };
+  const recommendation = (lowItem && recommendationMap[lowItem.id]) || '강점은 유지하면서 보완 항목의 일관성을 높이면 전체 수행이 더 설득력 있게 연결될 수 있습니다.';
+  const conclusion = `${comparison} ${timeText} ${recommendation}`.replace(/\s+/g, ' ').trim();
   return _sensoryOptionSet_([
-    `${sectionText} ${totalText} ${conclusion}`,
-    `KBC 수행의 모든 평가 근거를 항목별로 정리했습니다. ${sectionText} ${comparison} ${totalText} 전체 수행은 ${_toneByScore_(overallAvg, 5)} 수준으로 평가됩니다.`,
-    `점수, 점수 수준, 선택 스마트태그와 직접 기록을 함께 반영하면 다음과 같습니다. ${sectionText} ${totalText} ${conclusion}`
+    `KBC 수행을 종합하면 서비스 전달, 음료의 감각적 완성도${isMain ? ', 창작음료 설계' : ''}와 장비 운용 사이의 연결성이 전체 인상을 결정했습니다. ${sectionText} ${conclusion}`,
+    `이번 평가는 각 항목을 따로 나열하기보다 실제 시연에서 어떻게 이어졌는지를 중심으로 정리했습니다. ${sectionText} ${conclusion}`,
+    `심사 기록을 종합하면 다음과 같습니다. ${sectionText} ${conclusion}`
   ], _commentVariationKey_(payload, 'KBC'));
 }
 
