@@ -791,10 +791,11 @@ generatedKbc.comments.forEach((comment) => {
     item.tags.forEach((tag) => assert.ok(comment.includes(tag), `KBC generated comment omitted ${tag}`));
     if (item.comment) assert.ok(comment.includes("테스트입니다"), `KBC generated comment omitted direct note for ${item.label}`);
   });
-  assert.match(comment, /기본 기준을 충족했지만/);
-  assert.match(comment, /우선적인 개선이 필요/);
-  assert.match(comment, /상대적인 강점/);
-  assert.match(comment, /핵심 보완 지점/);
+  assert.match(comment, /안정적인 인상/);
+  assert.match(comment, /다소 불안정한 인상/);
+  assert.match(comment, /심사에서 느껴진 내용을 간단히|서비스 전문성/);
+  assert.doesNotMatch(comment, /우선적인 개선|연습이 필요|재정비|핵심 보완 지점|높아질 수 있습니다/);
+  assert.ok(comment.length <= 550, `KBC generated comment is too long: ${comment.length}`);
   assert.doesNotMatch(comment, /항목 합계|가중 반영|전 항목 평균|최종 18\.8점|\d+(?:\.\d+)?점\s*\(/);
 });
 

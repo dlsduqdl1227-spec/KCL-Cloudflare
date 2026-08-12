@@ -6434,7 +6434,7 @@ function generateCuppingComment(payload) {
   ], _commentVariationKey_(payload, 'KCR'));
 }
 
-function generateKbcComment(payload) {
+function generateKbcCommentLegacy_(payload) {
   payload = payload || {};
   const presentation = _num(payload.presentationVal);
   const espressoVals = Array.isArray(payload.espressoVals) ? payload.espressoVals.map(_num) : [];
@@ -6574,6 +6574,110 @@ function generateKbcComment(payload) {
     `KBC 수행을 종합하면 서비스 전달, 음료의 감각적 완성도${isMain ? ', 창작음료 설계' : ''}와 장비 운용 사이의 연결성이 전체 인상을 결정했습니다. ${sectionText} ${conclusion}`,
     `이번 평가는 각 항목을 따로 나열하기보다 실제 시연에서 어떻게 이어졌는지를 중심으로 정리했습니다. ${sectionText} ${conclusion}`,
     `심사 기록을 종합하면 다음과 같습니다. ${sectionText} ${conclusion}`
+  ], _commentVariationKey_(payload, 'KBC'));
+}
+
+function generateKbcComment(payload) {
+  payload = payload || {};
+  const presentation = _num(payload.presentationVal);
+  const espressoVals = Array.isArray(payload.espressoVals) ? payload.espressoVals.map(_num) : [];
+  const sigVals = Array.isArray(payload.sigVals) ? payload.sigVals.map(_num) : [];
+  const machine = _num(payload.machineVal);
+  const isMain = !!payload.isMain;
+  const legacy = [
+    {id:'kbc-presentation', label:'서비스 전문성', section:'서비스', score:presentation},
+    {id:'kbc-espresso-taste', label:'에스프레소 맛과 설계', section:'에스프레소', score:espressoVals[0]},
+    {id:'kbc-espresso-clean', label:'에스프레소 클린컵', section:'에스프레소', score:espressoVals[1]},
+    {id:'kbc-espresso-mouth', label:'에스프레소 마우스필', section:'에스프레소', score:espressoVals[2]},
+    {id:'kbc-espresso-flavor', label:'에스프레소 플레이버', section:'에스프레소', score:espressoVals[3]},
+    {id:'kbc-signature-taste', label:'창작음료 맛과 설계', section:'창작음료', score:sigVals[0]},
+    {id:'kbc-signature-clean', label:'창작음료 클린컵', section:'창작음료', score:sigVals[1]},
+    {id:'kbc-signature-mouth', label:'창작음료 마우스필', section:'창작음료', score:sigVals[2]},
+    {id:'kbc-signature-flavor', label:'창작음료 플레이버', section:'창작음료', score:sigVals[3]},
+    {id:'kbc-machine', label:'머신 및 기물 운용 전문성', section:'운영', score:machine}
+  ].filter(item => isMain || item.section !== '창작음료');
+  const sourceItems = Array.isArray(payload.evaluatedItems) && payload.evaluatedItems.length
+    ? payload.evaluatedItems
+    : legacy;
+  const items = sourceItems.map((item, index) => {
+    item = item || {};
+    const fallback = legacy[index] || {};
+    const score = _num(item.score !== undefined ? item.score : fallback.score);
+    const rawTags = Array.isArray(item.tags) ? item.tags : (item.tags ? String(item.tags).split(/[,;\n]/) : []);
+    return {
+      id:safeStr(item.id || fallback.id),
+      label:safeStr(item.label || fallback.label || `평가 항목 ${index + 1}`),
+      section:safeStr(item.section || fallback.section || '평가'),
+      score,
+      rating:safeStr(item.rating || _toneByScore_(score, 5)),
+      tags:Array.from(new Set(rawTags.map(_cleanTagText_).filter(Boolean))),
+      comment:safeStr(item.comment).replace(/\s+/g, ' ').trim()
+    };
+  });
+
+  function ratingLevel(item) {
+    const rating = safeStr(item.rating);
+    if (/매우\s*우수/.test(rating)) return 7;
+    if (/우수/.test(rating)) return 6;
+    if (/양호/.test(rating)) return 5;
+    if (/안정/.test(rating)) return 4;
+    if (/기준/.test(rating)) return 3;
+    if (/보완/.test(rating)) return 2;
+    if (/매우\s*미흡/.test(rating)) return 0;
+    if (/미흡/.test(rating)) return 1;
+    const ratio = _num(item.score) / 5;
+    if (ratio >= .88) return 7;
+    if (ratio >= .76) return 6;
+    if (ratio >= .64) return 5;
+    if (ratio >= .52) return 3;
+    if (ratio >= .38) return 2;
+    return ratio >= .24 ? 1 : 0;
+  }
+
+  function impressionText(item) {
+    return [
+      '매우 제한적인 인상',
+      '다소 불안정한 인상',
+      '선명도가 낮은 인상',
+      '기본적인 인상',
+      '안정적인 인상',
+      '양호한 인상',
+      '선명한 인상',
+      '매우 선명한 인상'
+    ][ratingLevel(item)];
+  }
+
+  function sectionSentence(section) {
+    const sectionItems = items.filter(item => item.section === section);
+    if (!sectionItems.length) return '';
+    if (sectionItems.length === 1) {
+      const item = sectionItems[0];
+      return `${item.label}${_topicParticle_(item.label)} ${impressionText(item)}이었습니다.`;
+    }
+    const clauses = sectionItems.map((item, index) => {
+      const label = item.label;
+      const ending = index === sectionItems.length - 1 ? '이었습니다.' : index === sectionItems.length - 2 ? '이었으며, ' : '이었고, ';
+      return `${label}${_topicParticle_(label)} ${impressionText(item)}${ending}`;
+    });
+    return clauses.join('');
+  }
+
+  const sectionOrder = ['서비스', '에스프레소', '창작음료', '운영'];
+  const sectionText = sectionOrder.map(sectionSentence).filter(Boolean).join(' ');
+  const tagText = items.filter(item => item.tags.length).map(item => {
+    const observed = /taste|clean|mouth|flavor/.test(item.id) ? '느껴진' : '확인된';
+    return `${item.label}에서 ${observed} 표현은 ${item.tags.join(', ')}입니다.`;
+  }).join(' ');
+  const directText = items.filter(item => item.comment).map(item => {
+    const comment = item.comment.replace(/[.!?]+$/, '');
+    return `${item.label}에는 “${comment}”라는 심사 기록이 남았습니다.`;
+  }).join(' ');
+  const timeText = Math.max(0, _num(payload.timePenalty)) ? '시간 감점이 함께 반영되었습니다.' : '';
+  const concise = `${sectionText} ${tagText} ${directText} ${timeText}`.replace(/\s+/g, ' ').trim();
+
+  return _sensoryOptionSet_([
+    concise,
+    `심사에서 느껴진 내용을 간단히 정리하면, ${concise}`
   ], _commentVariationKey_(payload, 'KBC'));
 }
 
