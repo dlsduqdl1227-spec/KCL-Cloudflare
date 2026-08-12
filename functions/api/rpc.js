@@ -6815,28 +6815,71 @@ function generateIkrcComment(payload) {
   const scores = payload.scores || {};
   const intensities = payload.intensities || {};
   const tags = payload.tags || {};
-  const sample = safeStr(payload.sampleNo || '');
   const items = [
-    {name:'Flavor', score:scores.flavor},
-    {name:'Clean Cup', score:scores.cleanCup},
-    {name:'Sweetness', score:scores.sweetness},
-    {name:'Acidity', score:scores.acidity},
-    {name:'Mouthfeel', score:scores.mouthfeel}
+    {key:'flavor', label:'플레이버', score:scores.flavor},
+    {key:'cleanCup', label:'클린컵', score:scores.cleanCup},
+    {key:'sweetness', label:'단맛', score:scores.sweetness},
+    {key:'acidity', label:'산미', score:scores.acidity},
+    {key:'mouthfeel', label:'마우스필', score:scores.mouthfeel}
   ];
-  const flavor = _tagPhrase_(tags, 'flavor', '플레이버');
-  const clean = _tagPhrase_(tags, 'cleanCup', '클린컵');
-  const sweet = _tagPhrase_(tags, 'sweetness', '단맛');
-  const acidity = _tagPhrase_(tags, 'acidity', '산미 구조');
-  const mouthfeel = _tagPhrase_(tags, 'mouthfeel', '질감');
-  const hl = _lowHighScore(items);
-  const high = hl.high ? _areaKorean_(hl.high.name) : '';
-  const low = hl.low && hl.low !== hl.high ? _areaKorean_(hl.low.name) : '';
-  const axis = high && low ? `${high}이 가장 두드러졌고, ${low}은 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 기록되었습니다.';
-  const avg = _avg(items.map(x=>x.score));
-  const prefix = sample ? `Sample ${sample}은 ` : '해당 샘플은 ';
-  return _optionSet([
-    `${prefix}${flavor} 계열의 향미가 첫인상을 형성하고, ${clean}한 인상이 컵의 완성도에 반영되었습니다. 단맛은 ${sweet} 방향으로 나타났으며, 산미는 ${acidity}, 마우스필은 ${mouthfeel} 특성으로 기록되었습니다.`,
-    `로스팅 결과는 향미의 선명도, 후반부 클린함, 단맛 지속성의 균형을 중심으로 평가되었습니다. 향미 강도는 ${_intensityText_(intensities.flavor)} 수준으로 기록되며, 전체적으로 ${_toneByScore_(avg, 10)} 샘플로 평가됩니다.`,
-    `항목 평균 ${_fmt(avg)}점에서 ${axis} 종합 평가는 단맛과 산미, 질감의 연결성이 로스팅 의도와 컵의 실제 인상에서 어떻게 드러났는지를 반영합니다.`
+
+  function ratingLevel(item) {
+    const ratio = Math.max(0, Math.min(1, _num(item.score) / 10));
+    if (ratio >= .88) return 7;
+    if (ratio >= .76) return 6;
+    if (ratio >= .64) return 5;
+    if (ratio >= .52) return 4;
+    if (ratio >= .40) return 3;
+    if (ratio >= .28) return 2;
+    return ratio >= .16 ? 1 : 0;
+  }
+  function impressionText(item) {
+    return [
+      '매우 제한적인 인상', '다소 제한적인 인상', '선명도가 낮은 인상', '기본적인 인상',
+      '안정적인 인상', '양호한 인상', '선명한 인상', '매우 선명한 인상'
+    ][ratingLevel(item)];
+  }
+  function intensityAdverb(value) {
+    return {
+      1:'매우 은은하게', 2:'은은하게', 3:'다소 은은하게', 4:'중간 강도로',
+      5:'다소 뚜렷하게', 6:'뚜렷하게', 7:'매우 뚜렷하게'
+    }[parseInt(value, 10)] || '중간 강도로';
+  }
+  function scoreSummary() {
+    const groups = [];
+    items.forEach(item => {
+      const level = ratingLevel(item);
+      let group = groups.find(entry => entry.level === level);
+      if (!group) { group = {level, items:[]}; groups.push(group); }
+      group.items.push(item);
+    });
+    return groups.map((group, index) => {
+      const labels = group.items.map(item => item.label).join('·');
+      const ending = index === groups.length - 1 ? '이었습니다.' : '이었고, ';
+      return `${labels}${_subjectParticle_(labels)} ${impressionText(group.items[0])}${ending}`;
+    }).join('');
+  }
+  function tagObservation(item) {
+    const selected = _tags(tags[item.key], 8).map(_cleanTagText_).filter(Boolean);
+    if (!selected.length) return '';
+    const phrase = Array.from(new Set(selected)).join('·');
+    const intensity = intensityAdverb(intensities[item.key]);
+    if (item.key === 'flavor') return `플레이버에서는 ${phrase} 향미가 ${intensity} 느껴졌습니다.`;
+    if (item.key === 'sweetness') return `단맛에서는 ${phrase} 특성이 ${intensity} 느껴졌습니다.`;
+    if (item.key === 'acidity') return `산미에서는 ${phrase} 특성이 ${intensity} 느껴졌습니다.`;
+    if (item.key === 'mouthfeel') return `마우스필에서는 ${phrase} 질감이 ${intensity} 느껴졌습니다.`;
+    return `클린컵에서는 ${phrase} 특성이 ${intensity} 확인됐습니다.`;
+  }
+
+  const scoreText = scoreSummary();
+  const sensoryText = items.map(tagObservation).filter(Boolean).join(' ');
+  const concise = `${scoreText} ${sensoryText}`.replace(/\s+/g, ' ').trim();
+  const sensoryFirst = sensoryText
+    ? `${sensoryText} 전체적으로 ${scoreText}`
+    : `컵에서 느껴진 인상을 정리하면, ${scoreText}`;
+  return _sensoryOptionSet_([
+    concise,
+    sensoryFirst,
+    `심사에서 느껴진 컵의 인상을 간단히 정리하면, ${concise}`
   ], _commentVariationKey_(payload, 'IKRC'));
 }

@@ -77,7 +77,7 @@ assert.match(reviewReference, /현재 검수 화면에서 수정한 점수·스�
 const reviewCard = functionSource(assessment, "ensureReviewOverallCard_");
 assert.match(reviewCard, /AI 코멘트 생성 \/ 다시 생성/);
 assert.match(reviewCard, /AI 코멘트 생성 초기화/);
-assert.match(reviewCard, /resetReviewKbcAiCommentGeneration/);
+assert.match(reviewCard, /resetReviewAiCommentGeneration/);
 assert.match(reviewCard, /review-kbc-comment-reference/);
 const reviewGenerate = functionSource(assessment, "generateReviewOverallComment");
 assert.match(reviewGenerate, /refreshReviewKbcCommentReference_/);
@@ -85,7 +85,7 @@ assert.match(reviewGenerate, /AI 코멘트 다시 생성/);
 assert.match(reviewGenerate, /runner\.generateKbcComment\(payload\)/);
 assert.match(reviewGenerate, /requestToken/);
 assert.match(reviewGenerate, /reviewCommentGenerationKey_/);
-const reviewReset = functionSource(assessment, "resetReviewKbcAiCommentGeneration");
+const reviewReset = functionSource(assessment, "resetReviewAiCommentGeneration");
 assert.match(reviewReset, /current\s*===\s*generated/);
 assert.match(reviewReset, /delete _reviewGeneratedComments/);
 assert.match(reviewReset, /scheduleReviewAutoSave\(true\)/);

@@ -68,5 +68,9 @@ assert.match(authorityRoute, /kclSaveActiveEvalDraftNow_/);
 assert.match(authorityRoute, /loadAdminPanel\(\)/);
 assert.match(authorityRoute, /loadTeamPanel\(\)/);
 assert.match(authorityRoute, /loadSelectPanel\(\)/);
+assert.doesNotMatch(authorityRoute, /관리자가 변경한 최신 권한을 반영했습니다/);
+const authoritySignature = functionSource(assessment, "actorAuthoritySignature_");
+assert.match(authoritySignature, /Object\.keys\(map\)\.sort\(\)/);
+assert.match(authoritySignature, /\.filter\(Boolean\)\.sort\(\)\.join\(','\)/);
 
 process.stdout.write("Stage164 administrator live-authority tests passed.\n");

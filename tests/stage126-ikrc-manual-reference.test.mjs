@@ -63,6 +63,22 @@ assert.match(html, /아몬드, 블루베리/);
 assert.match(html, /선택 표현 없음/);
 assert.match(html, /data-ikrc-comment-reference="true"/);
 
+assert.match(assessment, /id="ikrc-ai-comment-generate"[\s\S]*AI 코멘트 생성 \/ 다시 생성/);
+assert.match(assessment, /id="ikrc-ai-comment-reset"[\s\S]*AI 코멘트 생성 초기화/);
+const generateIkrc = functionSource(assessment, "generateIkrcComment");
+assert.match(generateIkrc, /requestToken/);
+assert.match(generateIkrc, /_ikrcCommentGenerationTimer/);
+assert.match(generateIkrc, /AI 코멘트 다시 생성/);
+assert.match(generateIkrc, /resetIkrcAiCommentGeneration/);
+const resetIkrc = functionSource(assessment, "resetIkrcAiCommentGeneration");
+assert.match(resetIkrc, /current\s*===\s*generated/);
+assert.match(resetIkrc, /s\.generatedComment\s*=\s*''/);
+assert.match(resetIkrc, /kclSaveActiveEvalDraftNow_/);
+assert.doesNotMatch(resetIkrc, /s\.(?:flavor|cleanCup|sweetness|acidity|mouthfeel)\s*=/);
+const reviewCard = functionSource(assessment, "ensureReviewOverallCard_");
+assert.match(reviewCard, /currentCode === 'KBC' \|\| currentCode === 'IKRC'/);
+assert.match(reviewCard, /resetReviewAiCommentGeneration/);
+
 let cardRenderCount = 0;
 const clearContext = {
   _ikrcSamples: [sample],
@@ -71,6 +87,7 @@ const clearContext = {
   renderIkrcAttrCard: () => { cardRenderCount += 1; },
   renderIkrcAttrTabs: () => {},
   renderIkrcNav: () => {},
+  cancelIkrcCommentGeneration_: () => {},
   toast: () => {},
 };
 vm.createContext(clearContext);

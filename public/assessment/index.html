@@ -662,11 +662,11 @@ input[type=range].kcl-range,
 .ikrc-comment-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .ikrc-comment-actions .btn-gen-comment,.ikrc-comment-actions .btn-outline{margin:0}
 .ikrc-comment-actions [aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
-#kbc-auto-comment-reset{grid-column:1/-1}
+#kbc-auto-comment-reset,#ikrc-ai-comment-reset{grid-column:1/-1}
 .comment-regenerate-btn{width:100%;margin:12px 0 0!important}
 .review-ai-comment-actions{display:flex;flex-direction:column;gap:7px;min-width:166px}
 .review-ai-comment-actions .btn-gen-comment,.review-ai-comment-actions .btn-outline{width:100%;min-width:0!important;margin:0!important;white-space:normal!important}
-@media(max-width:420px){.ikrc-comment-actions{grid-template-columns:1fr}#kbc-auto-comment-reset{grid-column:auto}}
+@media(max-width:420px){.ikrc-comment-actions{grid-template-columns:1fr}#kbc-auto-comment-reset,#ikrc-ai-comment-reset{grid-column:auto}}
 .review-score-input{margin-top:10px!important;text-align:center;font-weight:700}
 .review-readonly-block{background:rgba(255,255,255,.035);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px}
 .review-field{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}
@@ -3326,6 +3326,7 @@ var _reviewState = { code:null, name:null, headers:[], list:[], current:null, ba
 var _reviewCalibrationOnly = false;
 var _kbcGeneratedComment = '', _kbcCommentEdited = true, _kbcAutoCommentEnabled = false;
 var _kbcCommentGenerationToken = 0, _kbcCommentGenerationTimer = null;
+var _ikrcCommentGenerationToken = 0, _ikrcCommentGenerationTimer = null;
 var _reviewCommentGenerationTokens = {}, _reviewCommentGenerationTimers = {}, _reviewGeneratedComments = {};
 var _mobGeneratedComment = '', _mobCommentEdited = true;
 
@@ -3598,9 +3599,16 @@ function refreshEvaluationList_(code) {
 }
 function actorAuthoritySignature_(actor) {
   actor = actor || {};
+  function stableMap(map) {
+    map = map && typeof map === 'object' ? map : {};
+    var out = {};
+    Object.keys(map).sort().forEach(function(key){ out[key] = map[key]; });
+    return out;
+  }
+  var access = String(actor.access || '').toUpperCase().split(',').map(function(value){ return value.trim(); }).filter(Boolean).sort().join(',');
   return JSON.stringify({
-    type:actor.accountType || actor.type || '', role:actor.role || '', access:actor.access || '',
-    teamMap:actor.teamMap || {}, roleMap:actor.roleMap || {}, accountTypeMap:actor.accountTypeMap || {}
+    type:String(actor.accountType || actor.type || '').toUpperCase(), role:actor.role || '', access:access,
+    teamMap:stableMap(actor.teamMap), roleMap:stableMap(actor.roleMap), accountTypeMap:stableMap(actor.accountTypeMap)
   });
 }
 function actorCanAccessCodeClient_(actor, code) {
@@ -3676,7 +3684,6 @@ function routeAfterLiveAuthorityChange_(oldActor, newActor, code) {
     else if (isTeamLeaderRole()) loadTeamPanel();
     else loadSelectPanel();
   }
-  toast('관리자가 변경한 최신 권한을 반영했습니다.');
 }
 function refreshRegistryLiveState_(force) {
   if (_registryLiveSyncInFlight || !(_judge && _judge.judgeToken)) return;
@@ -8907,10 +8914,10 @@ function ensureReviewOverallCard_() {
     ? (editable ? '심사위원이 제출한 수기 원문입니다. 검수 중 수정한 내용이 최종 코멘트로 저장됩니다.' : '심사위원이 제출한 수기 원문입니다.')
     : '항목별 코멘트가 없을 경우 이 영역의 전체 코멘트만 저장·반영됩니다.';
   var generateButton = isMobManualComment ? '' : '<button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">AI 코멘트 생성 / 다시 생성</button>';
-  if (currentCode === 'KBC') {
+  if (currentCode === 'KBC' || currentCode === 'IKRC') {
     generateButton = '<div class="review-ai-comment-actions">' +
       '<button id="review-ai-comment-generate-' + idx + '" type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">AI 코멘트 생성 / 다시 생성</button>' +
-      '<button id="review-ai-comment-reset-' + idx + '" type="button" class="btn-outline" onclick="resetReviewKbcAiCommentGeneration(' + idx + ')">AI 코멘트 생성 초기화</button>' +
+      '<button id="review-ai-comment-reset-' + idx + '" type="button" class="btn-outline" onclick="resetReviewAiCommentGeneration(' + idx + ')">AI 코멘트 생성 초기화</button>' +
       '</div>';
   }
   if (!editable) generateButton = '';
@@ -8949,7 +8956,7 @@ function reviewCommentGenerationKey_(code, commentIdx) {
   var identity = item.rowIndex || item.id || item.unit || item['참가자번호'] || item['샘플번호'] || '';
   return [String(code || '').toUpperCase(), String(identity), String(commentIdx)].join(':');
 }
-function setReviewKbcCommentGenerationBusy_(commentIdx, busy) {
+function setReviewAiCommentGenerationBusy_(commentIdx, busy) {
   var button = document.getElementById('review-ai-comment-generate-' + commentIdx);
   var area = document.getElementById('review-gen-comment-area-' + commentIdx);
   if (button) {
@@ -8958,13 +8965,14 @@ function setReviewKbcCommentGenerationBusy_(commentIdx, busy) {
   }
   if (area) area.setAttribute('aria-busy', busy ? 'true' : 'false');
 }
-function resetReviewKbcAiCommentGeneration(commentIdx) {
-  if (String((_reviewState && _reviewState.code) || '').toUpperCase() !== 'KBC') return;
-  var key = reviewCommentGenerationKey_('KBC', commentIdx);
+function resetReviewAiCommentGeneration(commentIdx) {
+  var code = String((_reviewState && _reviewState.code) || '').toUpperCase();
+  if (code !== 'KBC' && code !== 'IKRC') return;
+  var key = reviewCommentGenerationKey_(code, commentIdx);
   _reviewCommentGenerationTokens[key] = Number(_reviewCommentGenerationTokens[key] || 0) + 1;
   if (_reviewCommentGenerationTimers[key]) clearTimeout(_reviewCommentGenerationTimers[key]);
   delete _reviewCommentGenerationTimers[key];
-  setReviewKbcCommentGenerationBusy_(commentIdx, false);
+  setReviewAiCommentGenerationBusy_(commentIdx, false);
   var area = document.getElementById('review-gen-comment-area-' + commentIdx);
   if (area) { area.innerHTML = ''; area.classList.remove('active'); }
   var textarea = document.querySelector('#review-edit-fields textarea[data-col="' + commentIdx + '"]');
@@ -8975,7 +8983,7 @@ function resetReviewKbcAiCommentGeneration(commentIdx) {
     scheduleReviewAutoSave(true);
   }
   delete _reviewGeneratedComments[key];
-  toast('검수 AI 코멘트 생성만 초기화했습니다. 점수·스마트태그·항목별 코멘트와 직접 수정한 종합 의견은 유지됩니다.');
+  toast('검수 AI 코멘트 생성만 초기화했습니다. 점수·강도·스마트태그와 직접 수정한 종합 의견은 유지됩니다.');
 }
 function generateReviewOverallComment(commentIdx) {
   var code = reviewCommentGeneratorCode_();
@@ -8998,20 +9006,20 @@ function generateReviewOverallComment(commentIdx) {
   updateReviewOverallInsights_();
   area.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:10px">생성 중...</p>';
   area.classList.add('active');
-  setReviewKbcCommentGenerationBusy_(commentIdx, code === 'KBC');
+  setReviewAiCommentGenerationBusy_(commentIdx, code === 'KBC' || code === 'IKRC');
   _reviewCommentGenerationTimers[requestKey] = setTimeout(function(){
     if (requestKey !== reviewCommentGenerationKey_(code, commentIdx) || requestToken !== _reviewCommentGenerationTokens[requestKey]) return;
     _reviewCommentGenerationTokens[requestKey] = requestToken + 1;
     delete _reviewCommentGenerationTimers[requestKey];
-    setReviewKbcCommentGenerationBusy_(commentIdx, false);
-    area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 응답이 지연되고 있습니다.</p>' + (code === 'KBC' ? '<button type="button" class="btn-outline comment-regenerate-btn" onclick="resetReviewKbcAiCommentGeneration(' + commentIdx + ')">AI 코멘트 생성 초기화</button>' : '<button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">다시 시도</button>');
+    setReviewAiCommentGenerationBusy_(commentIdx, false);
+    area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 응답이 지연되고 있습니다.</p>' + ((code === 'KBC' || code === 'IKRC') ? '<button type="button" class="btn-outline comment-regenerate-btn" onclick="resetReviewAiCommentGeneration(' + commentIdx + ')">AI 코멘트 생성 초기화</button>' : '<button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">다시 시도</button>');
   }, 20000);
   var runner = google.script.run
     .withSuccessHandler(function(res) {
       if (requestKey !== reviewCommentGenerationKey_(code, commentIdx) || requestToken !== _reviewCommentGenerationTokens[requestKey]) return;
       if (_reviewCommentGenerationTimers[requestKey]) clearTimeout(_reviewCommentGenerationTimers[requestKey]);
       delete _reviewCommentGenerationTimers[requestKey];
-      setReviewKbcCommentGenerationBusy_(commentIdx, false);
+      setReviewAiCommentGenerationBusy_(commentIdx, false);
       if (!res || !Array.isArray(res.comments) || !res.comments.length) {
         area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">다시 시도</button>';
         return;
@@ -9024,7 +9032,7 @@ function generateReviewOverallComment(commentIdx) {
       if (requestKey !== reviewCommentGenerationKey_(code, commentIdx) || requestToken !== _reviewCommentGenerationTokens[requestKey]) return;
       if (_reviewCommentGenerationTimers[requestKey]) clearTimeout(_reviewCommentGenerationTimers[requestKey]);
       delete _reviewCommentGenerationTimers[requestKey];
-      setReviewKbcCommentGenerationBusy_(commentIdx, false);
+      setReviewAiCommentGenerationBusy_(commentIdx, false);
       area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">다시 시도</button>';
     });
   if (code === 'KCR') runner.generateCuppingComment(payload);
@@ -9039,8 +9047,9 @@ function generateReviewCuppingComment(commentIdx) {
 function useReviewGeneratedComment(commentIdx, comment) {
   var ta = document.querySelector('#review-edit-fields textarea[data-col="' + commentIdx + '"]');
   if (!ta || ta.disabled) return;
-  if (String((_reviewState && _reviewState.code) || '').toUpperCase() === 'KBC') {
-    _reviewGeneratedComments[reviewCommentGenerationKey_('KBC', commentIdx)] = String(comment || '');
+  var code = String((_reviewState && _reviewState.code) || '').toUpperCase();
+  if (code === 'KBC' || code === 'IKRC') {
+    _reviewGeneratedComments[reviewCommentGenerationKey_(code, commentIdx)] = String(comment || '');
   }
   reviewSetFieldValueByIndex_(commentIdx, String(comment || ''));
   scheduleReviewAutoSave(true);
@@ -15419,6 +15428,7 @@ function saveIkrc() {
 }
 
 function loadIkrcSample(idx) {
+  if (typeof cancelIkrcCommentGeneration_ === 'function') cancelIkrcCommentGeneration_();
   _ikrcIdx = idx;
   var s = _ikrcSamples[_ikrcIdx];
   if (!s || ['flavor','cleanCup','sweetness','acidity','mouthfeel','comment'].indexOf(s.activeAttr) < 0) {
@@ -15461,8 +15471,9 @@ function renderIkrcAttrCard() {
     html += '<textarea id="ikrc-comment" placeholder="스마트태그와 강도를 참고해 종합 의견을 직접 입력하세요" oninput="onIkrcCommentInput()">' + escHtml(s.comment || '') + '</textarea>';
     html += '<div id="ikrc-comment-warning" class="comment-edit-warning" style="display:none"></div>';
     html += '<div class="ikrc-comment-actions">';
-    html += '<button class="btn-gen-comment" onclick="generateIkrcComment()">AI 자동 코멘트 생성</button>';
+    html += '<button id="ikrc-ai-comment-generate" class="btn-gen-comment" type="button" onclick="generateIkrcComment()">AI 코멘트 생성 / 다시 생성</button>';
     html += '<button class="btn-outline" type="button" onclick="clearIkrcGeneratedComment()">AI 코멘트 사용 안 함</button>';
+    html += '<button id="ikrc-ai-comment-reset" class="btn-outline" type="button" onclick="resetIkrcAiCommentGeneration()">AI 코멘트 생성 초기화</button>';
     html += '</div>';
     html += '<div class="gen-comment-area" id="ikrc-comment-gen"></div>';
     html += '</div>';
@@ -15678,6 +15689,7 @@ function buildIkrcManualCommentReferenceHtml_(s) {
 }
 
 function clearIkrcGeneratedComment() {
+  cancelIkrcCommentGeneration_();
   var s = _ikrcSamples[_ikrcIdx];
   if (!s) return;
   var ta = document.getElementById('ikrc-comment');
@@ -15695,6 +15707,42 @@ function clearIkrcGeneratedComment() {
   renderIkrcAttrTabs();
   renderIkrcNav();
   toast('AI 자동 코멘트 사용을 해제했습니다.');
+}
+function setIkrcCommentGenerationBusy_(busy) {
+  var button = document.getElementById('ikrc-ai-comment-generate');
+  var area = document.getElementById('ikrc-comment-gen');
+  if (button) {
+    button.disabled = !!busy;
+    button.textContent = busy ? 'AI 코멘트 생성 중...' : 'AI 코멘트 생성 / 다시 생성';
+  }
+  if (area) area.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
+function cancelIkrcCommentGeneration_() {
+  _ikrcCommentGenerationToken += 1;
+  if (_ikrcCommentGenerationTimer) clearTimeout(_ikrcCommentGenerationTimer);
+  _ikrcCommentGenerationTimer = null;
+  setIkrcCommentGenerationBusy_(false);
+}
+function resetIkrcAiCommentGeneration() {
+  cancelIkrcCommentGeneration_();
+  var s = _ikrcSamples[_ikrcIdx];
+  if (!s) return;
+  var ta = document.getElementById('ikrc-comment');
+  var generated = String(s.generatedComment || '').trim();
+  var current = ta ? ta.value.trim() : String(s.comment || '').trim();
+  if (generated && current === generated) {
+    if (ta) ta.value = '';
+    s.comment = '';
+  } else if (ta) {
+    s.comment = ta.value;
+  }
+  s.generatedComment = '';
+  s.commentEdited = true;
+  renderIkrcAttrCard();
+  renderIkrcAttrTabs();
+  renderIkrcNav();
+  if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
+  toast('IKRC AI 코멘트 생성만 초기화했습니다. 점수·강도·스마트태그와 직접 수정한 종합 의견은 유지됩니다.');
 }
 function ikrcCalItem_(item) {
   if (typeof item === 'string') return { sampleNo:item, checked:false, judgeCount:0, headCount:0, checkedAt:'', latestSubmittedAt:'' };
@@ -16094,17 +16142,39 @@ function generateIkrcComment() {
   var s = _ikrcSamples[_ikrcIdx];
   calcIkrcTotal();
   var area = document.getElementById('ikrc-comment-gen');
+  if (!area || !s) { toast('AI 코멘트 생성 영역을 불러오지 못했습니다. 현재 컵을 다시 열어주세요.', true); return; }
+  cancelIkrcCommentGeneration_();
+  var requestToken = ++_ikrcCommentGenerationToken;
+  setIkrcCommentGenerationBusy_(true);
   area.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:10px">생성 중...</p>';
   area.classList.add('active');
   var scores = {}, intensities = {}, tags = {};
   IKRC_ATTRS.forEach(function(a){ scores[a.key] = s[a.key]; intensities[a.key] = s[ikrcIntensityKey_(a.key)]; tags[a.key] = s[ikrcTagKey_(a.key)] || []; });
+  _ikrcCommentGenerationTimer = setTimeout(function(){
+    if (requestToken !== _ikrcCommentGenerationToken || _ikrcSamples[_ikrcIdx] !== s) return;
+    _ikrcCommentGenerationToken += 1;
+    _ikrcCommentGenerationTimer = null;
+    setIkrcCommentGenerationBusy_(false);
+    area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 응답이 지연되고 있습니다.</p><button type="button" class="btn-outline comment-regenerate-btn" onclick="resetIkrcAiCommentGeneration()">AI 코멘트 생성 초기화</button>';
+  }, 20000);
   google.script.run
     .withSuccessHandler(function(res){
-      if (!res || !res.comments) { area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>'; return; }
+      if (requestToken !== _ikrcCommentGenerationToken || _ikrcSamples[_ikrcIdx] !== s) return;
+      if (_ikrcCommentGenerationTimer) clearTimeout(_ikrcCommentGenerationTimer);
+      _ikrcCommentGenerationTimer = null;
+      setIkrcCommentGenerationBusy_(false);
+      if (!res || !Array.isArray(res.comments) || !res.comments.length) { area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateIkrcComment()">다시 시도</button>'; return; }
       area.innerHTML = '<div class="comment-edit-warning">AI 자동 코멘트는 초안입니다. 선택하면 직접 수정해야 제출할 수 있고, 사용하지 않으려면 AI 코멘트 사용 안 함을 누르세요.</div>' +
-        res.comments.map(function(c){ return '<div class="comment-variation" onclick="useIkrcComment(this.textContent)">' + escHtml(c) + '</div>'; }).join('');
+        res.comments.map(function(c){ return '<div class="comment-variation" onclick="useIkrcComment(this.textContent)">' + escHtml(c) + '</div>'; }).join('') +
+        '<button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateIkrcComment()">AI 코멘트 다시 생성</button>';
     })
-    .withFailureHandler(function(){ area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>'; })
+    .withFailureHandler(function(){
+      if (requestToken !== _ikrcCommentGenerationToken || _ikrcSamples[_ikrcIdx] !== s) return;
+      if (_ikrcCommentGenerationTimer) clearTimeout(_ikrcCommentGenerationTimer);
+      _ikrcCommentGenerationTimer = null;
+      setIkrcCommentGenerationBusy_(false);
+      area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateIkrcComment()">다시 시도</button>';
+    })
     .generateIkrcComment({ judgeName:(_judge && _judge.name) || '', variationSeed:[(_judge && _judge.name) || '', 'IKRC', s.no].join('|'), sampleNo:s.no, scores:scores, intensities:intensities, tags:tags });
 }
 function useIkrcComment(text) {
