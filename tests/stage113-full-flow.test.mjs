@@ -787,15 +787,17 @@ assert.equal(generatedKbc.success, true);
 assert.equal(generatedKbc.comments.length, 2);
 generatedKbc.comments.forEach((comment) => {
   kbcCommentEvidence.forEach((item) => {
-    assert.ok(comment.includes(item.label), `KBC generated comment omitted ${item.label}`);
     item.tags.forEach((tag) => assert.ok(comment.includes(tag), `KBC generated comment omitted ${tag}`));
     if (item.comment) assert.ok(comment.includes("테스트입니다"), `KBC generated comment omitted direct note for ${item.label}`);
+  });
+  ["서비스", "맛과 설계", "클린컵", "마우스필", "플레이버", "머신 및 기물 운용"].forEach((signal) => {
+    assert.ok(comment.includes(signal), `KBC generated comment omitted ${signal}`);
   });
   assert.match(comment, /안정적인 인상/);
   assert.match(comment, /다소 불안정한 인상/);
   assert.match(comment, /심사에서 느껴진 내용을 간단히|서비스 전문성/);
   assert.doesNotMatch(comment, /우선적인 개선|연습이 필요|재정비|핵심 보완 지점|높아질 수 있습니다/);
-  assert.ok(comment.length <= 550, `KBC generated comment is too long: ${comment.length}`);
+  assert.ok(comment.length <= 350, `KBC generated comment is too long: ${comment.length}`);
   assert.doesNotMatch(comment, /항목 합계|가중 반영|전 항목 평균|최종 18\.8점|\d+(?:\.\d+)?점\s*\(/);
 });
 

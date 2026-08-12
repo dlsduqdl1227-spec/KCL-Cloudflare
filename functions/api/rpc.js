@@ -6647,30 +6647,59 @@ function generateKbcComment(payload) {
     ][ratingLevel(item)];
   }
 
+  function displayLabel(item, section) {
+    let label = safeStr(item.label);
+    if (section && label.indexOf(section) === 0) label = label.slice(section.length).trim();
+    return label.replace(/\s*전문성$/, '') || safeStr(item.label);
+  }
+
   function sectionSentence(section) {
     const sectionItems = items.filter(item => item.section === section);
     if (!sectionItems.length) return '';
     if (sectionItems.length === 1) {
       const item = sectionItems[0];
-      return `${item.label}${_topicParticle_(item.label)} ${impressionText(item)}이었습니다.`;
+      const label = displayLabel(item, section) || section;
+      return `${label}${_topicParticle_(label)} ${impressionText(item)}이었습니다.`;
     }
-    const clauses = sectionItems.map((item, index) => {
-      const label = item.label;
-      const ending = index === sectionItems.length - 1 ? '이었습니다.' : index === sectionItems.length - 2 ? '이었으며, ' : '이었고, ';
-      return `${label}${_topicParticle_(label)} ${impressionText(item)}${ending}`;
+    const groups = [];
+    sectionItems.forEach(item => {
+      const level = ratingLevel(item);
+      let group = groups.find(entry => entry.level === level);
+      if (!group) {
+        group = {level, items:[]};
+        groups.push(group);
+      }
+      group.items.push(item);
     });
-    return clauses.join('');
+    const clauses = groups.map((group, index) => {
+      const labels = group.items.map(item => displayLabel(item, section)).join('·');
+      const ending = index === groups.length - 1 ? '이었습니다.' : '이었고, ';
+      return `${labels}${_subjectParticle_(labels)} ${impressionText(group.items[0])}${ending}`;
+    });
+    return `${section}${_topicParticle_(section)} ${clauses.join('')}`;
+  }
+
+  function tagContext(item) {
+    const prefix = item.section === '창작음료' ? '창작음료 ' : item.section === '에스프레소' ? '에스프레소 ' : '';
+    if (/presentation/.test(item.id)) return '서비스';
+    if (/machine/.test(item.id)) return '머신 및 기물 운용';
+    if (/taste/.test(item.id)) return `${prefix}맛의 설계`;
+    if (/clean/.test(item.id)) return `${prefix}클린컵`;
+    if (/mouth/.test(item.id)) return `${prefix}질감`;
+    if (/flavor/.test(item.id)) return `${prefix}향미`;
+    return displayLabel(item, item.section);
   }
 
   const sectionOrder = ['서비스', '에스프레소', '창작음료', '운영'];
   const sectionText = sectionOrder.map(sectionSentence).filter(Boolean).join(' ');
   const tagText = items.filter(item => item.tags.length).map(item => {
-    const observed = /taste|clean|mouth|flavor/.test(item.id) ? '느껴진' : '확인된';
-    return `${item.label}에서 ${observed} 표현은 ${item.tags.join(', ')}입니다.`;
+    const tags = item.tags.join('·');
+    const observed = /taste|clean|mouth|flavor/.test(item.id) ? '느껴졌습니다' : '확인됐습니다';
+    return `${tagContext(item)}에서는 ${tags}${_subjectParticle_(tags)} ${observed}.`;
   }).join(' ');
   const directText = items.filter(item => item.comment).map(item => {
     const comment = item.comment.replace(/[.!?]+$/, '');
-    return `${item.label}에는 “${comment}”라는 심사 기록이 남았습니다.`;
+    return `${tagContext(item)}에는 “${comment}”라는 심사 기록이 남았습니다.`;
   }).join(' ');
   const timeText = Math.max(0, _num(payload.timePenalty)) ? '시간 감점이 함께 반영되었습니다.' : '';
   const concise = `${sectionText} ${tagText} ${directText} ${timeText}`.replace(/\s+/g, ' ').trim();
