@@ -28,9 +28,10 @@ function functionSource(source, name) {
 }
 
 assert.match(assessment, /id="kbc-comment-reference"/);
-assert.match(assessment, /id="kbc-auto-comment-generate"[\s\S]*AI 자동 코멘트 생성/);
+assert.match(assessment, /id="kbc-auto-comment-generate"[\s\S]*AI 코멘트 생성 \/ 다시 생성/);
 assert.match(assessment, /id="kbc-auto-comment-disable"[\s\S]*AI 코멘트 사용 안 함/);
 assert.match(assessment, /_kbcAutoCommentEnabled\s*=\s*false/);
+assert.match(assessment, /class="btn-gen-comment comment-regenerate-btn" onclick="generateKbcComment\(\)"[\s\S]*AI 코멘트 다시 생성/);
 
 const tagSection = functionSource(assessment, "renderKbcInlineTagSection_");
 assert.doesNotMatch(tagSection, /custom-tag-row|직접 입력|addKbcInlineCustomTag/);
@@ -60,6 +61,17 @@ assert.match(clearClient, /_kbcGeneratedComment\s*=\s*''/);
 const reviewPayload = functionSource(assessment, "reviewBuildKbcCommentPayload_");
 assert.match(reviewPayload, /evaluatedItems/);
 assert.match(reviewPayload, /comment:reviewCommentAttrText_/);
+const reviewReference = functionSource(assessment, "reviewCommentReferenceHtml_");
+assert.match(reviewReference, /data-review-kbc-comment-reference/);
+assert.match(reviewReference, /현재 검수 화면에서 수정한 점수·스마트태그·항목별 코멘트/);
+const reviewCard = functionSource(assessment, "ensureReviewOverallCard_");
+assert.match(reviewCard, /AI 코멘트 생성 \/ 다시 생성/);
+assert.match(reviewCard, /review-kbc-comment-reference/);
+const reviewGenerate = functionSource(assessment, "generateReviewOverallComment");
+assert.match(reviewGenerate, /refreshReviewKbcCommentReference_/);
+assert.match(reviewGenerate, /AI 코멘트 다시 생성/);
+assert.match(reviewGenerate, /runner\.generateKbcComment\(payload\)/);
+assert.match(functionSource(assessment, "scheduleReviewAutoSave"), /refreshReviewKbcCommentReference_/);
 
 const generateServer = functionSource(rpc, "generateKbcComment");
 assert.match(generateServer, /payload\.evaluatedItems/);

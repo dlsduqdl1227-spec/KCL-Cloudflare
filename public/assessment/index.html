@@ -662,6 +662,7 @@ input[type=range].kcl-range,
 .ikrc-comment-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .ikrc-comment-actions .btn-gen-comment,.ikrc-comment-actions .btn-outline{margin:0}
 .ikrc-comment-actions [aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.comment-regenerate-btn{width:100%;margin:12px 0 0!important}
 @media(max-width:420px){.ikrc-comment-actions{grid-template-columns:1fr}}
 .review-score-input{margin-top:10px!important;text-align:center;font-weight:700}
 .review-readonly-block{background:rgba(255,255,255,.035);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px}
@@ -2318,7 +2319,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div id="kbc-comment-reference"></div>
     <div class="section-label" style="margin-top:16px">AI 자동 코멘트 사용 여부</div>
     <div class="ikrc-comment-actions">
-      <button id="kbc-auto-comment-generate" class="btn-gen-comment" type="button" onclick="generateKbcComment()">AI 자동 코멘트 생성</button>
+      <button id="kbc-auto-comment-generate" class="btn-gen-comment" type="button" onclick="generateKbcComment()">AI 코멘트 생성 / 다시 생성</button>
       <button id="kbc-auto-comment-disable" class="btn-outline" type="button" onclick="clearKbcGeneratedComment()">AI 코멘트 사용 안 함</button>
     </div>
     <div id="kbc-comment-mode-note" class="review-edit-help" style="margin-bottom:10px">자동 생성을 사용하지 않고 아래 종합 의견을 직접 작성할 수 있습니다.</div>
@@ -8837,9 +8838,26 @@ function reviewScoreSummaryFromPayload_(code, payload) {
   return items.filter(function(x){ return x[1] !== null && x[1] !== undefined && x[1] !== '' && !isNaN(parseFloat(x[1])); }).map(function(x){ return x[0] + ' ' + fmt(x[1]); }).slice(0, 7).join(' · ');
 }
 function reviewCommentReferenceHtml_(code, payload) {
-  // Stage52: 전체 대회 검수 화면에서 코멘트 참고 요약은 공식 평가 항목처럼 보일 수 있어 숨긴다.
-  // 코멘트 자동 생성 payload와 저장 데이터는 유지하고, 화면 노출만 제거한다.
+  if (String(code || '').toUpperCase() === 'KBC' && payload && Array.isArray(payload.evaluatedItems)) {
+    var cards = payload.evaluatedItems.map(function(item){
+      var tags = Array.isArray(item.tags) ? item.tags.filter(function(tag){ return !!String(tag || '').trim(); }) : [];
+      var scoreText = fmtScore(item.score || 0, 1) + '점 · ' + (item.rating || kbcGetDesc(item.score || 0));
+      if (Number(item.weight || 1) > 1) scoreText += ' · ×' + Number(item.weight) + ' 반영 ' + fmtScore(item.weightedScore || 0, 1) + '점';
+      return '<div class="mob-comment-reference-card" data-review-kbc-comment-item="' + escHtml(item.id || '') + '">' +
+        '<div class="mob-comment-reference-title">' + escHtml((item.section || '평가') + ' · ' + (item.label || '평가 항목')) + '</div>' +
+        '<div class="mob-comment-reference-text">' + escHtml(scoreText) + '</div>' +
+        '<div class="mob-comment-reference-text">' + escHtml(tags.length ? ('선택 스마트태그: ' + tags.join(', ')) : '선택 스마트태그 없음') + '</div>' +
+        '<div class="mob-comment-reference-text">' + escHtml(item.comment ? ('직접 코멘트: ' + item.comment) : '직접 코멘트 없음') + '</div></div>';
+    }).join('');
+    return '<div class="review-edit-help" style="margin:10px 0">현재 검수 화면에서 수정한 점수·스마트태그·항목별 코멘트를 기준으로 AI 코멘트를 생성하거나 다시 생성합니다.</div>' +
+      '<div class="kcr-comment-reference" data-review-kbc-comment-reference="true">' + cards + '</div>';
+  }
   return '';
+}
+function refreshReviewKbcCommentReference_() {
+  var wrap = document.getElementById('review-kbc-comment-reference');
+  if (!wrap || String((_reviewState && _reviewState.code) || '').toUpperCase() !== 'KBC') return;
+  wrap.innerHTML = reviewCommentReferenceHtml_('KBC', reviewBuildKbcCommentPayload_());
 }
 function updateReviewOverallInsights_() {
   var el = document.getElementById('review-comment-insights-wrap');
@@ -8880,8 +8898,10 @@ function ensureReviewOverallCard_() {
   var sub = isMobManualComment
     ? (editable ? '심사위원이 제출한 수기 원문입니다. 검수 중 수정한 내용이 최종 코멘트로 저장됩니다.' : '심사위원이 제출한 수기 원문입니다.')
     : '항목별 코멘트가 없을 경우 이 영역의 전체 코멘트만 저장·반영됩니다.';
-  var generateButton = isMobManualComment ? '' : '<button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">초안 생성</button>';
-  var insights = isMobManualComment ? '' : '<div id="review-comment-insights-wrap"></div><div class="gen-comment-area" id="review-gen-comment-area-' + idx + '"></div>';
+  var generateButton = isMobManualComment ? '' : '<button type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">AI 코멘트 생성 / 다시 생성</button>';
+  if (!editable) generateButton = '';
+  var reference = currentCode === 'KBC' ? '<div id="review-kbc-comment-reference">' + reviewCommentReferenceHtml_('KBC', reviewBuildKbcCommentPayload_()) + '</div>' : '';
+  var insights = isMobManualComment ? '' : reference + '<div id="review-comment-insights-wrap"></div><div class="gen-comment-area" id="review-gen-comment-area-' + idx + '"></div>';
   var inputHandlers = ' oninput="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave()" onblur="reviewSetFieldValueByIndex_(' + idx + ', this.value); scheduleReviewAutoSave(true)"' + (!editable ? ' disabled' : '');
   card.innerHTML =
     '<div class="review-overall-head">' +
@@ -8916,6 +8936,7 @@ function generateReviewOverallComment(commentIdx) {
   syncReviewControlsFromDom_();
   normalizeReviewNumbers();
   syncReviewDerivedTotals_();
+  refreshReviewKbcCommentReference_();
   var area = document.getElementById('review-gen-comment-area-' + commentIdx);
   if (!area) return;
   var payload = reviewBuildCommentPayload_(code);
@@ -8929,15 +8950,15 @@ function generateReviewOverallComment(commentIdx) {
   var runner = google.script.run
     .withSuccessHandler(function(res) {
       if (!res || !res.comments) {
-        area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>';
+        area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">다시 시도</button>';
         return;
       }
       area.innerHTML = '<div class="comment-edit-warning">검수 코멘트 초안입니다. 선택 후 필요하면 직접 수정하세요.</div>' + res.comments.map(function(comment){
         return '<div class="comment-variation" onclick="useReviewGeneratedComment(' + commentIdx + ', this.textContent)">' + escHtml(comment) + '</div>';
-      }).join('');
+      }).join('') + '<button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">AI 코멘트 다시 생성</button>';
     })
     .withFailureHandler(function(){
-      area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>';
+      area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">다시 시도</button>';
     });
   if (code === 'KCR') runner.generateCuppingComment(payload);
   else if (code === 'KBC') runner.generateKbcComment(payload);
@@ -9504,6 +9525,7 @@ function setReviewAutoSaveState(msg, cls) {
 function scheduleReviewAutoSave(immediate) {
   if (!canReviewEditAny_()) return;
   if (!_reviewState.current) return;
+  refreshReviewKbcCommentReference_();
   clearTimeout(_reviewAutoSaveTimer);
   setReviewAutoSaveState('수정 내용을 자동 저장하는 중입니다.', 'review-autosaving');
   updateReviewOverallInsights_();
@@ -13519,15 +13541,15 @@ function generateKbcComment() {
   google.script.run
     .withSuccessHandler(function(res){
       if (!res || !res.comments) {
-        area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>';
+        area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateKbcComment()">다시 시도</button>';
         return;
       }
       area.innerHTML = '<div class="comment-edit-warning">자동 생성 코멘트 선택 후 반드시 직접 수정해야 제출할 수 있습니다.</div>' + res.comments.map(function(c){
         return '<div class="comment-variation" onclick="useKbcComment(this.textContent)">' + escHtml(c) + '</div>';
-      }).join('');
+      }).join('') + '<button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateKbcComment()">AI 코멘트 다시 생성</button>';
     })
     .withFailureHandler(function(){
-      area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>';
+      area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateKbcComment()">다시 시도</button>';
     })
     .generateKbcComment({
       judgeName:(_judge && _judge.name) || '', variationSeed:[(_judge && _judge.name) || '', 'KBC', val_('kbc-num') || '', (_selComp && _selComp.currentRound) || ''].join('|'),
