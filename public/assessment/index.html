@@ -9607,6 +9607,8 @@ var _reviewAutoSaveTimer = null;
 var _reviewAutoSaving = false;
 var _reviewAutoSaveQueued = false;
 var _reviewAutoSaveWaiters = [];
+var _reviewDraftDirty = false;
+var _reviewDraftVersion = 0;
 
 function setReviewAutoSaveState(msg, cls) {
   var el = document.getElementById('review-autosave-state');
@@ -9618,11 +9620,17 @@ function setReviewAutoSaveState(msg, cls) {
 function scheduleReviewAutoSave(immediate) {
   if (!canReviewEditAny_()) return;
   if (!_reviewState.current) return;
+  captureReviewDraftValues_();
+  _reviewDraftDirty = true;
+  _reviewDraftVersion += 1;
   refreshReviewKbcCommentReference_();
   clearTimeout(_reviewAutoSaveTimer);
   setReviewAutoSaveState('수정 내용을 자동 저장하는 중입니다.', 'review-autosaving');
   updateReviewOverallInsights_();
-  _reviewAutoSaveTimer = setTimeout(function(){ autoSaveReviewEdit(); }, immediate ? 80 : 900);
+  _reviewAutoSaveTimer = setTimeout(function(){
+    _reviewAutoSaveTimer = null;
+    autoSaveReviewEdit();
+  }, immediate ? 80 : 900);
 }
 
 function finishReviewAutoSaveWaiters_(ok) {
@@ -9660,9 +9668,26 @@ function applyReviewSavedState_(item, headers, updates, status) {
       target['_col' + k] = updates[k];
       if (Array.isArray(target.values) && !isNaN(idx)) target.values[idx] = updates[k];
     });
-    target.status = status;
-    target['검수상태'] = status;
+    if (status !== undefined && status !== null) {
+      target.status = status;
+      target['검수상태'] = status;
+    }
   });
+}
+
+function captureReviewDraftValues_() {
+  var item = _reviewState && _reviewState.current;
+  if (!item) return;
+  var updates = {};
+  document.querySelectorAll('#review-edit-fields input[data-col], #review-edit-fields textarea[data-col]').forEach(function(el){
+    if (el.disabled) return;
+    var col = el.getAttribute('data-col');
+    if (col == null || col === '') return;
+    var nextVal = el.value;
+    if (updates[col] !== undefined && String(updates[col] || '').trim() && !String(nextVal || '').trim()) return;
+    updates[col] = nextVal;
+  });
+  applyReviewSavedState_(item, (_reviewState.headers || []).slice(), updates, null);
 }
 
 function autoSaveReviewEdit(cb) {
@@ -9682,6 +9707,7 @@ function autoSaveReviewEdit(cb) {
   var saveRowIndex = item.rowIndex;
   var saveRole = roleTextForCode_(saveCode);
   var saveActor = reviewActorPayload_(saveCode);
+  var saveVersion = _reviewDraftVersion;
   _reviewAutoSaving = true;
   setReviewAutoSaveState('수정 내용을 자동 저장하는 중입니다.', 'review-autosaving');
   var autoStatus = reviewIsCalibration_(item, saveCode) ? (item.status || '켈리브레이션') : '수정완료';
@@ -9695,6 +9721,7 @@ function autoSaveReviewEdit(cb) {
         return;
       }
       applyReviewSavedState_(item, saveHeaders, saveUpdates, autoStatus);
+      if (_reviewDraftVersion === saveVersion) _reviewDraftDirty = false;
       setReviewAutoSaveState('수정완료 · 자동 저장됨', 'review-autosaved');
       if (_reviewAutoSaveQueued) {
         _reviewAutoSaveQueued = false;
@@ -9757,6 +9784,7 @@ function saveReviewEdit(complete, options) {
   var saveCode = _reviewState.code;
   var saveHeaders = (_reviewState.headers || []).slice();
   var saveUpdates = collectReviewUpdates();
+  var saveVersion = _reviewDraftVersion;
   var groupItems = reviewGroupItems_(item);
   var stayInGroupedReview = !!options.stayOpen || (!complete && String(saveCode || '').toUpperCase() === 'IKRC' && groupItems.length > 1);
   showOverlay();
@@ -9764,6 +9792,7 @@ function saveReviewEdit(complete, options) {
     .withSuccessHandler(function(res){
       if (!res || !res.success) { hideOverlay(); toast((res && res.message) || '저장 실패', true); return; }
       applyReviewSavedState_(item, saveHeaders, saveUpdates, status);
+      if (_reviewDraftVersion === saveVersion) _reviewDraftDirty = false;
       if (complete && groupItems.length > 1) {
         google.script.run
           .withSuccessHandler(function(batchRes){
@@ -9837,6 +9866,17 @@ function deleteReviewCurrent() {
 }
 
 function backToReviewList() {
+  if (canReviewEditAny_() && _reviewState.current && (_reviewDraftDirty || _reviewAutoSaving || _reviewAutoSaveTimer)) {
+    setReviewAutoSaveState('작성한 코멘트를 저장한 뒤 이동합니다.', 'review-autosaving');
+    flushReviewAutoSaveThen_(function(ok){
+      if (!ok) {
+        toast('코멘트를 저장하지 못해 화면 이동을 중단했습니다. 네트워크를 확인하고 다시 시도해주세요.', true);
+        return;
+      }
+      goReviewByCode(_reviewState.code, _reviewState.name, _reviewState.backPanel);
+    });
+    return;
+  }
   goReviewByCode(_reviewState.code, _reviewState.name, _reviewState.backPanel);
 }
 
@@ -15539,7 +15579,7 @@ function renderIkrcAttrCard() {
   if (attr === 'comment') {
     html += buildIkrcManualCommentReferenceHtml_(s);
     html += '<div class="section-label" style="margin-top:16px">Overall Comment (수기 작성 가능)</div>';
-    html += '<textarea id="ikrc-comment" placeholder="스마트태그와 강도를 참고해 종합 의견을 직접 입력하세요" oninput="onIkrcCommentInput()">' + escHtml(s.comment || '') + '</textarea>';
+    html += '<textarea id="ikrc-comment" placeholder="스마트태그와 강도를 참고해 종합 의견을 직접 입력하세요" oninput="onIkrcCommentInput()" onblur="saveIkrc(); kclSaveActiveEvalDraftNow_(true)">' + escHtml(s.comment || '') + '</textarea>';
     html += '<div id="ikrc-comment-warning" class="comment-edit-warning" style="display:none"></div>';
     html += '<div class="ikrc-comment-actions">';
     html += '<button id="ikrc-ai-comment-generate" class="btn-gen-comment" type="button" onclick="generateIkrcComment()">AI 코멘트 생성 / 다시 생성</button>';
@@ -16145,6 +16185,7 @@ function toggleIkrcBranchValue_(attr, tag, branchData, ancestors) {
   if (next.length > MAX_TAGS) { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return false; }
   s[key] = smartTagNormalizeSelection_(next, IKRC_SMART_TAGS[attr], 'label');
   refreshIkrcTagDisplay(attr);
+  if (typeof kclScheduleEvalDraftSave_ === 'function') kclScheduleEvalDraftSave_();
   return true;
 }
 function selectIkrcTag(attr, tag, parentPrimary, parentSecondary) {
@@ -16156,11 +16197,13 @@ function selectIkrcTag(attr, tag, parentPrimary, parentSecondary) {
   if (idx > -1) s[key].splice(idx,1); else if (s[key].length < MAX_TAGS) s[key].push(tag); else { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return; }
   s[key] = smartTagNormalizeSelection_(s[key], IKRC_SMART_TAGS[attr], 'label');
   refreshIkrcTagDisplay(attr);
+  if (typeof kclScheduleEvalDraftSave_ === 'function') kclScheduleEvalDraftSave_();
 }
 function removeIkrcTag(attr, tag) {
   var s = _ikrcSamples[_ikrcIdx], key = ikrcTagKey_(attr); if (!s[key]) return;
   var idx = s[key].indexOf(tag); if (idx > -1) s[key].splice(idx,1);
   refreshIkrcTagDisplay(attr);
+  if (typeof kclScheduleEvalDraftSave_ === 'function') kclScheduleEvalDraftSave_();
 }
 function addIkrcCustomTag(attr) {
   var input = document.getElementById('ikrc-custom-tag-' + attr); if (!input) return;
@@ -16196,7 +16239,10 @@ function onIkrcCommentInput() {
   s.comment = document.getElementById('ikrc-comment').value;
   if (s.generatedComment) s.commentEdited = s.comment.trim() !== s.generatedComment.trim() && s.comment.trim().length >= 10;
   setCommentWarning('ikrc-comment-warning', s.generatedComment, s.commentEdited);
-  renderIkrcAttrTabs(); renderIkrcNav();
+  // 모바일 한글 조합 입력 중 탭/컵 내비게이션 전체 DOM을 다시 만들면 입력기가 끊기거나
+  // textarea가 이전 상태로 보일 수 있습니다. 입력값은 메모리와 로컬 초안에만 즉시 반영하고,
+  // 탭/컵 표시는 실제 이동·저장 시점에 갱신합니다.
+  if (typeof kclScheduleEvalDraftSave_ === 'function') kclScheduleEvalDraftSave_();
 }
 function validateIkrcCommentEdited(s) {
   if (s && s.generatedComment && !s.commentEdited) {
