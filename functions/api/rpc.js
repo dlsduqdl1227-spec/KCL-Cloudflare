@@ -616,6 +616,8 @@ async function dispatch(action, args, env, request) {
     deleteReviewRow: () => deleteReviewRow(env, args[0], args[1], args[3] || args[2]),
     getRanking: () => getRanking(env, args[0], args[1]),
     getRankingDetail: () => getRankingDetail(env, args[0], args[1], args[2], args[3]),
+    getAdminDebriefPreviewOptions: () => getAdminDebriefPreviewOptions(env, args[0], args[1]),
+    getAdminDebriefPreview: () => getAdminDebriefPreview(env, args[0], args[1], args[2], args[3]),
     getFinalReport: () => getFinalReport(env, args[0], args[1]),
     getScoreBackupReport: () => getScoreBackupReport(env, args[0], args[1]),
     sendOTP: () => sendOTP(env, args[0], args[1], args[2], request),
@@ -5869,6 +5871,82 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const displayTotal = Number.isFinite(rankingTotal) ? rankingTotal : totalScore;
   const displayAvg = Number.isFinite(rankingTotal) ? rankingTotal : (count ? Math.round((totalScore / count) * 100) / 100 : 0);
   return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code), unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', unit: targetUnit, unitDisplay: targetUnit, round: targetRound, headers: data.headers, rows, scores: rows, totalScore: displayTotal, avgScore: displayAvg, rankInfo, rankInfos: rankInfo ? [rankInfo] : [], disqualified: disqualified || (rankInfo && rankInfo.disqualified) || false, disqualificationReason: reasons.join(' / ') || (rankInfo && rankInfo.disqualificationReason) || '', reviewedCount, totalCount: rows.length, playerNameSummary: (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || (rows[0] && rows[0].participantName) || '', playerAffiliationSummary: (rankInfo && rankInfo.playerAffiliationSummary) || (rows[0] && rows[0].participantAffiliation) || '' };
+}
+
+async function requireAdminPreviewActor_(env, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!actor || !hasAdmin(actor)) {
+    return { ok:false, res:{ success:false, message:'전체 관리자 로그인 후 디브리핑 미리보기를 이용해주세요.' } };
+  }
+  return { ok:true, actor };
+}
+async function getAdminDebriefPreviewOptions(env, competitionCode, actorArg) {
+  const code = safeStr(competitionCode).toUpperCase();
+  const auth = await requireAdminPreviewActor_(env, actorArg);
+  if (!auth.ok) return auth.res;
+  if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
+  const data = await buildRankingData_(env, code);
+  const publicCountByUnit = new Map();
+  officialScoreItemsForOutput_(code, (data.rows || []).filter(item =>
+    shouldCountItemInRanking_(code, item) && reviewCompletedStatus_(item && (item['검수상태'] || item.status))
+  )).forEach(item => {
+    const key = roundName_(item.round || item['라운드'], data.cfg && data.cfg.current_round) + '::' + itemNumber_(item);
+    publicCountByUnit.set(key, (publicCountByUnit.get(key) || 0) + 1);
+  });
+  const options = (data.ranking || []).map(item => {
+    const key = roundName_(item.round, data.cfg && data.cfg.current_round) + '::' + safeStr(item.unit);
+    return Object.assign({}, item, { publicReviewedCount:Number(publicCountByUnit.get(key) || 0) });
+  }).filter(item => item.publicReviewedCount > 0).map(item => ({
+    unit:safeStr(item.unit),
+    unitDisplay:safeStr(item.unitDisplay || item.unit),
+    round:roundName_(item.round, data.cfg && data.cfg.current_round),
+    name:safeStr(item.playerNameSummary || item.nameSummary),
+    affiliation:safeStr(item.playerAffiliationSummary),
+    reviewedCount:item.publicReviewedCount,
+    totalCount:Number(item.totalCount || 0),
+    rank:item.rank,
+    totalInRound:Number(item.totalInRound || 0)
+  }));
+  return {
+    success:true,
+    compCode:code,
+    compName:data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code),
+    currentRound:data.cfg ? data.cfg.current_round : '',
+    options
+  };
+}
+async function getAdminDebriefPreview(env, competitionCode, unit, round, actorArg) {
+  const code = safeStr(competitionCode).toUpperCase();
+  const auth = await requireAdminPreviewActor_(env, actorArg);
+  if (!auth.ok) return auth.res;
+  if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
+  const detail = await getRankingDetail(env, code, unit, round, { judgeToken:auth.actor.judgeToken || (actorArg && actorArg.judgeToken) || '' });
+  if (!detail || !detail.success) return detail || { success:false, message:'디브리핑 미리보기를 불러오지 못했습니다.' };
+  const publicScores = officialScoreItemsForOutput_(code, (detail.scores || detail.rows || []).filter(item =>
+    reviewCompletedStatus_(item && (item['검수상태'] || item.status))
+  ));
+  const rankInfo = detail.rankInfo || null;
+  return {
+    success:true,
+    isAdminPreview:true,
+    competition:code,
+    competitionCode:code,
+    compName:detail.compName || (COMPETITION_NAMES[code] || code),
+    playerInfo:{
+      name:safeStr(detail.playerNameSummary || (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || detail.unitDisplay || detail.unit),
+      affiliation:safeStr(detail.playerAffiliationSummary || (rankInfo && rankInfo.playerAffiliationSummary)),
+      teamName:safeStr(rankInfo && rankInfo.teamNameSummary),
+      teamNo:code === 'KTCC' ? safeStr(detail.unitDisplay || detail.unit) : '',
+      maskedPhone:''
+    },
+    scores:publicScores,
+    headers:detail.headers || [],
+    rankInfos:detail.rankInfos || (rankInfo ? [rankInfo] : []),
+    rankInfo,
+    previewUnit:safeStr(detail.unitDisplay || detail.unit),
+    previewRound:roundName_(detail.round || round, ''),
+    previewDataBasis:'검수완료·수정완료 공식평가'
+  };
 }
 
 

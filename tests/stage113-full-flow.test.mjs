@@ -1041,6 +1041,22 @@ for (const [code, review] of Object.entries(reviewLists)) {
   assert.ok(report.approvedRows.length > 0, `${code} final report has no approved rows`);
 }
 
+const previewScoreCountBefore = testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores").get().n;
+const adminPreviewOptions = await rpc("getAdminDebriefPreviewOptions", "KBC", adminActor);
+assert.equal(adminPreviewOptions.success, true, adminPreviewOptions.message);
+assert.ok(adminPreviewOptions.options.length > 0, "관리자 디브리핑 미리보기에 검수 완료 선수가 표시되어야 합니다");
+const previewTarget = adminPreviewOptions.options[0];
+const adminPreview = await rpc("getAdminDebriefPreview", "KBC", previewTarget.unit, previewTarget.round, adminActor);
+assert.equal(adminPreview.success, true, adminPreview.message);
+assert.equal(adminPreview.isAdminPreview, true);
+assert.ok(adminPreview.scores.length > 0, "관리자 미리보기는 선수 공개용 공식 평가를 반환해야 합니다");
+assert.ok(adminPreview.scores.every((item) => ["검수완료", "수정완료"].includes(String(item["검수상태"] || item.status || "").replace(/\s/g, ""))), "미리보기에는 검수 완료·수정 완료 평가만 포함되어야 합니다");
+const unauthorizedPreview = await rpc("getAdminDebriefPreviewOptions", "KBC", { judgeToken:judge.judgeToken });
+assert.equal(unauthorizedPreview.success, false, "일반 심사위원은 관리자 디브리핑 미리보기를 열 수 없어야 합니다");
+const teamLeadPreview = await rpc("getAdminDebriefPreviewOptions", "IKRC", stationLeadActor);
+assert.equal(teamLeadPreview.success, false, "대회팀장도 전체 관리자 전용 디브리핑 미리보기를 열 수 없어야 합니다");
+assert.equal(testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores").get().n, previewScoreCountBefore, "디브리핑 미리보기는 평가 데이터를 변경하면 안 됩니다");
+
 const ikrcRankingBeforeStationFinal = await rpc("getRanking", "IKRC", adminActor);
 assert.equal(ikrcRankingBeforeStationFinal.success, true);
 const reviewedBeforeFinalZ1 = ikrcRankingBeforeStationFinal.ranking.find((item) => item.unit === "Z-1");

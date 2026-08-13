@@ -254,6 +254,8 @@ h2,.subtitle,.section-label,.result-name,.result-affil,.result-comp,.round-title
 .ikrc-combined-comment{margin:0 0 16px;border-left-width:5px;background:linear-gradient(180deg,#171717,#101010)}
 .ikrc-combined-comment .comment-label{color:#fff;font-size:12px;letter-spacing:.03em;text-transform:none}
 .ikrc-combined-meta{margin-top:8px;color:#888;font-size:11px;line-height:1.5}
+.admin-preview-box{display:none;margin-top:14px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(255,255,255,.065);padding:15px}
+.admin-preview-box.active{display:block}.admin-preview-title{font-size:14px;font-weight:950;margin-bottom:6px}.admin-preview-help{font-size:12px;line-height:1.55;color:#aaa;margin-bottom:12px}.admin-preview-status{min-height:18px;margin-top:9px;color:#aaa;font-size:11px;line-height:1.5}.admin-preview-notice{display:none;margin:0 0 12px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:rgba(255,255,255,.08);padding:10px 12px;color:#ddd;font-size:11px;line-height:1.55}.admin-preview-notice.active{display:block}
 
 @media print{
   @page{size:A4;margin:10mm 11mm}
@@ -652,11 +654,21 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   <select id="sel-comp">
     <option value="">-- 대회를 선택하세요 --</option>
   </select>
-  <div class="section-label" id="identity-label">본인 확인</div>
-  <input type="text" id="inp-name" placeholder="이름" autocomplete="name" autocapitalize="off">
-  <input type="tel" id="inp-phone" placeholder="연락처 (숫자만)" maxlength="11" inputmode="numeric"
-    autocomplete="one-time-code" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-  <button class="btn" id="btn-send-otp" onclick="doSendOTP()">인증번호 받기</button>
+  <div id="public-identity-fields">
+    <div class="section-label" id="identity-label">본인 확인</div>
+    <input type="text" id="inp-name" placeholder="이름" autocomplete="name" autocapitalize="off">
+    <input type="tel" id="inp-phone" placeholder="연락처 (숫자만)" maxlength="11" inputmode="numeric"
+      autocomplete="one-time-code" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+    <button class="btn" id="btn-send-otp" onclick="doSendOTP()">인증번호 받기</button>
+  </div>
+  <div id="admin-preview-box" class="admin-preview-box">
+    <div class="admin-preview-title">전체 대회 디브리핑 미리보기</div>
+    <div class="admin-preview-help">선수가 보게 될 현재 디브리핑 화면을 연락처 인증 없이 확인합니다. 검수완료·수정완료 공식평가만 표시되며 원본 데이터는 변경되지 않습니다.</div>
+    <div class="section-label">미리볼 선수·팀</div>
+    <select id="admin-preview-unit" disabled><option value="">대회를 먼저 선택해주세요</option></select>
+    <button class="btn" id="admin-preview-open" type="button" onclick="openAdminDebriefPreview_()" disabled>선수 화면 미리보기</button>
+    <div id="admin-preview-status" class="admin-preview-status"></div>
+  </div>
 </div>
 
 <!-- PANEL 2 -->
@@ -675,6 +687,8 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
 
 <!-- PANEL 3: 결과 -->
 <div id="pResult" class="panel">
+  <div id="admin-preview-notice" class="admin-preview-notice">관리자 미리보기입니다. 선수 공개 화면의 표시 형태만 확인하며 평가 데이터는 변경되지 않습니다.
+  </div>
   <div class="result-header">
     <div class="report-label">OFFICIAL DEBRIEFING REPORT</div>
     <div id="result-logo" class="result-logo-wrap"></div>
@@ -693,9 +707,11 @@ var _name = '', _phone = '', _compCode = '', _maskedPhone = '';
 var _lastResult = null;
 var _timerInterval = null;
 var _configs = [];
+var _adminPreviewActor = null;
+var _adminPreviewOptions = [];
 
 function debriefHomeTarget_() {
-  return '/';
+  return adminPreviewRequested_() ? '/admin/' : '/';
 }
 function clearDebriefSession_() {
   try {
@@ -730,6 +746,7 @@ function updateDebriefLogo() {
   var code = document.getElementById('sel-comp').value;
   document.getElementById('debrief-logo').innerHTML = logoImg_(code, 'hero-logo');
   updateIdentityLabels_();
+  if (_adminPreviewActor) loadAdminDebriefPreviewOptions_();
 }
 
 function updateIdentityLabels_() {
@@ -773,30 +790,157 @@ function gasRun_(fnName, args, onSuccess, onFailure) {
   runner[fnName].apply(runner, args || []);
 }
 
-window.onload = function() {
+function adminPreviewRequested_() {
+  var params = new URLSearchParams(window.location.search || '');
+  return params.get('from') === 'admin' || params.get('preview') === 'admin' || params.get('preview') === '1';
+}
+function readSavedAdminActor_() {
+  try { return JSON.parse(localStorage.getItem('kclAdminActor') || 'null'); } catch(e) { return null; }
+}
+function isFullAdminActor_(actor) {
+  if (!actor) return false;
+  var type = String(actor.accountType || actor.type || '').toUpperCase();
+  var rows = Array.isArray(actor.operatorRows) ? actor.operatorRows : [];
+  return type === 'ADMIN' || /관리자|admin|총괄/i.test(actor.role || '') || rows.some(function(row){
+    return String(row.accountType || row.account_type || '').toUpperCase() === 'ADMIN' || /관리자|admin|총괄/i.test(row.role || '');
+  });
+}
+function adminPreviewActorPayload_() {
+  return { judgeToken:(_adminPreviewActor && _adminPreviewActor.judgeToken) || '' };
+}
+function setAdminPreviewMode_(active) {
+  var publicFields = document.getElementById('public-identity-fields');
+  var previewBox = document.getElementById('admin-preview-box');
+  var subtitle = document.querySelector('#pStep1 .subtitle');
+  if (publicFields) publicFields.style.display = active ? 'none' : '';
+  if (previewBox) previewBox.classList.toggle('active', !!active);
+  if (subtitle) subtitle.textContent = active ? '관리자 전체 대회 디브리핑 미리보기' : '본인 확인 후 점수를 조회할 수 있습니다';
+}
+function populateDebriefCompetitions_(configs, includeClosed) {
+  _configs = configs || [];
+  var sel = document.getElementById('sel-comp');
+  sel.innerHTML = '<option value="">-- 대회를 선택하세요 --</option>';
+  sel.onchange = updateDebriefLogo;
+  _configs.forEach(function(c) {
+    if (!includeClosed && !c.debriefing) return;
+    var opt = document.createElement('option');
+    opt.value = c.code;
+    opt.textContent = c.name + (includeClosed && !c.debriefing ? ' · 선수 비공개 중' : '');
+    sel.appendChild(opt);
+  });
+  if (sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">' + (includeClosed ? '등록된 대회가 없습니다' : '현재 오픈된 디브리핑이 없습니다') + '</option>';
+  }
+  if (includeClosed) {
+    var requestedCode = String(new URLSearchParams(window.location.search || '').get('comp') || '').toUpperCase();
+    if (requestedCode && Array.from(sel.options).some(function(option){ return option.value === requestedCode; })) sel.value = requestedCode;
+  }
+  updateDebriefLogo();
+}
+function loadDebriefConfig_(includeClosed) {
   showOverlay();
   gasRun_('getConfig', [], function(res) {
     hideOverlay();
     if (!res.success) { toast(res.message, true); return; }
-    _configs = res.configs;
-    var sel = document.getElementById('sel-comp');
-    sel.onchange = updateDebriefLogo;
-    res.configs.forEach(function(c) {
-      if (!c.debriefing) return;
-      var opt = document.createElement('option');
-      opt.value = c.code;
-      opt.textContent = c.name;
-      sel.appendChild(opt);
-    });
-    if (sel.options.length <= 1) {
-      sel.innerHTML = '<option value="">현재 오픈된 디브리핑이 없습니다</option>';
-    }
-    updateDebriefLogo();
+    populateDebriefCompetitions_(res.configs || [], !!includeClosed);
   }, function() {
     hideOverlay();
     toast('설정을 불러오지 못했습니다', true);
   });
+}
+function initializeDebriefPage_() {
+  if (!adminPreviewRequested_()) {
+    setAdminPreviewMode_(false);
+    loadDebriefConfig_(false);
+    return;
+  }
+  var saved = readSavedAdminActor_();
+  if (!saved || !isFullAdminActor_(saved)) {
+    setAdminPreviewMode_(false);
+    loadDebriefConfig_(false);
+    toast('관리자 로그인 후 디브리핑 미리보기를 이용해주세요.', true);
+    return;
+  }
+  showOverlay();
+  gasRun_('refreshAdminActor', [{judgeToken:saved.judgeToken || ''}], function(res){
+    hideOverlay();
+    if (!res || !res.success || !isFullAdminActor_(res.actor)) {
+      setAdminPreviewMode_(false);
+      loadDebriefConfig_(false);
+      toast((res && res.message) || '관리자 권한을 확인할 수 없습니다.', true);
+      return;
+    }
+    _adminPreviewActor = res.actor;
+    try { localStorage.setItem('kclAdminActor', JSON.stringify(res.actor)); } catch(e) {}
+    setAdminPreviewMode_(true);
+    loadDebriefConfig_(true);
+  }, function(){
+    hideOverlay();
+    setAdminPreviewMode_(false);
+    loadDebriefConfig_(false);
+    toast('관리자 권한을 다시 확인해주세요.', true);
+  });
+}
+window.onload = function() {
+  initializeDebriefPage_();
 };
+
+function loadAdminDebriefPreviewOptions_() {
+  if (!_adminPreviewActor) return;
+  var code = String((document.getElementById('sel-comp') || {}).value || '').toUpperCase();
+  var select = document.getElementById('admin-preview-unit');
+  var button = document.getElementById('admin-preview-open');
+  var status = document.getElementById('admin-preview-status');
+  _adminPreviewOptions = [];
+  if (!code) {
+    select.innerHTML = '<option value="">대회를 먼저 선택해주세요</option>';
+    select.disabled = true; button.disabled = true; status.textContent = '';
+    return;
+  }
+  select.innerHTML = '<option value="">검수 완료 평가 목록을 불러오는 중...</option>';
+  select.disabled = true; button.disabled = true; status.textContent = '';
+  gasRun_('getAdminDebriefPreviewOptions', [code, adminPreviewActorPayload_()], function(res){
+    if (!res || !res.success) {
+      select.innerHTML = '<option value="">목록을 불러오지 못했습니다</option>';
+      status.textContent = (res && res.message) || '관리자 권한을 확인해주세요.';
+      return;
+    }
+    _adminPreviewOptions = res.options || [];
+    select.innerHTML = '<option value="">-- 미리볼 선수·팀을 선택하세요 --</option>';
+    _adminPreviewOptions.forEach(function(item, index){
+      var option = document.createElement('option');
+      option.value = String(index);
+      option.textContent = [item.round, item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
+      select.appendChild(option);
+    });
+    select.disabled = !_adminPreviewOptions.length;
+    button.disabled = !_adminPreviewOptions.length;
+    status.textContent = _adminPreviewOptions.length
+      ? '검수 완료 평가가 있는 대상 ' + _adminPreviewOptions.length + '명·팀'
+      : '현재 선수 화면에 표시할 검수 완료 평가가 없습니다.';
+  }, function(){
+    select.innerHTML = '<option value="">목록을 불러오지 못했습니다</option>';
+    status.textContent = '서버 연결을 확인해주세요.';
+  });
+}
+function openAdminDebriefPreview_() {
+  if (!_adminPreviewActor) { toast('관리자 로그인이 필요합니다.', true); return; }
+  var code = String((document.getElementById('sel-comp') || {}).value || '').toUpperCase();
+  var rawIndex = String((document.getElementById('admin-preview-unit') || {}).value || '');
+  var index = rawIndex === '' ? -1 : Number(rawIndex);
+  var item = _adminPreviewOptions[index];
+  if (!code || !item) { toast('미리볼 선수·팀을 선택해주세요.', true); return; }
+  showOverlay();
+  gasRun_('getAdminDebriefPreview', [code, item.unit, item.round, adminPreviewActorPayload_()], function(res){
+    hideOverlay();
+    if (!res || !res.success) { toast((res && res.message) || '디브리핑 미리보기를 불러오지 못했습니다.', true); return; }
+    renderResult(res);
+    showPanel('pResult');
+  }, function(){
+    hideOverlay();
+    toast('디브리핑 미리보기 중 서버 오류가 발생했습니다.', true);
+  });
+}
 
 function toast(msg, isErr) {
   var t = document.getElementById('toast');
@@ -1070,6 +1214,8 @@ function normalizeKcacRoundForDisplay_(competition, round) {
 }
 function renderResult(res) {
   _lastResult = res;
+  var previewNotice = document.getElementById('admin-preview-notice');
+  if (previewNotice) previewNotice.classList.toggle('active', !!res.isAdminPreview);
   var info = res.playerInfo;
   var comp = '';
   for (var i = 0; i < _configs.length; i++) {

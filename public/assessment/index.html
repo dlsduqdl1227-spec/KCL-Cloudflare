@@ -5546,11 +5546,13 @@ function adminRenderRunCards_() {
         '<button data-act="review">평가 검수/수정</button>' +
         workflowAfter +
         '<button data-act="rank">실시간 순위 / 디브리핑</button>' +
+        '<button data-act="debrief-preview">선수 디브리핑 미리보기</button>' +
         '<button data-act="score-backup">점수·검수 백업</button>' +
         '<button data-act="judge-qr">심사 웹 QR</button>' + extra +
       '</div>';
     div.querySelector('[data-act="eval"]').onclick = function(){ adminOpenEval_(c, ''); };
     div.querySelector('[data-act="rank"]').onclick = function(){ adminOpenRanking_(c); };
+    div.querySelector('[data-act="debrief-preview"]').onclick = function(){ openAdminDebriefPreviewFromConsole_(c); };
     div.querySelector('[data-act="review"]').onclick = function(){ adminOpenReview_(c); };
     div.querySelector('[data-act="score-backup"]').onclick = function(){ downloadScoreBackupExcel(c.code); };
     div.querySelector('[data-act="judge-qr"]').onclick = function(){ openJudgeQr_(c); };
@@ -5570,6 +5572,12 @@ function adminRenderRunCards_() {
     b = div.querySelector('[data-act="mob-tech-cal"]'); if (b) b.onclick = function(){ adminOpenMobCalibration_(c, 'technical'); };
     wrap.appendChild(div);
   });
+}
+function openAdminDebriefPreviewFromConsole_(cfg) {
+  if (!isAdminRole()) { toast('전체 관리자 권한이 필요합니다.', true); return; }
+  try { localStorage.setItem('kclAdminActor', JSON.stringify(_judge || {})); } catch(e) {}
+  var code = encodeURIComponent(String((cfg && cfg.code) || '').toUpperCase());
+  window.location.href = '/debriefing/?from=admin&preview=1' + (code ? ('&comp=' + code) : '');
 }
 function adminRenderConfigList_() {
   var wrap = document.getElementById('admin-config-list');
