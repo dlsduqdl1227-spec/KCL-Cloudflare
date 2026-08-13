@@ -665,10 +665,10 @@ const resetFirstSensoryReview = await rpc("updateReviewStatusBatch", "IKRC", fir
 assert.equal(resetFirstSensoryReview.success, true, resetFirstSensoryReview.message);
 const officialZ1Detail = await rpc("getIkrcOfficialCalibrationResultsByCup", "Z-1", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
 assert.equal(officialZ1Detail.success, true, officialZ1Detail.message);
-assert.equal(officialZ1Detail.rows.length, 3, "헤드 화면에는 센서리 3명만 개별 표시해야 합니다");
+assert.equal(officialZ1Detail.rows.length, 4, "헤드 화면에는 헤드 1명과 센서리 3명을 함께 표시해야 합니다");
 assert.equal(officialZ1Detail.headCount, 1);
-assert.equal(officialZ1Detail.headScoreHidden, true);
-assert.ok(officialZ1Detail.rows.every((item) => !/헤드|head/i.test(item.role)));
+assert.equal(officialZ1Detail.headScoreHidden, false);
+assert.equal(officialZ1Detail.rows.filter((item) => /헤드|head/i.test(item.role)).length, 1);
 const prematureFinalization = await rpc("finalizeIkrcStationEvaluation", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
 assert.equal(prematureFinalization.success, true, "현장 심사 인원수나 별도 검수완료 상태를 최종확정 조건으로 강제하면 안 됩니다");
 assert.match(prematureFinalization.message, /심사 인원수는 강제하지 않으며/);

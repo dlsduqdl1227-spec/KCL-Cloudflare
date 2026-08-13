@@ -9378,14 +9378,27 @@ function appendReviewGroupTabs_(wrap, groupItems, activeRowIndex) {
     if (gItem.status === '검수완료') tab.className += ' filled';
     tab.textContent = reviewGroupItemLabel_(gItem, _reviewState.code);
     tab.onclick = function(){
+      if (String(gItem.rowIndex) === String(activeRowIndex)) return;
       var next = Object.assign({}, gItem);
       next._reviewGroupItems = groupItems;
       if (String(_reviewState.code || '').toUpperCase() === 'KCAC') next._kcacGroupItems = groupItems;
-      openReviewEdit(next);
+      switchReviewGroupItem_(next);
     };
     tabs.appendChild(tab);
   });
   wrap.appendChild(tabs);
+}
+function switchReviewGroupItem_(next) {
+  if (!next) return;
+  if (!canReviewEditAny_()) { openReviewEdit(next); return; }
+  setReviewAutoSaveState('현재 컵 수정 내용을 저장한 뒤 이동합니다.', 'review-autosaving');
+  flushReviewAutoSaveThen_(function(ok){
+    if (!ok) {
+      toast('현재 컵의 수정 내용을 저장하지 못해 이동하지 않았습니다. 다시 시도해주세요.', true);
+      return;
+    }
+    openReviewEdit(next);
+  });
 }
 function appendKcacReviewGroupTabs_(wrap, groupItems, activeRowIndex) {
   appendReviewGroupTabs_(wrap, groupItems, activeRowIndex);
@@ -9593,6 +9606,7 @@ function enableReviewEdit() {
 var _reviewAutoSaveTimer = null;
 var _reviewAutoSaving = false;
 var _reviewAutoSaveQueued = false;
+var _reviewAutoSaveWaiters = [];
 
 function setReviewAutoSaveState(msg, cls) {
   var el = document.getElementById('review-autosave-state');
@@ -9611,48 +9625,68 @@ function scheduleReviewAutoSave(immediate) {
   _reviewAutoSaveTimer = setTimeout(function(){ autoSaveReviewEdit(); }, immediate ? 80 : 900);
 }
 
+function finishReviewAutoSaveWaiters_(ok) {
+  var waiters = _reviewAutoSaveWaiters.splice(0);
+  waiters.forEach(function(cb){ try { cb(!!ok); } catch (e) {} });
+}
+
+function flushReviewAutoSaveThen_(cb) {
+  clearTimeout(_reviewAutoSaveTimer);
+  _reviewAutoSaveTimer = null;
+  autoSaveReviewEdit(cb);
+}
+
 function autoSaveReviewEdit(cb) {
-  if (!canReviewEditAny_()) { if (cb) cb(false); return; }
+  if (cb) _reviewAutoSaveWaiters.push(cb);
+  if (!canReviewEditAny_()) { finishReviewAutoSaveWaiters_(false); return; }
   var item = _reviewState.current;
-  if (!item) { if (cb) cb(false); return; }
+  if (!item) { finishReviewAutoSaveWaiters_(false); return; }
   if (_reviewAutoSaving) {
     _reviewAutoSaveQueued = true;
-    if (cb) setTimeout(function(){ autoSaveReviewEdit(cb); }, 300);
     return;
   }
-  if (!normalizeReviewNumbers()) { if (cb) cb(false); return; }
+  syncReviewControlsFromDom_();
+  if (!normalizeReviewNumbers()) { finishReviewAutoSaveWaiters_(false); return; }
+  var saveCode = _reviewState.code;
+  var saveHeaders = (_reviewState.headers || []).slice();
+  var saveUpdates = collectReviewUpdates();
+  var saveRowIndex = item.rowIndex;
+  var saveRole = roleTextForCode_(saveCode);
+  var saveActor = reviewActorPayload_(saveCode);
   _reviewAutoSaving = true;
   setReviewAutoSaveState('수정 내용을 자동 저장하는 중입니다.', 'review-autosaving');
-  var autoStatus = reviewIsCalibration_(item, _reviewState.code) ? (item.status || '켈리브레이션') : '수정완료';
+  var autoStatus = reviewIsCalibration_(item, saveCode) ? (item.status || '켈리브레이션') : '수정완료';
   google.script.run
     .withSuccessHandler(function(res){
       _reviewAutoSaving = false;
       if (!res || !res.success) {
         setReviewAutoSaveState((res && res.message) || '자동 저장 실패', 'review-autosave-error');
-        if (cb) cb(false);
+        _reviewAutoSaveQueued = false;
+        finishReviewAutoSaveWaiters_(false);
         return;
       }
-      var updates = collectReviewUpdates();
-      Object.keys(updates).forEach(function(k){
-        var h = (_reviewState.headers || [])[parseInt(k,10)];
-        if (h) item[h] = updates[k];
-        item['_col' + k] = updates[k];
+      Object.keys(saveUpdates).forEach(function(k){
+        var h = saveHeaders[parseInt(k,10)];
+        if (h) item[h] = saveUpdates[k];
+        item['_col' + k] = saveUpdates[k];
       });
       item.status = autoStatus;
       item['검수상태'] = autoStatus;
       setReviewAutoSaveState('수정완료 · 자동 저장됨', 'review-autosaved');
       if (_reviewAutoSaveQueued) {
         _reviewAutoSaveQueued = false;
-        scheduleReviewAutoSave(true);
+        autoSaveReviewEdit();
+        return;
       }
-      if (cb) cb(true);
+      finishReviewAutoSaveWaiters_(true);
     })
     .withFailureHandler(function(err){
       _reviewAutoSaving = false;
       setReviewAutoSaveState('자동 저장 중 오류가 발생했습니다.', 'review-autosave-error');
-      if (cb) cb(false);
+      _reviewAutoSaveQueued = false;
+      finishReviewAutoSaveWaiters_(false);
     })
-    .updateReviewRow(_reviewState.code, item.rowIndex, collectReviewUpdates(), autoStatus, roleTextForCode_(_reviewState.code), reviewActorPayload_(_reviewState.code));
+    .updateReviewRow(saveCode, saveRowIndex, saveUpdates, autoStatus, saveRole, saveActor);
 }
 
 function collectReviewUpdates() {
@@ -9677,28 +9711,42 @@ function collectReviewUpdates() {
   }
   return updates;
 }
-function saveReviewEdit(complete) {
+function saveReviewEdit(complete, options) {
+  options = options || {};
   if (!canReviewEditAny_()) { toast('검수 수정 권한이 없습니다.', true); return; }
   // 자동 저장과 수동 저장이 동시에 실행되면 이전 값으로 다시 덮어쓰는 경합이 생길 수 있으므로,
   // 자동 저장이 끝난 뒤 최종 저장을 수행한다.
   if (_reviewAutoSaving) {
     setReviewAutoSaveState('자동 저장 반영 중입니다. 완료 후 최종 저장합니다.', 'review-autosaving');
-    setTimeout(function(){ saveReviewEdit(complete); }, 350);
+    setTimeout(function(){ saveReviewEdit(complete, options); }, 350);
     return;
   }
   clearTimeout(_reviewAutoSaveTimer);
+  _reviewAutoSaveTimer = null;
   _reviewAutoSaveQueued = false;
+  syncReviewControlsFromDom_();
   if (!normalizeReviewNumbers()) return;
   var item = _reviewState.current;
   if (!item) return;
   if (complete && !reviewManageScopeForCode_(_reviewState.code)) complete = false;
   var status = complete ? '검수완료' : (reviewIsCalibration_(item, _reviewState.code) ? (item.status || '켈리브레이션') : '수정완료');
   if (complete && !confirm('현재 수정 내용을 저장하고 검수완료 처리할까요?')) return;
+  var saveCode = _reviewState.code;
+  var saveHeaders = (_reviewState.headers || []).slice();
+  var saveUpdates = collectReviewUpdates();
+  var groupItems = reviewGroupItems_(item);
+  var stayInGroupedReview = !!options.stayOpen || (!complete && String(saveCode || '').toUpperCase() === 'IKRC' && groupItems.length > 1);
   showOverlay();
   google.script.run
     .withSuccessHandler(function(res){
       if (!res || !res.success) { hideOverlay(); toast((res && res.message) || '저장 실패', true); return; }
-      var groupItems = reviewGroupItems_(item);
+      Object.keys(saveUpdates).forEach(function(k){
+        var h = saveHeaders[parseInt(k,10)];
+        if (h) item[h] = saveUpdates[k];
+        item['_col' + k] = saveUpdates[k];
+      });
+      item.status = status;
+      item['검수상태'] = status;
       if (complete && groupItems.length > 1) {
         google.script.run
           .withSuccessHandler(function(batchRes){
@@ -9713,10 +9761,15 @@ function saveReviewEdit(complete) {
       }
       hideOverlay();
       toast(complete ? '검수완료' : '수정완료');
-      goReviewByCode(_reviewState.code, _reviewState.name, _reviewState.backPanel);
+      if (stayInGroupedReview) {
+        item._reviewGroupItems = groupItems;
+        openReviewEdit(item);
+      } else {
+        goReviewByCode(_reviewState.code, _reviewState.name, _reviewState.backPanel);
+      }
     })
     .withFailureHandler(function(){ hideOverlay(); toast('저장 중 오류 발생', true); })
-    .updateReviewRow(_reviewState.code, item.rowIndex, collectReviewUpdates(), status, roleTextForCode_(_reviewState.code), reviewActorPayload_(_reviewState.code));
+    .updateReviewRow(saveCode, item.rowIndex, saveUpdates, status, roleTextForCode_(saveCode), reviewActorPayload_(saveCode));
 }
 function completeReviewWithoutEdit() {
   var item = _reviewState.current;
@@ -15629,7 +15682,8 @@ function ikrcCalBadge_(std, isTotal) {
 }
 function ikrcCalJudgeHeader_(row, idx) {
   var name = (row && row.judgeName) ? String(row.judgeName) : '';
-  return '<div>심사' + (idx + 1) + '</div>' +
+  var roleLabel = row && row.isHeadCalibration ? '헤드' : '센서리';
+  return '<div>' + roleLabel + '</div>' +
     (name ? '<div class="ikrc-cal-judge-name">' + escHtml(name) + '</div>' : '');
 }
 function buildIkrcCalibrationMatrixHtml_(sensoryRows, referenceHead) {
@@ -15828,7 +15882,7 @@ function renderIkrcCalibrationScope_() {
     if (!stations.length) note.textContent = _ikrcCalibrationScopeLoading
       ? '확인 가능한 스테이션을 불러오고 있습니다.'
       : '확인할 수 있는 스테이션 결과가 아직 없습니다.';
-    else if (isIkrcOfficialStationView_()) note.textContent = '공식 대회평가 기준입니다. 현재 제출된 센서리 항목별 점수·코멘트와 표준편차를 표시하며 헤드 개인점수는 표시하지 않습니다.';
+    else if (isIkrcOfficialStationView_()) note.textContent = '공식 대회평가 기준입니다. 현재 제출된 헤드·센서리 심사위원의 항목별 점수·코멘트와 표준편차를 함께 표시합니다.';
     else note.textContent = '대회 전 전체 켈리브레이션 데이터만 비교합니다. 검수나 순위에는 연결되지 않습니다.';
   }
 }
@@ -15858,7 +15912,7 @@ function loadIkrcCalibrationCups(scopeReady) {
   var finalizeStatus = document.getElementById('ikrc-official-station-status');
   if (title) title.textContent = 'IKRC 심사 켈리브레이션';
   if (help) help.textContent = officialView
-    ? '대회평가용 스테이션을 기준으로 현재 제출된 센서리 점수·코멘트와 평균·표준편차를 확인합니다. 헤드 개인점수는 숨기지만 공식 평균에는 포함됩니다.'
+    ? '대회평가용 스테이션을 기준으로 현재 제출된 헤드·센서리 심사위원의 점수·코멘트와 평균·표준편차를 함께 확인합니다.'
     : '켈리브레이션용 스테이션의 결과입니다. 자체 기준 확인용이며 검수·공식점수·순위에 반영되지 않습니다.';
   if (finalizeBtn) finalizeBtn.style.display = officialView && _ikrcCalibrationScope === 'station' ? 'block' : 'none';
   if (finalizeStatus) { finalizeStatus.style.display = officialView ? 'block' : 'none'; finalizeStatus.textContent = officialView ? '현재 제출·수정 상태를 확인한 뒤 헤드가 마지막에 눌러주세요. 심사 인원수는 강제하지 않습니다.' : ''; }
@@ -16007,26 +16061,26 @@ function buildIkrcCalibrationHtml_(sampleNo, detail) {
     return calibrationHtml;
   }
   detail = detail || {};
-  var sensoryRows = Array.isArray(detail.rows) ? detail.rows.slice() : [];
-  var html = '<div class="review-edit-help" style="margin-bottom:12px">공식 대회평가 기준입니다. 헤드 개인점수는 표시하지 않고 현재 제출된 센서리 항목별 점수·코멘트와 표준편차를 확인합니다. 헤드 점수도 공식 평균에 포함됩니다.</div>';
+  var panelRows = Array.isArray(detail.rows) ? detail.rows.slice() : [];
+  var html = '<div class="review-edit-help" style="margin-bottom:12px">공식 대회평가 기준입니다. 헤드 1명과 센서리 심사위원들의 항목별 점수·코멘트·평균·표준편차를 한 화면에서 확인합니다.</div>';
   html += '<div class="overall-summary-box"><div class="overall-summary-title">현재 공식평균 반영 상태</div>' +
-    '<div class="overall-summary-row"><span class="overall-summary-label">제출 구성</span><span class="overall-summary-value">헤드 ' + Number(detail.headCount || 0) + '명 · 센서리 ' + Number(detail.judgeCount || sensoryRows.length) + '명</span></div>' +
+    '<div class="overall-summary-row"><span class="overall-summary-label">제출 구성</span><span class="overall-summary-value">헤드 ' + Number(detail.headCount || 0) + '명 · 센서리 ' + Number(detail.judgeCount || 0) + '명</span></div>' +
     '<div class="overall-summary-row"><span class="overall-summary-label">현재 상태</span><span class="overall-summary-value">' + (detail.panelComplete ? '제출 점수 반영 중' : '제출 대기') + '</span></div>' +
     (detail.panelComplete && detail.finalAverage !== null && detail.finalAverage !== undefined ? '<div class="overall-summary-row"><span class="overall-summary-label">현재 제출자 평균</span><span class="overall-summary-value">' + fmtAverageFixedScore_(detail.finalAverage,2) + '</span></div>' : '') +
     '</div>';
-  if (!sensoryRows.length) {
-    html += '<p style="text-align:center;color:var(--muted);padding:24px">아직 이 스테이션의 공식 센서리 심사 제출 데이터가 없습니다.</p>';
+  if (!panelRows.length) {
+    html += '<p style="text-align:center;color:var(--muted);padding:24px">아직 이 스테이션의 공식 심사 제출 데이터가 없습니다.</p>';
     return html;
   }
-  html += '<div class="overall-summary-box"><div class="overall-summary-title">센서리 평균 ± 표준편차</div>';
+  html += '<div class="overall-summary-box"><div class="overall-summary-title">헤드·센서리 전체 평균 ± 표준편차</div>';
   attrs.forEach(function(a){
-    var vals = sensoryRows.map(function(r){ return parseFloat(r[a.key]) || 0; });
+    var vals = panelRows.map(function(r){ return parseFloat(r[a.key]) || 0; });
     var avg = ikrcCalAvg_(vals), std = ikrcCalStd_(vals);
     html += '<div class="overall-summary-row"><span class="overall-summary-label">' + escHtml(a.label) + '</span><span class="overall-summary-value">' + fmtAverageFixedScore_(avg,2) + ' ± ' + fmtAverageFixedScore_(std,2) + ikrcCalBadge_(std, !!a.total) + '</span></div>';
   });
   html += scoreSpreadGuideHtml_();
   html += '</div>';
-  html += buildIkrcCalibrationMatrixHtml_(sensoryRows, null);
+  html += buildIkrcCalibrationMatrixHtml_(panelRows, null);
   return html;
 }
 

@@ -102,5 +102,10 @@ assert.match(functionSource(rpc, "getReviewList"), /calibrationOnly = code === '
 assert.match(functionSource(rpc, "ikrcOfficialReviewComparison_"), /comment:\s*score\.comment/);
 assert.doesNotMatch(functionSource(rpc, "updateReviewRow"), /통계 확인 전용/);
 assert.match(functionSource(rpc, "updateReviewStatus"), /제출 즉시 확정/);
+assert.match(functionSource(assessment, "appendReviewGroupTabs_"), /switchReviewGroupItem_\(next\)/, "컵 탭 이동은 즉시 화면을 바꾸지 않고 저장 경로를 거쳐야 합니다");
+assert.match(functionSource(assessment, "switchReviewGroupItem_"), /flushReviewAutoSaveThen_/, "컵 탭 이동 전에 현재 컵을 즉시 저장해야 합니다");
+assert.match(functionSource(assessment, "autoSaveReviewEdit"), /saveRowIndex/, "자동 저장 대상 행은 요청 시작 시점의 컵으로 고정해야 합니다");
+assert.match(functionSource(assessment, "autoSaveReviewEdit"), /saveUpdates/, "자동 저장 값은 요청 시작 시점의 컵 값으로 고정해야 합니다");
+assert.match(functionSource(assessment, "saveReviewEdit"), /stayInGroupedReview/, "IKRC 묶음 수정완료 뒤에는 검수 화면 안에 남아야 합니다");
 
 process.stdout.write("Stage128 cup resume, mobile total, and IKRC head-monitor tests passed.\n");

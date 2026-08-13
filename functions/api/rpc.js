@@ -4827,15 +4827,15 @@ async function getIkrcOfficialCalibrationResultsByCup(env, sampleNo, requestedSc
     success:true,
     sampleNo:no,
     scope:data.scope,
-    rows:sensory.map(ikrcScoreObjectFromItem_).sort((a,b) => safeStr(a.judgeName).localeCompare(safeStr(b.judgeName), 'ko')),
+    rows:submittedRows.map(ikrcScoreObjectFromItem_).sort((a,b) => Number(b.isHeadCalibration) - Number(a.isHeadCalibration) || safeStr(a.judgeName).localeCompare(safeStr(b.judgeName), 'ko')),
     judgeCount:sensory.length,
     headCount:heads.length,
     sensoryReviewCount:sensory.filter(item => reviewCompletedStatus_(item['검수상태'] || item.status)).length,
     reviewComplete:sensory.length > 0 && sensory.every(item => reviewCompletedStatus_(item['검수상태'] || item.status)),
     panelComplete,
     finalAverage,
-    headScoreHidden:true,
-    message:panelComplete ? `현재 제출된 헤드 ${heads.length}명과 센서리 ${sensory.length}명의 공식 평가를 표시합니다.` : '아직 제출된 공식 평가가 없습니다.'
+    headScoreHidden:false,
+    message:panelComplete ? `현재 제출된 헤드 ${heads.length}명과 센서리 ${sensory.length}명의 공식 평가를 함께 표시합니다.` : '아직 제출된 공식 평가가 없습니다.'
   };
 }
 async function finalizeIkrcStationEvaluation(env, requestedScope, actorArg) {

@@ -83,7 +83,8 @@ assert.doesNotMatch(reviewSource, /headMonitor/);
 assert.match(functionSource(rpc, "submitScores"), /IKRC 전체 켈리브레이션은 운영하지 않습니다/);
 assert.match(functionSource(rpc, "getIkrcCalibrationScopeOptions"), /canViewOverall:false/);
 assert.match(functionSource(rpc, "getIkrcOfficialCalibrationScopeOptions"), /canViewOverall:false/);
-assert.match(functionSource(rpc, "getIkrcOfficialCalibrationResultsByCup"), /rows:sensory\.map\(ikrcScoreObjectFromItem_\)/);
+assert.match(functionSource(rpc, "getIkrcOfficialCalibrationResultsByCup"), /rows:submittedRows\.map\(ikrcScoreObjectFromItem_\)/);
+assert.match(functionSource(rpc, "getIkrcOfficialCalibrationResultsByCup"), /headScoreHidden:false/);
 assert.match(functionSource(rpc, "ikrcScoreObjectFromItem_"), /comment: extraComment/);
 assert.doesNotMatch(functionSource(rpc, "finalizeIkrcStationEvaluation"), /reviewed !== 3|sensoryCount\}\/3|headCount\}\/1/);
 
