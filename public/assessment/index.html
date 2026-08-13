@@ -9636,6 +9636,35 @@ function flushReviewAutoSaveThen_(cb) {
   autoSaveReviewEdit(cb);
 }
 
+// IKRC처럼 한 제출을 여러 샘플 탭으로 나누어 검수할 때 current는 원본 목록의 복사본입니다.
+// 저장 성공 후 복사본만 갱신하면 다른 샘플로 이동했다 돌아왔을 때 이전 값이 다시 표시되므로,
+// 현재 항목과 같은 row reference를 가진 그룹/목록 항목을 모두 같은 값으로 동기화합니다.
+function applyReviewSavedState_(item, headers, updates, status) {
+  if (!item) return;
+  var rowRef = String(item.rowIndex == null ? '' : item.rowIndex);
+  var targets = [item];
+  reviewGroupItems_(item).forEach(function(candidate){
+    if (String(candidate && candidate.rowIndex != null ? candidate.rowIndex : '') === rowRef) targets.push(candidate);
+  });
+  ((_reviewState && _reviewState.list) || []).forEach(function(candidate){
+    if (String(candidate && candidate.rowIndex != null ? candidate.rowIndex : '') === rowRef) targets.push(candidate);
+  });
+  var seen = [];
+  targets.forEach(function(target){
+    if (!target || seen.indexOf(target) > -1) return;
+    seen.push(target);
+    Object.keys(updates || {}).forEach(function(k){
+      var idx = parseInt(k, 10);
+      var h = (headers || [])[idx];
+      if (h) target[h] = updates[k];
+      target['_col' + k] = updates[k];
+      if (Array.isArray(target.values) && !isNaN(idx)) target.values[idx] = updates[k];
+    });
+    target.status = status;
+    target['검수상태'] = status;
+  });
+}
+
 function autoSaveReviewEdit(cb) {
   if (cb) _reviewAutoSaveWaiters.push(cb);
   if (!canReviewEditAny_()) { finishReviewAutoSaveWaiters_(false); return; }
@@ -9665,13 +9694,7 @@ function autoSaveReviewEdit(cb) {
         finishReviewAutoSaveWaiters_(false);
         return;
       }
-      Object.keys(saveUpdates).forEach(function(k){
-        var h = saveHeaders[parseInt(k,10)];
-        if (h) item[h] = saveUpdates[k];
-        item['_col' + k] = saveUpdates[k];
-      });
-      item.status = autoStatus;
-      item['검수상태'] = autoStatus;
+      applyReviewSavedState_(item, saveHeaders, saveUpdates, autoStatus);
       setReviewAutoSaveState('수정완료 · 자동 저장됨', 'review-autosaved');
       if (_reviewAutoSaveQueued) {
         _reviewAutoSaveQueued = false;
@@ -9740,13 +9763,7 @@ function saveReviewEdit(complete, options) {
   google.script.run
     .withSuccessHandler(function(res){
       if (!res || !res.success) { hideOverlay(); toast((res && res.message) || '저장 실패', true); return; }
-      Object.keys(saveUpdates).forEach(function(k){
-        var h = saveHeaders[parseInt(k,10)];
-        if (h) item[h] = saveUpdates[k];
-        item['_col' + k] = saveUpdates[k];
-      });
-      item.status = status;
-      item['검수상태'] = status;
+      applyReviewSavedState_(item, saveHeaders, saveUpdates, status);
       if (complete && groupItems.length > 1) {
         google.script.run
           .withSuccessHandler(function(batchRes){
