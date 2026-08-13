@@ -251,6 +251,9 @@ h2,.subtitle,.section-label,.result-name,.result-affil,.result-comp,.round-title
 .score-grid{gap:10px}.score-item{border-radius:12px;padding:13px 14px;background:#101010;border:1px solid rgba(255,255,255,.11)}.score-item-label{color:#a0a0a0;font-size:11px;font-weight:850}.score-item-val{font-size:20px;font-weight:950;letter-spacing:-.03em}.score-item-sub{color:#969696;font-weight:700}
 .smart-tag-box{margin-top:12px;border-radius:12px;background:#111;border:1px solid rgba(255,255,255,.12);padding:12px}.smart-tag-title{color:#aaa;font-size:10px;letter-spacing:.08em}.smart-tag-row{border-top-color:rgba(255,255,255,.08)}.smart-tag-label{color:#e6e6e6}.smart-tag-chip{border-color:rgba(255,255,255,.18);background:#1a1a1a;color:#e8e8e8;font-weight:800}
 .comment-box{margin-top:14px;border:1px solid rgba(255,255,255,.12);border-left:4px solid #fff;border-radius:12px;background:#111;padding:15px 16px}.comment-label{color:#aaa}.comment-text{font-size:14.5px;line-height:1.78;color:#e7e7e7;word-break:keep-all;overflow-wrap:anywhere}.no-score{border:1px solid rgba(255,255,255,.12);border-radius:16px;background:#101010;color:#aaa;line-height:1.6}
+.ikrc-combined-comment{margin:0 0 16px;border-left-width:5px;background:linear-gradient(180deg,#171717,#101010)}
+.ikrc-combined-comment .comment-label{color:#fff;font-size:12px;letter-spacing:.03em;text-transform:none}
+.ikrc-combined-meta{margin-top:8px;color:#888;font-size:11px;line-height:1.5}
 
 @media print{
   @page{size:A4;margin:10mm 11mm}
@@ -1152,6 +1155,8 @@ function renderResult(res) {
     if (isIkrcDebrief) {
       var avgBox = buildIkrcRoundAverageBox_(round, list, ikrcRankByRound[round]);
       if (avgBox) section.appendChild(avgBox);
+      var combinedCommentBox = buildIkrcCombinedCommentBox_(round, list);
+      if (combinedCommentBox) section.appendChild(combinedCommentBox);
     }
 
     list.forEach(function(s) {
@@ -1404,6 +1409,125 @@ function buildProfessionalOverallComment_(s, compCode) {
   if (high && low && high[0] !== low[0]) third += '. 항목별 인상에서는 ' + high[0] + '이 가장 두드러졌고, ' + low[0] + '에서 상대적으로 낮은 평가가 확인되었습니다.';
   else third += '. 항목 간 편차는 크지 않고, 전체 인상은 각 세부 항목의 균형 속에서 형성되었습니다.';
   return first + second + third;
+}
+
+function ikrcAggregateJudgeCount_(list) {
+  var seen = {};
+  (list || []).forEach(function(s, idx){
+    var key = String((s && (s['심사위원명'] || s['심사위원'] || s['Judge'])) || '').trim();
+    if (!key) key = '__row_' + idx;
+    seen[key] = true;
+  });
+  return Object.keys(seen).length;
+}
+function ikrcAggregateTags_(list, names, limit) {
+  var stats = {}, order = 0;
+  (list || []).forEach(function(s){
+    var judgeSeen = {};
+    Object.keys(s || {}).forEach(function(k){
+      if (!isSmartTagLabel(k)) return;
+      var lower = String(k || '').toLowerCase();
+      if (!(names || []).some(function(name){ return lower.indexOf(String(name || '').toLowerCase()) > -1; })) return;
+      splitPublicTokens_(s[k]).forEach(function(raw){
+        var label = normalizePublicTag_(String(raw || '').replace(/^.*(?:>|›)\s*/, ''));
+        var key = label.replace(/\s/g, '').toLowerCase();
+        if (!label || judgeSeen[key]) return;
+        judgeSeen[key] = true;
+        if (!stats[key]) stats[key] = { label:label, count:0, order:order++ };
+        stats[key].count += 1;
+      });
+    });
+  });
+  return Object.keys(stats).map(function(key){ return stats[key]; })
+    .sort(function(a,b){ return b.count - a.count || a.order - b.order; })
+    .slice(0, limit || 4)
+    .map(function(item){ return item.label; });
+}
+function ikrcAggregateScore_(list, keys) {
+  var values = (list || []).map(function(s){
+    var value = firstFilledScoreValue(s || {}, keys || []);
+    var number = Number(value);
+    return value === '' || !isFinite(number) ? null : number;
+  }).filter(function(value){ return value != null; });
+  if (!values.length) return null;
+  return values.reduce(function(sum, value){ return sum + value; }, 0) / values.length;
+}
+function ikrcLooksGeneratedComment_(text) {
+  text = String(text || '');
+  return (/(?:플레이버|클린컵|단맛|산미|마우스필)에서/.test(text) && /(?:인상이었습니다|느껴졌습니다|확인됐습니다)/.test(text)) ||
+    /이 컵은 .* 인상을 중심으로 첫 향미가 형성됩니다|전체적으로 .* 컵으로 평가됩니다/.test(text);
+}
+function ikrcCommentExcerpt_(text) {
+  text = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  var sentence = (text.match(/^[^.!?\n]+[.!?]?/) || [text])[0].trim();
+  if (sentence.length > 110) sentence = sentence.slice(0, 107).replace(/[\s,.·]+$/, '') + '…';
+  return sentence;
+}
+function ikrcManualCommentExcerpts_(list, limit) {
+  var out = [], seen = {};
+  (list || []).forEach(function(s){
+    Object.keys(s || {}).forEach(function(k){
+      if (!isCommentLabel(k) || isSmartTagLabel(k)) return;
+      if (ikrcLooksGeneratedComment_(s[k])) return;
+      var text = cleanupPublicCommentText_(k, s[k], s, 'IKRC');
+      if (!text || ikrcLooksGeneratedComment_(text)) return;
+      var excerpt = ikrcCommentExcerpt_(text);
+      var key = excerpt.replace(/\s/g, '').toLowerCase();
+      if (!excerpt || seen[key]) return;
+      seen[key] = true;
+      out.push(excerpt);
+    });
+  });
+  return out.slice(0, limit || 2);
+}
+function buildIkrcCombinedCommentText_(list) {
+  list = list || [];
+  if (!list.length) return '';
+  var judgeCount = ikrcAggregateJudgeCount_(list);
+  var flavorTags = ikrcAggregateTags_(list, ['Flavor','플레이버'], 4);
+  var cleanTags = ikrcAggregateTags_(list, ['Clean Cup','클린컵'], 3);
+  var sweetTags = ikrcAggregateTags_(list, ['Sweetness','스윗니스','단맛'], 3);
+  var acidityTags = ikrcAggregateTags_(list, ['Acidity','산미'], 3);
+  var mouthfeelTags = ikrcAggregateTags_(list, ['Mouthfeel','마우스필'], 3);
+  var sentences = [];
+  if (flavorTags.length) {
+    sentences.push('심사위원 ' + judgeCount + '명의 평가를 종합하면, 주요 향미에는 ' + joinNatural_(flavorTags, '') + ' 등이 기록되었습니다.');
+  } else {
+    sentences.push('심사위원 ' + judgeCount + '명의 검수 완료 평가를 종합했습니다.');
+  }
+  var sensoryParts = [];
+  if (cleanTags.length) sensoryParts.push('클린컵에서 ' + joinNatural_(cleanTags, ''));
+  if (sweetTags.length) sensoryParts.push('단맛에서 ' + joinNatural_(sweetTags, ''));
+  if (acidityTags.length) sensoryParts.push('산미에서 ' + joinNatural_(acidityTags, ''));
+  if (mouthfeelTags.length) sensoryParts.push('마우스필에서 ' + joinNatural_(mouthfeelTags, ''));
+  if (sensoryParts.length) sentences.push('세부 속성에서는 ' + sensoryParts.join(', ') + ' 등의 표현이 함께 기록되었습니다.');
+
+  var scoreGroups = [
+    ['플레이버', ikrcAggregateScore_(list, ['Flavor(플레이버) ×3','Flavor(플레이버)','플레이버','Flavor'])],
+    ['클린컵', ikrcAggregateScore_(list, ['Clean Cup(클린컵) ×2','Clean Cup(클린컵)','클린컵','Clean Cup'])],
+    ['단맛', ikrcAggregateScore_(list, ['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','스윗니스','Sweetness'])],
+    ['산미', ikrcAggregateScore_(list, ['Acidity(산미)','산미','Acidity'])],
+    ['마우스필', ikrcAggregateScore_(list, ['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','마우스필','Mouthfeel'])]
+  ].filter(function(item){ return item[1] != null; }).sort(function(a,b){ return b[1] - a[1]; });
+  if (scoreGroups.length > 1 && scoreGroups[0][1] - scoreGroups[scoreGroups.length - 1][1] >= 0.4) {
+    sentences.push('항목별 평가에서는 ' + scoreGroups[0][0] + '가 상대적으로 두드러졌고, ' + scoreGroups[scoreGroups.length - 1][0] + '는 비교적 낮게 평가되었습니다.');
+  } else if (scoreGroups.length) {
+    sentences.push('항목별 평가는 크게 치우치지 않고 전체 감각 인상에 고르게 반영되었습니다.');
+  }
+  var manual = ikrcManualCommentExcerpts_(list, 2);
+  if (manual.length) sentences.push('추가 수기 의견에는 ' + manual.map(function(text){ return '“' + text + '”'; }).join(' / ') + ' 등이 기록되었습니다.');
+  return sentences.join(' ');
+}
+function buildIkrcCombinedCommentBox_(round, list) {
+  var text = buildIkrcCombinedCommentText_(list);
+  if (!text) return null;
+  var box = document.createElement('div');
+  box.className = 'comment-box ikrc-combined-comment';
+  box.innerHTML = '<div class="comment-label">심사위원 종합 코멘트</div>' +
+    '<div class="comment-text">' + escHtml(text) + '</div>' +
+    '<div class="ikrc-combined-meta">' + escHtml(round || '-') + ' · 검수 완료 평가 ' + ikrcAggregateJudgeCount_(list) + '명의 점수·스마트태그·수기 코멘트를 함께 반영</div>';
+  return box;
 }
 function buildSmartTagBox(s, compCode) {
   var rows = [];
