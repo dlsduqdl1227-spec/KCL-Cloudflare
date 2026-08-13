@@ -98,9 +98,12 @@ function participantRoundPolicy_(code, round) {
   const r = normalizeRoundForCompetition_(code, round || '예선');
   const base = { mode:'VISIBLE', numberLabel: r + '번호', identityHidden:false, directInput:false };
   if (code === 'KCR') return { mode:'BLIND', numberLabel: r === '결선' ? '결선출품번호' : '예선출품번호', identityHidden:true, directInput:false };
-  if (code === 'KCAC') return r === '예선'
-    ? { mode:'BLIND', numberLabel:'예선블라인드번호', identityHidden:true, directInput:false }
-    : { mode:'VISIBLE', numberLabel:'결선참가번호', identityHidden:false, directInput:false };
+  if (code === 'KCAC') return {
+    mode:'BLIND',
+    numberLabel:r === '예선' ? '예선블라인드번호' : '결선참가번호',
+    identityHidden:true,
+    directInput:false
+  };
   if (code === 'IKRC') return { mode:'BLIND_SAMPLE', numberLabel:r === '결선' ? '결선샘플번호' : '예선샘플번호', identityHidden:true, directInput:false };
   if (code === 'KTCC') return { mode:'TEAM_VISIBLE', numberLabel:r === '결선' ? '결선팀번호' : '예선팀번호', identityHidden:false, directInput:true };
   if (code === 'MOC') return { mode:'DIRECT_VISIBLE', numberLabel:r + '참가자번호', identityHidden:false, directInput:true };
@@ -109,6 +112,7 @@ function participantRoundPolicy_(code, round) {
   return base;
 }
 function actorCanSeeParticipantIdentity_(actor, code) {
+  if (safeStr(code).toUpperCase() === 'KCAC') return !!hasAdmin(actor);
   return !!(hasAdmin(actor) || hasManageAccess(actor, code));
 }
 
@@ -2271,6 +2275,53 @@ function enrichReviewItemWithParticipant_(item, identity, code) {
   if (identity.teamNo && !item['팀번호']) item['팀번호'] = identity.teamNo;
   return item;
 }
+
+function isParticipantIdentityField_(key) {
+  const compact = safeStr(key).replace(/[\s_\-]/g, '').toLowerCase();
+  return /^(선수명|참가자명|이름|소속|업체명|participantname|playername|participantaffiliation|playeraffiliation|affiliation|namesummary|playernamesummary|playeraffiliationsummary)$/.test(compact);
+}
+function redactParticipantIdentityPayload_(payload, headers) {
+  const out = payload && typeof payload === 'object' ? Object.assign({}, payload) : payload;
+  if (!out || typeof out !== 'object') return out;
+  Object.keys(out).forEach(key => { if (isParticipantIdentityField_(key)) out[key] = ''; });
+  if (Array.isArray(out.rows)) {
+    out.rows = out.rows.map(row => {
+      const nextRow = row && typeof row === 'object' ? Object.assign({}, row) : row;
+      if (!nextRow || typeof nextRow !== 'object') return nextRow;
+      if (Array.isArray(nextRow.data)) {
+        nextRow.data = nextRow.data.slice();
+        (headers || []).forEach((header, idx) => { if (isParticipantIdentityField_(header) && idx < nextRow.data.length) nextRow.data[idx] = ''; });
+      }
+      if (nextRow.extraFields && typeof nextRow.extraFields === 'object') {
+        nextRow.extraFields = Object.assign({}, nextRow.extraFields);
+        Object.keys(nextRow.extraFields).forEach(key => { if (isParticipantIdentityField_(key)) nextRow.extraFields[key] = ''; });
+      }
+      return nextRow;
+    });
+  }
+  return out;
+}
+function redactParticipantIdentityObject_(value, headers) {
+  if (!value || typeof value !== 'object') return value;
+  const out = Object.assign({}, value);
+  Object.keys(out).forEach(key => { if (isParticipantIdentityField_(key)) out[key] = ''; });
+  (headers || []).forEach((header, idx) => {
+    if (!isParticipantIdentityField_(header)) return;
+    out[header] = '';
+    if (Object.prototype.hasOwnProperty.call(out, '_col' + idx)) out['_col' + idx] = '';
+    if (Array.isArray(out.values) && idx < out.values.length) {
+      if (out.values === value.values) out.values = out.values.slice();
+      out.values[idx] = '';
+    }
+  });
+  if (out.payload && typeof out.payload === 'object') out.payload = redactParticipantIdentityPayload_(out.payload, headers);
+  return out;
+}
+function redactKcacIdentityForActor_(actor, code, value, headers) {
+  return safeStr(code).toUpperCase() === 'KCAC' && !hasAdmin(actor)
+    ? redactParticipantIdentityObject_(value, headers)
+    : value;
+}
 async function getParticipantAssignments(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
   const actor = await getActor(env, actorArg);
@@ -2352,7 +2403,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     success: true,
     competitionCode: code,
     currentRound,
-    policy,
+    policy:Object.assign({}, policy, {identityHidden:hideIdentity}),
     assignments,
     scheduleScope: code === 'MOB' && !mobManager ? { competitionDate:mobParticipantScopeDate, team:mobActorTeam } : null
   };
@@ -3299,7 +3350,7 @@ async function getScoreBackupReport(env, competitionCode, actorArg) {
   const auth = await requireManageActorForCode_(env, actorArg, code, '점수 백업 엑셀 다운로드 권한이 없습니다. 관리자 또는 대회팀장 권한으로 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const data = await buildRankingData_(env, code);
-  const rows = data.rows.map(item => scoreBackupRowOut_(code, item, data.headers));
+  const rows = data.rows.map(item => redactKcacIdentityForActor_(auth.actor, code, scoreBackupRowOut_(code, item, data.headers), data.headers));
   const competitionRows = rows.filter(row => row['백업구분'] === '실제평가');
   const calibrationRows = rows.filter(row => row['백업구분'] === '켈리브레이션');
   const rounds = Array.from(new Set((data.ranking || []).map(r => r.round).concat(rows.map(r => r['라운드구분'] || r['라운드'])).filter(Boolean)));
@@ -3336,9 +3387,9 @@ async function getFinalReport(env, competitionCode, actorArg) {
   const data = await buildRankingData_(env, code);
   // 최종디브리핑 파일은 순위 반영 기준과 동일하게, 검수완료·수정완료이면서 순위 제외 대상이 아닌 데이터만 내려보냅니다.
   const finalItems = officialScoreItemsForOutput_(code, data.rows.filter(item => officialReviewCompleted_(code, item) && shouldCountItemInRanking_(code, item)));
-  const approvedRows = finalItems.map(item => reportRowOut_(item, data.headers));
+  const approvedRows = finalItems.map(item => redactKcacIdentityForActor_(auth.actor, code, reportRowOut_(item, data.headers), data.headers));
   const rows = approvedRows.slice();
-  const rawRows = finalItems.map(item => ({
+  const rawRows = finalItems.map(item => redactKcacIdentityForActor_(auth.actor, code, {
     id: item.rowIndex,
     submittedAt: item['제출시간'] || '',
     round: item['라운드'] || item.round || '',
@@ -3351,7 +3402,7 @@ async function getFinalReport(env, competitionCode, actorArg) {
     signatureSaved: item.signatureData ? 'Y' : '',
     mediaCount: item.mediaCount || 0,
     payload: stripPayloadForReport_(item.payload)
-  }));
+  }, data.headers));
   const rounds = Array.from(new Set((data.ranking || []).map(r => r.round).concat(rows.map(r => r['라운드'])).filter(Boolean)));
   return {
     success: true,
@@ -3363,7 +3414,7 @@ async function getFinalReport(env, competitionCode, actorArg) {
     tieBreakRule: tieRuleLabel_(code, rounds[0] || (data.cfg && data.cfg.current_round) || ''),
     headers: data.headers,
     rounds,
-    ranking: data.ranking,
+    ranking: data.ranking.map(item => redactKcacIdentityForActor_(auth.actor, code, item, data.headers)),
     rows,
     approvedRows,
     rawRows
@@ -4117,6 +4168,9 @@ async function getReviewList(env, competitionCode, actorArg) {
         return item;
       });
     }
+  }
+  if (code === 'KCAC' && !hasAdmin(auth.actor)) {
+    list = list.map(item => redactParticipantIdentityObject_(item, headers));
   }
   return {
     success: true,
@@ -5794,7 +5848,8 @@ async function getRanking(env, competitionCode, actorArg) {
   const auth = await requireManageActorForCode_(env, actorArg, code, '순위 조회 권한이 없습니다. 관리자 또는 대회팀장 권한으로 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const data = await buildRankingData_(env, code);
-  return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : code, currentRound: data.cfg ? data.cfg.current_round : '', unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking: data.ranking, tieBreakRule: tieRuleLabel_(code, data.cfg ? data.cfg.current_round : '') };
+  const ranking = data.ranking.map(item => redactKcacIdentityForActor_(auth.actor, code, item, data.headers));
+  return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : code, currentRound: data.cfg ? data.cfg.current_round : '', unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking, tieBreakRule: tieRuleLabel_(code, data.cfg ? data.cfg.current_round : '') };
 }
 async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const code = safeStr(competitionCode).toUpperCase(); const targetUnit = safeStr(unit); const targetRound = roundName_(round, '');
@@ -5803,8 +5858,10 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   if (!auth.ok) return auth.res;
   const data = await buildRankingData_(env, code);
   const countableRows = officialScoreItemsForOutput_(code, data.rows.filter(item => shouldCountItemInRanking_(code, item)));
-  const rows = countableRows.filter(item => { const sameUnit = itemNumber_(item) === targetUnit; const itemRound = roundName_(item.round || item['라운드'], targetRound); const sameRound = !targetRound || !itemRound || itemRound === targetRound; return sameUnit && sameRound; });
-  const rankInfo = data.ranking.find(r => safeStr(r.unit) === targetUnit && (!targetRound || roundName_(r.round) === targetRound)) || null;
+  const rawRows = countableRows.filter(item => { const sameUnit = itemNumber_(item) === targetUnit; const itemRound = roundName_(item.round || item['라운드'], targetRound); const sameRound = !targetRound || !itemRound || itemRound === targetRound; return sameUnit && sameRound; });
+  const rawRankInfo = data.ranking.find(r => safeStr(r.unit) === targetUnit && (!targetRound || roundName_(r.round) === targetRound)) || null;
+  const rows = rawRows.map(item => redactKcacIdentityForActor_(auth.actor, code, item, data.headers));
+  const rankInfo = redactKcacIdentityForActor_(auth.actor, code, rawRankInfo, data.headers);
   let totalScore = 0, count = 0, reviewedCount = 0, disqualified = false; const reasons = [];
   rows.forEach(item => { const n = toNumber(item['총점'] ?? item['최종점수'] ?? item.totalScore); if (n !== null) { totalScore += n; count++; } if (reviewCompletedStatus_(item['검수상태'])) reviewedCount++; if (item.disqualified || item['실격여부'] === 'Y') { disqualified = true; if (item['실격사유']) reasons.push(item['실격사유']); } });
   totalScore = Math.round(totalScore * 100) / 100;

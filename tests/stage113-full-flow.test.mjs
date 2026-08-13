@@ -319,6 +319,24 @@ for (const operator of [
     teamGroup: "KCR 스테이션 1",
     role: "센서리 심사위원",
   },
+  {
+    accountType: "JUDGE",
+    name: "QA KCAC 헤드",
+    phone: "01011110013",
+    affiliation: "QA",
+    access: "KCAC",
+    teamGroup: "KCAC A조",
+    role: "헤드 심사위원",
+  },
+  {
+    accountType: "TEAMLEAD",
+    name: "QA KCAC 팀장",
+    phone: "01011110014",
+    affiliation: "QA",
+    access: "KCAC",
+    teamGroup: "전체",
+    role: "대회팀장",
+  },
 ]) {
   const saved = await rpc("upsertOperatorAccount", operator, adminActor);
   assert.equal(saved.success, true, saved.message);
@@ -412,6 +430,12 @@ assert.equal(multiRoleKcrAssignments.success, true, multiRoleKcrAssignments.mess
 assert.equal(multiRoleKcrAssignments.assignments[0].identityHidden, true, "MOC teamlead must not unlock KCR participant identity");
 assert.equal(multiRoleKcrAssignments.assignments[0].name, "");
 
+const kcacBlindParticipant = await rpc("upsertParticipant", {
+  competitionCode:"KCAC", name:"QA KCAC 비공개 선수", affiliation:"QA 비공개 소속",
+  phone:"01022227777", uniqueNo:"KCAC-BLIND-01", prelimCupNo:"KCAC-1", finalCupNo:"KCAC-1",
+}, adminActor);
+assert.equal(kcacBlindParticipant.success, true, kcacBlindParticipant.message);
+
 // 관리자가 역할·팀을 수정하거나 권한 행을 삭제하면 로그인 당시 세션보다 최신 D1 값이 우선되어야 합니다.
 const liveStateBeforeAdminEdit = await rpc("getRegistryLiveState", "KCR", { judgeToken:multiRoleJudge.judgeToken }, "");
 assert.equal(liveStateBeforeAdminEdit.success, true, liveStateBeforeAdminEdit.message);
@@ -459,12 +483,26 @@ const head2 = await rpc("judgeLogin", "QA 헤드2", "01011110005");
 const assignedHead = await rpc("judgeLogin", "QA 배정헤드", "01011110009");
 const lead = await rpc("judgeLogin", "QA 대회팀장", "01011110003");
 const stationLead = await rpc("judgeLogin", "QA 스테이션2팀장", "01011110008");
-for (const login of [judge, judge2, judgeZ, judgeZ2, judgeZ3, head, head2, assignedHead, lead, stationLead]) {
+const kcacHead = await rpc("judgeLogin", "QA KCAC 헤드", "01011110013");
+const kcacLead = await rpc("judgeLogin", "QA KCAC 팀장", "01011110014");
+for (const login of [judge, judge2, judgeZ, judgeZ2, judgeZ3, head, head2, assignedHead, lead, stationLead, kcacHead, kcacLead]) {
   assert.equal(login.success, true, login.message);
   assert.ok(login.judgeToken);
 }
 const leadActor = managedActor(lead);
 const stationLeadActor = managedActor(stationLead);
+const kcacLeadActor = managedActor(kcacLead);
+
+const kcacHeadAssignments = await rpc("getParticipantAssignments", "KCAC", { judgeToken:kcacHead.judgeToken });
+assert.equal(kcacHeadAssignments.success, true, kcacHeadAssignments.message);
+assert.equal(kcacHeadAssignments.policy.identityHidden, true);
+assert.ok(kcacHeadAssignments.assignments.every((item) => item.name === "" && item.affiliation === ""), "KCAC 헤드에게 선수명과 소속을 노출하면 안 됩니다");
+const kcacLeadAssignments = await rpc("getParticipantAssignments", "KCAC", kcacLeadActor);
+assert.equal(kcacLeadAssignments.policy.identityHidden, true);
+assert.ok(kcacLeadAssignments.assignments.every((item) => item.name === "" && item.affiliation === ""), "KCAC 대회팀장에게도 선수명과 소속을 노출하면 안 됩니다");
+const kcacAdminAssignments = await rpc("getParticipantAssignments", "KCAC", adminActor);
+assert.equal(kcacAdminAssignments.policy.identityHidden, false);
+assert.ok(kcacAdminAssignments.assignments.some((item) => item.name === "QA KCAC 비공개 선수" && item.affiliation === "QA 비공개 소속"), "KCAC 관리자는 선수 신원을 확인할 수 있어야 합니다");
 
 const station1 = station("station1", "스테이션 1", "X", 1, 2);
 const station2 = station("station2", "스테이션 2", "Z", 1, 6);
@@ -834,6 +872,24 @@ assert.equal(reviewLists.MOB.list[0]["종합코멘트"], mobReviewComment, "MOB 
 assert.ok(reviewLists.IKRC.list.some((item) => item.judgeName === "QA 헤드" || item["심사위원명"] === "QA 헤드"));
 assert.ok(reviewLists.IKRC.list.filter((item) => item.judgeName === "QA 헤드").every((item) => item.status === "검수완료"), "기존 미검수 헤드 기록도 화면에서는 검수 없는 확정 상태로 보여야 합니다");
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "X-1"));
+assert.ok(reviewLists.KCAC.list.some((item) => item["선수명"] === "QA KCAC 비공개 선수"), "KCAC 관리자는 검수에서 선수명을 확인할 수 있어야 합니다");
+const kcacLeadReview = await rpc("getReviewList", "KCAC", kcacLeadActor);
+assert.equal(kcacLeadReview.success, true, kcacLeadReview.message);
+assert.ok(kcacLeadReview.list.every((item) => !item["선수명"] && !item["참가자명"] && !item.participantName && !item["소속"]), "KCAC 비관리자 검수 응답은 선수 신원을 제거해야 합니다");
+const kcacReviewStatus = await rpc("updateReviewStatusBatch", "KCAC", reviewLists.KCAC.list.map((item) => item.rowIndex), "검수완료", "관리자", adminActor);
+assert.equal(kcacReviewStatus.success, true, kcacReviewStatus.message);
+const kcacLeadRanking = await rpc("getRanking", "KCAC", kcacLeadActor);
+assert.equal(kcacLeadRanking.success, true, kcacLeadRanking.message);
+assert.ok(kcacLeadRanking.ranking.every((item) => !item.playerNameSummary && !item.playerAffiliationSummary), "KCAC 비관리자 순위 응답은 선수 신원을 제거해야 합니다");
+const kcacAdminRanking = await rpc("getRanking", "KCAC", adminActor);
+assert.ok(kcacAdminRanking.ranking.some((item) => item.playerNameSummary === "QA KCAC 비공개 선수"), "KCAC 관리자 순위에는 선수명이 표시되어야 합니다");
+const kcacRankTarget = kcacLeadRanking.ranking[0];
+const kcacLeadRankingDetail = await rpc("getRankingDetail", "KCAC", kcacRankTarget.unit, kcacRankTarget.round, kcacLeadActor);
+assert.ok(kcacLeadRankingDetail.rows.every((item) => !item["선수명"] && !item.participantName && !item["소속"]), "KCAC 비관리자 순위 상세도 선수 신원을 제거해야 합니다");
+const kcacLeadBackup = await rpc("getScoreBackupReport", "KCAC", kcacLeadActor);
+assert.ok(kcacLeadBackup.rows.every((item) => !item["선수명"] && !item["소속"]), "KCAC 비관리자 백업에도 선수 신원을 포함하면 안 됩니다");
+const kcacLeadFinalReport = await rpc("getFinalReport", "KCAC", kcacLeadActor);
+assert.ok(kcacLeadFinalReport.rows.every((item) => !item["선수명"] && !item["소속"]), "KCAC 비관리자 최종정리에도 선수 신원을 포함하면 안 됩니다");
 assert.ok(reviewLists.IKRC.list.some((item) => item.unit === "Y-2"));
 assert.ok(
   reviewLists.IKRC.list.some(

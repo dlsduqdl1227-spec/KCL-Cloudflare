@@ -3516,7 +3516,7 @@ function renderParticipantControl_(code, cfg) {
     var policy = st.policy || {};
     help.style.display = 'block';
     if (policy.identityHidden) {
-      help.textContent = (policy.numberLabel || '심사용 번호') + '만 심사위원 화면에 표시됩니다. 선수명과 소속은 관리자/팀장 검수·정산 화면에서만 확인됩니다.';
+      help.textContent = (policy.numberLabel || '심사용 번호') + '만 표시됩니다. 선수명과 소속은 관리자만 확인할 수 있습니다.';
     } else if (code === 'MOB') {
       var scope = st.scheduleScope || {};
       var scopeText = [scope.competitionDate, scope.team].filter(Boolean).join(' · ');
@@ -3706,7 +3706,7 @@ function refreshRegistryLiveState_(force) {
       if (res.revision !== undefined) _registryLiveRevisionByCode[code || 'ALL'] = String(res.revision);
       var participantChanged = code ? applyLiveParticipantAssignments_(code, res) : false;
       routeAfterLiveAuthorityChange_(oldActor, _judge, code);
-      if (participantChanged) toast('관리자가 변경한 최신 선수 명단을 반영했습니다.');
+      // 선수명단은 조용히 최신 상태로 동기화합니다. 진행 중인 심사를 방해하는 반복 알림은 표시하지 않습니다.
     })
     .withFailureHandler(function(){ _registryLiveSyncInFlight = false; })
     .getRegistryLiveState(code, {judgeToken:_judge.judgeToken || ''}, knownRevision);
@@ -11409,10 +11409,11 @@ function startKcac() {
 
 function syncKcacRoundParticipantUi_(isMainFinal) {
   var isBlindPrelim = !isMainFinal;
+  var identityHidden = !isAdminRole();
   _kcac.isBlindPrelim = isBlindPrelim;
   var nameInput = document.getElementById('kcac-name');
   if (nameInput) {
-    if (isBlindPrelim) {
+    if (identityHidden) {
       nameInput.value = '';
       nameInput.placeholder = '블라인드 심사: 이름은 표시·입력하지 않음';
       nameInput.readOnly = true;
@@ -12859,7 +12860,7 @@ function kcacSubmitAll() {
   var num = document.getElementById('kcac-num').value.trim();
   var isQualSubmission = !_kcac.jars.some(function(j){ return j.type !== 'qual'; });
   var submissionUrl = isQualSubmission ? kcacSubmissionUrl_() : '';
-  var playerName = isQualSubmission ? '' : document.getElementById('kcac-name').value.trim();
+  var playerName = (!isQualSubmission && isAdminRole()) ? document.getElementById('kcac-name').value.trim() : '';
   if (!num) { toast('참가자 번호를 입력해주세요', true); return; }
   if (!validateKcacBeforeSubmit_()) return;
 

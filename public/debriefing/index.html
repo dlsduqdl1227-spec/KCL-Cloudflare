@@ -1448,7 +1448,8 @@ function buildCommentBox(s, compCode) {
     if (rows.some(function(r){ return r.key === key; })) return;
     rows.push({ key:key, label: label, text: text });
   });
-  if (comp === 'KCR' && !rows.some(function(r){ return isOverallReportCommentLabel_(r.label); })) {
+  var hasSmartTags = Object.keys(s || {}).some(function(k){ return isSmartTagLabel(k) && splitPublicTokens_(s[k]).length > 0; });
+  if ((comp === 'KCR' || (comp === 'IKRC' && hasSmartTags)) && !rows.some(function(r){ return isOverallReportCommentLabel_(r.label); })) {
     var generated = buildProfessionalOverallComment_(s, compCode);
     if (generated) rows.push({ key:'overallcomment', label:'Overall Comment(종합 코멘트)', text:generated });
   }
