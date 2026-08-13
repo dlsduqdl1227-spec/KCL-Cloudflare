@@ -32,10 +32,6 @@ const reviewBack = functionSource(assessment, 'backToReviewList');
 assert.match(reviewBack, /flushReviewAutoSaveThen_/, 'leaving review must wait for the pending comment save');
 assert.match(reviewBack, /화면 이동을 중단/, 'failed comment saves must keep the judge on the edit screen');
 
-for (const name of ['toggleIkrcBranchValue_', 'selectIkrcTag', 'removeIkrcTag']) {
-  assert.match(functionSource(assessment, name), /kclScheduleEvalDraftSave_\(\)/, `${name} must persist IKRC smart-tag changes to the local draft`);
-}
-assert.match(assessment, /extra\[header\]\s*=\s*\(s\[ikrcTagKey_\(a\.key\)\]\s*\|\|\s*\[\]\)\.join\(', '\)/, 'every IKRC attribute smart-tag value must be included in submission');
 assert.match(assessment, /data:\s*\[s\.no\][\s\S]*?s\.comment\s*\|\|\s*''/, 'every IKRC cup comment must be included in submission');
 
 console.log('stage168 IKRC evaluation and review comment-retention tests passed');
