@@ -1377,10 +1377,8 @@ function buildRankBox(res) {
     return box;
   }
   var rankFullText = main.rank ? (main.totalInRound ? (main.rank + ' / ' + main.totalInRound) : String(main.rank)) : '-';
-  var ikrcAvg = Number(main.avgScore || 0);
-  var ikrcFinal = Number(main.rankingScore != null ? main.rankingScore : ikrcAvg);
   var scoreCells = isIkrc
-    ? (Math.abs(ikrcFinal - ikrcAvg) > 0.0001 ? '<div class="cell"><small>가산점 반영 최종 점수</small><b>' + escHtml(fmtScore(ikrcFinal, 2)) + '</b></div>' : '')
+    ? ''
     : '<div class="cell"><small>공식 점수</small><b>' + escHtml(fmtScore(main.totalScore || 0, 2)) + '</b></div>';
   if (isIkrc && !scoreCells) box.classList.add('rank-only');
   box.innerHTML =

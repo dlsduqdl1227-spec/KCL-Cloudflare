@@ -120,8 +120,9 @@ assert.match(scoreCard, /개별 평가 점수/, 'IKRC 개별 카드에는 반복
 assert.doesNotMatch(scoreCard, /__ikrcRoundAvgScore[^\n]*\?/, 'IKRC 라운드 평균을 모든 카드 총점으로 반복하면 안 됩니다.');
 
 const rankBox = functionSource('buildRankBox');
-assert.match(rankBox, /Math\.abs\(ikrcFinal - ikrcAvg\) > 0\.0001/, 'IKRC 최종점수는 평균과 실제로 다를 때만 별도 표시해야 합니다.');
-assert.match(rankBox, /box\.classList\.add\('rank-only'\)/, 'IKRC 평균과 최종점수가 같을 때 순위 카드가 빈 열을 남기면 안 됩니다.');
+assert.doesNotMatch(rankBox, /가산점 반영 최종 점수/, 'IKRC 선수 디브리핑에는 내부 공식점수 명칭을 노출하지 않아야 합니다.');
+assert.match(rankBox, /var scoreCells = isIkrc\s*\? ''/, 'IKRC 선수 디브리핑 순위 카드에는 평균점수와 중복되는 공식점수 셀을 숨겨야 합니다.');
+assert.match(rankBox, /box\.classList\.add\('rank-only'\)/, 'IKRC 순위 카드는 점수 셀을 숨긴 레이아웃을 사용해야 합니다.');
 
 const ikrcGrid = functionSource('buildCuppingScoreGrid');
 assert.match(ikrcGrid, /publicRoundIsFinal_\(s\)/);
