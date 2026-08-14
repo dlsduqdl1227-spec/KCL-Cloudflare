@@ -3198,6 +3198,7 @@ function fmtAverageFixedScore_(v, digits) {
   return n.toFixed(d);
 }
 function usesAverageScoreDisplay_(compCode, basis) {
+  if (String(compCode || '').toUpperCase() === 'IKRC') return true;
   return /average|평균/i.test(String(basis || ''));
 }
 function fmtRankingScore_(v, digits, compCode, basis) {
@@ -10199,8 +10200,9 @@ function renderRanking(res) {
       var tieText = item.tieBreakSummary && !item.disqualified ? '<br>동점항목: ' + escHtml(item.tieBreakSummary) : '';
       var dqText = item.disqualified ? '<br><span class="rank-dq">실격' + (item.disqualificationReason ? ' · ' + escHtml(item.disqualificationReason) : '') + '</span>' : '';
       var rankLabel = item.disqualified ? '실격' : item.rank;
-      var scoreValue = item.rankingScore != null ? item.rankingScore : item.totalScore;
-      var scoreLabel = item.disqualified ? 'DQ' : fmtRankingScore_(scoreValue || 0, 2, res.compCode, item.scoreBasis);
+      var scoreValue = isIkrcRank && item.avgScore != null ? item.avgScore : (item.rankingScore != null ? item.rankingScore : item.totalScore);
+      var displayScoreBasis = isIkrcRank ? '심사위원 총평균' : item.scoreBasis;
+      var scoreLabel = item.disqualified ? 'DQ' : fmtRankingScore_(scoreValue || 0, 2, res.compCode, displayScoreBasis);
       var nameSummary = item.playerNameSummary || item.unitName || '';
       var affSummary = item.playerAffiliationSummary || item.affiliationSummary || '';
       var displayUnit = item.unitDisplay || item.unit;
@@ -10221,7 +10223,7 @@ function renderRanking(res) {
         '<div class="rank-num' + rankClass + '">' + escHtml(String(rankLabel)) + '</div>' +
         '<div class="rank-info">' +
           '<div class="rank-unit">' + escHtml(unitText) + '</div>' +
-          '<div class="rank-meta">' + ktccMeta + ikrcMeta + (item.scoreBasis ? escHtml(item.scoreBasis) + ' 기준 · ' : '') + (item.teamSummary ? (isKtccRank ? '테이블 ' : '평가팀 ') + escHtml(item.teamSummary) + ' · ' : '') + reviewProgressMeta + tieText + dqText + '</div>' +
+          '<div class="rank-meta">' + ktccMeta + ikrcMeta + (displayScoreBasis ? escHtml(displayScoreBasis) + ' 기준 · ' : '') + (item.teamSummary ? (isKtccRank ? '테이블 ' : '평가팀 ') + escHtml(item.teamSummary) + ' · ' : '') + reviewProgressMeta + tieText + dqText + '</div>' +
           '<div class="rank-detail-hint">눌러서 상세 점수 / 디브리핑 확인</div>' +
         '</div>' +
         '<div class="rank-score">' + scoreLabel + '</div>';
@@ -10630,9 +10632,11 @@ function renderRankingDetail(res) {
     body.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:14px">상세 점수 데이터가 없습니다.</p>';
     return;
   }
+  var isIkrcDetail = String(res.compCode || '').toUpperCase() === 'IKRC';
   var detailUsesAverageTotal = usesAverageScoreDisplay_(res.compCode, rankInfo && rankInfo.scoreBasis);
-  var totalScore = res.totalScore != null ? (detailUsesAverageTotal ? fmtAverageScore_(res.totalScore, 2) : fmtScore(res.totalScore,2)) : '-';
-  var detailTotalLine = '<br>총점: ' + escHtml(totalScore);
+  var detailScoreValue = isIkrcDetail && rankInfo && rankInfo.avgScore != null ? rankInfo.avgScore : res.totalScore;
+  var totalScore = detailScoreValue != null ? (detailUsesAverageTotal ? fmtAverageScore_(detailScoreValue, 2) : fmtScore(detailScoreValue,2)) : '-';
+  var detailTotalLine = '<br>' + (isIkrcDetail ? '심사위원 총평균' : '총점') + ': ' + escHtml(totalScore);
   var detailTitleText = String(res.compCode || '').toUpperCase() === 'KTCC'
     ? ('팀번호 ' + (res.unitDisplay || res.unit || '-') + (res.teamNameSummary ? ' · ' + res.teamNameSummary : ''))
     : ((res.unitLabel || '식별자') + ' ' + (res.unitDisplay || res.unit || '-') + (res.playerNameSummary ? ' · ' + res.playerNameSummary : ''));

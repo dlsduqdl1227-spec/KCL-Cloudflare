@@ -77,7 +77,7 @@ assert.doesNotMatch(detailCardSource, /\['총평가 반영점수'\]|\['감점 �
 assert.doesNotMatch(assessment, /function buildMobRankingBreakdownHtml_\(/);
 
 const rankingDetailSource = functionSource("renderRankingDetail");
-assert.match(rankingDetailSource, /var detailTotalLine = '<br>총점:/);
+assert.match(rankingDetailSource, /isIkrcDetail \? '심사위원 총평균' : '총점'/);
 assert.doesNotMatch(rankingDetailSource, /buildMobRankingBreakdownHtml_\(rankInfo\)/);
 
 const mobDescSource = functionSource("mobGetDesc");
