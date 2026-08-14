@@ -67,7 +67,10 @@ assert.equal(context._kcac.jars[1].leafCount, '', 'a delayed event from the prev
 
 const validation = functionSource(assessment, 'validateKcacBeforeSubmit_');
 assert.match(validation, /syncKcacLeafCountFromDOM_\(\)/, 'submission validation must synchronize the visible field first');
-assert.match(validation, /kcacCupFullLabel\(j\).*리프 수를 입력해주세요/, 'the error must identify the exact milk and pattern cup');
+assert.match(validation, /missingLeafLabels\.push\(kcacCupFullLabel\(j\)\)/, 'a missing mobile event must be recorded for review');
+assert.doesNotMatch(validation, /리프 수를 입력해주세요[\s\S]*?return false/, 'missing leaf count must never block the full submission');
+assert.match(validation, /제출은 계속 진행합니다/, 'the operator must be told that submission continues');
+assert.match(assessment, /'리프수입력상태':[\s\S]*?'확인필요'[\s\S]*?'입력완료'/, 'submitted rows must expose leaf-count verification state');
 assert.match(functionSource(assessment, 'setKcacQualMilkPattern_'), /syncKcacLeafCountFromDOM_\(\)/, 'changing FAST/SLOW assignment must preserve the visible leaf count first');
 
 process.stdout.write('Stage183 KCAC leaf-count persistence tests passed.\n');
