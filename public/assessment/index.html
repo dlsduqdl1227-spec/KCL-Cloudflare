@@ -262,6 +262,20 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .mob-header-metric.official{min-width:72px}
 .mob-small-total{font-size:22px!important;letter-spacing:-.5px!important}
 @media(max-width:520px){.mob-header-scorebox{gap:8px;max-width:55%;min-width:150px}.mob-header-metric{min-width:54px}.mob-small-total{font-size:18px!important}.mob-header-metric.official{min-width:64px}}
+.kcac-header-scorebox{display:flex;align-items:flex-end;justify-content:flex-end;gap:10px;min-width:210px;max-width:66%;padding-bottom:1px}
+.kcac-header-cup-scores{display:flex;align-items:flex-end;justify-content:flex-end;gap:8px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.kcac-header-cup-scores::-webkit-scrollbar{display:none}
+.kcac-header-metric{min-width:52px;text-align:right;flex:0 0 auto}
+.kcac-header-metric.current .eval-total-label{color:#fff;font-weight:700}
+.kcac-header-metric.total{min-width:70px;padding-left:10px;border-left:1px solid var(--border);flex:0 0 auto}
+.kcac-header-score{font-size:21px!important;letter-spacing:-.5px!important}
+@media(max-width:520px){
+  .kcac-header-scorebox{gap:7px;min-width:184px;max-width:64%}
+  .kcac-header-cup-scores{gap:6px}
+  .kcac-header-metric{min-width:44px}
+  .kcac-header-metric.total{min-width:60px;padding-left:7px}
+  .kcac-header-score{font-size:18px!important}
+}
 
 .cup-nav{background:var(--panel);border-bottom:1.5px solid var(--border);
   padding:10px 12px;
@@ -2300,9 +2314,12 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="eval-title">KCAC <span class="role-mode-badge" id="kcac-round-badge">예선</span></div>
       <div class="eval-sub" id="kcac-sub"></div>
     </div>
-    <div>
-      <div class="eval-total-label">Final</div>
-      <div class="eval-total-val" id="kcac-final-display">0.00</div>
+    <div class="kcac-header-scorebox" aria-label="KCAC 개별 점수와 전체 합산점수">
+      <div class="kcac-header-cup-scores" id="kcac-header-cup-scores"></div>
+      <div class="kcac-header-metric total">
+        <div class="eval-total-label">합산</div>
+        <div class="eval-total-val kcac-header-score" id="kcac-final-display">0.00</div>
+      </div>
     </div>
   </div>
   <div class="cup-nav" id="kcac-cup-nav" style="display:none">
@@ -12460,6 +12477,30 @@ function calcKcacTotalPenalty() {
   return { leaf: leaf, time: time, total: roundTotal(leaf + time) };
 }
 
+function kcacHeaderScoreLabel_(j, index) {
+  var patternType = String((j && j.patternType) || '');
+  if (patternType === 'dynamic') return 'FAST';
+  if (patternType === 'controlled') return 'SLOW';
+  if (patternType === 'final-pattern') return '패턴';
+  if (patternType === 'sensory-regular') return '일반우유';
+  if (patternType === 'sensory-oat') return '대체우유';
+  var main = kcacCupMainLabel(j);
+  return main || ('잔 ' + (index + 1));
+}
+
+function renderKcacHeaderScores_() {
+  var wrap = document.getElementById('kcac-header-cup-scores');
+  if (!wrap) return;
+  wrap.innerHTML = _kcac.jars.map(function(j, index){
+    var label = kcacHeaderScoreLabel_(j, index);
+    var current = index === _kcac.currentIdx ? ' current' : '';
+    return '<div class="kcac-header-metric' + current + '" title="' + escHtml(kcacCupFullLabel(j) || label) + '">' +
+      '<div class="eval-total-label">' + escHtml(label) + '</div>' +
+      '<div class="eval-total-val kcac-header-score">' + fmtScore(calcKcacJarFinal(j, false), 2) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
 function setKcacPenalty(val) {
   // KCAC 시간초과 감점은 개별 잔이 아니라 참가자/제출 단위로 한 번만 적용한다.
   _kcac.penalty = Number(val) || 0;
@@ -12568,6 +12609,7 @@ function updateKcacFinal() {
   _kcac.jars.forEach(function(j) { totalSub = roundTotal(totalSub + calcKcacJarSubtotal(j)); });
   var penalties = calcKcacTotalPenalty();
   var totalFinal = penalties.total >= 999 ? 0 : Math.max(0, roundTotal(totalSub - penalties.total));
+  renderKcacHeaderScores_();
   document.getElementById('kcac-final-display').textContent = fmtScore(totalFinal,2);
 
   var j = _kcac.jars[_kcac.currentIdx];

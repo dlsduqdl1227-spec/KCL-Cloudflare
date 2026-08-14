@@ -79,6 +79,9 @@ assert.match(assessment, /\.kcac-qual-nav\{display:grid!important;grid-template-
 assert.match(functionSource(assessment, 'renderKcacCupNav'), /FAST|kcacOrderedQualEntries_|종합코멘트/);
 assert.match(functionSource(assessment, 'setKcacQualMilkPattern_'), /loadKcacJar\(_kcac\.currentIdx\)/, '우유 배정 후 실제 FAST 잔을 다시 열어야 합니다');
 assert.match(functionSource(assessment, 'renderKcacLeafRuleBox'), /kcac-leaf-entry-title[\s\S]*리프\(잎\) 수를 입력하세요/);
+assert.match(assessment, /id="kcac-header-cup-scores"[\s\S]*>합산</);
+assert.match(functionSource(assessment, 'renderKcacHeaderScores_'), /kcac-header-metric[\s\S]*calcKcacJarFinal\(j, false\)/);
+assert.match(functionSource(assessment, 'updateKcacFinal'), /renderKcacHeaderScores_\(\)[\s\S]*kcac-final-display/);
 
 async function rpc(action, payload) {
   const statement = { bind(){ return this; }, async run(){ return { success:true }; }, async first(){ return { n:1 }; }, async all(){ return { results:[] }; } };
@@ -114,7 +117,9 @@ generated.comments.forEach(comment => {
   assert.match(comment, /중심축 이탈/);
   assert.match(comment, /리프 15개/);
   assert.match(comment, /강점|보완/);
-  assert.ok(comment.length <= 320, `KCAC 종합코멘트가 너무 깁니다: ${comment.length}자`);
+  assert.match(comment, /형태와 대칭, 표면 상태가 위치와 선명도로 이어지는 흐름/);
+  assert.ok(comment.length >= 170, `KCAC 종합코멘트가 충분히 상세하지 않습니다: ${comment.length}자`);
+  assert.ok(comment.length <= 420, `KCAC 종합코멘트가 너무 깁니다: ${comment.length}자`);
   assert.doesNotMatch(comment, /항목별로 정리하면 다음과 같습니다|점수와 선택된 관찰 기록을 함께 반영/);
 });
 
@@ -140,7 +145,9 @@ combined.comments.forEach(comment => {
   assert.match(comment, /SLOW Rosetta[\s\S]*어메이징 오트바리스타/);
   assert.match(comment, /리프 15개/);
   assert.match(comment, /리프 9개/);
-  assert.ok(comment.length <= 360, `KCAC 통합 코멘트가 너무 깁니다: ${comment.length}자`);
+  assert.match(comment, /전체 항목 흐름에서는/);
+  assert.ok(comment.length >= 230, `KCAC 통합 코멘트가 충분히 상세하지 않습니다: ${comment.length}자`);
+  assert.ok(comment.length <= 480, `KCAC 통합 코멘트가 너무 깁니다: ${comment.length}자`);
 });
 
 assert.match(functionSource(assessment, 'kcacCommentPayloadForJar_'), /leafCount:\s*j\.leafCount[\s\S]*leafPenalty:\s*j\.leafPenalty/);

@@ -7270,11 +7270,26 @@ function _generateKcacCombinedComment_(payload) {
     allPositive.push(...(evidence.positive || []));
     allRefinement.push(...(evidence.refinement || []));
   });
+  const areaScores = {};
+  cups.forEach(cup => {
+    Object.keys((cup && cup.scores) || {}).forEach(key => {
+      const area = _kcacCanonicalAreaKey_(key);
+      if (!areaScores[area]) areaScores[area] = [];
+      areaScores[area].push(cup.scores[key]);
+    });
+  });
+  const areaItems = Object.keys(areaScores).map(key => ({ name:key, score:_avg(areaScores[key]) }));
+  const areaFlow = _lowHighScore(areaItems);
+  const highArea = areaFlow.high ? _kcacAreaLabel_(areaFlow.high.name) : '';
+  const lowArea = areaFlow.low && areaFlow.low !== areaFlow.high ? _kcacAreaLabel_(areaFlow.low.name) : '';
+  const comparison = highArea && lowArea
+    ? `전체 항목 흐름에서는 ${highArea}${_subjectParticle_(highArea)} 상대적으로 안정적이었고, ${lowArea}${_topicParticle_(lowArea)} 두 잔의 차이가 함께 확인됐습니다.`
+    : '두 잔의 형태, 대칭, 표면, 위치와 선명도를 같은 기준으로 연결해 확인했습니다.';
   const tone = _kcacTone_(_avg(allScores), { positive:allPositive, refinement:allRefinement });
   const closing = `두 잔의 패턴 연결성과 시각적 균형을 종합한 완성도는 ${tone} 수준입니다.`;
   return _sensoryOptionSet_([
-    `${observations.join(' ')} ${closing}`,
-    `FAST와 SLOW 로제타를 함께 보면 ${tone} 흐름을 보였습니다. ${observations.join(' ')}`
+    `${observations.join(' ')} ${comparison} ${closing}`,
+    `FAST와 SLOW 로제타를 함께 보면 ${tone} 흐름을 보였습니다. ${observations.join(' ')} ${comparison} ${closing}`
   ], _commentVariationKey_(payload, 'KCAC-COMBINED'));
 }
 
@@ -7337,15 +7352,17 @@ function generateKcacComment(payload) {
     : balance;
   const visualClose = `전체 시각 완성도는 ${tone} 수준입니다.`;
   const sensoryClose = `맛과 질감의 종합 인상은 ${tone} 수준입니다.`;
+  const visualConnection = '형태와 대칭, 표면 상태가 위치와 선명도로 이어지는 흐름을 함께 반영했습니다.';
+  const sensoryConnection = '맛의 균형과 질감, 프레젠테이션이 하나의 인상으로 이어지는 흐름을 함께 반영했습니다.';
   if (isSensory) {
     return _sensoryOptionSet_([
-      `${contextText}에서 ${evidenceText} ${scoreFlowText} ${sensoryClose}`,
-      `${contextText}의 센서리 평가는 ${tone} 흐름을 보였습니다. ${evidenceText} ${scoreFlowText}`
+      `${contextText}에서 ${evidenceText} ${scoreFlowText} ${sensoryConnection} ${sensoryClose}`,
+      `${contextText}의 센서리 평가는 ${tone} 흐름을 보였습니다. ${evidenceText} ${scoreFlowText} ${sensoryConnection} ${sensoryClose}`
     ], _commentVariationKey_(payload, 'KCAC'));
   }
   return _sensoryOptionSet_([
-    `${contextText}에서 ${evidenceText} ${scoreFlowText} ${leafText} ${visualClose}`,
-    `${contextText}는 ${tone} 시각 흐름을 보였습니다. ${evidenceText} ${scoreFlowText} ${leafText}`
+    `${contextText}에서 ${evidenceText} ${scoreFlowText} ${leafText} ${visualConnection} ${visualClose}`,
+    `${contextText}는 ${tone} 시각 흐름을 보였습니다. ${evidenceText} ${scoreFlowText} ${leafText} ${visualConnection} ${visualClose}`
   ], _commentVariationKey_(payload, 'KCAC'));
 }
 
