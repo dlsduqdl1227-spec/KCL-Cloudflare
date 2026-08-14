@@ -49,7 +49,8 @@ const context = {
   refreshKcacCommentReference_:()=>{},
   syncKcacMilkPatternSelectors_:()=>{},
   updateKcacFinal:()=>{},
-  renderKcacCupNav:()=>{}
+  renderKcacCupNav:()=>{},
+  loadKcacJar:(idx)=>{ context._kcac.currentIdx = idx; }
 };
 vm.createContext(context);
 vm.runInContext([
@@ -61,6 +62,7 @@ vm.runInContext([
 context.setKcacQualMilkPattern_('dynamic', '0');
 assert.equal(context._kcac.jars[0].patternType, 'dynamic');
 assert.equal(context._kcac.jars[1].patternType, 'controlled');
+assert.equal(context._kcac.currentIdx, 0, 'FAST로 배정한 실제 우유 잔이 즉시 열려야 합니다');
 
 context.setKcacQualMilkPattern_('controlled', '0');
 assert.equal(context._kcac.jars[0].patternType, 'controlled');

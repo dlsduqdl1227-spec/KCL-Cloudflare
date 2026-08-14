@@ -54,8 +54,11 @@ assert.match(assessment, /\.kcac-smart-group-refinement \.kcac-smart-group-label
 assert.match(assessment, /id="kcac-comment-reference"/);
 assert.match(assessment, /onclick="clearKcacGeneratedComment\(\)"/);
 const guide = functionSource(assessment, 'buildKcacCommentReferenceHtml_');
-assert.match(guide, /점수·스마트태그·패턴 기록은 그대로 유지/);
-assert.match(guide, /kcacSelectedSmartTags_/);
+const guideCards = functionSource(assessment, 'buildKcacReferenceCardsForJar_');
+assert.doesNotMatch(assessment, /AI 코멘트를 사용하지 않아도 현재 잔의 점수·스마트태그·패턴 기록은 그대로 유지/);
+assert.match(guide, /kcac-overall-guide-grid/);
+assert.match(guide, /FAST|pattern/);
+assert.match(guideCards, /kcacSelectedSmartTags_/);
 assert.match(guide, /leafCount/);
 assert.match(functionSource(assessment, 'onKcacScore'), /refreshKcacCommentReference_\(\)/);
 assert.match(functionSource(assessment, 'toggleKcacSmartTag'), /refreshKcacCommentReference_\(\)/);

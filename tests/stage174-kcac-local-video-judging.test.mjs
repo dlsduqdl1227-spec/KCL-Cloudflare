@@ -28,7 +28,7 @@ assert.match(validation, /mediaOptionalStatus[\s\S]*선택안함/, '이미지를
 
 const submit = functionSource(assessment, 'kcacSubmitAll');
 assert.doesNotMatch(submit, /kcacSubmissionUrl_|예선영상URL|제출영상URL|영상제출확인/);
-assert.match(submit, /'', j\.comment \|\| ''/, 'legacy guide URL column must remain blank so existing positional score columns stay aligned');
+assert.match(submit, /'', isQualSubmission \? \(_kcac\.overallComment \|\| ''\) : \(j\.comment \|\| ''\)/, 'legacy guide URL column must remain blank and the following shared comment column must keep its position');
 
 assert.match(rpc, /'가이드URL'/, 'legacy KCAC header position must remain for old score compatibility');
 

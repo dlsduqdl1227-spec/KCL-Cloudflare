@@ -38,8 +38,9 @@ const elements = {
   'kcac-comment': { value:'현장 평가 코멘트' }
 };
 const context = {
-  _kcac:{ currentIdx:0, jars:[{ type:'qual', patternType:'dynamic', leafCount:'', leafPenalty:0, generatedComment:'', commentEdited:true }] },
+  _kcac:{ currentIdx:0, overallComment:'', overallGeneratedComment:'', overallCommentEdited:true, jars:[{ type:'qual', patternType:'dynamic', leafCount:'', leafPenalty:0, generatedComment:'', commentEdited:true }] },
   document:{ getElementById:id => elements[id] || null },
+  kcacIsUnifiedQualComment_:()=>true,
   calcKcacLeafPenalty:j => {
     j.leafPenalty = j.patternType === 'dynamic' && Number(j.leafCount) < 14 ? 5 : 0;
     return j.leafPenalty;
@@ -52,7 +53,7 @@ vm.runInContext(functionSource(assessment, 'saveKcacJarFromDOM'), context);
 context.saveKcacJarFromDOM();
 assert.equal(context._kcac.jars[0].leafCount, '14', 'the visible mobile input must be persisted even if its input event was delayed');
 assert.equal(context._kcac.jars[0].leafPenalty, 0);
-assert.equal(context._kcac.jars[0].comment, '현장 평가 코멘트');
+assert.equal(context._kcac.overallComment, '현장 평가 코멘트');
 
 elements['kcac-leaf-count'].value = '0';
 context.saveKcacJarFromDOM();

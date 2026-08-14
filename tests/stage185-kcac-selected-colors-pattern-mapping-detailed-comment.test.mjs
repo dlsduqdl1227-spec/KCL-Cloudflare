@@ -75,6 +75,11 @@ assert.equal(elements['kcac-current-pattern-title'].textContent, '현재 잔: SL
 assert.equal(elements['kcac-current-milk-label'].textContent, '사용 우유: 어메이징 오트바리스타');
 assert.equal(elements['kcac-selected-pattern-label'].textContent, '리프 10개 이하');
 
+assert.match(assessment, /\.kcac-qual-nav\{display:grid!important;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+assert.match(functionSource(assessment, 'renderKcacCupNav'), /FAST|kcacOrderedQualEntries_|종합코멘트/);
+assert.match(functionSource(assessment, 'setKcacQualMilkPattern_'), /loadKcacJar\(_kcac\.currentIdx\)/, '우유 배정 후 실제 FAST 잔을 다시 열어야 합니다');
+assert.match(functionSource(assessment, 'renderKcacLeafRuleBox'), /kcac-leaf-entry-title[\s\S]*리프\(잎\) 수를 입력하세요/);
+
 async function rpc(action, payload) {
   const statement = { bind(){ return this; }, async run(){ return { success:true }; }, async first(){ return { n:1 }; }, async all(){ return { results:[] }; } };
   const request = new Request('https://qa.kcl.local/api/rpc', {
@@ -113,6 +118,31 @@ generated.comments.forEach(comment => {
   assert.doesNotMatch(comment, /항목별로 정리하면 다음과 같습니다|점수와 선택된 관찰 기록을 함께 반영/);
 });
 
-assert.match(functionSource(assessment, 'generateKcacComment'), /leafCount:\s*j\.leafCount[\s\S]*leafPenalty:\s*j\.leafPenalty/);
+const combined = await rpc('generateKcacComment', {
+  type:'qual-combined', variationSeed:'stage185-combined',
+  cups:[
+    {
+      type:'qual', patternType:'FAST Rosetta', milkProduct:'매일멸균우유', leafCount:'15', scores:{ 완성도:4.0, 균형:3.6, 표면:3.2, 위치:2.8, 선명도:2.4 },
+      smartTags:{ 'Pattern Completion(패턴 완성도)':['리프 형태 식별 가능'], 'Pattern Definition(패턴 선명도)':['라인 분리 부족'] },
+      smartTagPolarity:{ positive:['완성도: 리프 형태 식별 가능'], refinement:['선명도: 라인 분리 부족'] }
+    },
+    {
+      type:'qual', patternType:'SLOW Rosetta', milkProduct:'어메이징 오트바리스타', leafCount:'9', scores:{ 완성도:3.6, 균형:3.4, 표면:3.8, 위치:3.0, 선명도:3.2 },
+      smartTags:{ 'Surface Quality(표면 품질)':['광택 유지'], 'Position & Proportion(위치와 비율)':['컵 중심 이탈'] },
+      smartTagPolarity:{ positive:['표면: 광택 유지'], refinement:['위치: 컵 중심 이탈'] }
+    }
+  ]
+});
+assert.equal(combined.success, true);
+assert.equal(combined.comments.length, 2);
+combined.comments.forEach(comment => {
+  assert.match(comment, /FAST Rosetta[\s\S]*매일멸균우유/);
+  assert.match(comment, /SLOW Rosetta[\s\S]*어메이징 오트바리스타/);
+  assert.match(comment, /리프 15개/);
+  assert.match(comment, /리프 9개/);
+  assert.ok(comment.length <= 360, `KCAC 통합 코멘트가 너무 깁니다: ${comment.length}자`);
+});
+
+assert.match(functionSource(assessment, 'kcacCommentPayloadForJar_'), /leafCount:\s*j\.leafCount[\s\S]*leafPenalty:\s*j\.leafPenalty/);
 
 process.stdout.write('Stage185 KCAC selected colors, exact pattern mapping, and detailed comment tests passed.\n');

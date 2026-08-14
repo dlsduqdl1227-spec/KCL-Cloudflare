@@ -7234,8 +7234,53 @@ function _kcacAreaObservation_(item, tagsByArea, polarity) {
     : `${subject} ${level} 수준으로 기록되었습니다.`;
 }
 
+function _kcacCombinedCupObservation_(cup) {
+  cup = cup || {};
+  const pattern = safeStr(cup.patternType || cup.pattern || '패턴');
+  const milk = safeStr(cup.milkProduct || cup.milkType);
+  const subject = milk ? `${pattern}(${milk})` : pattern;
+  const evidence = _kcacTagEvidence_({ smartTags:cup.smartTags, smartTagPolarity:cup.smartTagPolarity });
+  const clean = values => Array.from(new Set((values || []).map(value => _cleanTagText_(safeStr(value).replace(/^[^:：]{1,40}[:：]\s*/, ''))).filter(Boolean))).slice(0, 2);
+  const positive = clean(evidence.positive);
+  const refinement = clean(evidence.refinement);
+  const scoreItems = Object.keys(cup.scores || {}).map(key => ({ name:key, score:cup.scores[key] }));
+  const hl = _lowHighScore(scoreItems);
+  const high = hl.high ? _kcacAreaLabel_(hl.high.name) : '';
+  const low = hl.low && hl.low !== hl.high ? _kcacAreaLabel_(hl.low.name) : '';
+  let observation = '';
+  if (positive.length && refinement.length) observation = `${_joinWithComma(positive)}가 강점이었고, ${_joinWithComma(refinement)}는 보완 관찰로 확인됐습니다.`;
+  else if (positive.length) observation = `${_joinWithComma(positive)}가 주요 강점으로 확인됐습니다.`;
+  else if (refinement.length) observation = `${_joinWithComma(refinement)}가 주요 보완 관찰로 확인됐습니다.`;
+  else if (high && low) observation = `${high}${_subjectParticle_(high)} 상대적으로 두드러졌고, ${low}${_topicParticle_(low)} 편차가 확인됐습니다.`;
+  else observation = '패턴 구조와 시각적 균형을 중심으로 확인했습니다.';
+  const leaf = safeStr(cup.leafCount);
+  const leafText = leaf ? ` 리프 ${leaf}개가 기록되었습니다.` : '';
+  return `${subject}는 ${observation}${leafText}`;
+}
+
+function _generateKcacCombinedComment_(payload) {
+  const cups = Array.isArray(payload.cups) ? payload.cups.slice(0, 2) : [];
+  const observations = cups.map(_kcacCombinedCupObservation_).filter(Boolean);
+  const allScores = [];
+  const allPositive = [];
+  const allRefinement = [];
+  cups.forEach(cup => {
+    Object.keys((cup && cup.scores) || {}).forEach(key => allScores.push(cup.scores[key]));
+    const evidence = _kcacTagEvidence_({ smartTags:cup && cup.smartTags, smartTagPolarity:cup && cup.smartTagPolarity });
+    allPositive.push(...(evidence.positive || []));
+    allRefinement.push(...(evidence.refinement || []));
+  });
+  const tone = _kcacTone_(_avg(allScores), { positive:allPositive, refinement:allRefinement });
+  const closing = `두 잔의 패턴 연결성과 시각적 균형을 종합한 완성도는 ${tone} 수준입니다.`;
+  return _sensoryOptionSet_([
+    `${observations.join(' ')} ${closing}`,
+    `FAST와 SLOW 로제타를 함께 보면 ${tone} 흐름을 보였습니다. ${observations.join(' ')}`
+  ], _commentVariationKey_(payload, 'KCAC-COMBINED'));
+}
+
 function generateKcacComment(payload) {
   payload = payload || {};
+  if (Array.isArray(payload.cups) && payload.cups.length) return _generateKcacCombinedComment_(payload);
   const scores = payload.scores || {};
   const smartTags = payload.smartTags || {};
   const type = safeStr(payload.type || '');
