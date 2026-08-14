@@ -28,24 +28,22 @@ function functionSource(source, name) {
   throw new Error(`${name} function incomplete`);
 }
 
-// 선수 기본정보와 공통 일정은 하나의 작업 카드에서 관리한다.
+// 선수 기본정보와 예선 일정은 하나의 단순한 작업 카드에서 관리한다.
 assert.match(registry, /class="card player-workspace-card"/);
 assert.match(registry, /선수·일정 관리/);
-assert.match(registry, /id="scheduleBuilder"/);
-assert.match(registry, /예외 일정 직접 입력/);
-assert.match(registry, /선택 선수 일정 적용·변경/);
+assert.doesNotMatch(registry, /id="scheduleBuilder"|예외 일정 직접 입력|공통 일정 만들기/);
+assert.match(registry, /선수명·소속·참가번호·연락처·예선 일정/);
+assert.match(registry, /선택 선수 일정 일괄 변경/);
 
-// 기본 화면에는 준비시간과 시연·로스팅시간만 두고 과거 필드는 숨겨 보존한다.
-for (const id of ["scheduleDay", "scheduleWaiting", "scheduleCleanup", "mDay", "mWaiting", "mCleanup"]) {
+// 과거 세부시간 필드는 숨겨 보존하고 기본 화면에는 예선일만 둔다.
+for (const id of ["mDay", "mWaiting", "mCleanup"]) {
   assert.match(registry, new RegExp(`id=["']${id}["'][^>]*type=["']hidden["']|type=["']hidden["'][^>]*id=["']${id}["']`));
 }
-assert.match(registry, /id="schedulePrep"/);
-assert.match(registry, /id="schedulePerformance"/);
-assert.match(functionSource(registry, "scheduleTimesText_"), /\['준비'/);
-assert.doesNotMatch(functionSource(registry, "scheduleTimesText_"), /\['대기'|\['정리'/);
+assert.match(registry, /id="mDate"[^>]*type="date"/);
+assert.match(registry, /id="bulkParticipantDate"[^>]*type="date"/);
 
 // IKRC 로스팅 위치는 선수 일정 정보일 뿐 센서리 평가 스테이션을 덮지 않는다.
-assert.match(registry, /IKRC의 운영 위치는 로스팅 일정 참고용/);
+assert.doesNotMatch(registry, /IKRC의 운영 위치는 로스팅 일정 참고용/);
 const assignSource = functionSource(rpc, "assignRegistrySchedule");
 assert.match(assignSource, /teamGroupOverride:context\.code === 'IKRC' \? ''/);
 assert.match(assignSource, /extra\['로스팅위치'\] = schedule\.station/);

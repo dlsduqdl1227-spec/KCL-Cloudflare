@@ -43,21 +43,17 @@ assert.match(registry, /id="allRegistryFile"/);
 assert.match(registry, /registerAllFromExcel\(\)/);
 assert.match(registry, /exportCurrentRegistryExcel\(\)/);
 
-// 모든 대회가 허용 라운드별 일정을 만들고 선수·심사위원을 체크 배정할 수 있다.
-for (const id of ["scheduleRound", "scheduleDate", "scheduleName", "scheduleStation", "scheduleWaiting", "schedulePrep", "schedulePerformance", "scheduleCleanup", "participantScheduleSelect", "operatorScheduleSelect"]) {
+// 공통 일정 생성 없이 선수 예선일과 심사 적용일을 바로 일괄 변경한다.
+for (const id of ["mDate", "bulkParticipantDate", "bulkOperatorDate"]) {
   assert.match(registry, new RegExp(`id=["']${id}["']`));
 }
-assert.match(functionSource(registry, "syncScheduleRoundOptions_"), /ROUND_OPTIONS\[code\]/);
-assert.match(functionSource(registry, "saveRegistrySchedule_"), /saveRegistrySchedule/);
-assert.match(functionSource(registry, "deleteRegistrySchedule_"), /deleteRegistrySchedule/);
-assert.match(functionSource(registry, "assignSelectedParticipantsToSchedule_"), /targetType:'participants'/);
-assert.match(functionSource(registry, "assignSelectedOperatorsToSchedule_"), /targetType:'operators'/);
+assert.doesNotMatch(registry, /id="scheduleBuilder"|id="participantScheduleSelect"|id="operatorScheduleSelect"|공통 일정 만들기/);
+assert.match(functionSource(registry, "bulkUpdateParticipantPrelimDate_"), /bulkUpdateParticipantPrelimDate/);
 assert.match(functionSource(registry, "participantSelectCell_"), /data-schedule-part/);
 assert.match(functionSource(registry, "renderSelectedOperatorsTable"), /data-bulk-op/);
 assert.match(functionSource(registry, "renderSelectedOperatorsTable"), /data-op-identity/);
 assert.match(functionSource(registry, "toggleAllVisibleOperators_"), /selected\[key\]/);
-assert.match(functionSource(registry, "participantScheduleParts_"), /ex\['일정ID'\]/);
-assert.match(functionSource(registry, "participantScheduleParts_"), /ex\['일정구분'\]/);
+assert.match(functionSource(registry, "participantPrelimDate_"), /ex\['예선일'\]/);
 
 // 관리자는 심사위원 폼과 분리하고 ALL 권한으로 저장한다.
 assert.doesNotMatch(registry, /<option value="ADMIN">관리자<\/option>/);
@@ -80,6 +76,7 @@ const dispatchSource = functionSource(rpc, "dispatch");
 assert.match(dispatchSource, /saveRegistrySchedule/);
 assert.match(dispatchSource, /deleteRegistrySchedule/);
 assert.match(dispatchSource, /assignRegistrySchedule/);
+assert.match(dispatchSource, /bulkUpdateParticipantPrelimDate/);
 
 const saveScheduleSource = functionSource(rpc, "saveRegistrySchedule");
 assert.match(saveScheduleSource, /registrySchedules/);
@@ -101,6 +98,11 @@ const upsertParticipantSource = functionSource(rpc, "upsertParticipant");
 assert.doesNotMatch(upsertParticipantSource, /MOB 선수 등록 시 대회일을 반드시/);
 assert.doesNotMatch(functionSource(registry, "saveOneParticipant"), /MOB 선수 등록 시 대회일을 반드시/);
 assert.match(assignScheduleSource, /extra\['대회일'\] = schedule\.date/);
+
+const bulkParticipantDateSource = functionSource(rpc, "bulkUpdateParticipantPrelimDate");
+assert.match(bulkParticipantDateSource, /extra\['예선일'\] = date/);
+assert.match(bulkParticipantDateSource, /UPDATE participants SET extra_json=/);
+assert.doesNotMatch(bulkParticipantDateSource, /UPDATE scores|DELETE FROM/);
 
 const deleteScheduleSource = functionSource(rpc, "deleteRegistrySchedule");
 assert.match(deleteScheduleSource, /선수 정보·심사 권한·점수는 유지/);

@@ -602,6 +602,7 @@ async function dispatch(action, args, env, request) {
     saveRegistrySchedule: () => saveRegistrySchedule(env, args[0], args[1]),
     deleteRegistrySchedule: () => deleteRegistrySchedule(env, args[0], args[1]),
     assignRegistrySchedule: () => assignRegistrySchedule(env, args[0], args[1]),
+    bulkUpdateParticipantPrelimDate: () => bulkUpdateParticipantPrelimDate(env, args[0], args[1]),
     getRegistrationTemplates: () => getRegistrationTemplates(),
     getParticipantAssignments: () => getParticipantAssignments(env, args[0], args[1]),
     getIkrcBlindAssignments: () => getIkrcBlindAssignments(env, args[0]),
@@ -1369,6 +1370,45 @@ async function assignRegistrySchedule(env, payload, actorArg) {
     for (const statement of statements) await statement.run();
   }
   return { success:true, message:`${schedule.name} 일정으로 선수 ${rows.length}명 변경 완료 · 기존 선수번호와 점수 유지`, schedule, applied:rows.length };
+}
+
+async function bulkUpdateParticipantPrelimDate(env, payload, actorArg) {
+  const actor = await getActor(env, actorArg);
+  const checked = strictCompetitionCode_(payload && payload.competitionCode, '선수 예선 일정');
+  if (checked.error) return checked.error;
+  const code = checked.code;
+  if (!actor || !hasManageAccess(actor, code)) return { success:false, message:code + ' 선수 일정 관리 권한이 없습니다.' };
+  const date = normalizeEffectiveDate_(payload && payload.competitionDate);
+  if (!date) return { success:false, message:'변경할 예선 일정을 달력에서 선택해주세요.' };
+  const rowIndexes = Array.from(new Set((Array.isArray(payload && payload.rowIndexes) ? payload.rowIndexes : [])
+    .map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0))).slice(0, 500);
+  if (!rowIndexes.length) return { success:false, message:'일정을 바꿀 선수를 한 명 이상 선택해주세요.' };
+
+  const placeholders = rowIndexes.map(() => '?').join(',');
+  const rs = await env.DB.prepare(`SELECT id, competition_code, extra_json FROM participants WHERE id IN (${placeholders}) ORDER BY id`).bind(...rowIndexes).all();
+  const rows = rs.results || [];
+  if (rows.length !== rowIndexes.length || rows.some(row => safeStr(row.competition_code).toUpperCase() !== code)) {
+    return { success:false, message:'선택한 선수 목록이 변경되었거나 다른 대회 선수가 포함되어 있습니다. 목록을 새로고침해주세요.' };
+  }
+
+  const updatedAt = nowIso();
+  const statements = rows.map(row => {
+    const extra = parseJson(row.extra_json, {});
+    delete extra['일정ID'];
+    delete extra['일정명'];
+    extra['일정구분'] = '예선';
+    extra['대회일'] = date;
+    extra['예선일'] = date;
+    extra.competitionDate = date;
+    return env.DB.prepare('UPDATE participants SET extra_json=?, updated_at=? WHERE id=? AND competition_code=?')
+      .bind(JSON.stringify(extra), updatedAt, row.id, code);
+  });
+  if (statements.length && typeof env.DB.batch === 'function') {
+    for (let i = 0; i < statements.length; i += 50) await env.DB.batch(statements.slice(i, i + 50));
+  } else {
+    for (const statement of statements) await statement.run();
+  }
+  return { success:true, message:`${code} 선수 ${rows.length}명의 예선 일정을 ${date}로 변경했습니다.`, applied:rows.length, competitionDate:date };
 }
 
 async function upsertOperatorAccount(env, payload, actorArg) {

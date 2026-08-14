@@ -31,7 +31,10 @@ function functionSource(source, name) {
 for (const id of ["mDate", "mDay", "mOrder", "mStation", "mWaiting", "mPrep", "mPerformance", "mCleanup"]) {
   assert.match(registry, new RegExp(`id=["']${id}["']`), `${id} schedule field must exist`);
 }
-assert.match(registry, /var PARTICIPANT_SCHEDULE_CODES=\['KBC','KTCC','MOC','MOB','IKRC'\]/);
+assert.match(registry, /var PARTICIPANT_SCHEDULE_CODES=\['KBC','KTCC','MOC','MOB','KCR','IKRC','KCAC'\]/);
+assert.doesNotMatch(registry, /id="scheduleBuilder"|공통 일정 만들기/);
+assert.match(registry, /id="bulkParticipantDate"/);
+assert.match(registry, /선택 선수 일정 일괄 변경/);
 assert.match(registry, /class="participant-table-wrap"/);
 assert.match(registry, /class="table participant-table"/);
 assert.match(registry, /\.participant-table \.cell-name,.participant-table \.cell-phone\{white-space:nowrap\}/);
@@ -72,8 +75,10 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext([
-  "var PARTICIPANT_SCHEDULE_CODES=['KBC','KTCC','MOC','MOB','IKRC'];",
+  "var PARTICIPANT_SCHEDULE_CODES=['KBC','KTCC','MOC','MOB','KCR','IKRC','KCAC'];",
   functionSource(registry, "participantUsesSchedule_"),
+  functionSource(registry, "participantPrimaryNumber_"),
+  functionSource(registry, "participantPrelimDate_"),
   functionSource(registry, "saveOneParticipant"),
   functionSource(registry, "editParticipant"),
 ].join("\n"), context);
@@ -83,13 +88,8 @@ assert.equal(savedPayload.competitionCode, "KBC");
 assert.equal(savedPayload.competitionDate, "2026-08-19");
 assert.deepEqual(JSON.parse(JSON.stringify(savedPayload.extra)), {
   "대회일": "2026-08-19",
-  "운영일차": "1일차",
-  "경연순서": "28",
-  "스테이션번호": "A",
-  "대기시간": "19:00~19:10",
-  "준비시간": "19:14~19:21",
-  "시연시간": "19:22~19:29",
-  "정리시간": "19:29~19:35",
+  "예선일": "2026-08-19",
+  "competitionDate": "2026-08-19",
 });
 
 context.participantRows = [{
@@ -116,11 +116,11 @@ assert.equal(elements.mDate.value, "2026-08-19");
 assert.equal(elements.mPrep.value, "19:14~19:21");
 assert.equal(elements.mPerformance.value, "19:22~19:29");
 assert.equal(elements.mCleanup.value, "19:29~19:35");
-assert.match(elements.participantEditState.textContent, /기존 일정까지 불러왔습니다/);
+assert.match(elements.participantEditState.textContent, /기존 정보는 유지됩니다/);
 
 assert.match(functionSource(rpcSource, "participantPayloadFromRow_"), /'로스팅시간'/);
 assert.match(functionSource(rpcSource, "participantPayloadFromRow_"), /'정리시간'/);
 assert.match(functionSource(rpcSource, "participantRowOut_"), /cleanupTime/);
 assert.match(functionSource(rpcSource, "participantRowOut_"), /operatingDay/);
 
-process.stdout.write("Stage133 common participant schedule and responsive registry layout tests passed.\n");
+process.stdout.write("Stage133 direct participant schedule and responsive registry layout tests passed.\n");

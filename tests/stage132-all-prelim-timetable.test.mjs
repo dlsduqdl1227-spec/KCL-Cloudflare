@@ -14,7 +14,7 @@ assert.match(registry, /ex\['운영일차'\]/);
 assert.match(registry, /ex\['경연순서'\]/);
 assert.match(registry, /ex\['스테이션번호'\]/);
 assert.match(registry, /예선 일정/);
-assert.match(registry, /ex\['팀장 성명'\]/);
+assert.match(registry, /r\.teamName\|\|r\.name/);
 assert.match(registry, /ex\['팀장 휴대전화'\]/);
 
 process.stdout.write("Stage132 all-competition preliminary timetable display tests passed.\n");
