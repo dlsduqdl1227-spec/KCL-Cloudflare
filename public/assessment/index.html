@@ -11484,14 +11484,14 @@ var KCAC_SMART_TAGS = {
   qual: {
     '완성도': {
       '긍정':['리프 형태 식별 가능','중심줄기 연결 확인','마감 포인트 확인','전체 구조 식별 가능'],
-      '보완':['리프 형태 일부 변형','중심줄기 끊김','마감 포인트 불명확','패턴 핵심요소 미구현']
+      '보완':['리프 형태 일부 변형','중심줄기 끊김','마감 포인트 불명확','패턴 핵심요소 미구현','언더필']
     },
     '균형': {
       '긍정':['좌우 대칭 유지','진폭 균일','중심축 유지','흐름 연속'],
       '보완':['좌우 비대칭 확인','진폭 불균일','중심축 이탈','흐름 단절','한쪽 쏠림 확인']
     },
     '표면': {
-      '긍정':['기포 없음 또는 극소','광택 유지','크레마 경계 선명','라인 번짐 없음'],
+      '긍정':['기포 없음','광택 유지'],
       '보완':['기포 확인','광택 저하','크레마 경계 번짐','라인 번짐 확인','표면 거침 확인']
     },
     '위치': {
@@ -11499,8 +11499,8 @@ var KCAC_SMART_TAGS = {
       '보완':['컵 중심 이탈','점유율 과대','점유율 과소','상하 여백 불균형','좌우 여백 불균형','가장자리 치우침']
     },
     '선명도': {
-      '긍정':['라인 분리 확인','리프 경계 식별 가능','선 간격 유지','패턴 번짐 없음'],
-      '보완':['라인 분리 부족','리프 경계 뭉개짐','선 간격 불균일','패턴 번짐 확인','패턴 식별 어려움']
+      '긍정':['라인 분리 확인','리프 경계 식별 가능','선 간격 유지','패턴 번짐 없음','크레마 경계 선명','라인 번짐 없음','크레마 얼룩 없음'],
+      '보완':['라인 분리 부족','리프 경계 뭉개짐','선 간격 불균일','패턴 번짐 확인','패턴 식별 어려움','크레마 얼룩 있음']
     }
   },
   finalPattern: {
@@ -11981,8 +11981,24 @@ function kcacFilterSmartTagData_(data) {
   return out;
 }
 
+function kcacMigrateQualSmartTagAssignments_(j) {
+  if (!j || j.type !== 'qual' || !j.smartTags) return;
+  var surface = Array.isArray(j.smartTags['표면']) ? j.smartTags['표면'].slice() : [];
+  var definition = Array.isArray(j.smartTags['선명도']) ? j.smartTags['선명도'].slice() : [];
+  var moved = ['크레마 경계 선명','라인 번짐 없음'];
+  surface = surface.map(function(tag){ return tag === '기포 없음 또는 극소' ? '기포 없음' : tag; });
+  moved.forEach(function(tag){
+    if (surface.indexOf(tag) < 0) return;
+    surface = surface.filter(function(value){ return value !== tag; });
+    if (definition.indexOf(tag) < 0) definition.push(tag);
+  });
+  j.smartTags['표면'] = smartTagDedupeList_(surface);
+  if (definition.length || Array.isArray(j.smartTags['선명도'])) j.smartTags['선명도'] = smartTagDedupeList_(definition);
+}
+
 function kcacCleanPatternSpecificSmartTags_(j) {
   if (!j || !j.smartTags) return;
+  kcacMigrateQualSmartTagAssignments_(j);
   var removeDynamic = j.type === 'qual' && j.patternType === 'controlled';
   var removeControlled = j.type === 'qual' && j.patternType === 'dynamic';
   Object.keys(j.smartTags).forEach(function(key){
@@ -13842,6 +13858,7 @@ function kbcCommentEvidenceItems_() {
     };
   });
 }
+
 function buildKbcCommentReferenceHtml_() {
   var items = kbcCommentEvidenceItems_();
   var subtotal = roundTotal(kbcWeightedSum_(KBC_SERVICE) + kbcWeightedSum_(KBC_ESPRESSO) + (kbcIsMainRound_() ? kbcWeightedSum_(KBC_SIGNATURE_SENSORY) : 0) + kbcWeightedSum_(KBC_MACHINE));
