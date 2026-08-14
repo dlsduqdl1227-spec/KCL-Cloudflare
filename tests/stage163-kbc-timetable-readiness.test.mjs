@@ -99,7 +99,7 @@ const calibrationContext = {
 vm.createContext(calibrationContext);
 vm.runInContext(functionSource(assessment, "canCalibrationCode_"), calibrationContext);
 assert.equal(calibrationContext.canCalibrationCode_("KBC"), false, "KBC calibration entry must stay hidden");
-assert.equal(calibrationContext.canCalibrationCode_("KCAC"), true, "Removing KBC calibration must not affect KCAC");
+assert.equal(calibrationContext.canCalibrationCode_("KCAC"), false, "KCAC must not expose calibration entry");
 assert.match(functionSource(assessment, "goCalibration"), /code === 'KBC'[\s\S]*공식 대회평가만 진행합니다/);
 assert.match(functionSource(assessment, "startKbc"), /setEvaluationPurpose_\('competition'\)/);
 const kbcSubmit = functionSource(assessment, "kbcSubmit");

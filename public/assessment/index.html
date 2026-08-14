@@ -4789,8 +4789,8 @@ function canCalibrationCode_(code) {
   // 센서리/테크니컬 헤드가 각자의 기준 입력과 결과 확인을 담당하고,
   // 운영팀장·관리자는 전용 운영 카드에서 두 헤드 영역을 관리한다.
   if (c === 'MOB') return isHeadRoleForCode_(c) || isTeamLeaderForCode_(c) || isAdminRole();
-  // KBC 예선은 헤드 심사위원 2명의 공식 평가만 운영하며 별도 켈리브레이션 진입을 사용하지 않는다.
-  return ['KCR','KCAC','IKRC'].indexOf(c) > -1;
+  // KBC와 KCAC는 헤드 심사위원의 공식 평가만 운영하며 별도 켈리브레이션 진입을 사용하지 않는다.
+  return ['KCR','IKRC'].indexOf(c) > -1;
 }
 function calibrationButtonLabel_(code) {
   var c = String(code || '').toUpperCase();
@@ -5022,6 +5022,10 @@ function filterConfigsByAccessAll_(configs) {
   return list.filter(function(c){ return access.indexOf(String(c.code).toUpperCase()) > -1; });
 }
 function assertCanEvaluate(code) {
+  if (code === 'KCAC' && !(isAdminRole() || isTeamLeaderForCode_(code) || isHeadRoleForCode_(code))) {
+    toast('KCAC 예선·결선 공식 평가는 헤드 심사위원이 진행합니다.', true);
+    return false;
+  }
   if ((code === 'KCR' || code === 'IKRC') && isTechnicalRoleForCode_(code) && !isHeadRoleForCode_(code)) {
     toast('해당 대회는 센서리 평가 중심입니다. 테크니컬 심사 권한으로는 평가 입력이 제한됩니다.', true);
     return false;
@@ -5971,6 +5975,7 @@ function goCalibration(scope) {
   if (!_selComp) { toast('먼저 대회를 선택해주세요', true); return; }
   var code = String(_selComp.code || '').toUpperCase();
   if (code === 'KBC') { setEvaluationPurpose_('competition'); toast('KBC는 별도 켈리브레이션 없이 공식 대회평가만 진행합니다.', true); return; }
+  if (code === 'KCAC') { setEvaluationPurpose_('competition'); toast('KCAC는 켈리브레이션 없이 헤드 심사위원 4명이 공식 대회평가를 진행합니다.', true); return; }
   if (!canCalibrationCode_(code)) { toast('이 대회 켈리브레이션 권한이 없습니다.', true); return; }
   if (!assertCanEvaluate(code)) return;
   if (code === 'IKRC' && scope === 'all') { toast('IKRC 전체 켈리브레이션은 사용하지 않습니다. 스테이션 켈리브레이션만 이용해주세요.', true); return; }
@@ -5981,8 +5986,6 @@ function goCalibration(scope) {
   if (scope === 'team' && !judgeTeamText(code)) { toast('팀별 켈리브레이션을 시작하려면 운영탭에서 해당 대회의 팀을 먼저 지정해주세요.', true); return; }
   setEvaluationPurpose_('calibration', scope);
   if (code === 'KCR') { _forceKcrCalibrationMode = true; showCuppingSetup(); return; }
-  if (code === 'KCAC') { startKcac(); return; }
-  if (code === 'KBC') { startKbc(); return; }
   if (code === 'MOB') { startMob(); return; }
   if (code === 'IKRC') { startIkrc(); return; }
 }
@@ -11426,11 +11429,14 @@ var KCAC_SMART_TAGS = {
 };
 
 function startKcac() {
+  // KCAC는 예선·결선 모두 헤드 심사위원 4명의 공식 평가만 사용합니다.
+  // 이전 대회에서 남은 공통 켈리브레이션 상태가 KCAC에 유입되지 않도록 항상 초기화합니다.
+  setEvaluationPurpose_('competition');
   var rawRoundName = String((_selComp && _selComp.currentRound) || '');
   var roundName = normalizeKcacRoundDisplay_(rawRoundName);
   var isMainFinal = roundName === '결선';
   document.getElementById('kcac-round-badge').textContent = roundName;
-  document.getElementById('kcac-sub').textContent = judgeLineText() + '  ' + roundName + ' · ' + evaluationPurposeDisplayLabel_() + evaluationTeamContextText_() + (isActiveCalibrationMode_() ? ' · 공식 점수·순위 제외' : ' · 공식 점수 반영');
+  document.getElementById('kcac-sub').textContent = judgeLineText() + '  ' + roundName + ' · 헤드 심사위원 공식평가 · 공식 점수 반영';
 
   _kcac.jars = [];
   _kcacOpenSmartTagBranches = {};
@@ -12967,7 +12973,8 @@ function kcacSubmitAll() {
       '리프수감점': j.type === 'qual' ? leafPenalty : '',
       '시간감점': rowIdx === penaltyTargetIdx ? ((Number(_kcac.penalty) || 0) >= 999 ? 999 : (Number(_kcac.penalty) || 0)) : ''
     };
-    Object.assign(extra, evaluationPurposeExtraFields_());
+    extra['평가구분'] = '대회평가';
+    extra['켈리브레이션범위'] = '';
     var attrExtra = kcacSmartTagExtraFields_(j);
     Object.keys(attrExtra).forEach(function(header){ extra[header] = attrExtra[header]; });
     var persistedMedia = kcacBuildPersistedMedia_(j);
@@ -13019,8 +13026,8 @@ function kcacSubmitAll() {
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: roleTextForCode_('KCAC'),
-      team: evaluationTeamForSubmit_(),
-      mode: evaluationModeValue_('judge'),
+      team: judgeTeamForSubmit(),
+      mode: 'judge',
       rows: rows
     });
 }

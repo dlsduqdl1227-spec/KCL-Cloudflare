@@ -720,7 +720,7 @@ for (const [code, payload, signature] of [
   ["KBC", genericPayload(judge, "KBC", "KBC-1", 81), ""],
   [
     "KCAC",
-    genericPayload(judge, "KCAC", "KCAC-1", 30, [
+    genericPayload(kcacHead, "KCAC", "KCAC-1", 30, [
       { data: ["KCAC-1"], extraFields: { Total: 12 } },
       { data: ["KCAC-1"], extraFields: { Total: 18 } },
     ]),

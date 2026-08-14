@@ -3829,6 +3829,12 @@ async function submitScores(env, payload, signature, request = null) {
   if (initial.code === 'KBC' && requestedEvaluationCategory !== 'competition') {
     return { success:false, message:'KBC는 별도 켈리브레이션 없이 공식 대회평가만 저장합니다. 대회평가 화면에서 다시 제출해주세요.' };
   }
+  if (initial.code === 'KCAC' && requestedEvaluationCategory !== 'competition') {
+    return { success:false, message:'KCAC는 별도 켈리브레이션 없이 헤드 심사위원의 공식 대회평가만 저장합니다. 대회평가 화면에서 다시 제출해주세요.' };
+  }
+  if (initial.code === 'KCAC' && !hasManageAccess(auth.actor, 'KCAC') && !/헤드|head/i.test(actorRole)) {
+    return { success:false, message:'KCAC 예선·결선 공식 평가는 등록된 헤드 심사위원이 진행합니다.' };
+  }
   const receiptInfo = await scoreSubmissionReceipt_(env, initial.code, basePayload.clientSubmissionId, actorIdentityKey);
   if (receiptInfo.receipt && Number(receiptInfo.receipt.inserted || 0) > 0) {
     return {
