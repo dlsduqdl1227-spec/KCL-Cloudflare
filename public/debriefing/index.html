@@ -664,7 +664,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   </div>
   <div id="admin-preview-box" class="admin-preview-box">
     <div class="admin-preview-title">전체 대회 디브리핑 미리보기</div>
-    <div class="admin-preview-help">선수가 보게 될 현재 디브리핑 화면을 연락처 인증 없이 확인합니다. 검수완료·수정완료 공식평가만 표시되며 원본 데이터는 변경되지 않습니다.</div>
+    <div class="admin-preview-help">선수 공개 화면과 동일한 서버 결과를 연락처 인증 없이 확인합니다. 원본 데이터는 변경되지 않습니다.</div>
     <div class="section-label">미리볼 선수·팀</div>
     <select id="admin-preview-unit" disabled><option value="">대회를 먼저 선택해주세요</option></select>
     <button class="btn" id="admin-preview-open" type="button" onclick="openAdminDebriefPreview_()" disabled>선수 화면 미리보기</button>
@@ -898,7 +898,7 @@ function loadAdminDebriefPreviewOptions_() {
     select.disabled = true; button.disabled = true; status.textContent = '';
     return;
   }
-  select.innerHTML = '<option value="">검수 완료 평가 목록을 불러오는 중...</option>';
+  select.innerHTML = '<option value="">' + (code === 'IKRC' ? '공식 제출 평가 목록을 불러오는 중...' : '검수 완료 평가 목록을 불러오는 중...') + '</option>';
   select.disabled = true; button.disabled = true; status.textContent = '';
   gasRun_('getAdminDebriefPreviewOptions', [code, adminPreviewActorPayload_()], function(res){
     if (!res || !res.success) {
@@ -917,8 +917,8 @@ function loadAdminDebriefPreviewOptions_() {
     select.disabled = !_adminPreviewOptions.length;
     button.disabled = !_adminPreviewOptions.length;
     status.textContent = _adminPreviewOptions.length
-      ? '검수 완료 평가가 있는 대상 ' + _adminPreviewOptions.length + '명·팀'
-      : '현재 선수 화면에 표시할 검수 완료 평가가 없습니다.';
+      ? (code === 'IKRC' ? '공식 제출 평가가 있는 선수 ' : '검수 완료 평가가 있는 대상 ') + _adminPreviewOptions.length + (code === 'IKRC' ? '명' : '명·팀')
+      : (code === 'IKRC' ? '현재 선수 화면에 표시할 공식 제출 평가가 없습니다.' : '현재 선수 화면에 표시할 검수 완료 평가가 없습니다.');
   }, function(){
     select.innerHTML = '<option value="">목록을 불러오지 못했습니다</option>';
     status.textContent = '서버 연결을 확인해주세요.';
@@ -1326,13 +1326,13 @@ function ikrcLocalRoundAverage_(list) {
 function buildIkrcRoundAverageBox_(round, list, rank) {
   list = list || [];
   rank = rank || {};
-  var avg = rank.avgScore != null ? Number(rank.avgScore) : ikrcLocalRoundAverage_(list);
-  if (isNaN(avg)) avg = 0;
-  var judgeCount = rank.judgeCount || list.length || 0;
-  var headCount = Number(rank.headCount || list.filter(function(s){ return /헤드|head/i.test(String(s['역할'] || s.role || '')); }).length || 0);
-  var sensoryCount = Number(rank.sensoryCount || Math.max(0, judgeCount - headCount) || 0);
   var totals = list.map(function(s){ return Number(s['총점'] != null ? s['총점'] : (s['최종점수'] != null ? s['최종점수'] : s.totalScore)); }).filter(function(n){ return !isNaN(n); });
   var totalSum = totals.reduce(function(sum, value){ return sum + value; }, 0);
+  var avg = totals.length ? Math.round((totalSum / totals.length) * 100 + 1e-8) / 100 : ikrcLocalRoundAverage_(list);
+  if (isNaN(avg)) avg = 0;
+  var judgeCount = totals.length || list.length || 0;
+  var headCount = Number(rank.headCount || list.filter(function(s){ return /헤드|head/i.test(String(s['역할'] || s.role || '')); }).length || 0);
+  var sensoryCount = Number(rank.sensoryCount || Math.max(0, judgeCount - headCount) || 0);
   var panelText = [];
   if (headCount) panelText.push('헤드 ' + headCount + '명');
   if (sensoryCount) panelText.push('센서리 ' + sensoryCount + '명');
@@ -1502,7 +1502,7 @@ function cleanupPublicCommentText_(label, raw, scoreObj, compCode) {
   var comp = String(compCode || '').toUpperCase();
   var looksOldAuto = /점수 흐름은|검수 관점에서 이 컵은|항목은 강점으로|보완 지점|1번 컵은/.test(text);
   if ((comp === 'KCR' || comp === 'IKRC') && /Overall|종합|총평|General/i.test(labelText)) {
-    if (looksOldAuto || text.length > 220 || (text.match(/검수 관점/g) || []).length > 1) {
+    if (looksOldAuto || (comp === 'IKRC' && ikrcLooksGeneratedComment_(text)) || text.length > 220 || (text.match(/검수 관점/g) || []).length > 1) {
       var generated = buildProfessionalOverallComment_(scoreObj, compCode);
       if (generated) return generated;
     }
@@ -1564,15 +1564,15 @@ function buildProfessionalOverallComment_(s, compCode) {
   var tone = avg >= 4 ? '향미 표현이 선명하게 드러난 컵' : (avg >= 3 ? '기본 향미 구조가 확인되는 컵' : '향미 구조의 불안정성이 함께 확인된 컵');
   var high = [['플레이버', flavor], ['에프터테이스트', after], ['산미', acidity], ['단맛', sweet], ['마우스필', mouthfeel], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return b[1]-a[1]; })[0];
   var low = [['플레이버', flavor], ['에프터테이스트', after], ['산미', acidity], ['단맛', sweet], ['마우스필', mouthfeel], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return a[1]-b[1]; })[0];
-  var first = '이 컵은 ' + joinNatural_(flavorTags, '주요 향미') + ' 인상을 중심으로 첫 향미가 형성됩니다.';
+  var first = '첫 향미에서는 ' + joinNatural_(flavorTags, '주요 향미') + ' 인상이 중심을 이룹니다.';
   var second = '';
   if (afterTags.length || acidityTags.length || bodyTags.length || sweetTags.length) {
-    second = ' 이후 ' + joinNatural_(afterTags, '여운') + '의 흐름, ' + joinNatural_(acidityTags, '산미') + '의 구조, ' + joinNatural_(sweetTags, '단맛') + '과 ' + joinNatural_(bodyTags, '마우스필') + '이 전체 균형에 반영됩니다.';
+    second = ' 세부 인상은 여운: ' + joinNatural_(afterTags, '기록 없음') + ' · 산미: ' + joinNatural_(acidityTags, '기록 없음') + ' · 단맛: ' + joinNatural_(sweetTags, '기록 없음') + ' · 마우스필: ' + joinNatural_(bodyTags, '기록 없음') + '으로 정리됩니다.';
   } else {
     second = ' 플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성이 전체 평가의 주요 판단 기준으로 작용했습니다.';
   }
   var third = ' 전체적으로 ' + tone + '으로 평가됩니다';
-  if (high && low && high[0] !== low[0]) third += '. 항목별 인상에서는 ' + high[0] + '이 가장 두드러졌고, ' + low[0] + '에서 상대적으로 낮은 평가가 확인되었습니다.';
+  if (high && low && high[0] !== low[0]) third += '. 항목별 인상에서는 ' + high[0] + ' 점수가 상대적으로 높았고, ' + low[0] + ' 점수가 비교적 낮았습니다.';
   else third += '. 항목 간 편차는 크지 않고, 전체 인상은 각 세부 항목의 균형 속에서 형성되었습니다.';
   return first + second + third;
 }
@@ -1658,16 +1658,16 @@ function buildIkrcCombinedCommentText_(list) {
   var mouthfeelTags = ikrcAggregateTags_(list, ['Mouthfeel','마우스필'], 3);
   var sentences = [];
   if (flavorTags.length) {
-    sentences.push('심사위원 ' + judgeCount + '명의 평가를 종합하면, 주요 향미에는 ' + joinNatural_(flavorTags, '') + ' 등이 기록되었습니다.');
+    sentences.push('심사위원 ' + judgeCount + '명의 공식 제출을 종합했습니다. 주요 향미로 ' + joinNatural_(flavorTags, '') + ' 등이 기록되었습니다.');
   } else {
-    sentences.push('심사위원 ' + judgeCount + '명의 검수 완료 평가를 종합했습니다.');
+    sentences.push('심사위원 ' + judgeCount + '명의 공식 제출을 종합했습니다.');
   }
   var sensoryParts = [];
-  if (cleanTags.length) sensoryParts.push('클린컵에서 ' + joinNatural_(cleanTags, ''));
-  if (sweetTags.length) sensoryParts.push('단맛에서 ' + joinNatural_(sweetTags, ''));
-  if (acidityTags.length) sensoryParts.push('산미에서 ' + joinNatural_(acidityTags, ''));
-  if (mouthfeelTags.length) sensoryParts.push('마우스필에서 ' + joinNatural_(mouthfeelTags, ''));
-  if (sensoryParts.length) sentences.push('세부 속성에서는 ' + sensoryParts.join(', ') + ' 등의 표현이 함께 기록되었습니다.');
+  if (cleanTags.length) sensoryParts.push('클린컵: ' + joinNatural_(cleanTags, ''));
+  if (sweetTags.length) sensoryParts.push('단맛: ' + joinNatural_(sweetTags, ''));
+  if (acidityTags.length) sensoryParts.push('산미: ' + joinNatural_(acidityTags, ''));
+  if (mouthfeelTags.length) sensoryParts.push('마우스필: ' + joinNatural_(mouthfeelTags, ''));
+  if (sensoryParts.length) sentences.push('세부 속성은 ' + sensoryParts.join(' · ') + '으로 정리됩니다.');
 
   var scoreGroups = [
     ['플레이버', ikrcAggregateScore_(list, ['Flavor(플레이버) ×3','Flavor(플레이버)','플레이버','Flavor'])],
@@ -1677,7 +1677,7 @@ function buildIkrcCombinedCommentText_(list) {
     ['마우스필', ikrcAggregateScore_(list, ['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','마우스필','Mouthfeel'])]
   ].filter(function(item){ return item[1] != null; }).sort(function(a,b){ return b[1] - a[1]; });
   if (scoreGroups.length > 1 && scoreGroups[0][1] - scoreGroups[scoreGroups.length - 1][1] >= 0.4) {
-    sentences.push('항목별 평가에서는 ' + scoreGroups[0][0] + '가 상대적으로 두드러졌고, ' + scoreGroups[scoreGroups.length - 1][0] + '는 비교적 낮게 평가되었습니다.');
+    sentences.push('항목별 평가에서는 ' + scoreGroups[0][0] + ' 점수가 상대적으로 높았고, ' + scoreGroups[scoreGroups.length - 1][0] + ' 점수가 비교적 낮았습니다.');
   } else if (scoreGroups.length) {
     sentences.push('항목별 평가는 크게 치우치지 않고 전체 감각 인상에 고르게 반영되었습니다.');
   }
@@ -1692,7 +1692,7 @@ function buildIkrcCombinedCommentBox_(round, list) {
   box.className = 'comment-box ikrc-combined-comment';
   box.innerHTML = '<div class="comment-label">심사위원 종합 코멘트</div>' +
     '<div class="comment-text">' + escHtml(text) + '</div>' +
-    '<div class="ikrc-combined-meta">' + escHtml(round || '-') + ' · 검수 완료 평가 ' + ikrcAggregateJudgeCount_(list) + '명의 점수·스마트태그·수기 코멘트를 함께 반영</div>';
+    '<div class="ikrc-combined-meta">' + escHtml(round || '-') + ' · 공식 제출 평가 ' + ikrcAggregateJudgeCount_(list) + '명의 점수·스마트태그·수기 코멘트를 함께 반영</div>';
   return box;
 }
 function publicRoundName_(s) {

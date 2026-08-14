@@ -6062,7 +6062,7 @@ async function getAdminDebriefPreviewOptions(env, competitionCode, actorArg) {
   const data = await buildRankingData_(env, code);
   const publicCountByUnit = new Map();
   officialScoreItemsForOutput_(code, (data.rows || []).filter(item =>
-    shouldCountItemInRanking_(code, item) && officialReviewCompleted_(code, item)
+    shouldCountItemInRanking_(code, item) && (code === 'IKRC' || officialReviewCompleted_(code, item))
   )).forEach(item => {
     const key = roundName_(item.round || item['라운드'], data.cfg && data.cfg.current_round) + '::' + itemNumber_(item);
     publicCountByUnit.set(key, (publicCountByUnit.get(key) || 0) + 1);
@@ -6094,6 +6094,32 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
   const auth = await requireAdminPreviewActor_(env, actorArg);
   if (!auth.ok) return auth.res;
   if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
+  if (code === 'IKRC') {
+    const bundle = await buildIkrcPublicDebriefBundle_(env, [{ round:roundName_(round, '예선'), unit:safeStr(unit) }]);
+    const rankInfo = bundle.rankInfo;
+    return {
+      success:true,
+      isAdminPreview:true,
+      competition:code,
+      competitionCode:code,
+      compName:COMPETITION_NAMES[code] || code,
+      playerInfo:{
+        name:safeStr(rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary) || unit),
+        affiliation:safeStr(rankInfo && rankInfo.playerAffiliationSummary),
+        teamName:'',
+        teamNo:'',
+        maskedPhone:''
+      },
+      scores:bundle.scores,
+      headers:bundle.headers,
+      rankInfos:bundle.rankInfos,
+      rankInfo,
+      previewUnit:safeStr(unit),
+      previewRound:roundName_(round, ''),
+      previewDataBasis:bundle.dataBasis,
+      dataBasis:bundle.dataBasis
+    };
+  }
   const detail = await getRankingDetail(env, code, unit, round, { judgeToken:auth.actor.judgeToken || (actorArg && actorArg.judgeToken) || '' });
   if (!detail || !detail.success) return detail || { success:false, message:'디브리핑 미리보기를 불러오지 못했습니다.' };
   const publicScores = officialScoreItemsForOutput_(code, (detail.scores || detail.rows || []).filter(item =>
@@ -6359,6 +6385,45 @@ function ikrcParticipantBlindTargets_(participant) {
   ].forEach(entry => add(entry[0], entry[1]));
   return targets;
 }
+function ikrcDebriefTargetKey_(round, unit, fallbackRound='예선') {
+  const normalizedRound = roundName_(round, fallbackRound);
+  const normalizedUnit = safeStr(unit).replace(/\s+/g, '').toUpperCase();
+  return normalizedRound && normalizedUnit ? (normalizedRound + '::' + normalizedUnit) : '';
+}
+async function buildIkrcPublicDebriefBundle_(env, blindTargets, rankingData=null) {
+  const targets = Array.isArray(blindTargets) ? blindTargets : [];
+  const data = rankingData || await buildRankingData_(env, 'IKRC');
+  const fallbackRound = data.cfg && data.cfg.current_round || '예선';
+  const targetKeys = new Set(targets.map(target => ikrcDebriefTargetKey_(target && target.round, target && target.unit, fallbackRound)).filter(Boolean));
+  const matchesTarget = item => targetKeys.has(ikrcDebriefTargetKey_(item && (item.round || item['라운드']), itemNumber_(item), fallbackRound));
+  const scores = officialScoreItemsForOutput_('IKRC', (data.rows || []).filter(item => shouldCountItemInRanking_('IKRC', item) && matchesTarget(item)));
+  const rankInfos = (data.ranking || []).filter(matchesTarget).map(rank => {
+    const key = ikrcDebriefTargetKey_(rank.round, rank.unit, fallbackRound);
+    const roundScores = scores.filter(item => ikrcDebriefTargetKey_(item.round || item['라운드'], itemNumber_(item), fallbackRound) === key);
+    const totals = roundScores.map(item => toNumber(item['총점'] ?? item['최종점수'] ?? item.totalScore)).filter(value => value !== null && Number.isFinite(Number(value))).map(Number);
+    const totalSum = roundScoreValue_(totals.reduce((sum, value) => sum + value, 0), 2);
+    const exactAverage = totals.length ? Math.round((totalSum / totals.length) * 100 + 1e-8) / 100 : 0;
+    const headCount = roundScores.filter(item => isHeadRole_(item['역할'] || item.role || item.judgeRole)).length;
+    return Object.assign({}, rank, {
+      avgScore:exactAverage,
+      judgeCount:totals.length,
+      headCount,
+      sensoryCount:Math.max(0, totals.length - headCount),
+      displayedScoreSum:totalSum,
+      displayedScoreCount:totals.length,
+      averageFormula:totalSum + ' / ' + totals.length,
+      publicDataBasis:'화면에 표시된 공식 평가표 총점 합계 ÷ 평가표 수'
+    });
+  });
+  return {
+    scores,
+    headers:data.headers || [],
+    rankInfos,
+    rankInfo:rankInfos[0] || null,
+    dataBasis:'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균',
+    targetKeys:Array.from(targetKeys)
+  };
+}
 async function verifyOTP(env, name, phone, competitionCode, otp, request = null) {
   name = safeStr(name); phone = normalizePhone(phone); const code = safeStr(competitionCode).toUpperCase();
   const verifyLimit = await rateLimit_(env, 'otp-verify:' + code + ':' + await sha256Hex_(phone), 10, 10 * 60);
@@ -6378,15 +6443,18 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
   const participants = pr.results || [];
   if (!participants.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다.' };
   const ikrcBlindTargets = code === 'IKRC' ? participants.flatMap(ikrcParticipantBlindTargets_) : [];
-  const ikrcBlindPairSet = new Set(ikrcBlindTargets.map(target => target.key));
   const ikrcBlindUnits = Array.from(new Set(ikrcBlindTargets.map(target => target.unit)));
   const ids = Array.from(new Set(participants.flatMap(participantIdentifiers_).concat(ikrcBlindUnits))).filter(Boolean);
+  let headers = [];
+  let scoreItems = [];
+  let rankInfos = [];
   let scoreRows = [];
-  if (code === 'IKRC' && ikrcBlindUnits.length) {
-    const placeholders = ikrcBlindUnits.map(() => '?').join(',');
-    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND unit IN (${placeholders}) ORDER BY id`).bind(code, ...ikrcBlindUnits).all();
-    scoreRows = rs.results || [];
-  } else if (code !== 'IKRC' && ids.length) {
+  if (code === 'IKRC') {
+    const publicBundle = await buildIkrcPublicDebriefBundle_(env, ikrcBlindTargets);
+    headers = publicBundle.headers;
+    scoreItems = publicBundle.scores;
+    rankInfos = publicBundle.rankInfos;
+  } else if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
     const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료') AND unit IN (${placeholders}) ORDER BY id`).bind(code, ...ids).all();
     scoreRows = rs.results || [];
@@ -6402,23 +6470,13 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
       .bind(code, name, `%${name}%`).all();
     scoreRows = rs.results || [];
   }
-  const headers = mergeHeaders(code, scoreRows);
-  let scoreItems = scoreRows.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
-  scoreItems = scoreItems.filter(item => {
-    if (!shouldCountItemInRanking_(code, item)) return false;
-    if (code !== 'IKRC') return true;
-    const key = roundName_(item.round || item['라운드'], cfg && cfg.current_round) + '::' + safeStr(itemNumber_(item)).replace(/\s+/g, '').toUpperCase();
-    return ikrcBlindPairSet.has(key);
-  });
-  scoreItems = officialScoreItemsForOutput_(code, scoreItems);
-  const rankingData = await buildRankingData_(env, code);
-  let rankInfos = rankingData.ranking.filter(r => {
-    if (code === 'IKRC') {
-      const key = roundName_(r.round, cfg && cfg.current_round) + '::' + safeStr(r.unit).replace(/\s+/g, '').toUpperCase();
-      return ikrcBlindPairSet.has(key);
-    }
-    return ids.includes(safeStr(r.unit)) || scoreItems.some(s => itemNumber_(s) === safeStr(r.unit));
-  });
+  if (code !== 'IKRC') {
+    headers = mergeHeaders(code, scoreRows);
+    scoreItems = scoreRows.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
+    scoreItems = officialScoreItemsForOutput_(code, scoreItems.filter(item => shouldCountItemInRanking_(code, item)));
+    const rankingData = await buildRankingData_(env, code);
+    rankInfos = rankingData.ranking.filter(r => ids.includes(safeStr(r.unit)) || scoreItems.some(s => itemNumber_(s) === safeStr(r.unit)));
+  }
   const p0 = participants[0];
   const info = {
     name: p0.name || name,
@@ -6429,7 +6487,7 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
     identifiers: ids
   };
   const token = await issueSession(env, 'debrief', { competition: code, name, phone, identifiers: ids }, 3600);
-  return { success: true, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token };
+  return { success: true, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : '검수완료·수정완료 공식평가' };
 }
 
 function _num(v) {

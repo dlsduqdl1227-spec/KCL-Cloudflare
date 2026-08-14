@@ -94,7 +94,7 @@ const rows = [
 const before = JSON.stringify(rows);
 const combined = context.buildIkrcCombinedCommentText_(rows);
 assert.match(combined, /심사위원 4명/, "all judges for the player must be represented once");
-assert.match(combined, /주요 향미에는 오렌지/, "the most repeated smart tag must lead the combined sensory description");
+assert.match(combined, /주요 향미로 오렌지/, "the most repeated smart tag must lead the combined sensory description");
 assert.match(combined, /오렌지의 산미와 단맛/, "manual sensory comments must be retained as evidence");
 assert.doesNotMatch(combined, /플레이버에서 오렌지가 느껴졌습니다/, "standard generated boilerplate must not be repeated as a manual note");
 assert.equal(JSON.stringify(rows), before, "building the public combined comment must never mutate stored evaluation rows");
