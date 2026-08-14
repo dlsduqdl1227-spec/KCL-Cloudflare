@@ -715,17 +715,14 @@ const mobReviewComment = "향미의 연결성과 밸런스를 확인한 MOB 전�
 const mobReviewPayload = genericPayload(judge, "MOB", "MOB-1", 55);
 mobReviewPayload.clientSubmissionId = "QA-MOB-SUBMISSION-1";
 mobReviewPayload.rows[0].extraFields["종합코멘트"] = mobReviewComment;
+const kcacOfficialPayload = genericPayload(kcacHead, "KCAC", "KCAC-1", 30, [
+  { data: ["KCAC-1"], extraFields: { Total: 12 } },
+  { data: ["KCAC-1"], extraFields: { Total: 18 } },
+]);
 
 for (const [code, payload, signature] of [
   ["KBC", genericPayload(judge, "KBC", "KBC-1", 81), ""],
-  [
-    "KCAC",
-    genericPayload(kcacHead, "KCAC", "KCAC-1", 30, [
-      { data: ["KCAC-1"], extraFields: { Total: 12 } },
-      { data: ["KCAC-1"], extraFields: { Total: 18 } },
-    ]),
-    "",
-  ],
+  ["KCAC", kcacOfficialPayload, ""],
   [
     "KCR",
     kcrStationPayload(judge, kcrStation1, [70, 72]),
@@ -742,6 +739,16 @@ for (const [code, payload, signature] of [
   if (code === "KCR") assert.equal(submitted.inserted, 2);
   else assert.equal(submitted.inserted, 1);
 }
+
+const kcacCompletedAssignments = await rpc("getParticipantAssignments", "KCAC", { judgeToken:kcacHead.judgeToken });
+assert.equal(kcacCompletedAssignments.success, true, kcacCompletedAssignments.message);
+const completedKcac = kcacCompletedAssignments.assignments.find((item) => item.number === "KCAC-1");
+assert.equal(completedKcac?.evaluationCompleted, true, "the current KCAC head must see their submitted participant as completed");
+assert.match(completedKcac?.display || "", /평가완료/);
+
+const duplicateKcac = await rpc("submitScores", kcacOfficialPayload);
+assert.equal(duplicateKcac.success, false, "the same KCAC head must not submit the same participant twice");
+assert.match(duplicateKcac.message, /평가완료|중복 제출/);
 
 const mobRetry = await rpc("submitScores", mobReviewPayload);
 assert.equal(mobRetry.success, true, mobRetry.message);

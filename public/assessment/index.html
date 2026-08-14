@@ -79,6 +79,19 @@ select{
   line-height:1.55;
   margin:-4px 0 12px;
 }
+.participant-complete-badge{
+  display:none;
+  width:max-content;
+  margin:-4px 0 12px;
+  padding:3px 7px;
+  border:1px solid #3e7f52;
+  border-radius:999px;
+  background:#17351f;
+  color:#9ce0ac;
+  font-size:10px;
+  font-weight:900;
+  line-height:1.2;
+}
 .participant-refresh-row{display:grid;grid-template-columns:minmax(0,1fr) 40px;gap:8px;align-items:stretch;margin-bottom:10px}
 .participant-refresh-row .participant-picker{margin-bottom:0;min-width:0}
 .list-refresh-btn{width:40px;min-width:40px;height:40px;padding:0;border:1px solid var(--border-lt);border-radius:8px;background:var(--card);color:var(--text-2);font-size:20px;font-weight:800;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
@@ -2210,6 +2223,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div class="section-label">참가자 정보</div>
     <div class="participant-refresh-row"><select id="kcac-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KCAC','kcac-participant-select','kcac-num','kcac-name')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="KCAC" onclick="refreshEvaluationList_('KCAC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="kcac-participant-help" class="participant-picker-help"></div>
+    <div id="kcac-participant-complete" class="participant-complete-badge">✓ 평가완료</div>
     <input type="number" id="kcac-num" placeholder="참가자 번호" inputmode="numeric" oninput="applyParticipantNumberInput_('KCAC','kcac-num','kcac-name')">
     <input type="text" id="kcac-name" placeholder="선수명 (선택)">
     <div id="kcac-milk-pattern-setup" class="kcac-milk-pattern-setup">
@@ -3551,7 +3565,11 @@ function renderParticipantControl_(code, cfg) {
   sel.style.display = 'block';
   sel.disabled = false;
   sel.innerHTML = '<option value="">' + escHtml(cfg.placeholder || '선수등록에서 선택') + '</option>' +
-    list.map(function(a, i){ return '<option value="' + i + '">' + escHtml(a.display || ((a.number || '-') + ' · ' + participantNameForAssignment_(a))) + '</option>'; }).join('');
+    list.map(function(a, i){
+      var label = a.display || ((a.number || '-') + ' · ' + participantNameForAssignment_(a));
+      if (a.evaluationCompleted && !/평가완료/.test(label)) label += ' · ✓ 평가완료';
+      return '<option value="' + i + '">' + escHtml(label) + '</option>';
+    }).join('');
   if (numInput && code === 'MOB') {
     numInput.readOnly = true;
     numInput.placeholder = '선수를 선택하면 참가자번호 자동입력';
@@ -3611,6 +3629,7 @@ function loadParticipantAssignmentsForCode_(code) {
       }
       renderParticipantControls_(code);
       setParticipantRefreshState_(code, false);
+      if (code === 'KCAC') onKcacParticipantSelected_();
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
     })
@@ -3624,6 +3643,7 @@ function loadParticipantAssignmentsForCode_(code) {
       cur.message = '선수등록 목록을 불러오지 못했습니다. 직접 입력하세요.';
       renderParticipantControls_(code);
       setParticipantRefreshState_(code, false);
+      if (code === 'KCAC') onKcacParticipantSelected_();
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
     })
@@ -11673,9 +11693,12 @@ function syncKcacMilkPatternSelectors_() {
 function onKcacParticipantSelected_() {
   var setup = document.getElementById('kcac-milk-pattern-setup');
   var num = document.getElementById('kcac-num');
+  var completeBadge = document.getElementById('kcac-participant-complete');
   var isQual = normalizeKcacRoundDisplay_((_selComp && _selComp.currentRound) || '') !== '결선';
   var visible = !!(isQual && num && String(num.value || '').trim());
+  var assignment = num ? participantAssignmentByNumber_('KCAC', num.value) : null;
   if (setup) setup.style.display = visible ? 'block' : 'none';
+  if (completeBadge) completeBadge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
   if (visible) syncKcacMilkPatternSelectors_();
 }
 
@@ -12995,6 +13018,11 @@ function kcacSubmitAll() {
   var isQualSubmission = !_kcac.jars.some(function(j){ return j.type !== 'qual'; });
   var playerName = (!isQualSubmission && isAdminRole()) ? document.getElementById('kcac-name').value.trim() : '';
   if (!num) { toast('참가자 번호를 입력해주세요', true); return; }
+  var selectedAssignment = participantAssignmentByNumber_('KCAC', num);
+  if (selectedAssignment && selectedAssignment.evaluationCompleted) {
+    toast('이미 평가완료된 참가자입니다. 중복 제출하지 말고 검수 화면에서 확인·수정해주세요.', true);
+    return;
+  }
   if (!validateKcacBeforeSubmit_()) return;
 
   var notEdited = _kcac.jars.filter(function(j){ return j.generatedComment && !j.commentEdited; });
