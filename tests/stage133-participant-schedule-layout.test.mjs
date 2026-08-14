@@ -40,6 +40,33 @@ assert.match(registry, /class="table participant-table"/);
 assert.match(registry, /\.participant-table \.cell-name,.participant-table \.cell-phone\{white-space:nowrap\}/);
 assert.match(registry, /@media\(max-width:700px\)/);
 assert.match(registry, /data-label=/);
+assert.match(registry, /id="participantSortMode"[\s\S]*참가번호 낮은 순[\s\S]*순서 정렬/);
+assert.match(registry, /participantSortMode='number-asc'/);
+
+const sortContext = {};
+vm.createContext(sortContext);
+vm.runInContext([
+  functionSource(registry, "participantPrimaryNumber_"),
+  functionSource(registry, "participantPrelimDate_"),
+  functionSource(registry, "participantNaturalCompare_"),
+  functionSource(registry, "sortParticipantRowsForRegistry_"),
+].join("\n"), sortContext);
+const unsortedParticipants = [
+  { rowIndex:1, competitionCode:"KCAC", prelimCupNo:"1", name:"가" },
+  { rowIndex:2, competitionCode:"KCAC", prelimCupNo:"10", name:"다" },
+  { rowIndex:3, competitionCode:"KCAC", prelimCupNo:"8", name:"나" },
+  { rowIndex:4, competitionCode:"KCAC", prelimCupNo:"2", name:"라" },
+];
+assert.deepEqual(
+  Array.from(sortContext.sortParticipantRowsForRegistry_("KCAC", unsortedParticipants, "number-asc"), row => row.prelimCupNo),
+  ["1", "2", "8", "10"],
+  "participant numbers must be sorted numerically rather than by database registration order",
+);
+assert.deepEqual(
+  Array.from(sortContext.sortParticipantRowsForRegistry_("KCAC", unsortedParticipants, "number-desc"), row => row.prelimCupNo),
+  ["10", "8", "2", "1"],
+);
+assert.deepEqual(unsortedParticipants.map(row => row.prelimCupNo), ["1", "10", "8", "2"], "sorting must not mutate stored participant rows");
 
 const elements = {};
 for (const id of ["comp", "mNo", "mName", "mPhone", "mAff", "mCup", "mSample", "mDate", "mDay", "mOrder", "mStation", "mWaiting", "mPrep", "mPerformance", "mCleanup", "participantEditState", "participantCancelBtn", "participantSaveBtn", "participantFormLabel"]) {
