@@ -1534,8 +1534,14 @@ function joinNatural_(arr, fallback) {
   arr = uniqueList_(arr).filter(Boolean);
   if (!arr.length) return fallback || '향미';
   if (arr.length === 1) return arr[0];
-  if (arr.length === 2) return arr[0] + '와 ' + arr[1];
+  if (arr.length === 2) return arr[0] + koreanAndParticle_(arr[0]) + ' ' + arr[1];
   return arr.slice(0, -1).join(', ') + ', 그리고 ' + arr[arr.length - 1];
+}
+function koreanAndParticle_(text) {
+  var chars = String(text || '').trim();
+  if (!chars) return '와';
+  var code = chars.charCodeAt(chars.length - 1);
+  return code >= 0xAC00 && code <= 0xD7A3 && ((code - 0xAC00) % 28) !== 0 ? '과' : '와';
 }
 function buildProfessionalOverallComment_(s, compCode) {
   compCode = String(compCode || '').toUpperCase();
@@ -1567,7 +1573,7 @@ function buildProfessionalOverallComment_(s, compCode) {
   var first = '첫 향미에서는 ' + joinNatural_(flavorTags, '주요 향미') + ' 인상이 중심을 이룹니다.';
   var second = '';
   if (afterTags.length || acidityTags.length || bodyTags.length || sweetTags.length) {
-    second = ' 세부 인상은 여운: ' + joinNatural_(afterTags, '기록 없음') + ' · 산미: ' + joinNatural_(acidityTags, '기록 없음') + ' · 단맛: ' + joinNatural_(sweetTags, '기록 없음') + ' · 마우스필: ' + joinNatural_(bodyTags, '기록 없음') + '으로 정리됩니다.';
+    second = ' 세부 인상은 여운: ' + joinNatural_(afterTags, '기록 없음') + ' · 산미: ' + joinNatural_(acidityTags, '기록 없음') + ' · 단맛: ' + joinNatural_(sweetTags, '기록 없음') + ' · 마우스필: ' + joinNatural_(bodyTags, '기록 없음') + ' 등의 표현으로 정리됩니다.';
   } else {
     second = ' 플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성이 전체 평가의 주요 판단 기준으로 작용했습니다.';
   }
@@ -1667,7 +1673,7 @@ function buildIkrcCombinedCommentText_(list) {
   if (sweetTags.length) sensoryParts.push('단맛: ' + joinNatural_(sweetTags, ''));
   if (acidityTags.length) sensoryParts.push('산미: ' + joinNatural_(acidityTags, ''));
   if (mouthfeelTags.length) sensoryParts.push('마우스필: ' + joinNatural_(mouthfeelTags, ''));
-  if (sensoryParts.length) sentences.push('세부 속성은 ' + sensoryParts.join(' · ') + '으로 정리됩니다.');
+  if (sensoryParts.length) sentences.push('세부 속성은 ' + sensoryParts.join(' · ') + ' 등의 표현으로 정리됩니다.');
 
   var scoreGroups = [
     ['플레이버', ikrcAggregateScore_(list, ['Flavor(플레이버) ×3','Flavor(플레이버)','플레이버','Flavor'])],

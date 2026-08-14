@@ -45,8 +45,13 @@ const context = {
     const values = [...new Set((items || []).filter(Boolean))];
     if (!values.length) return fallback || "";
     if (values.length === 1) return values[0];
-    if (values.length === 2) return `${values[0]}와 ${values[1]}`;
+    if (values.length === 2) return `${values[0]}${context.koreanAndParticle_(values[0])} ${values[1]}`;
     return `${values.slice(0, -1).join(", ")}, 그리고 ${values.at(-1)}`;
+  },
+  koreanAndParticle_: (text) => {
+    const value = String(text || "").trim();
+    const code = value.charCodeAt(value.length - 1);
+    return code >= 0xAC00 && code <= 0xD7A3 && ((code - 0xAC00) % 28) !== 0 ? "과" : "와";
   }
 };
 vm.createContext(context);
@@ -97,6 +102,7 @@ assert.match(combined, /심사위원 4명/, "all judges for the player must be r
 assert.match(combined, /주요 향미로 오렌지/, "the most repeated smart tag must lead the combined sensory description");
 assert.match(combined, /오렌지의 산미와 단맛/, "manual sensory comments must be retained as evidence");
 assert.doesNotMatch(combined, /플레이버에서 오렌지가 느껴졌습니다/, "standard generated boilerplate must not be repeated as a manual note");
+assert.doesNotMatch(combined, /계열와|있는와|같은와|둥근으로/, "public combined comments must use natural Korean particles");
 assert.equal(JSON.stringify(rows), before, "building the public combined comment must never mutate stored evaluation rows");
 
 process.stdout.write("Stage169 IKRC combined debrief comment tests passed.\n");
