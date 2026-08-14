@@ -40,6 +40,7 @@ const context = {
   KCAC_QUAL_ATTRS:[],
   document:{ getElementById:()=>({ textContent:'' }) },
   kcacCleanPatternSpecificSmartTags_:()=>{},
+  syncKcacLeafCountFromDOM_:()=>{},
   calcKcacLeafPenalty:()=>0,
   kcacCupFullLabel:()=>'',
   refreshKcacPatternChoiceUI_:()=>{},

@@ -28,12 +28,13 @@ function functionSource(source, name) {
 }
 
 const inputMarkup = assessment.match(/<input type="number" id="kcac-leaf-count"[^>]+>/)?.[0] || '';
-assert.match(inputMarkup, /oninput="onKcacLeafCountInput\(this\.value\)"/);
-assert.match(inputMarkup, /onchange="onKcacLeafCountInput\(this\.value\)"/);
-assert.match(inputMarkup, /onblur="onKcacLeafCountInput\(this\.value\)"/);
+assert.match(inputMarkup, /data-jar-index=/);
+assert.match(inputMarkup, /oninput="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\)\)"/);
+assert.match(inputMarkup, /onchange="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\)\)"/);
+assert.match(inputMarkup, /onblur="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\)\)"/);
 
 const elements = {
-  'kcac-leaf-count': { value:'14' },
+  'kcac-leaf-count': { value:'14', getAttribute:name => name === 'data-jar-index' ? '0' : '' },
   'kcac-comment': { value:'현장 평가 코멘트' }
 };
 const context = {
@@ -57,8 +58,16 @@ elements['kcac-leaf-count'].value = '0';
 context.saveKcacJarFromDOM();
 assert.equal(context._kcac.jars[0].leafCount, '0', 'zero must remain a valid explicitly entered leaf count');
 
+context._kcac.jars.push({ type:'qual', patternType:'controlled', leafCount:'', leafPenalty:0, generatedComment:'', commentEdited:true });
+context._kcac.currentIdx = 1;
+elements['kcac-leaf-count'].value = '15';
+vm.runInContext('syncKcacLeafCountFromDOM_()', context);
+assert.equal(context._kcac.jars[0].leafCount, '15', 'a delayed mobile event must remain bound to the cup that rendered the input');
+assert.equal(context._kcac.jars[1].leafCount, '', 'a delayed event from the previous cup must not overwrite the current cup');
+
 const validation = functionSource(assessment, 'validateKcacBeforeSubmit_');
 assert.match(validation, /syncKcacLeafCountFromDOM_\(\)/, 'submission validation must synchronize the visible field first');
 assert.match(validation, /kcacCupFullLabel\(j\).*리프 수를 입력해주세요/, 'the error must identify the exact milk and pattern cup');
+assert.match(functionSource(assessment, 'setKcacQualMilkPattern_'), /syncKcacLeafCountFromDOM_\(\)/, 'changing FAST/SLOW assignment must preserve the visible leaf count first');
 
 process.stdout.write('Stage183 KCAC leaf-count persistence tests passed.\n');
