@@ -52,7 +52,7 @@ assert.match(assignments, /dedupeKcacParticipantRows_/);
 assert.match(assignments, /scoreOwnedByActor_\(scoreRow, actor\)/);
 assert.match(assignments, /evaluationCompleted/);
 assert.match(assignments, /✓ 평가완료/);
-assert.match(assignments, /evaluationCompletionScope:\s*code === 'KCAC' \? 'currentJudge'/);
+assert.match(assignments, /evaluationCompletionScope:\s*\(code === 'KCAC' \|\| code === 'KBC'\) \? 'currentJudge'/);
 
 const submit = functionSource(rpc, 'submitScores');
 assert.match(submit, /x\.code === 'KCAC'[\s\S]*normalizeKcacParticipantUnit_\(x\.unit\)/);

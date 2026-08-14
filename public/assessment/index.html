@@ -2443,6 +2443,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div class="section-label">참가자 번호</div>
     <div class="participant-refresh-row"><select id="kbc-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KBC','kbc-participant-select','kbc-num','kbc-name')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="KBC" onclick="refreshEvaluationList_('KBC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="kbc-participant-help" class="participant-picker-help"></div>
+    <div id="kbc-participant-complete" class="participant-complete-badge" style="display:none">✓ 내 평가 제출완료</div>
     <input type="number" id="kbc-num" placeholder="참가자 번호" inputmode="numeric" oninput="applyParticipantNumberInput_('KBC','kbc-num','kbc-name')">
     <input type="text" id="kbc-name" placeholder="참가자명">
     <div class="timer-box">
@@ -3499,6 +3500,7 @@ var _reviewState = { code:null, name:null, headers:[], list:[], current:null, ba
 var _reviewCalibrationOnly = false;
 var _kbcGeneratedComment = '', _kbcCommentEdited = true, _kbcAutoCommentEnabled = false;
 var _kbcCommentGenerationToken = 0, _kbcCommentGenerationTimer = null;
+var _kbcClientSubmissionId = '', _kbcClientSubmissionUnit = '', _kbcSubmitting = false;
 var _ikrcCommentGenerationToken = 0, _ikrcCommentGenerationTimer = null;
 var _reviewCommentGenerationTokens = {}, _reviewCommentGenerationTimers = {}, _reviewGeneratedComments = {};
 var _mobGeneratedComment = '', _mobCommentEdited = true;
@@ -3634,6 +3636,13 @@ function applyParticipantSelect_(code, selectId, numId, nameId) {
       if (kcacEmptyName) kcacEmptyName.value = '';
       onKcacParticipantSelected_();
     }
+    if (String(code || '').toUpperCase() === 'KBC') {
+      var kbcEmptyNum = numId ? document.getElementById(numId) : null;
+      var kbcEmptyName = nameId ? document.getElementById(nameId) : null;
+      if (kbcEmptyNum) kbcEmptyNum.value = '';
+      if (kbcEmptyName) kbcEmptyName.value = '';
+      onKbcParticipantSelected_();
+    }
     return;
   }
   var assignment = list[idx];
@@ -3646,6 +3655,7 @@ function applyParticipantSelect_(code, selectId, numId, nameId) {
     }
   }
   if (String(code || '').toUpperCase() === 'KCAC') onKcacParticipantSelected_();
+  if (String(code || '').toUpperCase() === 'KBC') onKbcParticipantSelected_();
 }
 function applyParticipantNumberInput_(code, numId, nameId) {
   var numEl = document.getElementById(numId);
@@ -3653,6 +3663,13 @@ function applyParticipantNumberInput_(code, numId, nameId) {
   var a = participantAssignmentByNumber_(code, numEl.value);
   if (a) applyParticipantAssignmentToInputs_(a, null, nameId);
   if (String(code || '').toUpperCase() === 'KCAC') onKcacParticipantSelected_();
+  if (String(code || '').toUpperCase() === 'KBC') onKbcParticipantSelected_();
+}
+function onKbcParticipantSelected_() {
+  var num = document.getElementById('kbc-num');
+  var badge = document.getElementById('kbc-participant-complete');
+  var assignment = num ? participantAssignmentByNumber_('KBC', num.value) : null;
+  if (badge) badge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
 }
 function renderParticipantControl_(code, cfg) {
   var sel = document.getElementById(cfg.selectId);
@@ -3751,6 +3768,7 @@ function loadParticipantAssignmentsForCode_(code) {
       renderParticipantControls_(code);
       setParticipantRefreshState_(code, false);
       if (code === 'KCAC') onKcacParticipantSelected_();
+      if (code === 'KBC') onKbcParticipantSelected_();
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
     })
@@ -3765,6 +3783,7 @@ function loadParticipantAssignmentsForCode_(code) {
       renderParticipantControls_(code);
       setParticipantRefreshState_(code, false);
       if (code === 'KCAC') onKcacParticipantSelected_();
+      if (code === 'KBC') onKbcParticipantSelected_();
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
     })
@@ -14264,6 +14283,9 @@ function startKbc() {
   var isMain = kbcIsMainRound_();
   _kbcTags = kbcCreateTagState_();
   _kbcOpenSmartTagBranches = {};
+  _kbcClientSubmissionId = '';
+  _kbcClientSubmissionUnit = '';
+  _kbcSubmitting = false;
   document.getElementById('kbc-service-rows').innerHTML = kbcRenderScoreRows_(KBC_SERVICE);
   document.getElementById('kbc-sensory-rows').innerHTML = kbcRenderScoreRows_(KBC_ESPRESSO);
   document.getElementById('kbc-sig-block').style.display = isMain ? 'block' : 'none';
@@ -14393,12 +14415,27 @@ function onKbcCommentInput() {
   setCommentWarning('kbc-comment-warning', _kbcGeneratedComment, _kbcCommentEdited);
 }
 
+function ensureKbcClientSubmissionId_(unit) {
+  var unitKey = participantNumberKey_(unit);
+  if (!_kbcClientSubmissionId || _kbcClientSubmissionUnit !== unitKey) {
+    _kbcClientSubmissionUnit = unitKey;
+    _kbcClientSubmissionId = 'KBC-' + Date.now() + '-' + Math.random().toString(36).slice(2,10);
+  }
+  return _kbcClientSubmissionId;
+}
+
 function kbcSubmit() {
+  if (_kbcSubmitting) { toast('제출을 처리하고 있습니다. 잠시만 기다려주세요.'); return; }
   var num = document.getElementById('kbc-num').value.trim();
   var playerName = val_('kbc-name').trim();
   var timeRaw = val_('kbc-end-time').trim();
   var timeMs = timeRaw ? kbcParseTimeMsStrict_(timeRaw) : null;
   if (!num) { toast('참가자 번호를 입력해주세요', true); return; }
+  var selectedAssignment = participantAssignmentByNumber_('KBC', num);
+  if (selectedAssignment && selectedAssignment.evaluationCompleted) {
+    toast('이미 제출한 참가자입니다. 수정이 필요하면 내 평가 검수에서 진행해주세요.', true);
+    return;
+  }
   if (!timeRaw) { toast('KBC 경기시간을 입력해주세요', true); document.getElementById('kbc-end-time').focus(); return; }
   if (timeRaw && timeMs == null) { toast('경기시간은 00분00초 형식으로 입력해주세요', true); document.getElementById('kbc-end-time').focus(); return; }
   var timeText = timeMs != null ? formatKbcTimeMs_(timeMs) : '';
@@ -14423,6 +14460,7 @@ function kbcSubmit() {
   var timeInfoText = timeText ? (' · ' + timeText + (timeDq ? ' · 실격' : (timeOver ? ' · 제한 초과' : '')) + (timePenalty ? ' · 시간감점 -' + fmtScore(timePenalty,1) + '점' : '')) : '';
   if (kbcDqInfo.disqualified && !timeDq) timeInfoText += ' · 수동 실격';
   if (!confirm('참가자 ' + num + (playerName ? ' · ' + playerName : '') + timeInfoText + ' 제출? 총점: ' + fmtScore(total,1) + '점')) return;
+  ensureKbcClientSubmissionId_(num);
 
   var kbcExtraFields = {
     '참가자번호': num,
@@ -14456,18 +14494,33 @@ function kbcSubmit() {
     if (a.tagHeader) kbcExtraFields[a.tagHeader] = include ? kbcSmartTagValue_(a) : '';
   });
 
+  _kbcSubmitting = true;
+  kclSaveActiveEvalDraftNow_(true);
   showOverlay();
   google.script.run
     .withSuccessHandler(function(res){
       hideOverlay();
-      if (res.success) {
-        toast('제출 완료');
-        setTimeout(function(){ hideEval(); showPanel(adminHomePanel_()); }, 1500);
-      } else { toast(res.message, true); }
+      _kbcSubmitting = false;
+      if (res && res.success) {
+        kclClearActiveEvalDraftAfterSubmit({competitionCode:'KBC'});
+        _kbcClientSubmissionId = '';
+        _kbcClientSubmissionUnit = '';
+        toast(res.idempotent ? '이미 안전하게 저장된 제출을 확인했습니다.' : '제출 완료');
+        setTimeout(function(){ hideEval(); showPanel(adminHomePanel_()); }, 900);
+      } else {
+        kclSaveActiveEvalDraftNow_(true);
+        toast((res && res.message) || '제출 상태를 확인하지 못했습니다. 같은 제출 버튼을 다시 눌러주세요.', true);
+      }
     })
-    .withFailureHandler(function(){ hideOverlay(); toast('오류 발생', true); })
+    .withFailureHandler(function(){
+      hideOverlay();
+      _kbcSubmitting = false;
+      kclSaveActiveEvalDraftNow_(true);
+      toast('네트워크 응답을 확인하지 못했습니다. 새로고침하지 말고 같은 제출 버튼을 다시 누르면 중복 없이 저장 상태를 확인합니다.', true);
+    })
     .submitScores({
       competitionCode: 'KBC',
+      clientSubmissionId: _kbcClientSubmissionId,
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
       judgeRole: roleTextForCode_('KBC'),
@@ -18460,7 +18513,7 @@ function kclBuildDraftState_(code) {
   var state = {};
   if (code === 'KCR') state.cupping = JSON.parse(JSON.stringify(_cupping || {}));
   if (code === 'KCAC') state.kcac = kclSlimKcacForDraft_(_kcac);
-  if (code === 'KBC') { state.kbcYN = JSON.parse(JSON.stringify(_kbcYN || {})); state.kbcTags = JSON.parse(JSON.stringify(_kbcTags || {})); state.kbcCommentMeta = { generated:_kbcGeneratedComment || '', edited:!!_kbcCommentEdited }; }
+  if (code === 'KBC') { state.kbcYN = JSON.parse(JSON.stringify(_kbcYN || {})); state.kbcTags = JSON.parse(JSON.stringify(_kbcTags || {})); state.kbcCommentMeta = { generated:_kbcGeneratedComment || '', edited:!!_kbcCommentEdited, autoEnabled:!!_kbcAutoCommentEnabled }; state.kbcClientSubmissionId = _kbcClientSubmissionId || ''; state.kbcClientSubmissionUnit = _kbcClientSubmissionUnit || ''; }
   if (code === 'MOB') { state.mobTags = JSON.parse(JSON.stringify(_mobTags || {})); state.mobScoreLocks = JSON.parse(JSON.stringify(_mobScoreLocks || {})); state.mobCommentMeta = { generated:_mobGeneratedComment || '', edited:!!_mobCommentEdited }; state.mobClientSubmissionId = _mobClientSubmissionId || ''; }
   if (code === 'IKRC') { if (typeof saveIkrc === 'function') saveIkrc(); state.ikrcSamples = JSON.parse(JSON.stringify(_ikrcSamples || [])); state.ikrcIdx = _ikrcIdx || 0; state.ikrcCurrentAttr = _ikrcCurrentAttr || 'flavor'; state.ikrcStation = _ikrcStation ? JSON.parse(JSON.stringify(_ikrcStation)) : null; state.ikrcClientSubmissionId = _ikrcClientSubmissionId || ''; }
   if (code === 'MOC') { try { var mt = currentMocTarget_ && currentMocTarget_(); if (mt) mt.snapshot = captureMocState_(); } catch(e) {} state.moc = JSON.parse(JSON.stringify(_moc || {})); }
@@ -18546,9 +18599,14 @@ function kclRestoreDraftForCode_(code, draft) {
     if (code === 'KBC') {
       if (draft.state.kbcYN) _kbcYN = draft.state.kbcYN;
       if (draft.state.kbcTags) _kbcTags = draft.state.kbcTags;
-      if (draft.state.kbcCommentMeta) { _kbcGeneratedComment = draft.state.kbcCommentMeta.generated || ''; _kbcCommentEdited = !!draft.state.kbcCommentMeta.edited; }
+      if (draft.state.kbcCommentMeta) { _kbcGeneratedComment = draft.state.kbcCommentMeta.generated || ''; _kbcCommentEdited = !!draft.state.kbcCommentMeta.edited; _kbcAutoCommentEnabled = draft.state.kbcCommentMeta.autoEnabled !== undefined ? !!draft.state.kbcCommentMeta.autoEnabled : !!_kbcGeneratedComment; }
+      _kbcClientSubmissionId = draft.state.kbcClientSubmissionId || '';
+      _kbcClientSubmissionUnit = draft.state.kbcClientSubmissionUnit || '';
+      _kbcSubmitting = false;
       kclApplyFormValues_(draft.form);
       try { Object.keys(_kbcYN || {}).forEach(function(k){ setYN(k, _kbcYN[k]); }); } catch(e) {}
+      if (typeof setKbcAutoCommentModeUi_ === 'function') setKbcAutoCommentModeUi_();
+      if (typeof onKbcParticipantSelected_ === 'function') onKbcParticipantSelected_();
       if (typeof updateKbcTimeStatus_ === 'function') updateKbcTimeStatus_();
       if (typeof calcKbcTotal === 'function') calcKbcTotal();
     }

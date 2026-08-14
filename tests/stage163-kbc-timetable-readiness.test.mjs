@@ -72,10 +72,24 @@ const withDraft = context.sortParticipantRowsForCompetition_([
 assert.equal(withDraft.at(-1).unique_no, "임시");
 assert.match(functionSource(rpc, "listParticipants"), /sortParticipantRowsForCompetition_/);
 assert.match(functionSource(rpc, "getParticipantAssignments"), /sortParticipantRowsForCompetition_/);
+assert.match(functionSource(rpc, "getParticipantAssignments"), /code === 'KCAC' \|\| code === 'KBC'/);
+assert.match(functionSource(rpc, "getParticipantAssignments"), /evaluationCompleted/);
+
+const completionContext = { safeStr: context.safeStr };
+vm.createContext(completionContext);
+vm.runInContext([
+  functionSource(rpc, "normalizeKcacParticipantUnit_"),
+  functionSource(rpc, "participantEvaluationCompletionUnitKey_"),
+].join("\n"), completionContext);
+assert.equal(completionContext.participantEvaluationCompletionUnitKey_("KBC", "08"), "8");
+assert.equal(completionContext.participantEvaluationCompletionUnitKey_("KBC", " A-1 "), "A-1");
+assert.equal(completionContext.participantEvaluationCompletionUnitKey_("IKRC", "1"), "");
 
 // KBC 운영 핵심 흐름: 참가자 선택, 시간 검증·감점/실격, 중복 제출 방지, 검수와 공식 순위 집계.
 for (const marker of [
   'id="kbc-participant-select"',
+  'id="kbc-participant-complete"',
+  "function onKbcParticipantSelected_",
   "function kbcParseTimeMsStrict_",
   "function kbcAutoTimePenaltyFromMs_",
   "function kbcSubmit()",
@@ -106,6 +120,42 @@ const kbcSubmit = functionSource(assessment, "kbcSubmit");
 assert.match(kbcSubmit, /mode:\s*'judge'/);
 assert.match(kbcSubmit, /team:\s*judgeTeamForSubmit\(\)/);
 assert.match(kbcSubmit, /kbcExtraFields\['평가구분'\]\s*=\s*'대회평가'/);
+assert.match(kbcSubmit, /_kbcSubmitting/);
+assert.match(kbcSubmit, /clientSubmissionId:\s*_kbcClientSubmissionId/);
+assert.match(kbcSubmit, /kclSaveActiveEvalDraftNow_/);
+assert.match(kbcSubmit, /kclClearActiveEvalDraftAfterSubmit/);
+assert.match(kbcSubmit, /evaluationCompleted/);
+assert.match(kbcSubmit, /중복 없이 저장 상태를 확인합니다/);
 assert.doesNotMatch(kbcSubmit, /evaluationModeValue_\(|evaluationPurposeExtraFields_\(/);
+assert.match(functionSource(assessment, "kclBuildDraftState_"), /kbcClientSubmissionId/);
+assert.match(functionSource(assessment, "kclRestoreDraftForCode_"), /kbcClientSubmissionUnit/);
+
+// 예선 7분/8분 실격, 본·결선 10분/11분 실격과 5초 단위 감점을 경계값으로 고정합니다.
+const timeContext = {
+  _selComp: { currentRound:"예선" },
+  KBC_QUAL_TIME_LIMIT_MS: 7 * 60 * 1000,
+  KBC_MAIN_FINAL_TIME_LIMIT_MS: 10 * 60 * 1000,
+  KBC_DQ_GRACE_MS: 60 * 1000,
+  KBC_TIME_PENALTY_STEP_MS: 5 * 1000,
+  isFinite,
+};
+vm.createContext(timeContext);
+vm.runInContext([
+  functionSource(assessment, "kbcTimeLimitMs_"),
+  functionSource(assessment, "kbcDisqTimeLimitMs_"),
+  functionSource(assessment, "kbcParseTimeMsStrict_"),
+  functionSource(assessment, "kbcAutoTimePenaltyFromMs_"),
+].join("\n"), timeContext);
+assert.equal(timeContext.kbcParseTimeMsStrict_("07분00초"), 420000);
+assert.equal(timeContext.kbcParseTimeMsStrict_("07분60초"), null);
+assert.equal(timeContext.kbcAutoTimePenaltyFromMs_(420000), 0);
+assert.equal(timeContext.kbcAutoTimePenaltyFromMs_(421000), 1);
+assert.equal(timeContext.kbcAutoTimePenaltyFromMs_(425000), 1);
+assert.equal(timeContext.kbcAutoTimePenaltyFromMs_(426000), 2);
+assert.equal(timeContext.kbcAutoTimePenaltyFromMs_(480000), 0, "8분부터 실격이므로 시간감점을 중복 적용하지 않음");
+timeContext._selComp.currentRound = "결선";
+assert.equal(timeContext.kbcTimeLimitMs_(), 600000);
+assert.equal(timeContext.kbcAutoTimePenaltyFromMs_(601000), 1);
+assert.equal(timeContext.kbcAutoTimePenaltyFromMs_(660000), 0, "11분부터 실격");
 
 process.stdout.write("Stage163 KBC timetable and event-readiness tests passed.\n");

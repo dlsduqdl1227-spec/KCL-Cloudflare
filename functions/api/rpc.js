@@ -2247,6 +2247,12 @@ function normalizeKcacParticipantUnit_(value) {
   return raw.replace(/\s+/g, '').toUpperCase();
 }
 
+function participantEvaluationCompletionUnitKey_(code, value) {
+  code = safeStr(code).toUpperCase();
+  if (code !== 'KCAC' && code !== 'KBC') return '';
+  return normalizeKcacParticipantUnit_(value);
+}
+
 function kcacParticipantSourcePriority_(row) {
   const extra = parseJson(row && row.extra_json, {});
   const source = safeStr(extra['원본시트'] || extra.sourceSheet || extra.source || '');
@@ -2409,14 +2415,14 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const hideIdentity = !!(policy.identityHidden && !canSeeIdentity);
   let sourceRows = sortParticipantRowsForCompetition_(rows.results || [], code);
   if (code === 'KCAC') sourceRows = dedupeKcacParticipantRows_(sourceRows, currentRound);
-  const completedKcacUnits = new Map();
-  if (code === 'KCAC') {
+  const completedOfficialUnits = new Map();
+  if (code === 'KCAC' || code === 'KBC') {
     const scoreRows = await env.DB.prepare('SELECT submitted_at, unit, mode, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? ORDER BY id DESC')
       .bind(code, currentRound).all();
     (scoreRows.results || []).forEach(scoreRow => {
       if (scoreEvaluationCategoryKey_(scoreRow.mode) !== 'competition' || !scoreOwnedByActor_(scoreRow, actor)) return;
-      const unitKey = normalizeKcacParticipantUnit_(scoreRow.unit);
-      if (unitKey && !completedKcacUnits.has(unitKey)) completedKcacUnits.set(unitKey, safeStr(scoreRow.submitted_at));
+      const unitKey = participantEvaluationCompletionUnitKey_(code, scoreRow.unit);
+      if (unitKey && !completedOfficialUnits.has(unitKey)) completedOfficialUnits.set(unitKey, safeStr(scoreRow.submitted_at));
     });
   }
   const mobManager = code === 'MOB' && hasManageAccess(actor, code);
@@ -2447,8 +2453,8 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     const displayName = hideIdentity ? '' : rawName;
     const displayAff = hideIdentity ? '' : (r.affiliation || '');
     const prefix = policy.numberLabel || (code === 'KTCC' ? '팀번호' : '참가자번호');
-    const completedUnitKey = code === 'KCAC' ? normalizeKcacParticipantUnit_(number) : '';
-    const evaluationCompleted = !!(completedUnitKey && completedKcacUnits.has(completedUnitKey));
+    const completedUnitKey = participantEvaluationCompletionUnitKey_(code, number);
+    const evaluationCompleted = !!(completedUnitKey && completedOfficialUnits.has(completedUnitKey));
     const assignment = {
       rowIndex: r.id,
       competitionCode: code,
@@ -2472,7 +2478,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       operatingDay,
       scheduleTeam,
       evaluationCompleted,
-      evaluationCompletedAt: evaluationCompleted ? completedKcacUnits.get(completedUnitKey) : '',
+      evaluationCompletedAt: evaluationCompleted ? completedOfficialUnits.get(completedUnitKey) : '',
       display: (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? ' · ' + displayAff : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
     };
     if (code === 'IKRC' && hideIdentity) {
@@ -2495,7 +2501,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     currentRound,
     policy:Object.assign({}, policy, {identityHidden:hideIdentity}),
     assignments,
-    evaluationCompletionScope: code === 'KCAC' ? 'currentJudge' : '',
+    evaluationCompletionScope: (code === 'KCAC' || code === 'KBC') ? 'currentJudge' : '',
     scheduleScope: code === 'MOB' && !mobManager ? { competitionDate:mobParticipantScopeDate, team:mobActorTeam } : null
   };
 }
