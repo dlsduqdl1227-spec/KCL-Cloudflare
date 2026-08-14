@@ -22,7 +22,8 @@ const assignment = assessment.indexOf('id="kcac-milk-pattern-setup"');
 const cupTitle = assessment.indexOf('id="kcac-cup-title"');
 assert.ok(participant >= 0 && participant < assignment && assignment < cupTitle, 'milk/pattern assignment must appear immediately after participant selection and before cup evaluation');
 assert.match(assessment, /id="kcac-fast-milk"[\s\S]*FAST Rosetta 사용우유/);
-assert.match(assessment, /id="kcac-slow-milk"[\s\S]*SLOW Rosetta 사용우유/);
+assert.doesNotMatch(assessment, /id="kcac-slow-milk"/, 'SLOW must be assigned automatically from the one FAST milk selection');
+assert.match(assessment, /SLOW는 자동 배정/);
 
 assert.match(functionSource(assessment, 'applyParticipantSelect_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
 assert.match(functionSource(assessment, 'applyParticipantNumberInput_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
@@ -44,6 +45,7 @@ const context = {
   refreshKcacPatternChoiceUI_:()=>{},
   refreshKcacSmartTagSection_:()=>{},
   renderKcacLeafRuleBox:()=>{},
+  refreshKcacCommentReference_:()=>{},
   syncKcacMilkPatternSelectors_:()=>{},
   updateKcacFinal:()=>{},
   renderKcacCupNav:()=>{}

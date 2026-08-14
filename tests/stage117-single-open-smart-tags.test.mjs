@@ -66,7 +66,8 @@ assert.match(mobRenderer, /smartTagBranchIsOpen_\(_mobOpenSmartTagBranches/);
 assert.doesNotMatch(mobRenderer, /smartTagPathBranchSelected_|smartTagPathSecondarySelected_/);
 
 const kcacRenderer = functionSource("kcacSmartTagButtonsHtml_");
-assert.match(kcacRenderer, /smartTagBranchIsOpen_\(_kcacOpenSmartTagBranches/);
+assert.match(kcacRenderer, /kcac-smart-groups/);
+assert.doesNotMatch(kcacRenderer, /smartTagBranchIsOpen_\(_kcacOpenSmartTagBranches/, "KCAC 긍정·보완 하위 항목은 부모 탭 없이 동시에 보여야 합니다.");
 assert.doesNotMatch(kcacRenderer, /smartTagDataHasSelected_/);
 
 const reviewRenderer = functionSource("reviewHierarchicalSmartTagButtonsHtml_");
