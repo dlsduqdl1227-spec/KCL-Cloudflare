@@ -1679,6 +1679,7 @@ function buildSmartTagBox(s, compCode) {
   var rows = [];
   Object.keys(s || {}).forEach(function(k){
     if (!isSmartTagLabel(k)) return;
+    if (String(compCode || '').toUpperCase() === 'MOB' && !mobPublicHeaderAppliesToRole_(k, s)) return;
     var raw = s[k];
     if (raw == null || String(raw).trim() === '') return;
     var chips = uniqueList_(splitPublicTokens_(raw));
@@ -1705,6 +1706,7 @@ function buildCommentBox(s, compCode) {
     var raw = s[k];
     if (raw == null || String(raw).trim() === '') return;
     if (isSmartTagLabel(k)) return;
+    if (comp === 'MOB' && !mobPublicHeaderAppliesToRole_(k, s)) return;
     if (comp === 'KCR' && /자동생성상태|generated\s*comment\s*state|comment\s*state/i.test(String(k || ''))) return;
     if (/강도|Intensity|지속성|Persistence|범위/i.test(String(k || ''))) return;
     var isComment = isCommentLabel(k);
@@ -1765,41 +1767,56 @@ function mobPublicHeaderGroup_(h) {
   if (/^테크니컬\s*총점$|^Technical\s*Total$/i.test(h)) return 'derivedTech';
   if (/^센서리\s*총점$|^Sensory\s*Total$/i.test(h)) return 'derivedSensory';
   if (/^창작메뉴\s*총점$|^Creative\s*Total$/i.test(h)) return 'derivedCreative';
-  if (/^감점\s*전\s*합산$|^총평가\s*반영점수$/i.test(h)) return 'derivedOfficial';
+  if (/^총점$|^최종점수$|^감점\s*전\s*합산$|^감점\s*적용\s*후\s*점수$|^순위\s*반영점수$|^총평가\s*반영점수$|^Gross\s*Total$|^Subtotal\s*Before\s*Penalty$|^Penalty\s*Applied(?:\s*Score)?$|^Ranking\s*Score$|^Official\s*Total$|^Final\s*Reflected(?:\s*Score)?$/i.test(h)) return 'derivedOfficial';
   if (/Signature\s*Technical|창작음료\s*시연|Ingredient\s*Use|부재료\s*사용/i.test(h)) return 'sigTech';
   if (/Pre-Service\s*Station|Service\s*Station|Post-Service\s*Station|시연\s*전\s*작업대|시연\s*중\s*작업대|시연\s*후\s*작업대/i.test(h)) return 'tech';
   if (/Creative\s*Form|Creative\s*Flavor|Creative\s*Balance|Creative\s*Mouthfeel|Creative\s*Professionalism|창작\s*향미|전문성과\s*독창성|형태와\s*용이성/i.test(h)) return 'creative';
   if (/Sweetness|Flavor|Balance|Clean\s*Cup|Mouthfeel|Professionalism|스윗니스|플레이버|균형|클린컵|질감|시연\s*전문성/i.test(h)) return 'sensory';
   return '';
 }
+function mobPublicRoundIsFinal_(s) {
+  s = s || {};
+  var round = String(s['라운드'] || s.round || s['Round'] || '').trim();
+  return /본선|결선|main|final/i.test(round);
+}
+function mobPublicCreativeApplies_(s) {
+  s = s || {};
+  var menu = String(s['메뉴'] || s['Menu'] || s._col8 || '브루잉');
+  return mobPublicRoundIsFinal_(s) && /창작|signature|creative/i.test(menu);
+}
+function mobPublicIsDerivedSummaryHeader_(h) {
+  return /^derived/.test(mobPublicHeaderGroup_(h));
+}
 function mobPublicHeaderAppliesToRole_(h, s) {
   var group = mobPublicHeaderGroup_(h);
   if (!group) return true;
   var flags = mobPublicRoleFlags_(s || {});
-  var menu = String((s && (s['메뉴'] || s['Menu'] || s._col8)) || '브루잉');
-  var creative = /창작|signature|creative/i.test(menu);
+  var creative = mobPublicCreativeApplies_(s || {});
   if (!creative && (group === 'sigTech' || group === 'creative' || group === 'derivedCreative')) return false;
   if (flags.onlyTech) return group === 'tech' || group === 'sigTech' || group === 'time' || group === 'derivedTech' || group === 'derivedOfficial';
   if (flags.onlySens) return group === 'sensory' || group === 'creative' || group === 'derivedSensory' || group === 'derivedCreative' || group === 'derivedOfficial';
   return true;
 }
-function buildMobBreakdownGrid_(s, compCode) {
-  var flags = mobPublicRoleFlags_(s || {});
+function mobPublicBreakdownItems_(s) {
+  s = s || {};
   var items = [];
-  function hasVal(k){ return s[k] !== undefined && s[k] !== null && String(s[k]).trim() !== ''; }
-  if (flags.onlyTech || hasVal('테크니컬 총점')) items.push({label:'테크니컬 평가항목 점수', value: hasVal('테크니컬 총점') ? s['테크니컬 총점'] : ''});
-  if (!flags.onlyTech && hasVal('센서리 총점')) items.push({label:'센서리 평가항목 점수', value:s['센서리 총점']});
-  if (!flags.onlyTech && hasVal('창작메뉴 총점')) items.push({label:'창작메뉴 평가항목 점수', value:s['창작메뉴 총점']});
-  if (flags.onlyTech || hasVal('시간감점')) { var mobTp = Number(s['시간감점']) || 0; items.push({label:'시간 감점', value: mobTp ? ('-' + fmtScore(mobTp,0)) : '0'}); }
-  var official = hasVal('총평가 반영점수') ? s['총평가 반영점수'] : (s['총점'] || s['최종점수'] || 0);
-  items.push({label: flags.onlySens ? '센서리 반영점수' : '총평가 반영점수', value:official});
+  var elapsed = s['경기시간'] != null && String(s['경기시간']).trim() !== '' ? s['경기시간'] : (s['시연시간'] != null && String(s['시연시간']).trim() !== '' ? s['시연시간'] : '');
+  if (elapsed) items.push({label:'경기시간', value:elapsed, numeric:false});
+  var penaltyRaw = s['시간감점'] != null && String(s['시간감점']).trim() !== '' ? s['시간감점'] : s['Time Penalty'];
+  var penalty = Number(penaltyRaw) || 0;
+  if (penalty > 0) items.push({label:'시간 감점', value:'-' + fmtScore(penalty, 2), numeric:false});
+  return items;
+}
+function buildMobBreakdownGrid_(s, compCode) {
+  var items = mobPublicBreakdownItems_(s);
   var grid = document.createElement('div');
   grid.className = 'score-grid mob-breakdown-grid';
+  if (!items.length) grid.style.display = 'none';
   items.forEach(function(item){
     if (item.value === '' || item.value == null) return;
     var div = document.createElement('div');
     div.className = 'score-item';
-    div.innerHTML = '<div class="score-item-label">' + escHtml(item.label) + '</div><div class="score-item-val">' + scoreDisplay(item.label, item.value, compCode) + '</div>';
+    div.innerHTML = '<div class="score-item-label">' + escHtml(item.label) + '</div><div class="score-item-val">' + (item.numeric === false ? escHtml(item.value) : scoreDisplay(item.label, item.value, compCode)) + '</div>';
     grid.appendChild(div);
   });
   return grid;
@@ -1825,7 +1842,7 @@ function buildScoreCard(s, compCode) {
   var total = fmtScore(totalValue, 2);
   var totalHtml = isIkrc && s.__ikrcRoundAvgScore != null && s.__ikrcRoundAvgScore !== ''
     ? '<span style="display:block;font-size:10px;color:#888;line-height:1;margin-bottom:4px;letter-spacing:.06em">평균</span>' + escHtml(total)
-    : escHtml(total);
+    : (isMob ? '<span style="display:block;font-size:10px;color:#888;line-height:1;margin-bottom:4px;letter-spacing:.06em">평가 반영 점수</span>' + escHtml(total) : escHtml(total));
   card.innerHTML =
     '<div class="score-card-header">' +
       '<div class="judge-name">' + escHtml(publicTitle) + statusBadge + '</div>' +
@@ -1864,7 +1881,7 @@ function buildGenericScoreGrid(s, compCode) {
   Object.keys(s || {}).forEach(function(k){
     if (String(compCode || '').toUpperCase() === 'MOB') {
       if (!mobPublicHeaderAppliesToRole_(k, s)) return;
-      if (/^테크니컬\s*총점$|^센서리\s*총점$|^창작메뉴\s*총점$|^감점\s*전\s*합산$|^총평가\s*반영점수$|^시간감점$/i.test(String(k || ''))) return;
+      if (mobPublicIsDerivedSummaryHeader_(k) || /시간감점|Time\s*Penalty/i.test(String(k || '')) || /경기시간|시연시간|Elapsed/i.test(String(k || ''))) return;
     }
     if (!isPublicScoreKey(k) || k === '총점' || k === '최종점수') return;
     var v = s[k];
