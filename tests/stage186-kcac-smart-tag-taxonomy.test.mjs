@@ -33,24 +33,36 @@ vm.runInContext(assessment.slice(dataStart, dataEnd), context);
 
 const qual = context.KCAC_SMART_TAGS.qual;
 assert.ok(qual['완성도']['보완'].includes('언더필'));
+assert.ok(qual['완성도']['보완'].includes('패턴 식별 어려움'));
 assert.deepEqual(Array.from(qual['표면']['긍정']), ['기포 없음','광택 유지']);
 assert.ok(!qual['표면']['긍정'].includes('크레마 경계 선명'));
 assert.ok(!qual['표면']['긍정'].includes('라인 번짐 없음'));
 for (const tag of ['크레마 경계 선명','라인 번짐 없음','크레마 얼룩 없음']) assert.ok(qual['선명도']['긍정'].includes(tag));
 assert.ok(qual['선명도']['보완'].includes('크레마 얼룩 있음'));
+assert.ok(!qual['표면']['보완'].includes('크레마 경계 번짐'));
+assert.ok(!qual['표면']['보완'].includes('라인 번짐 확인'));
+for (const tag of ['크레마 경계 번짐','라인 번짐']) assert.ok(qual['선명도']['보완'].includes(tag));
+assert.ok(!qual['선명도']['보완'].includes('리프 경계 뭉개짐'));
+assert.ok(!qual['선명도']['보완'].includes('패턴 식별 어려움'));
 assert.doesNotMatch(assessment, /['"]레마 얼룩있음['"]/);
 
 const migrationContext = { smartTagDedupeList_:items=>Array.from(new Set(items)) };
 vm.createContext(migrationContext);
 vm.runInContext(functionSource(assessment, 'kcacMigrateQualSmartTagAssignments_'), migrationContext);
 const jar = { type:'qual', smartTags:{
-  표면:['기포 없음 또는 극소','크레마 경계 선명','라인 번짐 없음','광택 유지'],
-  선명도:['라인 분리 확인']
+  완성도:['중심줄기 끊김'],
+  표면:['기포 없음 또는 극소','크레마 경계 선명','라인 번짐 없음','크레마 경계 번짐','라인 번짐 확인','광택 유지'],
+  선명도:['라인 분리 확인','리프 경계 뭉개짐','패턴 식별 어려움']
 } };
 migrationContext.kcacMigrateQualSmartTagAssignments_(jar);
 assert.deepEqual(Array.from(jar.smartTags['표면']), ['기포 없음','광택 유지']);
 assert.ok(jar.smartTags['선명도'].includes('크레마 경계 선명'));
 assert.ok(jar.smartTags['선명도'].includes('라인 번짐 없음'));
+assert.ok(jar.smartTags['선명도'].includes('크레마 경계 번짐'));
+assert.ok(jar.smartTags['선명도'].includes('라인 번짐'));
+assert.ok(!jar.smartTags['선명도'].includes('리프 경계 뭉개짐'));
+assert.ok(!jar.smartTags['선명도'].includes('패턴 식별 어려움'));
+assert.ok(jar.smartTags['완성도'].includes('패턴 식별 어려움'));
 
 const cleaner = functionSource(assessment, 'kcacCleanPatternSpecificSmartTags_');
 assert.match(cleaner, /kcacMigrateQualSmartTagAssignments_\(j\)/);

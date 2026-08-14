@@ -1030,6 +1030,18 @@ input[type=range].kcl-range,
   -webkit-user-drag:none;-webkit-touch-callout:none;pointer-events:none}
 .kcac-cam-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   text-align:center;color:var(--muted-2);font-size:13px;line-height:1.8;pointer-events:none}
+.kcac-guide-overlay{position:absolute;z-index:30;left:8px;right:8px;bottom:8px;
+  padding:7px;border:1px solid rgba(255,255,255,.2);border-radius:9px;
+  background:rgba(8,8,8,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  box-shadow:0 4px 18px rgba(0,0,0,.35);touch-action:auto}
+.kcac-guide-overlay .guide-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;margin:0 0 6px}
+.kcac-guide-overlay .g-btn{min-width:0;padding:6px 2px;border-width:1px;font-size:10px;line-height:1.1;white-space:nowrap}
+.kcac-guide-overlay .g-btn.guide-center{color:#b9f5e2;border-color:rgba(95,217,177,.65)}
+.kcac-guide-overlay .size-row{display:grid;grid-template-columns:38px minmax(0,1fr) 34px;gap:6px;margin:0 0 4px;font-size:10px;color:#ddd}
+.kcac-guide-overlay .size-row:last-child{margin-bottom:0}
+.kcac-guide-overlay .size-row input[type=range]{min-width:0;height:4px}
+.kcac-guide-overlay .size-row span{min-width:0;text-align:left;color:#fff}
+.kcac-guide-overlay .size-row span:last-child{text-align:right;font-variant-numeric:tabular-nums}
 
 .cam-controls{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
 .cam-ctl-btn{padding:8px 12px;background:var(--card);border:1.5px solid var(--border-lt);
@@ -2286,6 +2298,26 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       </div>
       <img id="kcac-photo-img" draggable="false">
       <canvas id="kcac-canvas"></canvas>
+      <div class="kcac-guide-overlay" id="kcac-guide-overlay" aria-label="사진 위 가이드 빠른 조절">
+        <div class="guide-row">
+          <button class="g-btn on" id="kcacG0" onclick="toggleKcacGuide(0)">원형</button>
+          <button class="g-btn on" id="kcacG1" onclick="toggleKcacGuide(1)">십자</button>
+          <button class="g-btn on" id="kcacG2" onclick="toggleKcacGuide(2)">3분할</button>
+          <button class="g-btn on" id="kcacG3" onclick="toggleKcacGuide(3)">대각선</button>
+          <button class="g-btn" id="kcacG4" onclick="toggleKcacGuide(4)">동심원</button>
+          <button class="g-btn guide-center" type="button" onclick="centerKcacGuide()">중앙</button>
+        </div>
+        <div class="size-row">
+          <span>크기</span>
+          <input type="range" id="kcacGuideSize" min="20" max="98" value="72" oninput="onKcacGuideSize()" aria-label="가이드 크기">
+          <span id="kcacGuideSizeLabel">72%</span>
+        </div>
+        <div class="size-row guide-opacity-row">
+          <span>진하기</span>
+          <input type="range" id="kcacGuideOpacity" min="35" max="100" value="88" oninput="onKcacGuideOpacity()" aria-label="가이드 진하기">
+          <span id="kcacGuideOpacityLabel">88%</span>
+        </div>
+      </div>
     </div>
     <div class="cam-controls kcac-media-controls">
       <button class="cam-ctl-btn primary" onclick="triggerKcacMediaInput('capture')">촬영하기</button>
@@ -2300,24 +2332,6 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="kcac-saved-title" id="kcac-saved-title">저장된 평가용 스냅샷 (0)</div>
       <div class="kcac-saved-list" id="kcac-saved-list"></div>
     </div>
-    <div class="guide-row">
-      <button class="g-btn on" id="kcacG0" onclick="toggleKcacGuide(0)">원형</button>
-      <button class="g-btn on" id="kcacG1" onclick="toggleKcacGuide(1)">십자</button>
-      <button class="g-btn on" id="kcacG2" onclick="toggleKcacGuide(2)">3분할</button>
-      <button class="g-btn on" id="kcacG3" onclick="toggleKcacGuide(3)">대각선</button>
-      <button class="g-btn"   id="kcacG4" onclick="toggleKcacGuide(4)">동심원</button>
-    </div>
-    <div class="size-row">
-      <span style="flex-shrink:0">가이드 크기</span>
-      <input type="range" id="kcacGuideSize" min="20" max="98" value="72" oninput="onKcacGuideSize()">
-      <span id="kcacGuideSizeLabel">72%</span>
-    </div>
-    <div class="size-row guide-opacity-row">
-      <span style="flex-shrink:0">가이드 진하기</span>
-      <input type="range" id="kcacGuideOpacity" min="35" max="100" value="88" oninput="onKcacGuideOpacity()">
-      <span id="kcacGuideOpacityLabel">88%</span>
-    </div>
-
     <div id="kcac-pre-eval"></div>
     <div id="kcac-leaf-rule-box" class="time-rule-guide" style="display:none"></div>
     <div id="kcac-attrs"></div>
@@ -11484,7 +11498,7 @@ var KCAC_SMART_TAGS = {
   qual: {
     '완성도': {
       '긍정':['리프 형태 식별 가능','중심줄기 연결 확인','마감 포인트 확인','전체 구조 식별 가능'],
-      '보완':['리프 형태 일부 변형','중심줄기 끊김','마감 포인트 불명확','패턴 핵심요소 미구현','언더필']
+      '보완':['리프 형태 일부 변형','중심줄기 끊김','마감 포인트 불명확','패턴 핵심요소 미구현','패턴 식별 어려움','언더필']
     },
     '균형': {
       '긍정':['좌우 대칭 유지','진폭 균일','중심축 유지','흐름 연속'],
@@ -11492,7 +11506,7 @@ var KCAC_SMART_TAGS = {
     },
     '표면': {
       '긍정':['기포 없음','광택 유지'],
-      '보완':['기포 확인','광택 저하','크레마 경계 번짐','라인 번짐 확인','표면 거침 확인']
+      '보완':['기포 확인','광택 저하','표면 거침 확인']
     },
     '위치': {
       '긍정':['컵 중심 정렬','점유율 적정','상하 여백 균형','좌우 여백 균형'],
@@ -11500,7 +11514,7 @@ var KCAC_SMART_TAGS = {
     },
     '선명도': {
       '긍정':['라인 분리 확인','리프 경계 식별 가능','선 간격 유지','패턴 번짐 없음','크레마 경계 선명','라인 번짐 없음','크레마 얼룩 없음'],
-      '보완':['라인 분리 부족','리프 경계 뭉개짐','선 간격 불균일','패턴 번짐 확인','패턴 식별 어려움','크레마 얼룩 있음']
+      '보완':['라인 분리 부족','선 간격 불균일','패턴 번짐 확인','크레마 경계 번짐','라인 번짐','크레마 얼룩 있음']
     }
   },
   finalPattern: {
@@ -11983,15 +11997,25 @@ function kcacFilterSmartTagData_(data) {
 
 function kcacMigrateQualSmartTagAssignments_(j) {
   if (!j || j.type !== 'qual' || !j.smartTags) return;
+  var completion = Array.isArray(j.smartTags['완성도']) ? j.smartTags['완성도'].slice() : [];
   var surface = Array.isArray(j.smartTags['표면']) ? j.smartTags['표면'].slice() : [];
   var definition = Array.isArray(j.smartTags['선명도']) ? j.smartTags['선명도'].slice() : [];
-  var moved = ['크레마 경계 선명','라인 번짐 없음'];
+  var moved = ['크레마 경계 선명','라인 번짐 없음','크레마 경계 번짐'];
   surface = surface.map(function(tag){ return tag === '기포 없음 또는 극소' ? '기포 없음' : tag; });
+  surface = surface.map(function(tag){ return tag === '라인 번짐 확인' ? '라인 번짐' : tag; });
+  definition = definition.map(function(tag){ return tag === '라인 번짐 확인' ? '라인 번짐' : tag; })
+    .filter(function(tag){ return tag !== '리프 경계 뭉개짐'; });
+  if (definition.indexOf('패턴 식별 어려움') >= 0) {
+    definition = definition.filter(function(tag){ return tag !== '패턴 식별 어려움'; });
+    if (completion.indexOf('패턴 식별 어려움') < 0) completion.push('패턴 식별 어려움');
+  }
+  moved.push('라인 번짐');
   moved.forEach(function(tag){
     if (surface.indexOf(tag) < 0) return;
     surface = surface.filter(function(value){ return value !== tag; });
     if (definition.indexOf(tag) < 0) definition.push(tag);
   });
+  if (completion.length || Array.isArray(j.smartTags['완성도'])) j.smartTags['완성도'] = smartTagDedupeList_(completion);
   j.smartTags['표면'] = smartTagDedupeList_(surface);
   if (definition.length || Array.isArray(j.smartTags['선명도'])) j.smartTags['선명도'] = smartTagDedupeList_(definition);
 }
@@ -12598,6 +12622,13 @@ function toggleKcacGuide(i) {
   if (!kcacUsesPatternMedia_(j)) return;
   j.guides[i] = j.guides[i] ? 0 : 1;
   document.getElementById('kcacG' + i).classList.toggle('on', !!j.guides[i]);
+  requestKcacGuideDraw_();
+}
+
+function centerKcacGuide() {
+  var j = _kcac.jars[_kcac.currentIdx];
+  if (!j || !kcacUsesPatternMedia_(j)) return;
+  j.guidePos = {rx:0.5, ry:0.5};
   requestKcacGuideDraw_();
 }
 
