@@ -1,0 +1,108 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import { onRequestPost } from '../functions/api/rpc.js';
+
+const assessment = fs.readFileSync(new URL('../public/assessment/index.html', import.meta.url), 'utf8');
+
+function functionSource(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `${name} function missing`);
+  const open = source.indexOf('{', start);
+  let depth = 0, quote = '', escaped = false;
+  for (let i = open; i < source.length; i += 1) {
+    const ch = source[i];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === quote) quote = '';
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }
+    if (ch === '{') depth += 1;
+    if (ch === '}' && --depth === 0) return source.slice(start, i + 1);
+  }
+  throw new Error(`${name} function incomplete`);
+}
+
+// 선택된 태그도 긍정(빨강)·보완(파랑)이 유지되어야 한다.
+assert.match(assessment, /\.kcac-smart-group-positive \.cat-btn-s\.selected\{background:#7f1d1d;color:#fff/);
+assert.match(assessment, /\.kcac-smart-group-refinement \.cat-btn-s\.selected\{background:#174ea6;color:#fff/);
+assert.match(assessment, /\.selected-tag\.kcac-selected-tag-positive\{background:#7f1d1d/);
+assert.match(assessment, /\.selected-tag\.kcac-selected-tag-refinement\{background:#174ea6/);
+
+const tagContext = {
+  _kcac:{ currentIdx:0, jars:[{ smartTags:{ 균형:['좌우 대칭 유지','중심축 이탈'] } }] },
+  kcacSmartTagOptions_:()=>({ 긍정:['좌우 대칭 유지'], 보완:['중심축 이탈'] }),
+  kcacSelectedSmartTags_:()=>['좌우 대칭 유지','중심축 이탈'],
+  escapeJsString_:value=>String(value),
+  escHtml:value=>String(value),
+  smartTagLeaf_:value=>String(value)
+};
+vm.createContext(tagContext);
+vm.runInContext(functionSource(assessment, 'kcacSmartTagToneClass_'), tagContext);
+vm.runInContext(functionSource(assessment, 'kcacSelectedSmartTagsHtml_'), tagContext);
+const selectedHtml = tagContext.kcacSelectedSmartTagsHtml_('균형');
+assert.match(selectedHtml, /kcac-selected-tag-positive[^>]*>좌우 대칭 유지/);
+assert.match(selectedHtml, /kcac-selected-tag-refinement[^>]*>중심축 이탈/);
+
+// FAST 멸균우유를 선택한 뒤 SLOW 잔에는 다른 우유가 명시되고 현재 잔도 강조한다.
+const elements = {
+  'kcac-fast-milk':{ innerHTML:'' },
+  'kcac-milk-pattern-status':{ innerHTML:'', textContent:'' }
+};
+const mappingContext = {
+  _kcac:{ currentIdx:1, jars:[
+    { type:'qual', patternType:'dynamic', milkProduct:'매일멸균우유' },
+    { type:'qual', patternType:'controlled', milkProduct:'어메이징 오트바리스타' }
+  ] },
+  document:{ getElementById:id=>elements[id] || null },
+  escHtml:value=>String(value),
+  kcacPatternTypeGuide_:type=>type === 'dynamic' ? '리프 14개 이상' : '리프 10개 이하'
+};
+vm.createContext(mappingContext);
+vm.runInContext(functionSource(assessment, 'kcacQualMilkEntries_'), mappingContext);
+vm.runInContext(functionSource(assessment, 'syncKcacMilkPatternSelectors_'), mappingContext);
+mappingContext.syncKcacMilkPatternSelectors_();
+assert.match(elements['kcac-milk-pattern-status'].innerHTML, /FAST Rosetta[\s\S]*매일멸균우유/);
+assert.match(elements['kcac-milk-pattern-status'].innerHTML, /kcac-pattern-assignment-card current[\s\S]*SLOW Rosetta[\s\S]*어메이징 오트바리스타/);
+
+async function rpc(action, payload) {
+  const statement = { bind(){ return this; }, async run(){ return { success:true }; }, async first(){ return { n:1 }; }, async all(){ return { results:[] }; } };
+  const request = new Request('https://qa.kcl.local/api/rpc', {
+    method:'POST', headers:{ 'Content-Type':'application/json', Origin:'https://qa.kcl.local' },
+    body:JSON.stringify({ action, args:[payload] })
+  });
+  const response = await onRequestPost({ request, env:{ DB:{ prepare(){ return statement; } } } });
+  assert.equal(response.status, 200);
+  return response.json();
+}
+
+const generated = await rpc('generateKcacComment', {
+  label:'예선 테스트 잔', type:'qual', patternType:'FAST Rosetta', milkProduct:'매일멸균우유', leafCount:'15', leafPenalty:0,
+  variationSeed:'stage185',
+  scores:{ 완성도:4.0, 균형:3.6, 표면:3.2, 위치:2.8, 선명도:2.4 },
+  smartTags:{
+    'Pattern Completion(패턴 완성도)':['리프 형태 식별 가능'],
+    'Pattern Symmetry & Balance(대칭과 균형)':['중심축 이탈'],
+    'Surface Quality(표면 품질)':['광택 유지'],
+    'Position & Proportion(위치와 비율)':['컵 중심 이탈'],
+    'Pattern Definition(패턴 선명도)':['라인 분리 부족']
+  },
+  smartTagPolarity:{
+    positive:['완성도: 리프 형태 식별 가능','표면: 광택 유지'],
+    refinement:['균형: 중심축 이탈','위치: 컵 중심 이탈','선명도: 라인 분리 부족'], custom:[]
+  }
+});
+assert.equal(generated.success, true);
+assert.equal(generated.comments.length, 2);
+generated.comments.forEach(comment => {
+  for (const label of ['패턴 완성도','대칭과 균형','표면 품질','위치와 비율','패턴 선명도']) assert.match(comment, new RegExp(label));
+  assert.match(comment, /리프 형태 식별 가능/);
+  assert.match(comment, /중심축 이탈/);
+  assert.match(comment, /리프 수는 15개/);
+});
+
+assert.match(functionSource(assessment, 'generateKcacComment'), /leafCount:\s*j\.leafCount[\s\S]*leafPenalty:\s*j\.leafPenalty/);
+
+process.stdout.write('Stage185 KCAC selected colors, exact pattern mapping, and detailed comment tests passed.\n');

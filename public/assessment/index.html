@@ -447,6 +447,12 @@ input[type=range].kcl-range,
 }
 .kcac-milk-pattern-item select{margin:0;min-width:0;width:100%}
 @media(max-width:520px){.kcac-milk-pattern-grid{grid-template-columns:1fr}}
+.kcac-pattern-assignment-status{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px}
+.kcac-pattern-assignment-card{border:1px solid var(--border);border-radius:7px;background:#202020;padding:8px 10px;line-height:1.45}
+.kcac-pattern-assignment-card b{display:block;font-size:11px;color:#fff;margin-bottom:2px}
+.kcac-pattern-assignment-card span{display:block;font-size:11px;color:var(--text-3);overflow-wrap:anywhere}
+.kcac-pattern-assignment-card.current{border-color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.2)}
+.kcac-pattern-assignment-card.current b::after{content:' · 현재 잔';color:#ffcb66;font-weight:900}
 .kcac-pattern-summary{
   display:flex;
   align-items:center;
@@ -467,12 +473,17 @@ input[type=range].kcl-range,
 .kcac-smart-group-refinement .kcac-smart-group-label{color:#69a7ff}
 .kcac-smart-group-positive .cat-btn-s{color:#ff9a9a;border-color:rgba(255,107,107,.42)}
 .kcac-smart-group-refinement .cat-btn-s{color:#8dbbff;border-color:rgba(105,167,255,.42)}
-.kcac-smart-group-positive .cat-btn-s.selected{background:#fff;color:#b42318;border-color:#ff6b6b}
-.kcac-smart-group-refinement .cat-btn-s.selected{background:#fff;color:#175cd3;border-color:#69a7ff}
+.kcac-smart-group-positive .cat-btn-s.selected{background:#7f1d1d;color:#fff;box-shadow:0 0 0 2px #ff6b6b,0 0 0 5px rgba(255,107,107,.16)}
+.kcac-smart-group-refinement .cat-btn-s.selected{background:#174ea6;color:#fff;box-shadow:0 0 0 2px #69a7ff,0 0 0 5px rgba(105,167,255,.16)}
+.kcac-smart-group-positive .cat-btn-s.selected::after{background:#d92d20;border-color:#ffd0cc}
+.kcac-smart-group-refinement .cat-btn-s.selected::after{background:#175cd3;border-color:#d1e5ff}
+.selected-tag.kcac-selected-tag-positive{background:#7f1d1d;color:#fff;border:1px solid #ff6b6b}
+.selected-tag.kcac-selected-tag-refinement{background:#174ea6;color:#fff;border:1px solid #69a7ff}
 @media(max-width:640px){
   .kcac-pattern-summary{align-items:flex-start;flex-direction:column}
   .kcac-pattern-summary span{text-align:left}
   .kcac-smart-groups{grid-template-columns:1fr}
+  .kcac-pattern-assignment-status{grid-template-columns:1fr 1fr}
 }
 .kcac-weight-chip{
   display:inline-flex;
@@ -11717,9 +11728,15 @@ function syncKcacMilkPatternSelectors_() {
   var fastEntry = entries.find(function(entry){ return entry.jar.patternType === 'dynamic'; });
   var slowEntry = entries.find(function(entry){ return entry.jar.patternType === 'controlled'; });
   if (status) {
-    status.textContent = fastEntry && slowEntry
-      ? '배정 완료 · FAST: ' + (fastEntry.jar.milkProduct || fastEntry.jar.milkType) + ' / SLOW: ' + (slowEntry.jar.milkProduct || slowEntry.jar.milkType)
-      : 'FAST 또는 SLOW에 사용할 우유를 먼저 선택해주세요.';
+    if (fastEntry && slowEntry) {
+      var current = Number(_kcac.currentIdx);
+      status.innerHTML = '<div class="kcac-pattern-assignment-status">' +
+        '<div class="kcac-pattern-assignment-card' + (fastEntry.index === current ? ' current' : '') + '"><b>FAST Rosetta</b><span>' + escHtml(fastEntry.jar.milkProduct || fastEntry.jar.milkType || '지정 우유') + ' · ' + escHtml(kcacPatternTypeGuide_('dynamic')) + '</span></div>' +
+        '<div class="kcac-pattern-assignment-card' + (slowEntry.index === current ? ' current' : '') + '"><b>SLOW Rosetta</b><span>' + escHtml(slowEntry.jar.milkProduct || slowEntry.jar.milkType || '지정 우유') + ' · ' + escHtml(kcacPatternTypeGuide_('controlled')) + '</span></div>' +
+      '</div>';
+    } else {
+      status.textContent = 'FAST에 사용할 우유를 선택하면 SLOW 우유가 자동 배정됩니다.';
+    }
   }
 }
 
@@ -11831,12 +11848,26 @@ function kcacSelectedSmartTags_(j, key) {
   return j.smartTags[key];
 }
 
+function kcacSmartTagToneClass_(j, key, tag) {
+  var data = kcacSmartTagOptions_(j, key);
+  if (!data || Array.isArray(data) || typeof data !== 'object') return '';
+  var labels = Object.keys(data);
+  for (var i = 0; i < labels.length; i++) {
+    var list = Array.isArray(data[labels[i]]) ? data[labels[i]] : [];
+    if (list.indexOf(tag) < 0) continue;
+    return /보완|개선|부정|주의|불균형|결점/i.test(labels[i]) ? 'refinement' : 'positive';
+  }
+  return '';
+}
+
 function kcacSelectedSmartTagsHtml_(key) {
   var j = _kcac.jars[_kcac.currentIdx];
   var selected = kcacSelectedSmartTags_(j, key);
   if (!selected.length) return '<span class="mob-empty-tag">선택 없음</span>';
   return selected.map(function(tag){
-    return '<span class="selected-tag" onclick="toggleKcacSmartTag(\'' + escapeJsString_(key) + '\',\'' + escapeJsString_(tag) + '\')">' + escHtml(smartTagLeaf_(tag)) + ' ×</span>';
+    var tone = kcacSmartTagToneClass_(j, key, tag);
+    var toneClass = tone ? ' kcac-selected-tag-' + tone : '';
+    return '<span class="selected-tag' + toneClass + '" onclick="toggleKcacSmartTag(\'' + escapeJsString_(key) + '\',\'' + escapeJsString_(tag) + '\')">' + escHtml(smartTagLeaf_(tag)) + ' ×</span>';
   }).join('');
 }
 
@@ -13045,6 +13076,8 @@ function generateKcacComment() {
       patternType: kcacPatternTypeTitle_(j.patternType) || j.patternType,
       milkType: j.milkType,
       milkProduct: j.milkProduct,
+      leafCount: j.leafCount,
+      leafPenalty: j.leafPenalty,
       purpose: j.purpose,
       scores: j.scores,
       smartTags: kcacSmartTagPayload_(j),

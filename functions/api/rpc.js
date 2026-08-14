@@ -7169,6 +7169,62 @@ function _kcacEvidenceSentence_(evidence) {
   return '선택된 스마트태그가 없어 점수 흐름을 중심으로 해석했습니다.';
 }
 
+function _kcacCanonicalAreaKey_(name) {
+  const value = safeStr(name).replace(/\s+/g, '');
+  if (/맛.*균형|TasteBalance/i.test(value)) return '맛균형';
+  if (/주제.*표현|ThemeExpression/i.test(value)) return '주제표현';
+  if (/작업.*수행|TechnicalExecution/i.test(value)) return '작업수행';
+  if (/프레젠|Presentation/i.test(value)) return '프레젠';
+  if (/선명도|Definition/i.test(value)) return '선명도';
+  if (/완성도|Completion/i.test(value)) return '완성도';
+  if (/균형|Symmetry|Balance/i.test(value)) return '균형';
+  if (/표면|Surface/i.test(value)) return '표면';
+  if (/위치|Position|Proportion/i.test(value)) return '위치';
+  if (/청결|Cleanliness/i.test(value)) return '청결';
+  if (/질감|Mouthfeel/i.test(value)) return '질감';
+  return value;
+}
+
+function _kcacAreaLabel_(key) {
+  return ({
+    완성도:'패턴 완성도', 균형:'대칭과 균형', 표면:'표면 품질', 위치:'위치와 비율', 선명도:'패턴 선명도',
+    주제표현:'주제 표현력', 작업수행:'작업 수행 완성도', 청결:'청결', 맛균형:'맛의 균형', 질감:'질감과 촉감', 프레젠:'프레젠테이션'
+  })[_kcacCanonicalAreaKey_(key)] || safeStr(key) || '평가 항목';
+}
+
+function _kcacTagsByArea_(smartTags) {
+  const result = {};
+  Object.keys(smartTags || {}).forEach(name => {
+    const key = _kcacCanonicalAreaKey_(name);
+    const values = _tags(smartTags[name], 12).map(_cleanTagText_).filter(Boolean);
+    if (!result[key]) result[key] = [];
+    values.forEach(tag => { if (!result[key].includes(tag)) result[key].push(tag); });
+  });
+  return result;
+}
+
+function _kcacPolarityLeafSet_(values) {
+  return new Set(_tags(values, 30).map(value => _cleanTagText_(safeStr(value).replace(/^[^:：]{1,40}[:：]\s*/, ''))).filter(Boolean));
+}
+
+function _kcacAreaObservation_(item, tagsByArea, polarity) {
+  const key = _kcacCanonicalAreaKey_(item.name);
+  const label = _kcacAreaLabel_(key);
+  const tags = (tagsByArea[key] || []).slice(0, 4);
+  const positive = tags.filter(tag => polarity.positive.has(tag));
+  const refinement = tags.filter(tag => polarity.refinement.has(tag));
+  const custom = tags.filter(tag => !polarity.positive.has(tag) && !polarity.refinement.has(tag));
+  const level = _toneByScore_(item.score, 5);
+  const parts = [];
+  if (positive.length) parts.push(`강점 관찰은 ${_joinWithComma(positive.slice(0, 2))}`);
+  if (refinement.length) parts.push(`보완 관찰은 ${_joinWithComma(refinement.slice(0, 2))}`);
+  if (custom.length) parts.push(`추가 기록은 ${_joinWithComma(custom.slice(0, 2))}`);
+  const subject = `${label}${_topicParticle_(label)}`;
+  return parts.length
+    ? `${subject} ${level} 수준으로 기록되었으며, ${parts.join(', ')}입니다.`
+    : `${subject} ${level} 수준으로 기록되었습니다.`;
+}
+
 function generateKcacComment(payload) {
   payload = payload || {};
   const scores = payload.scores || {};
@@ -7176,7 +7232,7 @@ function generateKcacComment(payload) {
   const type = safeStr(payload.type || '');
   const label = safeStr(payload.label || '해당 잔');
   const pattern = safeStr(payload.patternType || payload.pattern || '패턴');
-  const milk = [safeStr(payload.milkType), safeStr(payload.milkProduct)].filter(Boolean).join(' ');
+  const milk = safeStr(payload.milkProduct || payload.milkType);
   const scoreItems = Object.keys(scores).map(k => ({name:k, score:scores[k]}));
   const avg = _avg(scoreItems.map(x=>x.score));
   const isSensory = /sensory|맛|질감/i.test(type);
@@ -7186,18 +7242,27 @@ function generateKcacComment(payload) {
   const balance = high && low ? `${high}${_subjectParticle_(high)} 가장 두드러졌고, ${low}${_topicParticle_(low)} 상대적으로 낮게 평가되었습니다.` : '항목 간 편차는 크지 않게 기록되었습니다.';
   const evidence = _kcacTagEvidence_({ smartTags, smartTagPolarity:payload.smartTagPolarity });
   const tone = _kcacTone_(avg, evidence);
-  const evidenceText = _kcacEvidenceSentence_(evidence);
+  const tagsByArea = _kcacTagsByArea_(smartTags);
+  const polarity = {
+    positive:_kcacPolarityLeafSet_((payload.smartTagPolarity || {}).positive),
+    refinement:_kcacPolarityLeafSet_((payload.smartTagPolarity || {}).refinement)
+  };
+  const observations = scoreItems.map(item => _kcacAreaObservation_(item, tagsByArea, polarity));
+  const observationText = observations.join(' ');
+  const leafValue = safeStr(payload.leafCount);
+  const leafText = leafValue !== '' && /qual/i.test(type)
+    ? `${pattern}의 리프 수는 ${leafValue}개로 기록되었${_num(payload.leafPenalty) > 0 ? '고, 리프 수 기준 차이가 감점에 반영되었습니다' : '으며, 리프 수 기준 안에서 확인되었습니다'}.`
+    : '';
+  const contextText = `${milk ? milk + ' 조건의 ' : ''}${pattern}`;
   if (isSensory) {
     return _optionSet([
-      `${label}은 ${milk ? milk + ' 조건에서 ' : ''}맛의 균형과 질감을 중심으로 평가되었습니다. 전체 인상은 ${tone} 수준입니다. ${evidenceText}`,
-      `센서리 관점에서는 맛의 균형과 촉감의 연결성을 확인했습니다. ${balance} ${evidenceText}`,
-      `평균 ${_fmt(avg)}점의 항목 점수와 선택된 관찰 근거를 함께 반영하면 ${tone} 결과입니다. ${evidenceText}`
+      `${label}은 ${contextText}의 맛의 균형, 질감과 촉감, 프레젠테이션을 함께 확인했습니다. ${observationText} ${balance} 전체 센서리 인상은 ${tone} 수준으로 정리됩니다.`,
+      `${contextText}에서 느껴진 센서리 특성을 항목별로 정리하면 다음과 같습니다. ${observationText} ${balance} 점수와 선택된 관찰 기록을 함께 반영한 전체 흐름은 ${tone} 수준입니다.`
     ], _commentVariationKey_(payload, 'KCAC'));
   }
   return _optionSet([
-    `${label}은 ${milk ? milk + ' 조건에서 ' : ''}${pattern}의 완성도, 표면 품질, 위치와 비율을 중심으로 평가되었습니다. 전체적인 시각 완성도는 ${tone} 편입니다. ${evidenceText}`,
-    `패턴 평가는 중심축, 대칭, 리프 간격, 라인의 선명도와 표면 정리감을 기준으로 진행되었습니다. ${balance} ${evidenceText}`,
-    `평균 ${_fmt(avg)}점의 항목 점수와 선택된 관찰 근거를 함께 반영하면 ${tone} 결과입니다. ${evidenceText}`
+    `${label}의 ${contextText}를 패턴 구조와 시각적 연결성 중심으로 평가했습니다. ${observationText} ${leafText} ${balance} 전체적인 시각 완성도는 ${tone} 수준으로 정리됩니다.`,
+    `${contextText}에서 확인된 형태, 대칭, 표면, 배치와 선명도를 항목별로 정리하면 다음과 같습니다. ${observationText} ${leafText} ${balance} 점수와 선택된 관찰 기록을 함께 반영한 전체 흐름은 ${tone} 수준입니다.`
   ], _commentVariationKey_(payload, 'KCAC'));
 }
 
