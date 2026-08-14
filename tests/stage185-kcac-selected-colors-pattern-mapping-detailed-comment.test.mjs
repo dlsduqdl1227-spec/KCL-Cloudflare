@@ -49,7 +49,10 @@ assert.match(selectedHtml, /kcac-selected-tag-refinement[^>]*>중심축 이탈/)
 // FAST 멸균우유를 선택한 뒤 SLOW 잔에는 다른 우유가 명시되고 현재 잔도 강조한다.
 const elements = {
   'kcac-fast-milk':{ innerHTML:'' },
-  'kcac-milk-pattern-status':{ innerHTML:'', textContent:'' }
+  'kcac-milk-pattern-status':{ innerHTML:'', textContent:'' },
+  'kcac-current-pattern-title':{ textContent:'' },
+  'kcac-current-milk-label':{ textContent:'' },
+  'kcac-selected-pattern-label':{ textContent:'' }
 };
 const mappingContext = {
   _kcac:{ currentIdx:1, jars:[
@@ -58,14 +61,19 @@ const mappingContext = {
   ] },
   document:{ getElementById:id=>elements[id] || null },
   escHtml:value=>String(value),
+  kcacPatternTypeTitle_:type=>type === 'dynamic' ? 'FAST Rosetta' : type === 'controlled' ? 'SLOW Rosetta' : '',
   kcacPatternTypeGuide_:type=>type === 'dynamic' ? '리프 14개 이상' : '리프 10개 이하'
 };
 vm.createContext(mappingContext);
 vm.runInContext(functionSource(assessment, 'kcacQualMilkEntries_'), mappingContext);
+vm.runInContext(functionSource(assessment, 'refreshKcacCurrentCupAssignment_'), mappingContext);
 vm.runInContext(functionSource(assessment, 'syncKcacMilkPatternSelectors_'), mappingContext);
 mappingContext.syncKcacMilkPatternSelectors_();
 assert.match(elements['kcac-milk-pattern-status'].innerHTML, /FAST Rosetta[\s\S]*매일멸균우유/);
 assert.match(elements['kcac-milk-pattern-status'].innerHTML, /kcac-pattern-assignment-card current[\s\S]*SLOW Rosetta[\s\S]*어메이징 오트바리스타/);
+assert.equal(elements['kcac-current-pattern-title'].textContent, '현재 잔: SLOW Rosetta');
+assert.equal(elements['kcac-current-milk-label'].textContent, '사용 우유: 어메이징 오트바리스타');
+assert.equal(elements['kcac-selected-pattern-label'].textContent, '리프 10개 이하');
 
 async function rpc(action, payload) {
   const statement = { bind(){ return this; }, async run(){ return { success:true }; }, async first(){ return { n:1 }; }, async all(){ return { results:[] }; } };
@@ -97,10 +105,12 @@ const generated = await rpc('generateKcacComment', {
 assert.equal(generated.success, true);
 assert.equal(generated.comments.length, 2);
 generated.comments.forEach(comment => {
-  for (const label of ['패턴 완성도','대칭과 균형','표면 품질','위치와 비율','패턴 선명도']) assert.match(comment, new RegExp(label));
   assert.match(comment, /리프 형태 식별 가능/);
   assert.match(comment, /중심축 이탈/);
-  assert.match(comment, /리프 수는 15개/);
+  assert.match(comment, /리프 15개/);
+  assert.match(comment, /강점|보완/);
+  assert.ok(comment.length <= 320, `KCAC 종합코멘트가 너무 깁니다: ${comment.length}자`);
+  assert.doesNotMatch(comment, /항목별로 정리하면 다음과 같습니다|점수와 선택된 관찰 기록을 함께 반영/);
 });
 
 assert.match(functionSource(assessment, 'generateKcacComment'), /leafCount:\s*j\.leafCount[\s\S]*leafPenalty:\s*j\.leafPenalty/);

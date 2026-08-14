@@ -465,6 +465,8 @@ input[type=range].kcl-range,
 }
 .kcac-pattern-summary b{font-size:13px;color:#fff}
 .kcac-pattern-summary span{font-size:12px;color:var(--text-3);text-align:right}
+.kcac-pattern-summary span strong{display:block;color:#ffcb66;font-size:12px}
+.kcac-pattern-summary span small{display:block;color:var(--text-3);font-size:11px;margin-top:2px}
 .kcac-smart-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:100%;margin-top:8px}
 .kcac-smart-group{min-width:0;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,.28);padding:9px}
 .kcac-smart-group-label{font-size:12px;font-weight:900;margin:0 0 7px;padding:0 2px}
@@ -11701,19 +11703,27 @@ function renderKcacQualPatternSelector_(j) {
   return '<div class="kcac-rule-panel">' +
     '<div class="kcac-rule-title">현재 잔 배정</div>' +
     '<div class="kcac-pattern-summary">' +
-      '<b>' + escHtml(milkLabel) + '</b><span id="kcac-selected-pattern-label">' + escHtml(selected) + (j.patternType ? ' · ' + escHtml(kcacPatternTypeGuide_(j.patternType)) : '') + '</span>' +
+      '<b id="kcac-current-pattern-title">현재 잔: ' + escHtml(selected) + '</b>' +
+      '<span><strong id="kcac-current-milk-label">사용 우유: ' + escHtml(milkLabel) + '</strong><small id="kcac-selected-pattern-label">' + (j.patternType ? escHtml(kcacPatternTypeGuide_(j.patternType)) : '패턴 미선택') + '</small></span>' +
     '</div>' +
     '<div class="kcac-rule-note">패턴 변경은 참가자 정보 아래의 상단 선택에서 한 번만 진행합니다. FAST 사용우유를 정하면 다른 우유는 SLOW로 자동 배정됩니다.</div>' +
   '</div>';
 }
 
+function refreshKcacCurrentCupAssignment_(j) {
+  if (!j || j.type !== 'qual') return;
+  var title = kcacPatternTypeTitle_(j.patternType) || '패턴 미선택';
+  var milk = j.milkProduct || j.milkType || '지정 우유';
+  var titleEl = document.getElementById('kcac-current-pattern-title');
+  var milkEl = document.getElementById('kcac-current-milk-label');
+  var guideEl = document.getElementById('kcac-selected-pattern-label');
+  if (titleEl) titleEl.textContent = '현재 잔: ' + title;
+  if (milkEl) milkEl.textContent = '사용 우유: ' + milk;
+  if (guideEl) guideEl.textContent = j.patternType ? kcacPatternTypeGuide_(j.patternType) : '패턴 미선택';
+}
+
 function refreshKcacPatternChoiceUI_(j) {
-  var label = document.getElementById('kcac-selected-pattern-label');
-  if (label) {
-    var title = kcacPatternTypeTitle_(j && j.patternType) || '미선택';
-    var guide = kcacPatternTypeGuide_(j && j.patternType);
-    label.textContent = title + (guide ? ' · ' + guide : '');
-  }
+  refreshKcacCurrentCupAssignment_(j);
   document.querySelectorAll('#kcac-pattern-choice .kcac-pattern-card').forEach(function(btn){
     btn.classList.toggle('on', !!j && btn.getAttribute('data-pattern') === j.patternType);
   });
@@ -11754,6 +11764,7 @@ function syncKcacMilkPatternSelectors_() {
       status.textContent = 'FAST에 사용할 우유를 선택하면 SLOW 우유가 자동 배정됩니다.';
     }
   }
+  refreshKcacCurrentCupAssignment_(_kcac.jars[Number(_kcac.currentIdx)]);
 }
 
 function onKcacParticipantSelected_() {
@@ -13206,13 +13217,8 @@ function validateKcacBeforeSubmit_() {
       }
     }
 
-    // 라떼아트 패턴평가(예선 + 결선 창작패턴)는 반드시 이미지 기록을 남깁니다.
-    // 센서리용 아트는 맛/질감 평가 대상이라 이미지 저장을 강제하지 않습니다.
-    if (kcacUsesPatternMedia_(j) && (!j.snapshots || j.snapshots.length === 0)) {
-      toast(kcacCupFullLabel(j) + ' 평가 이미지를 저장해주세요. 촬영하기 또는 앨범 불러오기 후 “가이드 함께 저장”을 눌러야 기록에 남습니다.', true);
-      loadKcacJar(i);
-      return false;
-    }
+    // 평가지 이미지는 현장 기록을 위한 선택 사항입니다. 이미지가 없어도 점수·태그·코멘트는 제출됩니다.
+    j.mediaOptionalStatus = (j.snapshots && j.snapshots.length) ? '저장완료' : '선택안함';
   }
   if (isQual && (!hasDynamic || !hasControlled)) {
     toast('예선은 FAST Rosetta 1잔과 SLOW Rosetta 1잔이 필요합니다.', true);

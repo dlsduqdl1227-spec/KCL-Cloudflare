@@ -7239,7 +7239,6 @@ function generateKcacComment(payload) {
   const scores = payload.scores || {};
   const smartTags = payload.smartTags || {};
   const type = safeStr(payload.type || '');
-  const label = safeStr(payload.label || '해당 잔');
   const pattern = safeStr(payload.patternType || payload.pattern || '패턴');
   const milk = safeStr(payload.milkProduct || payload.milkType);
   const scoreItems = Object.keys(scores).map(k => ({name:k, score:scores[k]}));
@@ -7256,22 +7255,52 @@ function generateKcacComment(payload) {
     positive:_kcacPolarityLeafSet_((payload.smartTagPolarity || {}).positive),
     refinement:_kcacPolarityLeafSet_((payload.smartTagPolarity || {}).refinement)
   };
-  const observations = scoreItems.map(item => _kcacAreaObservation_(item, tagsByArea, polarity));
-  const observationText = observations.join(' ');
+
+  function conciseEvidence(kind, limit) {
+    const set = polarity[kind];
+    const found = [];
+    let used = 0;
+    Object.keys(tagsByArea).forEach(key => {
+      if (used >= limit) return;
+      const selected = (tagsByArea[key] || []).filter(tag => set && set.has(tag)).slice(0, limit - used);
+      if (!selected.length) return;
+      found.push(`${_kcacAreaLabel_(key)}의 ${_joinWithComma(selected)}`);
+      used += selected.length;
+    });
+    if (found.length) return found.join(', ');
+    const fallback = (evidence[kind] || []).map(value => _cleanTagText_(safeStr(value).replace(/^[^:：]{1,40}[:：]\s*/, ''))).filter(Boolean).slice(0, limit);
+    return _joinWithComma(fallback);
+  }
+
+  const positiveText = conciseEvidence('positive', 3);
+  const refinementText = conciseEvidence('refinement', 3);
   const leafValue = safeStr(payload.leafCount);
   const leafText = leafValue !== '' && /qual/i.test(type)
-    ? `${pattern}의 리프 수는 ${leafValue}개로 기록되었${_num(payload.leafPenalty) > 0 ? '고, 리프 수 기준 차이가 감점에 반영되었습니다' : '으며, 리프 수 기준 안에서 확인되었습니다'}.`
+    ? `리프 ${leafValue}개가 기록되었${_num(payload.leafPenalty) > 0 ? '고 기준 차이는 감점에 반영되었습니다' : '습니다'}.`
     : '';
   const contextText = `${milk ? milk + ' 조건의 ' : ''}${pattern}`;
+  let evidenceText = '';
+  if (positiveText && refinementText) evidenceText = `${positiveText}${_subjectParticle_(positiveText)} 강점으로, ${refinementText}${_subjectParticle_(refinementText)} 보완 관찰로 확인됐습니다.`;
+  else if (positiveText) evidenceText = `${positiveText}${_subjectParticle_(positiveText)} 주요 강점으로 확인됐습니다.`;
+  else if (refinementText) evidenceText = `${refinementText}${_subjectParticle_(refinementText)} 주요 보완 관찰로 확인됐습니다.`;
+  else evidenceText = isSensory
+    ? '맛의 균형과 질감의 연결성을 중심으로 확인했습니다.'
+    : '형태, 대칭, 표면과 선명도의 연결성을 중심으로 확인했습니다.';
+
+  const scoreFlowText = high && low
+    ? `${high}${_subjectParticle_(high)} 상대적으로 두드러졌고, ${low}${_topicParticle_(low)} 편차가 확인됐습니다.`
+    : balance;
+  const visualClose = `전체 시각 완성도는 ${tone} 수준입니다.`;
+  const sensoryClose = `맛과 질감의 종합 인상은 ${tone} 수준입니다.`;
   if (isSensory) {
-    return _optionSet([
-      `${label}은 ${contextText}의 맛의 균형, 질감과 촉감, 프레젠테이션을 함께 확인했습니다. ${observationText} ${balance} 전체 센서리 인상은 ${tone} 수준으로 정리됩니다.`,
-      `${contextText}에서 느껴진 센서리 특성을 항목별로 정리하면 다음과 같습니다. ${observationText} ${balance} 점수와 선택된 관찰 기록을 함께 반영한 전체 흐름은 ${tone} 수준입니다.`
+    return _sensoryOptionSet_([
+      `${contextText}에서 ${evidenceText} ${scoreFlowText} ${sensoryClose}`,
+      `${contextText}의 센서리 평가는 ${tone} 흐름을 보였습니다. ${evidenceText} ${scoreFlowText}`
     ], _commentVariationKey_(payload, 'KCAC'));
   }
-  return _optionSet([
-    `${label}의 ${contextText}를 패턴 구조와 시각적 연결성 중심으로 평가했습니다. ${observationText} ${leafText} ${balance} 전체적인 시각 완성도는 ${tone} 수준으로 정리됩니다.`,
-    `${contextText}에서 확인된 형태, 대칭, 표면, 배치와 선명도를 항목별로 정리하면 다음과 같습니다. ${observationText} ${leafText} ${balance} 점수와 선택된 관찰 기록을 함께 반영한 전체 흐름은 ${tone} 수준입니다.`
+  return _sensoryOptionSet_([
+    `${contextText}에서 ${evidenceText} ${scoreFlowText} ${leafText} ${visualClose}`,
+    `${contextText}는 ${tone} 시각 흐름을 보였습니다. ${evidenceText} ${scoreFlowText} ${leafText}`
   ], _commentVariationKey_(payload, 'KCAC'));
 }
 

@@ -23,6 +23,8 @@ assert.doesNotMatch(assessment, /function kcacSubmissionUrl_|function onKcacSubm
 
 const validation = functionSource(assessment, 'validateKcacBeforeSubmit_');
 assert.doesNotMatch(validation, /제출 영상|자료 링크|kcacSubmissionUrl_/);
+assert.doesNotMatch(validation, /평가 이미지를 저장해주세요|snapshots[^}]*return false/, 'KCAC 이미지는 선택 사항이어야 하며 제출을 막으면 안 됩니다');
+assert.match(validation, /mediaOptionalStatus[\s\S]*선택안함/, '이미지를 저장하지 않은 상태도 정상 제출 상태로 기록해야 합니다');
 
 const submit = functionSource(assessment, 'kcacSubmitAll');
 assert.doesNotMatch(submit, /kcacSubmissionUrl_|예선영상URL|제출영상URL|영상제출확인/);
