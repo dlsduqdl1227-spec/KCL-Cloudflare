@@ -12109,6 +12109,9 @@ function loadKcacJar(idx) {
 function saveKcacJarFromDOM() {
   if (!_kcac.jars.length) return;
   var j = _kcac.jars[_kcac.currentIdx];
+  // 모바일 숫자 입력은 키보드의 완료/화면 버튼을 바로 누르면 oninput이 늦게 전달될 수 있습니다.
+  // 잔 이동·최종 제출 직전에 현재 DOM 값을 다시 읽어 입력한 리프 수가 누락되지 않게 합니다.
+  syncKcacLeafCountFromDOM_();
   j.comment = document.getElementById('kcac-comment').value;
   if (j.generatedComment) j.commentEdited = j.comment.trim() !== j.generatedComment.trim() && j.comment.trim().length >= 10;
 }
@@ -12257,7 +12260,7 @@ function renderKcacLeafRuleBox(j) {
     '지정 리프 수를 벗어나면 예선 합산 점수에서 직접 감점됩니다. ' +
     '차이 1개 -5점, 2개 -10점, 3개 이상 -15점. 패턴 핵심 구성요소가 전혀 구현되지 않은 경우는 실격입니다.' +
     '<div style="display:flex;gap:8px;align-items:center;margin-top:10px">' +
-    '<input type="number" id="kcac-leaf-count" min="0" max="40" step="1" inputmode="numeric" placeholder="' + escHtml(guide || '패턴 선택 후 리프 수 입력') + '" value="' + escHtml(j.leafCount || '') + '" oninput="onKcacLeafCountInput(this.value)" style="margin-bottom:0;text-align:center;font-weight:800">' +
+    '<input type="number" id="kcac-leaf-count" min="0" max="40" step="1" inputmode="numeric" placeholder="' + escHtml(guide || '패턴 선택 후 리프 수 입력') + '" value="' + escHtml(j.leafCount == null ? '' : j.leafCount) + '" oninput="onKcacLeafCountInput(this.value)" onchange="onKcacLeafCountInput(this.value)" onblur="onKcacLeafCountInput(this.value)" style="margin-bottom:0;text-align:center;font-weight:800">' +
     '<div id="kcac-leaf-penalty-text" style="min-width:112px;text-align:right;font-size:13px;color:var(--text-2);font-weight:800">리프 감점 ' + fmtScore(penalty,0) + '점</div>' +
     '</div>';
 }
@@ -12271,12 +12274,20 @@ function setKcacQualPatternType_(patternType) {
 function onKcacLeafCountInput(value) {
   var j = _kcac.jars[_kcac.currentIdx];
   if (!j) return;
-  j.leafCount = String(value || '').replace(/[^0-9]/g,'');
+  j.leafCount = String(value == null ? '' : value).replace(/[^0-9]/g,'');
   j.leafPenalty = calcKcacLeafPenalty(j);
   var el = document.getElementById('kcac-leaf-penalty-text');
   if (el) el.textContent = '리프 감점 ' + fmtScore(j.leafPenalty,0) + '점';
   updateKcacFinal();
   renderKcacCupNav();
+}
+
+function syncKcacLeafCountFromDOM_() {
+  var j = _kcac.jars[_kcac.currentIdx];
+  var input = document.getElementById('kcac-leaf-count');
+  if (!j || j.type !== 'qual' || !input) return;
+  j.leafCount = String(input.value == null ? '' : input.value).replace(/[^0-9]/g,'');
+  j.leafPenalty = calcKcacLeafPenalty(j);
 }
 
 function updateKcacFinal() {
@@ -12979,6 +12990,7 @@ function kcacBuildPersistedMedia_(j) {
   };
 }
 function validateKcacBeforeSubmit_() {
+  syncKcacLeafCountFromDOM_();
   var isQual = !_kcac.jars.some(function(j){ return j.type !== 'qual'; });
   var hasDynamic = false, hasControlled = false;
   var sterilizedMilkCount = 0, alternativeMilkCount = 0;
@@ -12998,7 +13010,7 @@ function validateKcacBeforeSubmit_() {
       if (j.patternType === 'dynamic') hasDynamic = true;
       if (j.patternType === 'controlled') hasControlled = true;
       if (String(j.leafCount || '').trim() === '') {
-        toast(kcacCupMainLabel(j) + ' 리프 수를 입력해주세요.', true);
+        toast(kcacCupFullLabel(j) + ' 리프 수를 입력해주세요.', true);
         loadKcacJar(i);
         return false;
       }
