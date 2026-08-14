@@ -445,7 +445,20 @@ input[type=range].kcl-range,
   font-weight:900;
   margin-bottom:7px;
 }
-.kcac-milk-pattern-item select{margin:0;min-width:0;width:100%}
+.kcac-milk-button-table{display:grid;gap:9px}
+.kcac-milk-button-row{display:grid;grid-template-columns:minmax(110px,150px) repeat(2,minmax(0,1fr));gap:8px;align-items:stretch}
+.kcac-milk-button-label{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#171717}
+.kcac-milk-button-label b{font-size:12px;color:#fff}
+.kcac-milk-button-label span{font-size:10px;color:var(--text-3);line-height:1.35}
+.kcac-milk-choice-btn{min-width:0;min-height:54px;margin:0;padding:8px 10px;border:1px solid var(--border-lt);border-radius:8px;background:#242424;color:#fff;text-align:left;cursor:pointer;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease,opacity .16s ease}
+.kcac-milk-choice-btn strong{display:block;font-size:12px;line-height:1.3;overflow-wrap:anywhere}
+.kcac-milk-choice-btn small{display:block;margin-top:4px;font-size:10px;line-height:1.3;color:var(--text-3)}
+.kcac-milk-choice-btn:not(:disabled):hover{border-color:#fff}
+.kcac-milk-choice-btn.on{background:#fff;color:#000;border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.2)}
+.kcac-milk-choice-btn.on small{color:#333}
+.kcac-milk-choice-btn.locked{cursor:not-allowed;opacity:.46;background:#141414;border-color:#333}
+.kcac-milk-choice-btn.locked-selected{cursor:not-allowed;opacity:1;background:#153c2a;color:#effff5;border-color:#58d68d;box-shadow:0 0 0 2px rgba(88,214,141,.16)}
+.kcac-milk-choice-btn.locked-selected small{color:#9cf0bd}
 @media(max-width:520px){.kcac-milk-pattern-grid{grid-template-columns:1fr}}
 .kcac-pattern-assignment-status{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px}
 .kcac-pattern-assignment-card{border:1px solid var(--border);border-radius:7px;background:#202020;padding:8px 10px;line-height:1.45}
@@ -482,6 +495,12 @@ input[type=range].kcl-range,
 .kcac-leaf-entry-title::before{content:'!';display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;background:#ffcb66;color:#111;font-size:13px;font-weight:950;flex:0 0 auto}
 .kcac-leaf-entry-help{font-size:11px;color:#ddd;line-height:1.5;margin-bottom:10px}
 .kcac-leaf-entry input{min-height:52px!important;border:2px solid #ffcb66!important;background:#080808!important;color:#fff!important;font-size:20px!important}
+.kcac-leaf-entry.is-complete{border-color:#58d68d!important;background:linear-gradient(135deg,rgba(88,214,141,.14),rgba(255,255,255,.035))!important;box-shadow:0 0 0 3px rgba(88,214,141,.09)}
+.kcac-leaf-entry.is-complete .kcac-leaf-entry-title{color:#8ee8b2}
+.kcac-leaf-entry.is-complete .kcac-leaf-entry-title::before{content:'✓';background:#58d68d;color:#07170e}
+.kcac-leaf-entry.is-complete input{border-color:#58d68d!important;box-shadow:0 0 0 3px rgba(88,214,141,.13)!important}
+.kcac-leaf-entry.is-complete #kcac-leaf-penalty-text{color:#8ee8b2!important}
+.kcac-leaf-entry.is-complete.has-penalty #kcac-leaf-penalty-text{color:#ffcb66!important}
 @media(max-width:640px){.kcac-overall-guide-grid{grid-template-columns:1fr}.kcac-qual-nav{gap:5px}.kcac-qual-nav .cup-btn,.kcac-qual-nav .submit-btn-nav{height:60px;padding:6px 3px}.kcac-qual-nav .cup-btn-num{font-size:11px!important}.kcac-qual-nav .cup-btn-score{font-size:8px!important}}
 .kcac-smart-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:100%;margin-top:8px}
 .kcac-smart-group{min-width:0;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,.28);padding:9px}
@@ -502,6 +521,9 @@ input[type=range].kcl-range,
   .kcac-pattern-summary span{text-align:left}
   .kcac-smart-groups{grid-template-columns:1fr}
   .kcac-pattern-assignment-status{grid-template-columns:1fr 1fr}
+  .kcac-milk-button-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  .kcac-milk-button-label{grid-column:1/-1;min-height:0;padding:7px 9px}
+  .kcac-milk-choice-btn{padding:8px;min-height:58px}
 }
 .kcac-weight-chip{
   display:inline-flex;
@@ -2300,8 +2322,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="participant-picker-help" style="display:block;margin-bottom:10px">참가자를 선택한 뒤 FAST Rosetta에 사용할 우유만 한 번 선택하세요. 나머지 우유는 SLOW Rosetta로 자동 배정됩니다.</div>
       <div class="kcac-milk-pattern-grid">
         <div class="kcac-milk-pattern-item">
-          <label for="kcac-fast-milk">FAST Rosetta 사용우유 선택 <span style="color:var(--muted);font-weight:700">(SLOW는 자동 배정)</span></label>
-          <select id="kcac-fast-milk" onchange="setKcacQualMilkPattern_('dynamic',this.value)"></select>
+          <div class="kcac-milk-button-table" id="kcac-milk-button-grid" aria-label="FAST와 SLOW Rosetta 사용 우유 배정"></div>
         </div>
       </div>
       <div id="kcac-milk-pattern-status" class="participant-picker-help" style="display:block;margin-top:9px"></div>
@@ -11768,19 +11789,31 @@ function kcacQualMilkEntries_() {
 
 function syncKcacMilkPatternSelectors_() {
   var entries = kcacQualMilkEntries_();
-  var fast = document.getElementById('kcac-fast-milk');
+  var grid = document.getElementById('kcac-milk-button-grid');
   var status = document.getElementById('kcac-milk-pattern-status');
-  function fill(select, patternType, placeholder) {
-    if (!select) return;
-    var current = entries.find(function(entry){ return entry.jar.patternType === patternType; });
-    select.innerHTML = '<option value="">' + escHtml(placeholder) + '</option>' + entries.map(function(entry){
-      var label = entry.jar.milkProduct || entry.jar.milkType || ('사용우유 ' + (entry.index + 1));
-      return '<option value="' + entry.index + '"' + (current && current.index === entry.index ? ' selected' : '') + '>' + escHtml(label) + '</option>';
-    }).join('');
-  }
-  fill(fast, 'dynamic', 'FAST Rosetta 사용우유 선택');
   var fastEntry = entries.find(function(entry){ return entry.jar.patternType === 'dynamic'; });
   var slowEntry = entries.find(function(entry){ return entry.jar.patternType === 'controlled'; });
+  if (grid) {
+    var fastButtons = entries.map(function(entry){
+      var label = entry.jar.milkProduct || entry.jar.milkType || ('사용우유 ' + (entry.index + 1));
+      var selected = !!fastEntry && fastEntry.index === entry.index;
+      return '<button type="button" class="kcac-milk-choice-btn' + (selected ? ' on' : '') + '" data-kcac-milk-index="' + entry.index + '" aria-pressed="' + (selected ? 'true' : 'false') + '" onclick="setKcacQualMilkPattern_(\'dynamic\',' + entry.index + ')">' +
+        '<strong>' + escHtml(label) + '</strong><small>' + (selected ? '✓ FAST 선택 완료' : 'FAST에 사용') + '</small></button>';
+    }).join('');
+    var slowButtons = entries.map(function(entry){
+      var label = entry.jar.milkProduct || entry.jar.milkType || ('사용우유 ' + (entry.index + 1));
+      var selected = !!slowEntry && slowEntry.index === entry.index;
+      var blockedByFast = !!fastEntry && fastEntry.index === entry.index;
+      var cls = selected ? ' locked-selected' : ' locked';
+      var note = selected ? '✓ SLOW 자동 선택' : (blockedByFast ? '🔒 FAST 사용 중' : '자동 배정 대기');
+      return '<button type="button" class="kcac-milk-choice-btn' + cls + '" data-kcac-slow-milk-index="' + entry.index + '" disabled aria-disabled="true">' +
+        '<strong>' + escHtml(label) + '</strong><small>' + note + '</small></button>';
+    }).join('');
+    grid.innerHTML = '<div class="kcac-milk-button-row">' +
+      '<div class="kcac-milk-button-label"><b>FAST Rosetta</b><span>사용할 우유를 선택하세요</span></div>' + fastButtons + '</div>' +
+      '<div class="kcac-milk-button-row">' +
+      '<div class="kcac-milk-button-label"><b>SLOW Rosetta</b><span>반대 우유로 자동 배정</span></div>' + slowButtons + '</div>';
+  }
   if (status) {
     if (fastEntry && slowEntry) {
       var current = Number(_kcac.currentIdx);
@@ -12457,7 +12490,7 @@ function setKcacPenaltyRuleLabels_() {
 function renderKcacLeafRuleBox(j) {
   var box = document.getElementById('kcac-leaf-rule-box');
   if (!box) return;
-  box.classList.remove('kcac-leaf-entry');
+  box.classList.remove('kcac-leaf-entry', 'is-complete', 'has-penalty');
   if (!j || j.type !== 'qual') { box.style.display = 'none'; box.innerHTML = ''; return; }
   if (!j.patternType) {
     box.style.display = 'block';
@@ -12476,6 +12509,25 @@ function renderKcacLeafRuleBox(j) {
     '<input type="number" id="kcac-leaf-count" data-jar-index="' + jarIndex + '" min="0" max="40" step="1" inputmode="numeric" aria-label="리프 잎 수 입력" placeholder="' + escHtml(guide || '리프 수 입력') + '" value="' + escHtml(j.leafCount == null ? '' : j.leafCount) + '" oninput="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" onchange="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" onblur="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" style="margin-bottom:0;text-align:center;font-weight:800">' +
     '<div id="kcac-leaf-penalty-text" style="min-width:112px;text-align:right;font-size:13px;color:var(--text-2);font-weight:800">리프 감점 ' + fmtScore(penalty,0) + '점</div>' +
     '</div>';
+  syncKcacLeafEntryState_(j);
+}
+
+function syncKcacLeafEntryState_(j) {
+  var box = document.getElementById('kcac-leaf-rule-box');
+  if (!box || !j || j.type !== 'qual') return;
+  var entered = String(j.leafCount == null ? '' : j.leafCount).trim() !== '';
+  var penalty = calcKcacLeafPenalty(j);
+  box.classList.toggle('is-complete', entered);
+  box.classList.toggle('has-penalty', entered && penalty > 0);
+  box.setAttribute('data-input-state', entered ? 'complete' : 'waiting');
+  var title = box.querySelector('.kcac-leaf-entry-title');
+  var input = document.getElementById('kcac-leaf-count');
+  var penaltyEl = document.getElementById('kcac-leaf-penalty-text');
+  if (title) title.textContent = entered ? '리프(잎) 수 입력 완료' : '리프(잎) 수를 입력하세요';
+  if (input) input.setAttribute('aria-invalid', entered ? 'false' : 'true');
+  if (penaltyEl) penaltyEl.textContent = entered
+    ? ('입력 반영 · 리프 감점 ' + fmtScore(penalty,0) + '점')
+    : ('리프 감점 ' + fmtScore(penalty,0) + '점');
 }
 
 function setKcacQualPatternType_(patternType) {
@@ -12493,8 +12545,7 @@ function onKcacLeafCountInput(value, jarIndex) {
   j.leafCountMissing = j.leafCount === '';
   j.leafPenalty = calcKcacLeafPenalty(j);
   if (idx === _kcac.currentIdx) {
-    var el = document.getElementById('kcac-leaf-penalty-text');
-    if (el) el.textContent = '리프 감점 ' + fmtScore(j.leafPenalty,0) + '점';
+    syncKcacLeafEntryState_(j);
   }
   updateKcacFinal();
   renderKcacCupNav();

@@ -25,9 +25,10 @@ function functionSource(source, name) {
 }
 
 // FAST 사용우유를 상단에서 한 번만 선택하고 SLOW는 자동 배정한다.
-assert.equal((assessment.match(/id="kcac-fast-milk"/g) || []).length, 1);
+assert.equal((assessment.match(/id="kcac-milk-button-grid"/g) || []).length, 1);
+assert.doesNotMatch(assessment, /<select[^>]+id="kcac-fast-milk"/);
 assert.doesNotMatch(assessment, /id="kcac-slow-milk"/);
-assert.match(assessment, /FAST Rosetta 사용우유 선택[\s\S]*SLOW는 자동 배정/);
+assert.match(functionSource(assessment, 'syncKcacMilkPatternSelectors_'), /FAST Rosetta[\s\S]*SLOW Rosetta[\s\S]*반대 우유로 자동 배정/);
 const cupAssignment = functionSource(assessment, 'renderKcacQualPatternSelector_');
 assert.match(cupAssignment, /현재 잔 배정/);
 assert.doesNotMatch(cupAssignment, /kcac-pattern-choice|setKcacQualPatternType_/);
