@@ -44,6 +44,8 @@ const context = {
 };
 vm.createContext(context);
 for (const name of [
+  'publicRoundName_',
+  'publicRoundIsFinal_',
   'mobPublicRoleFlags_',
   'mobPublicHeaderGroup_',
   'mobPublicRoundIsFinal_',
@@ -95,7 +97,7 @@ assert.deepEqual(
 );
 
 const genericSource = functionSource('buildGenericScoreGrid');
-assert.match(genericSource, /mobPublicIsDerivedSummaryHeader_\(k\)/);
+assert.match(genericSource, /publicIsDerivedSummaryHeader_\(k, comp\)/);
 assert.match(genericSource, /경기시간\|시연시간\|Elapsed/);
 
 const breakdownSource = functionSource('buildMobBreakdownGrid_');
@@ -106,7 +108,7 @@ assert.match(scoreCardSource, /평가 반영 점수/);
 
 const smartTagSource = functionSource('buildSmartTagBox');
 const commentSource = functionSource('buildCommentBox');
-assert.match(smartTagSource, /compCode[\s\S]*MOB[\s\S]*mobPublicHeaderAppliesToRole_/);
-assert.match(commentSource, /comp === 'MOB'[\s\S]*mobPublicHeaderAppliesToRole_/);
+assert.match(smartTagSource, /publicHeaderAppliesToEvaluation_\(k, s, compCode\)/);
+assert.match(commentSource, /publicHeaderAppliesToEvaluation_\(k, s, compCode\)/);
 
 process.stdout.write('Stage171 MOB round-aware debrief display tests passed.\n');

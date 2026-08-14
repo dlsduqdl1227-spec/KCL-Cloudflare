@@ -176,6 +176,7 @@ h2,.subtitle,.section-label,.result-name,.result-affil,.result-comp,.round-title
 .avg-item-label{font-size:11px;color:#999;margin-bottom:4px}
 .avg-item-val{font-size:16px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums}
 .rank-box{background:#080808;border:1px solid #333;border-radius:10px;padding:14px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rank-box.rank-only{grid-template-columns:1fr}
 .rank-box .cell{background:#111;border:1px solid #282828;border-radius:8px;padding:10px;text-align:center}
 .rank-box small{display:block;color:#888;font-size:11px;font-weight:800;margin-bottom:4px;letter-spacing:.04em;text-transform:uppercase}
 .rank-box b{font-size:22px;color:#fff;font-variant-numeric:tabular-nums}
@@ -1325,15 +1326,13 @@ function buildIkrcRoundAverageBox_(round, list, rank) {
   rank = rank || {};
   var avg = rank.avgScore != null ? Number(rank.avgScore) : ikrcLocalRoundAverage_(list);
   if (isNaN(avg)) avg = 0;
-  var finalScore = rank.rankingScore != null ? Number(rank.rankingScore) : avg;
-  if (isNaN(finalScore)) finalScore = avg;
   var judgeCount = rank.judgeCount || list.length || 0;
   var box = document.createElement('div');
   box.className = 'avg-box';
   box.innerHTML =
     '<div class="avg-title">IKRC 심사위원 평균</div>' +
     '<div class="avg-total">' + fmtScore(avg, 2) + '</div>' +
-    '<div class="avg-sub">' + escHtml(round || '-') + ' · 센서리 평균 (' + judgeCount + '명)' + (finalScore !== avg ? ' · 최종 ' + fmtScore(finalScore, 2) : '') + '</div>';
+    '<div class="avg-sub">' + escHtml(round || '-') + ' · 센서리 평가 ' + judgeCount + '명 반영</div>';
   return box;
 }
 
@@ -1378,10 +1377,12 @@ function buildRankBox(res) {
     return box;
   }
   var rankFullText = main.rank ? (main.totalInRound ? (main.rank + ' / ' + main.totalInRound) : String(main.rank)) : '-';
+  var ikrcAvg = Number(main.avgScore || 0);
+  var ikrcFinal = Number(main.rankingScore != null ? main.rankingScore : ikrcAvg);
   var scoreCells = isIkrc
-    ? '<div class="cell"><small>센서리 평균</small><b>' + escHtml(fmtScore(main.avgScore || 0, 2)) + '</b></div>' +
-      '<div class="cell"><small>최종 점수</small><b>' + escHtml(fmtScore(main.rankingScore != null ? main.rankingScore : (main.avgScore || 0), 2)) + '</b></div>'
+    ? (Math.abs(ikrcFinal - ikrcAvg) > 0.0001 ? '<div class="cell"><small>가산점 반영 최종 점수</small><b>' + escHtml(fmtScore(ikrcFinal, 2)) + '</b></div>' : '')
     : '<div class="cell"><small>공식 점수</small><b>' + escHtml(fmtScore(main.totalScore || 0, 2)) + '</b></div>';
+  if (isIkrc && !scoreCells) box.classList.add('rank-only');
   box.innerHTML =
     '<div class="cell"><small>순위</small><b>' + escHtml(rankFullText) + '</b></div>' +
     scoreCells +
@@ -1675,11 +1676,70 @@ function buildIkrcCombinedCommentBox_(round, list) {
     '<div class="ikrc-combined-meta">' + escHtml(round || '-') + ' · 검수 완료 평가 ' + ikrcAggregateJudgeCount_(list) + '명의 점수·스마트태그·수기 코멘트를 함께 반영</div>';
   return box;
 }
+function publicRoundName_(s) {
+  s = s || {};
+  return String(s['라운드'] || s.round || s['Round'] || '').trim();
+}
+function publicRoundIsFinal_(s) {
+  return /본선|결선|main|final/i.test(publicRoundName_(s));
+}
+function kcacPublicHeaderGroup_(h) {
+  h = String(h || '');
+  if (/Theme\s*Expression|Technical\s*Execution|Cleanliness|Surface\s*Quality|Position\s*&\s*Symmetry|Design\s*Completion|주제\s*표현|작업\s*수행|청결|위치와\s*대칭|디자인\s*완성/i.test(h)) return 'pattern';
+  if (/Taste\s*Balance|Mouthfeel|Presentation|맛의\s*균형|질감|프레젠테이션/i.test(h)) return 'sensory';
+  return '';
+}
+function kcacPublicPurposeGroup_(s) {
+  s = s || {};
+  var purpose = String(s['잔용도'] || s['컵용도'] || s['평가용도'] || '');
+  if (/센서리/i.test(purpose)) return 'sensory';
+  if (/창작패턴|패턴평가/i.test(purpose)) return 'pattern';
+  return '';
+}
+function kcacPublicHeaderAppliesToPurpose_(h, s) {
+  if (!publicRoundIsFinal_(s)) return true;
+  var purpose = kcacPublicPurposeGroup_(s);
+  var group = kcacPublicHeaderGroup_(h);
+  return !purpose || !group || purpose === group;
+}
+function publicHeaderAppliesToRound_(h, s, compCode) {
+  var comp = String(compCode || '').toUpperCase();
+  var header = String(h || '');
+  var isFinal = publicRoundIsFinal_(s);
+  if (comp === 'KBC' && /(?:^|\s)Signature(?:\s|$)|창작메뉴/i.test(header)) return isFinal;
+  if (comp === 'IKRC' && /Seed\s*to\s*Cup|시드\s*투\s*컵/i.test(header)) return isFinal;
+  if (comp === 'KCAC') {
+    if (/^예선\s*/i.test(header)) return !isFinal;
+    if (/^결선\s*/i.test(header)) return isFinal && kcacPublicHeaderAppliesToPurpose_(header, s);
+    return kcacPublicHeaderAppliesToPurpose_(header, s);
+  }
+  if (comp === 'KTCC' && /전체오답|원기록\s*정답수/i.test(header)) return false;
+  return true;
+}
+function publicHeaderAppliesToEvaluation_(h, s, compCode) {
+  var comp = String(compCode || '').toUpperCase();
+  if (!publicHeaderAppliesToRound_(h, s, comp)) return false;
+  if (comp === 'MOB' && !mobPublicHeaderAppliesToRole_(h, s)) return false;
+  return true;
+}
+function publicIsDerivedSummaryHeader_(h, compCode) {
+  var comp = String(compCode || '').toUpperCase();
+  var header = String(h || '').trim();
+  if (/^총점$|^최종점수$|^Total(?:\s*Score)?$|^Final\s*Score$/i.test(header)) return true;
+  if (comp === 'MOB') return mobPublicIsDerivedSummaryHeader_(header);
+  if (comp === 'KBC' && /^Espresso\s*Total$|^Signature\s*Total$|^에스프레소\s*(?:합산|총점)$|^창작메뉴\s*(?:합산|총점)$/i.test(header)) return true;
+  if (comp === 'KCR' && /^정규화점수$|^공식점수$|^순위반영점수$/i.test(header)) return true;
+  if (comp === 'KCAC' && /^소계$|^감점$|^리프수감점$|^시간감점$/i.test(header)) return true;
+  return false;
+}
+function publicIsZeroPenalty_(h, value) {
+  return /감점|Penalty/i.test(String(h || '')) && Number(value) === 0;
+}
 function buildSmartTagBox(s, compCode) {
   var rows = [];
   Object.keys(s || {}).forEach(function(k){
     if (!isSmartTagLabel(k)) return;
-    if (String(compCode || '').toUpperCase() === 'MOB' && !mobPublicHeaderAppliesToRole_(k, s)) return;
+    if (!publicHeaderAppliesToEvaluation_(k, s, compCode)) return;
     var raw = s[k];
     if (raw == null || String(raw).trim() === '') return;
     var chips = uniqueList_(splitPublicTokens_(raw));
@@ -1706,7 +1766,7 @@ function buildCommentBox(s, compCode) {
     var raw = s[k];
     if (raw == null || String(raw).trim() === '') return;
     if (isSmartTagLabel(k)) return;
-    if (comp === 'MOB' && !mobPublicHeaderAppliesToRole_(k, s)) return;
+    if (!publicHeaderAppliesToEvaluation_(k, s, compCode)) return;
     if (comp === 'KCR' && /자동생성상태|generated\s*comment\s*state|comment\s*state/i.test(String(k || ''))) return;
     if (/강도|Intensity|지속성|Persistence|범위/i.test(String(k || ''))) return;
     var isComment = isCommentLabel(k);
@@ -1775,9 +1835,7 @@ function mobPublicHeaderGroup_(h) {
   return '';
 }
 function mobPublicRoundIsFinal_(s) {
-  s = s || {};
-  var round = String(s['라운드'] || s.round || s['Round'] || '').trim();
-  return /본선|결선|main|final/i.test(round);
+  return publicRoundIsFinal_(s);
 }
 function mobPublicCreativeApplies_(s) {
   s = s || {};
@@ -1838,10 +1896,10 @@ function buildScoreCard(s, compCode) {
   var statusRaw = String(s['검수상태'] || s.status || '').replace(/\s/g, '');
   var statusBadge = (statusRaw === '검수완료' || statusRaw === '수정완료') ? '<span class="reviewed-pill">' + escHtml(statusRaw) + '</span>' : '';
   var isMob = String(compCode || '').toUpperCase() === 'MOB';
-  var totalValue = isIkrc && s.__ikrcRoundAvgScore != null && s.__ikrcRoundAvgScore !== '' ? s.__ikrcRoundAvgScore : (isMob && s['총평가 반영점수'] != null && String(s['총평가 반영점수']) !== '' ? s['총평가 반영점수'] : (s['총점'] || s['최종점수'] || 0));
+  var totalValue = isMob && s['총평가 반영점수'] != null && String(s['총평가 반영점수']) !== '' ? s['총평가 반영점수'] : (s['총점'] != null && String(s['총점']) !== '' ? s['총점'] : (s['최종점수'] || 0));
   var total = fmtScore(totalValue, 2);
-  var totalHtml = isIkrc && s.__ikrcRoundAvgScore != null && s.__ikrcRoundAvgScore !== ''
-    ? '<span style="display:block;font-size:10px;color:#888;line-height:1;margin-bottom:4px;letter-spacing:.06em">평균</span>' + escHtml(total)
+  var totalHtml = isIkrc
+    ? '<span style="display:block;font-size:10px;color:#888;line-height:1;margin-bottom:4px;letter-spacing:.06em">개별 평가 점수</span>' + escHtml(total)
     : (isMob ? '<span style="display:block;font-size:10px;color:#888;line-height:1;margin-bottom:4px;letter-spacing:.06em">평가 반영 점수</span>' + escHtml(total) : escHtml(total));
   card.innerHTML =
     '<div class="score-card-header">' +
@@ -1879,13 +1937,14 @@ function buildGenericScoreGrid(s, compCode) {
   var grid = document.createElement('div');
   grid.className = 'score-grid';
   Object.keys(s || {}).forEach(function(k){
-    if (String(compCode || '').toUpperCase() === 'MOB') {
-      if (!mobPublicHeaderAppliesToRole_(k, s)) return;
-      if (mobPublicIsDerivedSummaryHeader_(k) || /시간감점|Time\s*Penalty/i.test(String(k || '')) || /경기시간|시연시간|Elapsed/i.test(String(k || ''))) return;
-    }
-    if (!isPublicScoreKey(k) || k === '총점' || k === '최종점수') return;
+    var comp = String(compCode || '').toUpperCase();
+    if (!publicHeaderAppliesToEvaluation_(k, s, comp)) return;
+    if (publicIsDerivedSummaryHeader_(k, comp)) return;
+    if (comp === 'MOB' && (/시간감점|Time\s*Penalty/i.test(String(k || '')) || /경기시간|시연시간|Elapsed/i.test(String(k || '')))) return;
+    if (!isPublicScoreKey(k)) return;
     var v = s[k];
     if (v == null || String(v) === '') return;
+    if (publicIsZeroPenalty_(k, v)) return;
     var div = document.createElement('div');
     div.className = 'score-item';
     div.innerHTML = '<div class="score-item-label">' + escHtml(publicLabel(k)) + '</div><div class="score-item-val">' + scoreDisplay(k, v, compCode) + '</div>' + scoreMeterHtml_(k, v, compCode);
@@ -1932,6 +1991,15 @@ function buildCuppingScoreGrid(s, compCode) {
     div.innerHTML = '<div class="score-item-label">' + escHtml(publicIntensityLabel(k)) + '</div><div class="score-item-val">' + escHtml(publicIntensityText(s[k])) + '</div>';
     grid.appendChild(div);
   });
+  if (isIkrc && publicRoundIsFinal_(s)) {
+    var seedBonus = firstFilledScoreValue(s, ['Seed to Cup 가산점','Seed To Cup 가산점','Seed to Cup Bonus']);
+    if (seedBonus !== '' && Number(seedBonus) > 0) {
+      var seedDiv = document.createElement('div');
+      seedDiv.className = 'score-item';
+      seedDiv.innerHTML = '<div class="score-item-label">Seed to Cup 가산점</div><div class="score-item-val">+' + escHtml(fmtScore(seedBonus,2)) + '</div>';
+      grid.appendChild(seedDiv);
+    }
+  }
   if (!grid.children.length) return buildGenericScoreGrid(s, compCode);
   return grid;
 }
@@ -2002,7 +2070,7 @@ function buildKcacScoreGrid(s, compCode) {
     { label:'Design Completion(디자인 완성도)', val:firstKcacVal_(s, ['디자인완성도','패턴완성도','결선 Design Completion(디자인 완성도)']) }
   ];
   var items = (isFinale ? finalItems : qualItems).filter(function(item){
-    return item.val !== undefined && item.val !== null && String(item.val).trim() !== '';
+    return item.val !== undefined && item.val !== null && String(item.val).trim() !== '' && kcacPublicHeaderAppliesToPurpose_(item.label, s);
   });
   var grid = document.createElement('div');
   grid.className = 'score-grid';
@@ -2019,13 +2087,12 @@ function buildKcacScoreGrid(s, compCode) {
   var leafPenalty = Number(s['리프수감점'] || 0);
   var penalty = Number(s['감점'] || 0);
   if (!penalty && (timePenalty || leafPenalty)) penalty = timePenalty >= 999 ? 999 : timePenalty + leafPenalty;
-  var final_ = Number(s['최종점수'] || 0);
   if (!grid.children.length) return buildGenericScoreGrid(s, compCode);
   if (penalty > 0) {
     var penDiv = document.createElement('div');
     penDiv.style.cssText = 'margin-top:8px;font-size:13px;color:#ff9800;text-align:right';
-    if (penalty >= 999) penDiv.textContent = '실격 처리 → 최종 ' + fmtScore(final_,2) + '점';
-    else penDiv.textContent = '감점 -' + fmtScore(penalty,2) + '점' + (timePenalty || leafPenalty ? ' (시간 -' + fmtScore(timePenalty,0) + ' / 리프 -' + fmtScore(leafPenalty,0) + ')' : '') + ' → 최종 ' + fmtScore(final_,2) + '점';
+    if (penalty >= 999) penDiv.textContent = '실격 처리';
+    else penDiv.textContent = '감점 -' + fmtScore(penalty,2) + '점' + (timePenalty || leafPenalty ? ' (시간 -' + fmtScore(timePenalty,0) + ' / 리프 -' + fmtScore(leafPenalty,0) + ')' : '');
     grid.appendChild(penDiv);
   }
   return grid;
