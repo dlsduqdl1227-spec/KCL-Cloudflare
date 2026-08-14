@@ -26,7 +26,7 @@ assert.match(assessment, /id="kcac-slow-milk"[\s\S]*SLOW Rosetta 사용우유/);
 
 assert.match(functionSource(assessment, 'applyParticipantSelect_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
 assert.match(functionSource(assessment, 'applyParticipantNumberInput_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
-assert.match(functionSource(assessment, 'onKcacParticipantSelected_'), /isQual[\s\S]*num\.value[\s\S]*style\.display = visible/);
+assert.match(functionSource(assessment, 'onKcacParticipantSelected_'), /hasParticipant[\s\S]*showMilkSetup[\s\S]*setup\.style\.display = showMilkSetup/);
 
 const context = {
   _kcac: {

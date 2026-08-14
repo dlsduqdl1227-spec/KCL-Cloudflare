@@ -2215,7 +2215,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="eval-total-val" id="kcac-final-display">0.00</div>
     </div>
   </div>
-  <div class="cup-nav" id="kcac-cup-nav">
+  <div class="cup-nav" id="kcac-cup-nav" style="display:none">
     <button class="submit-btn-nav" onclick="kcacSubmitAll()">전체 제출</button>
   </div>
   <div class="eval-content">
@@ -2226,6 +2226,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div id="kcac-participant-complete" class="participant-complete-badge">✓ 평가완료</div>
     <input type="number" id="kcac-num" placeholder="참가자 번호" inputmode="numeric" oninput="applyParticipantNumberInput_('KCAC','kcac-num','kcac-name')">
     <input type="text" id="kcac-name" placeholder="선수명 (선택)">
+    <div id="kcac-evaluation-body" style="display:none">
     <div id="kcac-milk-pattern-setup" class="kcac-milk-pattern-setup">
       <div class="section-label" style="margin-bottom:6px">사용 우유 · 로제타 배정</div>
       <div class="participant-picker-help" style="display:block;margin-bottom:10px">참가자를 선택한 뒤 FAST Rosetta와 SLOW Rosetta에 사용할 우유를 먼저 배정하세요. 한쪽을 선택하면 다른 쪽은 자동으로 배정됩니다.</div>
@@ -2306,6 +2307,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div id="kcac-comment-warning" class="comment-edit-warning" style="display:none"></div>
     <textarea id="kcac-comment" placeholder="해당 잔에 대한 종합 의견" oninput="onKcacCommentInput()"></textarea>
     <button class="btn" onclick="kcacSubmitAll()">전체 잔 제출완료</button>
+    </div>
     <div class="divider"></div>
     <button class="btn-danger" onclick="backToSelect()">대회 선택으로</button>
   </div>
@@ -11692,14 +11694,19 @@ function syncKcacMilkPatternSelectors_() {
 
 function onKcacParticipantSelected_() {
   var setup = document.getElementById('kcac-milk-pattern-setup');
+  var body = document.getElementById('kcac-evaluation-body');
+  var nav = document.getElementById('kcac-cup-nav');
   var num = document.getElementById('kcac-num');
   var completeBadge = document.getElementById('kcac-participant-complete');
   var isQual = normalizeKcacRoundDisplay_((_selComp && _selComp.currentRound) || '') !== '결선';
-  var visible = !!(isQual && num && String(num.value || '').trim());
+  var hasParticipant = !!(num && String(num.value || '').trim());
+  var showMilkSetup = !!(hasParticipant && isQual);
   var assignment = num ? participantAssignmentByNumber_('KCAC', num.value) : null;
-  if (setup) setup.style.display = visible ? 'block' : 'none';
+  if (body) body.style.display = hasParticipant ? '' : 'none';
+  if (nav) nav.style.display = hasParticipant ? '' : 'none';
+  if (setup) setup.style.display = showMilkSetup ? 'block' : 'none';
   if (completeBadge) completeBadge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
-  if (visible) syncKcacMilkPatternSelectors_();
+  if (showMilkSetup) syncKcacMilkPatternSelectors_();
 }
 
 function setKcacQualMilkPattern_(patternType, jarIndex) {
