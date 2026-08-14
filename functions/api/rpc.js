@@ -3132,6 +3132,15 @@ function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0) {
   const targetRow = payloadRows[payloadRowIndex] || payloadRows[0] || {};
   const data = Array.isArray(targetRow.data) ? targetRow.data : [];
   const normalizedCode = safeStr(code).toUpperCase();
+  // IKRC review edits are saved on the individual row. Older payloads may also
+  // retain a stale top-level extraFields snapshot, which some debrief clients
+  // read from item.payload. Always expose the row-level values as authoritative.
+  if (normalizedCode === 'IKRC' && targetRow.extraFields && typeof targetRow.extraFields === 'object') {
+    payload.extraFields = Object.assign({},
+      payload.extraFields && typeof payload.extraFields === 'object' ? payload.extraFields : {},
+      targetRow.extraFields
+    );
+  }
   const isVirtualMulti = (normalizedCode === 'KCAC' || normalizedCode === 'IKRC') && payloadRows.length > 1;
   const isKcacMulti = normalizedCode === 'KCAC' && payloadRows.length > 1;
   const extra = isVirtualMulti ? extractExtraSingleRow_(payload, code, payloadRowIndex) : extractExtra(payload, code, 0);
