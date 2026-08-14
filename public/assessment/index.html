@@ -2183,11 +2183,6 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div id="kcac-participant-help" class="participant-picker-help"></div>
     <input type="number" id="kcac-num" placeholder="참가자 번호" inputmode="numeric" oninput="applyParticipantNumberInput_('KCAC','kcac-num','kcac-name')">
     <input type="text" id="kcac-name" placeholder="선수명 (선택)">
-    <div id="kcac-submission-link-wrap" style="display:none">
-      <div class="section-label">예선 제출 자료</div>
-      <input type="url" id="kcac-submission-link" placeholder="원테이크 영상 1개와 FAST/SLOW 스크린샷 확인용 URL" oninput="onKcacSubmissionLinkInput_(this.value)">
-      <div class="participant-picker-help">예선은 블라인드 심사입니다. 링크에는 선수명이 보이지 않는 제출번호 기준 자료를 입력하세요.</div>
-    </div>
 
     <div class="sub-section"><div class="sub-section-title" id="kcac-cup-title">현재: 일반우유</div></div>
 
@@ -3277,8 +3272,7 @@ var _kcac = {
   dragStart: {x:0,y:0,rx:0,ry:0},
   initialized: false,
   roundName: '',
-  isBlindPrelim: false,
-  submissionUrl: ''
+  isBlindPrelim: false
 };
 var _kcacOpenSmartTagBranches = {};
 var KCAC_PERSISTED_SNAPSHOT_LIMIT = 1;
@@ -11444,7 +11438,6 @@ function startKcac() {
   _kcac.penalty = 0;
   _kcac.roundName = roundName;
   _kcac.isBlindPrelim = !isMainFinal;
-  _kcac.submissionUrl = '';
 
   if (!isMainFinal) {
     _kcac.jars.push(makeKcacJar('예선 1잔 · 매일멸균우유', 'qual', '멸균우유', '매일멸균우유', '예선 패턴평가', ''));
@@ -11497,25 +11490,6 @@ function syncKcacRoundParticipantUi_(isMainFinal) {
       nameInput.style.display = 'block';
     }
   }
-  var wrap = document.getElementById('kcac-submission-link-wrap');
-  var input = document.getElementById('kcac-submission-link');
-  if (wrap) wrap.style.display = isBlindPrelim ? 'block' : 'none';
-  if (input) {
-    input.disabled = !isBlindPrelim;
-    if (isBlindPrelim) input.value = _kcac.submissionUrl || '';
-    else input.value = '';
-  }
-}
-
-function onKcacSubmissionLinkInput_(value) {
-  _kcac.submissionUrl = String(value || '').trim();
-}
-
-function kcacSubmissionUrl_() {
-  var input = document.getElementById('kcac-submission-link');
-  var value = input ? input.value : _kcac.submissionUrl;
-  _kcac.submissionUrl = String(value || '').trim();
-  return _kcac.submissionUrl;
 }
 
 
@@ -12877,12 +12851,6 @@ function kcacBuildPersistedMedia_(j) {
 }
 function validateKcacBeforeSubmit_() {
   var isQual = !_kcac.jars.some(function(j){ return j.type !== 'qual'; });
-  if (isQual && !kcacSubmissionUrl_()) {
-    toast('예선 제출 영상/자료 링크를 입력해주세요. 규정상 원테이크 영상 1개와 FAST/SLOW 스크린샷 확인 자료가 필요합니다.', true);
-    var linkInput = document.getElementById('kcac-submission-link');
-    if (linkInput) linkInput.focus();
-    return false;
-  }
   var hasDynamic = false, hasControlled = false;
   var sterilizedMilkCount = 0, alternativeMilkCount = 0;
   for (var i = 0; i < _kcac.jars.length; i++) {
@@ -12930,7 +12898,6 @@ function kcacSubmitAll() {
   saveKcacJarFromDOM();
   var num = document.getElementById('kcac-num').value.trim();
   var isQualSubmission = !_kcac.jars.some(function(j){ return j.type !== 'qual'; });
-  var submissionUrl = isQualSubmission ? kcacSubmissionUrl_() : '';
   var playerName = (!isQualSubmission && isAdminRole()) ? document.getElementById('kcac-name').value.trim() : '';
   if (!num) { toast('참가자 번호를 입력해주세요', true); return; }
   if (!validateKcacBeforeSubmit_()) return;
@@ -12983,11 +12950,6 @@ function kcacSubmitAll() {
     extra['패턴스크린샷개수'] = persistedMedia.count || '';
     extra['미디어불러오기방식'] = persistedMedia.source ? kcacMediaSourceLabel_(persistedMedia.source) : '';
     extra['미디어파일명'] = persistedMedia.mediaName || '';
-    if (submissionUrl) {
-      extra['예선영상URL'] = submissionUrl;
-      extra['제출영상URL'] = submissionUrl;
-      extra['영상제출확인'] = 'Y';
-    }
     return { data: [
       num, playerName, j.milkType || kcacMilkTypeFromLabel_(j.label), j.purpose || kcacPurposeFromType_(j.type), j.milkProduct || kcacMilkProductFromLabel_(j.label),
       j.type === 'qual' ? roundScore02(s['완성도']||0) : '',
@@ -13005,7 +12967,7 @@ function kcacSubmitAll() {
       j.type === 'final-pattern' ? roundScore02(s['위치']||0) : '',
       j.type === 'final-pattern' ? roundScore02(s['완성도']||0) : '',
       roundTotal(sub), rowPenalty === '' ? '' : roundTotal(rowPenalty), roundTotal(fin),
-      submissionUrl, j.comment || '',
+      '', j.comment || '', // 기존 가이드URL 열 위치는 유지하되 새 링크는 저장하지 않습니다.
       dqFlag, dqReason, '미검수'
     ], extraFields: extra, media: persistedMedia};
   });
