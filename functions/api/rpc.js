@@ -2051,7 +2051,7 @@ async function deleteAuxSessionsForCompetition_(env, code) {
   }
   if (code === 'IKRC') {
     // IKRC 보조 세션 kind는 IKRC 전용입니다. payload에 competitionCode가 없는 구버전 데이터도 IKRC 점수 초기화 때만 함께 삭제합니다.
-    const rs = await env.DB.prepare("SELECT token FROM sessions WHERE kind IN ('IKRC_CALIBRATION_CHECK','IKRC_OFFICIAL_CALIBRATION_CHECK','IKRC_STATION_FINALIZATION','IKRC_SEED_MATCH','IKRC_SEED_RESULT')").all();
+    const rs = await env.DB.prepare("SELECT token FROM sessions WHERE kind IN ('IKRC_CALIBRATION_CHECK','IKRC_OFFICIAL_CALIBRATION_CHECK','IKRC_STATION_FINALIZATION','IKRC_SEED_MATCH','IKRC_SEED_RESULT','OFFICIAL_RANKING_OVERRIDE')").all();
     for (const row of (rs.results || [])) { await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(row.token).run(); sessionDeleted++; }
   }
   const receiptRows = await env.DB.prepare("SELECT token FROM sessions WHERE kind='SCORE_SUBMISSION_RECEIPT' AND token LIKE ?")
@@ -5316,6 +5316,37 @@ function officialRankingBasisLabel_(code, basis) {
   if (text && !/평균|average/i.test(text)) return text;
   return '최종 총점';
 }
+
+async function loadOfficialRankingOverrideMap_(env, competitionCode) {
+  const code = safeStr(competitionCode).toUpperCase();
+  const map = new Map();
+  if (!code) return map;
+  const raw = await env.DB.prepare("SELECT payload_json, created_at FROM sessions WHERE kind='OFFICIAL_RANKING_OVERRIDE' AND expires_at > ? ORDER BY created_at ASC")
+    .bind(nowIso()).all();
+  (raw.results || []).forEach(row => {
+    const payload = parseJson(row.payload_json, {});
+    if (safeStr(payload.competitionCode || payload.code).toUpperCase() !== code) return;
+    const defaultRound = roundName_(payload.round, '예선');
+    (Array.isArray(payload.entries) ? payload.entries : []).forEach(entry => {
+      const unit = safeStr(entry && (entry.unit || entry.sampleNo || entry.participantNo)).toUpperCase();
+      if (!unit) return;
+      const round = roundName_(entry.round || defaultRound, defaultRound);
+      const rankValue = Number(entry.officialRank ?? entry.rank);
+      const scoreValue = toNumber(entry.officialScore ?? entry.score);
+      map.set(round + '::' + unit, {
+        unit,
+        round,
+        officialRank:Number.isInteger(rankValue) && rankValue > 0 ? rankValue : null,
+        officialScore:scoreValue === null ? null : roundScoreValue_(scoreValue),
+        participantName:safeStr(entry.participantName || entry.name),
+        reason:safeStr(entry.reason || payload.reason),
+        source:safeStr(entry.source || payload.source),
+        effectiveAt:safeStr(entry.effectiveAt || payload.effectiveAt || row.created_at)
+      });
+    });
+  });
+  return map;
+}
 function rankingTieBreakSummary_(code, tie) {
   code = safeStr(code).toUpperCase();
   tie = tie || {};
@@ -5841,6 +5872,7 @@ async function buildRankingData_(env, competitionCode) {
   const headers = mergeHeaders(code, raw);
   const participantIdx = indexParticipantIdentities_(participantRows, code);
   const ikrcSeedMap = code === 'IKRC' ? await loadIkrcSeedResultMap_(env) : null;
+  const officialRankingOverrides = await loadOfficialRankingOverrideMap_(env, code);
   const ikrcFinalizedUnits = new Set();
   if (code === 'IKRC') {
     const finalRows = await env.DB.prepare("SELECT payload_json FROM sessions WHERE kind='IKRC_STATION_FINALIZATION'").all();
@@ -5904,8 +5936,20 @@ async function buildRankingData_(env, competitionCode) {
     if (code === 'IKRC' && (!agg || Number(agg.confirmedJudgeCount || 0) < 1)) return;
     const aggregateScore = toNumber(agg && agg.score);
     const aggregateTotal = toNumber(agg && agg.total);
-    g.rankingScore = aggregateScore !== null ? roundScoreValue_(aggregateScore) : (aggregateTotal !== null ? roundScoreValue_(aggregateTotal) : 0);
-    g.totalScore = aggregateTotal !== null ? roundScoreValue_(aggregateTotal) : g.rankingScore;
+    const calculatedRankingScore = aggregateScore !== null ? roundScoreValue_(aggregateScore) : (aggregateTotal !== null ? roundScoreValue_(aggregateTotal) : 0);
+    const override = officialRankingOverrides.get(roundName_(g.round, '예선') + '::' + safeStr(g.unit).toUpperCase()) || null;
+    g.calculatedRankingScore = calculatedRankingScore;
+    g.rankingScore = override && override.officialScore !== null ? override.officialScore : calculatedRankingScore;
+    g.totalScore = override && override.officialScore !== null
+      ? override.officialScore
+      : (aggregateTotal !== null ? roundScoreValue_(aggregateTotal) : g.rankingScore);
+    if (override) {
+      g.officialRankOverride = override.officialRank;
+      g.officialResultOverride = true;
+      g.officialResultReason = override.reason;
+      g.officialResultSource = override.source;
+      g.officialResultEffectiveAt = override.effectiveAt;
+    }
     if (code === 'IKRC' && agg && Object.prototype.hasOwnProperty.call(agg, 'sensoryAvg')) g.ikrcSensoryAvg = roundScoreValue_(agg.sensoryAvg);
     if (code === 'IKRC' && agg) {
       g.ikrcPanelComplete = !!agg.panelComplete;
@@ -5918,7 +5962,7 @@ async function buildRankingData_(env, competitionCode) {
       g.ikrcExpectedJudgeCount = Number(agg.expectedJudgeCount || agg.confirmedJudgeCount || 0);
       g.ikrcFinalized = ikrcFinalizedUnits.has(roundName_(g.round, '예선') + '::' + safeStr(g.unit));
     }
-    g.scoreBasis = officialRankingBasisLabel_(code, agg && agg.basis);
+    g.scoreBasis = override ? '공식 확정점수' : officialRankingBasisLabel_(code, agg && agg.basis);
     g.tie = agg.tie || g.tie;
     if (agg && Object.prototype.hasOwnProperty.call(agg, 'disqualified')) g.dq = !!agg.disqualified;
     if (!byRound[g.round]) byRound[g.round] = [];
@@ -5929,6 +5973,14 @@ async function buildRankingData_(env, competitionCode) {
     const list = byRound[round];
     list.sort((a,b) => {
       if (a.dq !== b.dq) return a.dq ? 1 : -1;
+      const officialRankA = Number(a.officialRankOverride);
+      const officialRankB = Number(b.officialRankOverride);
+      const hasOfficialRankA = Number.isInteger(officialRankA) && officialRankA > 0;
+      const hasOfficialRankB = Number.isInteger(officialRankB) && officialRankB > 0;
+      if (hasOfficialRankA || hasOfficialRankB) {
+        if (hasOfficialRankA && hasOfficialRankB && officialRankA !== officialRankB) return officialRankA - officialRankB;
+        if (hasOfficialRankA !== hasOfficialRankB) return hasOfficialRankA ? -1 : 1;
+      }
       const scoreA = a.rankingScore, scoreB = b.rankingScore;
       if (scoreA !== scoreB) return scoreB - scoreA;
       const t = compareTie_(code, a, b, round); if (t !== 0) return t;
@@ -5940,6 +5992,12 @@ async function buildRankingData_(env, competitionCode) {
       unit: g.unit, unitDisplay: g.unit, round,
       playerNameSummary: g.name || '', nameSummary: g.name || '', playerAffiliationSummary: g.affiliation || '', teamNameSummary: g.teamName || '', teamSummary: g.team || '',
       totalScore: g.rankingScore, avgScore: code === 'IKRC' && g.ikrcSensoryAvg !== undefined ? g.ikrcSensoryAvg : g.rankingScore, score: g.rankingScore, rankingScore: g.rankingScore,
+      calculatedScore:g.calculatedRankingScore,
+      officialResultOverride:!!g.officialResultOverride,
+      officialRank:g.officialRankOverride || null,
+      officialResultReason:g.officialResultReason || '',
+      officialResultSource:g.officialResultSource || '',
+      officialResultEffectiveAt:g.officialResultEffectiveAt || '',
       panelComplete:code === 'IKRC' ? !!g.ikrcPanelComplete : undefined,
       reviewComplete:code === 'IKRC' ? !!g.ikrcReviewComplete : undefined,
       finalized:code === 'IKRC' ? !!g.ikrcFinalized : undefined,
