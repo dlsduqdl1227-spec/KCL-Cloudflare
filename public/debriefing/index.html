@@ -1251,7 +1251,9 @@ function renderResult(res) {
   document.documentElement.classList.toggle('ikrc-debrief-print-mode', isIkrcDebrief);
   var screenOnlyNote = document.getElementById('screen-only-note'); if (screenOnlyNote) screenOnlyNote.style.display = scores.length ? 'block' : 'none';
   if (scores.length === 0) {
-    body.innerHTML = '<div class="no-score">아직 공개된 검수 완료 평가가 없습니다.<br>운영팀 검수 상태와 선수 등록 정보를 확인해주세요.</div>';
+    body.innerHTML = isIkrcDebrief
+      ? '<div class="no-score">이 선수와 연결된 IKRC 공식 평가가 없습니다.<br>운영팀에 라운드별 블라인드코드 배정을 확인해주세요.</div>'
+      : '<div class="no-score">아직 공개된 검수 완료 평가가 없습니다.<br>운영팀 검수 상태와 선수 등록 정보를 확인해주세요.</div>';
     return;
   }
 
@@ -1327,12 +1329,24 @@ function buildIkrcRoundAverageBox_(round, list, rank) {
   var avg = rank.avgScore != null ? Number(rank.avgScore) : ikrcLocalRoundAverage_(list);
   if (isNaN(avg)) avg = 0;
   var judgeCount = rank.judgeCount || list.length || 0;
+  var headCount = Number(rank.headCount || list.filter(function(s){ return /헤드|head/i.test(String(s['역할'] || s.role || '')); }).length || 0);
+  var sensoryCount = Number(rank.sensoryCount || Math.max(0, judgeCount - headCount) || 0);
+  var totals = list.map(function(s){ return Number(s['총점'] != null ? s['총점'] : (s['최종점수'] != null ? s['최종점수'] : s.totalScore)); }).filter(function(n){ return !isNaN(n); });
+  var totalSum = totals.reduce(function(sum, value){ return sum + value; }, 0);
+  var panelText = [];
+  if (headCount) panelText.push('헤드 ' + headCount + '명');
+  if (sensoryCount) panelText.push('센서리 ' + sensoryCount + '명');
+  if (!panelText.length) panelText.push('심사위원 ' + judgeCount + '명');
+  var formulaText = totals.length
+    ? ('총점 합계 ' + fmtScore(totalSum, 2) + ' ÷ ' + totals.length + '명')
+    : ('심사위원 ' + judgeCount + '명 반영');
   var box = document.createElement('div');
   box.className = 'avg-box';
   box.innerHTML =
     '<div class="avg-title">IKRC 심사위원 평균</div>' +
     '<div class="avg-total">' + fmtScore(avg, 2) + '</div>' +
-    '<div class="avg-sub">' + escHtml(round || '-') + ' · 센서리 평가 ' + judgeCount + '명 반영</div>';
+    '<div class="avg-sub">' + escHtml(round || '-') + ' · ' + escHtml(panelText.join(' + ')) + ' · ' + escHtml(formulaText) + '</div>' +
+    '<div class="avg-sub">스테이션 10컵의 평균이 아니라, 이 선수를 평가한 심사위원별 총점의 평균입니다.</div>';
   return box;
 }
 
@@ -1344,9 +1358,14 @@ function buildReportIntro(res, scores) {
   var rounds = Array.from(new Set((scores || []).map(function(s){ return normalizeKcacRoundForDisplay_(code, s.round || s['라운드'] || ''); }).filter(Boolean)));
   var box = document.createElement('div');
   box.className = 'report-intro';
-  box.innerHTML = '<div class="intro-title">공식 검수 완료 평가 결과</div>' +
-    '<div class="intro-text">이 리포트는 운영팀 검수를 완료한 공식 평가 항목만 기준으로 표시됩니다.' +
-    (count ? ' 공개 항목 ' + count + '건' : '') + (rounds.length ? ' · 라운드 ' + rounds.join(', ') : '') + '</div>';
+  var countText = code === 'IKRC' ? (' 심사위원 평가표 ' + count + '건') : (' 공개 항목 ' + count + '건');
+  var introTitle = code === 'IKRC' ? '공식 제출 평가 결과' : '공식 검수 완료 평가 결과';
+  var introText = code === 'IKRC'
+    ? '켈리브레이션을 제외하고, 이 선수의 블라인드코드에 정확히 제출된 헤드·센서리 심사만 표시합니다.'
+    : '이 리포트는 운영팀 검수를 완료한 공식 평가 항목만 기준으로 표시됩니다.';
+  box.innerHTML = '<div class="intro-title">' + escHtml(introTitle) + '</div>' +
+    '<div class="intro-text">' + escHtml(introText) +
+    (count ? countText : '') + (rounds.length ? ' · 라운드 ' + rounds.join(', ') : '') + '</div>';
   return box;
 }
 
@@ -1377,12 +1396,14 @@ function buildRankBox(res) {
     return box;
   }
   var rankFullText = main.rank ? (main.totalInRound ? (main.rank + ' / ' + main.totalInRound) : String(main.rank)) : '-';
+  var ikrcRankText = main.rank ? (/^\d+$/.test(String(main.rank)) ? (main.rank + '위') : String(main.rank)) : '-';
+  var ikrcRankTotalText = main.totalInRound ? ('전체 ' + main.totalInRound + '명 기준') : '';
   var scoreCells = isIkrc
     ? ''
     : '<div class="cell"><small>공식 점수</small><b>' + escHtml(fmtScore(main.totalScore || 0, 2)) + '</b></div>';
   if (isIkrc && !scoreCells) box.classList.add('rank-only');
   box.innerHTML =
-    '<div class="cell"><small>순위</small><b>' + escHtml(rankFullText) + '</b></div>' +
+    '<div class="cell"><small>' + escHtml(isIkrc ? ((main.round || '예선') + ' 순위') : '순위') + '</small><b>' + escHtml(isIkrc ? ikrcRankText : rankFullText) + '</b>' + (isIkrc && ikrcRankTotalText ? '<small>' + escHtml(ikrcRankTotalText) + '</small>' : '') + '</div>' +
     scoreCells +
     '<div class="tie-rule">동점 기준: ' + escHtml(main.tieBreakRule || '-') + (main.tieBreakSummary ? '<br>세부 기준: ' + escHtml(main.tieBreakSummary) : '') + '</div>';
   return box;

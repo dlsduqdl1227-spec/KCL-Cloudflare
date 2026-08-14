@@ -36,10 +36,10 @@ assert.match(rpc, /getAdminDebriefPreviewOptions:\s*\(\)\s*=>\s*getAdminDebriefP
 assert.match(rpc, /getAdminDebriefPreview:\s*\(\)\s*=>\s*getAdminDebriefPreview/);
 assert.match(functionSource(rpc, "requireAdminPreviewActor_"), /!actor\s*\|\|\s*!hasAdmin\(actor\)/, "preview APIs must reject team leads and judges");
 assert.match(functionSource(rpc, "getAdminDebriefPreviewOptions"), /requireAdminPreviewActor_/, "preview option listing must be admin-only");
-assert.match(functionSource(rpc, "getAdminDebriefPreviewOptions"), /reviewCompletedStatus_/, "preview choices must only include players with publicly visible reviewed evaluations");
+assert.match(functionSource(rpc, "getAdminDebriefPreviewOptions"), /officialReviewCompleted_/, "preview choices must use each competition's official public-evaluation rule");
 const previewServer = functionSource(rpc, "getAdminDebriefPreview");
 assert.match(previewServer, /requireAdminPreviewActor_/, "preview result must be admin-only");
-assert.match(previewServer, /reviewCompletedStatus_/, "preview must mirror the public reviewed-score filter");
+assert.match(previewServer, /officialReviewCompleted_/, "preview must mirror the public official-score filter");
 assert.match(previewServer, /officialScoreItemsForOutput_/, "preview must use the same official score selection as public debriefing");
 assert.doesNotMatch(previewServer, /UPDATE|INSERT|DELETE/, "preview must remain read-only");
 

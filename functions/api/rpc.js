@@ -6062,7 +6062,7 @@ async function getAdminDebriefPreviewOptions(env, competitionCode, actorArg) {
   const data = await buildRankingData_(env, code);
   const publicCountByUnit = new Map();
   officialScoreItemsForOutput_(code, (data.rows || []).filter(item =>
-    shouldCountItemInRanking_(code, item) && reviewCompletedStatus_(item && (item['검수상태'] || item.status))
+    shouldCountItemInRanking_(code, item) && officialReviewCompleted_(code, item)
   )).forEach(item => {
     const key = roundName_(item.round || item['라운드'], data.cfg && data.cfg.current_round) + '::' + itemNumber_(item);
     publicCountByUnit.set(key, (publicCountByUnit.get(key) || 0) + 1);
@@ -6097,7 +6097,7 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
   const detail = await getRankingDetail(env, code, unit, round, { judgeToken:auth.actor.judgeToken || (actorArg && actorArg.judgeToken) || '' });
   if (!detail || !detail.success) return detail || { success:false, message:'디브리핑 미리보기를 불러오지 못했습니다.' };
   const publicScores = officialScoreItemsForOutput_(code, (detail.scores || detail.rows || []).filter(item =>
-    reviewCompletedStatus_(item && (item['검수상태'] || item.status))
+    officialReviewCompleted_(code, item)
   ));
   const rankInfo = detail.rankInfo || null;
   return {
@@ -6334,6 +6334,31 @@ function participantIdentifiers_(p) {
     .map(safeStr).filter(Boolean);
   return Array.from(new Set(list));
 }
+function ikrcParticipantBlindTargets_(participant) {
+  const p = participant || {};
+  const extra = parseJson(p.extra_json, {});
+  const targets = [];
+  const seen = new Set();
+  const add = (round, unit) => {
+    const normalizedRound = roundName_(round, '');
+    const normalizedUnit = safeStr(unit).replace(/\s+/g, '').toUpperCase();
+    if (!normalizedRound || !normalizedUnit) return;
+    const key = normalizedRound + '::' + normalizedUnit;
+    if (seen.has(key)) return;
+    seen.add(key);
+    targets.push({ round:normalizedRound, unit:normalizedUnit, key });
+  };
+  [extra.ikrcBlindAssignments, extra.IKRCBlindAssignments, extra.ikrc_blind_assignments].forEach(map => {
+    if (!map || typeof map !== 'object' || Array.isArray(map)) return;
+    Object.keys(map).forEach(round => add(round, map[round]));
+  });
+  [
+    ['예선', extra['예선블라인드코드'] || extra['예선 블라인드코드']],
+    ['본선', extra['본선블라인드코드'] || extra['본선 블라인드코드']],
+    ['결선', extra['결선블라인드코드'] || extra['결선 블라인드코드']]
+  ].forEach(entry => add(entry[0], entry[1]));
+  return targets;
+}
 async function verifyOTP(env, name, phone, competitionCode, otp, request = null) {
   name = safeStr(name); phone = normalizePhone(phone); const code = safeStr(competitionCode).toUpperCase();
   const verifyLimit = await rateLimit_(env, 'otp-verify:' + code + ':' + await sha256Hex_(phone), 10, 10 * 60);
@@ -6352,29 +6377,48 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
     .bind(code, phone, name, name, `%${name}%`).all();
   const participants = pr.results || [];
   if (!participants.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다.' };
-  const ids = Array.from(new Set(participants.flatMap(participantIdentifiers_))).filter(Boolean);
+  const ikrcBlindTargets = code === 'IKRC' ? participants.flatMap(ikrcParticipantBlindTargets_) : [];
+  const ikrcBlindPairSet = new Set(ikrcBlindTargets.map(target => target.key));
+  const ikrcBlindUnits = Array.from(new Set(ikrcBlindTargets.map(target => target.unit)));
+  const ids = Array.from(new Set(participants.flatMap(participantIdentifiers_).concat(ikrcBlindUnits))).filter(Boolean);
   let scoreRows = [];
-  if (ids.length) {
+  if (code === 'IKRC' && ikrcBlindUnits.length) {
+    const placeholders = ikrcBlindUnits.map(() => '?').join(',');
+    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND unit IN (${placeholders}) ORDER BY id`).bind(code, ...ikrcBlindUnits).all();
+    scoreRows = rs.results || [];
+  } else if (code !== 'IKRC' && ids.length) {
     const placeholders = ids.map(() => '?').join(',');
     const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료') AND unit IN (${placeholders}) ORDER BY id`).bind(code, ...ids).all();
     scoreRows = rs.results || [];
   }
-  if (!scoreRows.length && ids.length) {
+  if (code !== 'IKRC' && !scoreRows.length && ids.length) {
     const likeConds = ids.map(() => 'payload_json LIKE ?').join(' OR ');
     const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료') AND (${likeConds}) ORDER BY id`)
       .bind(code, ...ids.map(id => `%${id}%`)).all();
     scoreRows = rs.results || [];
   }
-  if (!scoreRows.length) {
+  if (code !== 'IKRC' && !scoreRows.length) {
     const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료') AND (participant_name=? OR payload_json LIKE ?) ORDER BY id`)
       .bind(code, name, `%${name}%`).all();
     scoreRows = rs.results || [];
   }
   const headers = mergeHeaders(code, scoreRows);
   let scoreItems = scoreRows.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
-  scoreItems = officialScoreItemsForOutput_(code, scoreItems.filter(item => shouldCountItemInRanking_(code, item)));
+  scoreItems = scoreItems.filter(item => {
+    if (!shouldCountItemInRanking_(code, item)) return false;
+    if (code !== 'IKRC') return true;
+    const key = roundName_(item.round || item['라운드'], cfg && cfg.current_round) + '::' + safeStr(itemNumber_(item)).replace(/\s+/g, '').toUpperCase();
+    return ikrcBlindPairSet.has(key);
+  });
+  scoreItems = officialScoreItemsForOutput_(code, scoreItems);
   const rankingData = await buildRankingData_(env, code);
-  let rankInfos = rankingData.ranking.filter(r => ids.includes(safeStr(r.unit)) || scoreItems.some(s => itemNumber_(s) === safeStr(r.unit)));
+  let rankInfos = rankingData.ranking.filter(r => {
+    if (code === 'IKRC') {
+      const key = roundName_(r.round, cfg && cfg.current_round) + '::' + safeStr(r.unit).replace(/\s+/g, '').toUpperCase();
+      return ikrcBlindPairSet.has(key);
+    }
+    return ids.includes(safeStr(r.unit)) || scoreItems.some(s => itemNumber_(s) === safeStr(r.unit));
+  });
   const p0 = participants[0];
   const info = {
     name: p0.name || name,
