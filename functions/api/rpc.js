@@ -1735,6 +1735,48 @@ function normalizeParticipantScheduleRange_(value) {
   if (startHour > 23 || endHour > 23 || startMinute > 59 || endMinute > 59) return safeStr(value);
   return `${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}~${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`;
 }
+// KTCC는 개인 선수가 아닌 팀이 참가 단위입니다. 팀명은 name/team_name에,
+// 팀원 이름은 affiliation에만 보관해 목록·평가·디브리핑의 표기를 일관되게 합니다.
+// 원본 엑셀의 "팀장 성명 / 팀원1 성명"과 기존 업로드 양식의 "팀원1명 / 팀원2명"을
+// 모두 읽어, 과거 자료를 다시 올려도 팀원 정보가 사라지지 않도록 합니다.
+function ktccMemberName_(value) {
+  const text = safeStr(value).replace(/\s+/g, ' ').trim();
+  if (!text || /^\d+(?:\.\d+)?$/.test(text) || /^\d{4}[./-]\d{1,2}[./-]\d{1,2}$/.test(text)) return '';
+  return text;
+}
+function ktccMemberNames_(extra, fallback='') {
+  const source = extra && typeof extra === 'object' ? extra : {};
+  const values = [
+    source['팀장 성명'], source['팀장명'], source.teamLeaderName,
+    source['팀원1 성명'], source['팀원1명'], source['팀원1이름'], source.member1Name,
+    source['팀원2 성명'], source['팀원2명'], source['팀원2이름'], source.member2Name,
+    source['팀원3 성명'], source['팀원3명'], source['팀원3이름'], source.member3Name,
+    source['팀원4 성명'], source['팀원4명'], source['팀원4이름'], source.member4Name
+  ];
+  let names = values.map(ktccMemberName_).filter(Boolean);
+  if (!names.length && safeStr(fallback)) names = safeStr(fallback).split(/\s*(?:,|·|\/|&|및)\s*/).map(ktccMemberName_).filter(Boolean);
+  return names.filter((name, index, list) => list.findIndex(item => item.replace(/\s+/g, '').toLowerCase() === name.replace(/\s+/g, '').toLowerCase()) === index);
+}
+function normalizeKtccParticipant_(data) {
+  if (safeStr(data && data.competitionCode).toUpperCase() !== 'KTCC') return data;
+  const next = data || {};
+  const extra = next.extra && typeof next.extra === 'object' ? next.extra : {};
+  const teamName = firstNonEmpty([next.teamName, next.name, extra['팀명'], extra.teamName]);
+  const members = ktccMemberNames_(extra, next.affiliation);
+  next.name = teamName;
+  next.teamName = teamName;
+  if (members.length) {
+    next.affiliation = members.join(', ');
+    extra['팀원 이름'] = next.affiliation;
+  }
+  if (teamName) extra['팀명'] = teamName;
+  next.extra = extra;
+  return next;
+}
+function ktccMemberSummaryFromRow_(row, extra) {
+  const members = ktccMemberNames_(extra, safeStr(row && row.affiliation));
+  return members.length ? members.join(', ') : safeStr(row && row.affiliation);
+}
 function participantPayloadFromRow_(raw, defaultCode='') {
   raw = raw && typeof raw === 'object' ? raw : {};
   const inheritedExtra = raw.extra && typeof raw.extra === 'object' && !Array.isArray(raw.extra) ? raw.extra : {};
@@ -1777,7 +1819,7 @@ function participantPayloadFromRow_(raw, defaultCode='') {
   if (waitingTime) extra['대기시간'] = waitingTime;
   if (stationNo) extra[code === 'IKRC' ? '로스팅위치' : '스테이션번호'] = stationNo;
   if (performanceOrder) extra['경연순서'] = performanceOrder;
-  return {
+  return normalizeKtccParticipant_({
     competitionCode: code,
     name: name || teamName,
     affiliation,
@@ -1799,7 +1841,7 @@ function participantPayloadFromRow_(raw, defaultCode='') {
     stationNo,
     performanceOrder,
     extra
-  };
+  });
 }
 function operatorPayloadFromRow_(raw, defaultCode='') {
   const access = safeStr(pickByAliases_(raw, ['권한대회','access','대회코드','competition_code','code'], defaultCode === 'ALL' ? '' : defaultCode)).toUpperCase();
@@ -1834,6 +1876,13 @@ function normalizeParticipantImportRows_(rows, defaultCode='') {
     const teamName = safeStr(pickByAliases_(first, ['팀명','team_name','teamName'])) || ('KTCC-' + (teamNo || '팀'));
     let members = [];
     groupRows.forEach(r => {
+      const leader = {
+        name: safeStr(pickByAliases_(r, ['팀장 성명','팀장명','teamLeaderName'])),
+        affiliation: safeStr(pickByAliases_(r, ['팀장 소속','teamLeaderAffiliation'])),
+        phone: normalizePhone(pickByAliases_(r, ['팀장 휴대전화','팀장 연락처','teamLeaderPhone'])),
+        note: ''
+      };
+      if (leader.name || leader.affiliation || leader.phone) members.push(leader);
       const rowMember = {
         name: safeStr(pickByAliases_(r, ['선수명','참가자명','이름','name','playerName','participantName'])),
         affiliation: safeStr(pickByAliases_(r, ['소속','affiliation','company','업체명'])),
@@ -1843,9 +1892,9 @@ function normalizeParticipantImportRows_(rows, defaultCode='') {
       if (rowMember.name || rowMember.affiliation || rowMember.phone || rowMember.note) members.push(rowMember);
       for (let n=1; n<=4; n++) {
         const m = {
-          name: safeStr(pickByAliases_(r, ['팀원' + n + '명','팀원' + n + '이름','member' + n + 'Name'])),
+          name: safeStr(pickByAliases_(r, ['팀원' + n + ' 성명','팀원' + n + '명','팀원' + n + '이름','member' + n + 'Name'])),
           affiliation: safeStr(pickByAliases_(r, ['팀원' + n + '소속','member' + n + 'Affiliation'])),
-          phone: normalizePhone(pickByAliases_(r, ['팀원' + n + '연락처','팀원' + n + '전화번호','member' + n + 'Phone'])),
+          phone: normalizePhone(pickByAliases_(r, ['팀원' + n + ' 휴대전화','팀원' + n + '연락처','팀원' + n + '전화번호','member' + n + 'Phone'])),
           note: ''
         };
         if (m.name || m.affiliation || m.phone) members.push(m);
@@ -1857,7 +1906,7 @@ function normalizeParticipantImportRows_(rows, defaultCode='') {
     merged['팀번호'] = teamNo;
     merged['팀명'] = teamName;
     merged['선수명'] = teamName;
-    merged['소속'] = members[0] && members[0].affiliation || safeStr(pickByAliases_(first, ['소속','affiliation','company','업체명']));
+    merged['소속'] = members.map(m => ktccMemberName_(m.name)).filter(Boolean).join(', ') || safeStr(pickByAliases_(first, ['소속','affiliation','company','업체명']));
     merged['연락처'] = members[0] && members[0].phone || normalizePhone(pickByAliases_(first, ['연락처','전화번호','휴대폰','phone','mobile']));
     merged['예선컵번호'] = safeStr(pickByAliases_(first, ['예선컵번호','예선번호','예선팀번호','컵번호','팀번호'])) || teamNo;
     merged['결선컵번호'] = safeStr(pickByAliases_(first, ['결선컵번호','결선번호','결선팀번호'])) || safeStr(pickByAliases_(first, ['결선참가번호']));
@@ -1867,6 +1916,7 @@ function normalizeParticipantImportRows_(rows, defaultCode='') {
       merged['팀원' + n + '소속'] = m.affiliation;
       merged['팀원' + n + '연락처'] = m.phone;
     });
+    if (merged['소속']) merged['팀원 이름'] = merged['소속'];
     merged['비고'] = members.map((m, i) => {
       const parts = [m.name, m.affiliation, m.phone].filter(Boolean).join('/');
       return parts ? ('팀원' + (i + 1) + ':' + parts) : '';
@@ -1973,7 +2023,7 @@ function participantRowOut_(r) {
   return {
     rowIndex: r.id,
     competitionCode: r.competition_code,
-    name: r.name || '', affiliation: r.affiliation || '', phone: r.phone || '',
+    name: r.name || '', affiliation: r.competition_code === 'KTCC' ? ktccMemberSummaryFromRow_(r, ex) : (r.affiliation || ''), phone: r.phone || '',
     uniqueNo: r.unique_no || '', prelimCupNo: r.prelim_cup_no || '', mainCupNo: r.main_cup_no || '', finalCupNo: r.final_cup_no || '',
     cupNo: r.cup_no || '', sampleNo: r.sample_no || '', teamName: r.team_name || '', teamNo: r.team_no || '', extra: ex,
     competitionDate: normalizeEffectiveDate_(ex['대회일'] || ex.competitionDate || ex.competition_date),
@@ -2433,7 +2483,7 @@ function participantIdentityFromRow_(r, code) {
     ? firstNonEmpty([teamName, r.name, extra['팀명'], extra['팀원1명']])
     : firstNonEmpty([r.name, extra['선수명'], extra['참가자명'], extra.name]);
   const affiliation = code === 'KTCC'
-    ? firstNonEmpty([extra['팀원1소속'], extra['팀원2소속'], r.affiliation])
+    ? ktccMemberSummaryFromRow_(r, extra)
     : firstNonEmpty([r.affiliation, extra['소속'], extra.affiliation]);
   return {
     id: r.id,
@@ -2595,7 +2645,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     const number = participantRoundNumber_(r, code, currentRound);
     const rawName = code === 'KTCC' ? (r.team_name || r.name || '') : (r.name || '');
     const displayName = hideIdentity ? '' : rawName;
-    const displayAff = hideIdentity ? '' : (r.affiliation || '');
+    const displayAff = hideIdentity ? '' : (code === 'KTCC' ? ktccMemberSummaryFromRow_(r, extra) : (r.affiliation || ''));
     const prefix = policy.numberLabel || (code === 'KTCC' ? '팀번호' : '참가자번호');
     const completedUnitKey = participantEvaluationCompletionUnitKey_(code, number);
     const evaluationCompleted = !!(completedUnitKey && completedOfficialUnits.has(completedUnitKey));
@@ -2623,7 +2673,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       scheduleTeam,
       evaluationCompleted,
       evaluationCompletedAt: evaluationCompleted ? completedOfficialUnits.get(completedUnitKey) : '',
-      display: (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? ' · ' + displayAff : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
+      display: (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? (' · ' + (code === 'KTCC' ? '팀원 ' : '') + displayAff) : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
     };
     if (code === 'IKRC' && hideIdentity) {
       return {
