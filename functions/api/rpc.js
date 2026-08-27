@@ -20,10 +20,16 @@ const COMPETITION_ROUNDS = {
 const LOGIN_SECURITY_SETTING_KEY = 'assessment_login_security_code';
 const LOGIN_SECURITY_HMAC_ALGORITHM = 'HMAC-SHA256';
 const REGISTRY_REVISION_SETTING_KEY = 'registry_live_revision';
+const D1_FREE_DAILY_READ_LIMIT = 5000000;
+const D1_FREE_DAILY_WRITE_LIMIT = 100000;
+const D1_USAGE_CACHE_TTL_MS = 3 * 60 * 1000;
+const D1_USAGE_FORCE_REFRESH_MIN_MS = 60 * 1000;
+const D1_USAGE_DEFAULT_ACCOUNT_ID = '8a36d483451bf789cbd72a724f6a842a';
 
 let __schemaReadyPromise = null;
 let __defaultDataReadyPromise = null;
 const __readRateLimits = new Map();
+const __d1UsageMemoryCache = new Map();
 const RUNTIME_SCHEMA_OBJECTS = [
   'competitions', 'operators', 'sessions', 'participants', 'scores', 'otps', 'sms_logs', 'rate_limits', 'security_events', 'system_settings',
   'idx_scores_comp', 'idx_scores_comp_id', 'idx_scores_submitter_unit', 'idx_participants_comp', 'idx_operators_phone',
@@ -581,6 +587,7 @@ async function dispatch(action, args, env, request) {
     setLoginSecurityCode: () => setLoginSecurityCode(env, args[0], args[1]),
     deleteLoginSecurityCode: () => deleteLoginSecurityCode(env, args[0]),
     getAdminConsoleData: () => getAdminConsoleData(env, args[0]),
+    getD1DailyUsage: () => getD1DailyUsage(env, args[0], args[1]),
     updateCompetitionAdminSettings: () => updateCompetitionAdminSettings(env, args[0], args[1]),
     upsertOperatorAccount: () => upsertOperatorAccount(env, args[0], args[1]),
     deleteOperatorAccount: () => deleteOperatorAccount(env, args[0], args[1]),
@@ -1160,6 +1167,140 @@ async function getAdminConsoleData(env, actorArg) {
     success: true,
     configs: visibleConfigs
   };
+}
+
+function d1UsageUtcDate_() {
+  return new Date().toISOString().slice(0, 10);
+}
+function d1UsageLimit_(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+function d1UsageMetric_(used, limit) {
+  const safeUsed = Math.max(0, Number(used) || 0);
+  const safeLimit = Math.max(1, Number(limit) || 1);
+  const remaining = Math.max(0, safeLimit - safeUsed);
+  return {
+    used: safeUsed,
+    limit: safeLimit,
+    remaining,
+    usedPercent: (safeUsed / safeLimit) * 100,
+    remainingPercent: (remaining / safeLimit) * 100
+  };
+}
+function d1UsageSummary_(day, readRows, writeRows, env, updatedAt) {
+  const readLimit = d1UsageLimit_(env && env.D1_USAGE_READ_LIMIT, D1_FREE_DAILY_READ_LIMIT);
+  const writeLimit = d1UsageLimit_(env && env.D1_USAGE_WRITE_LIMIT, D1_FREE_DAILY_WRITE_LIMIT);
+  const tomorrow = new Date(Date.parse(day + 'T00:00:00.000Z') + 24 * 60 * 60 * 1000).toISOString();
+  return {
+    utcDate: day,
+    updatedAt: updatedAt || nowIso(),
+    resetAt: tomorrow,
+    read: d1UsageMetric_(readRows, readLimit),
+    write: d1UsageMetric_(writeRows, writeLimit)
+  };
+}
+function d1UsageCacheKey_(day) {
+  return 'd1-usage:' + safeStr(day);
+}
+function d1UsageCacheRequest_(day) {
+  return new Request('https://kcl-d1-usage-cache.invalid/' + encodeURIComponent(safeStr(day)));
+}
+async function d1UsageReadCache_(day, allowStale = false) {
+  const key = d1UsageCacheKey_(day);
+  const now = Date.now();
+  const memory = __d1UsageMemoryCache.get(key);
+  if (memory && memory.payload && (allowStale || Number(memory.expiresAtMs || 0) > now)) return memory;
+  try {
+    if (typeof caches === 'undefined' || !caches.default) return allowStale ? memory : null;
+    const response = await caches.default.match(d1UsageCacheRequest_(day));
+    if (!response) return allowStale ? memory : null;
+    const stored = await response.json();
+    if (!stored || !stored.payload) return allowStale ? memory : null;
+    const item = {
+      payload: stored.payload,
+      cachedAtMs: Number(stored.cachedAtMs || 0),
+      expiresAtMs: Number(stored.expiresAtMs || 0)
+    };
+    __d1UsageMemoryCache.set(key, item);
+    if (allowStale || item.expiresAtMs > now) return item;
+  } catch (_) {}
+  return allowStale ? memory : null;
+}
+async function d1UsageWriteCache_(day, payload) {
+  const now = Date.now();
+  const item = { payload, cachedAtMs:now, expiresAtMs:now + D1_USAGE_CACHE_TTL_MS };
+  __d1UsageMemoryCache.set(d1UsageCacheKey_(day), item);
+  try {
+    if (typeof caches !== 'undefined' && caches.default) {
+      await caches.default.put(d1UsageCacheRequest_(day), new Response(JSON.stringify(item), {
+        headers:{ 'Content-Type':'application/json', 'Cache-Control':'max-age=' + Math.floor(D1_USAGE_CACHE_TTL_MS / 1000) }
+      }));
+    }
+  } catch (_) {}
+  return item;
+}
+async function fetchD1DailyUsageAnalytics_(env, day) {
+  const token = safeStr(env && env.D1_USAGE_ANALYTICS_TOKEN);
+  const accountTag = safeStr(env && env.D1_USAGE_ACCOUNT_ID) || D1_USAGE_DEFAULT_ACCOUNT_ID;
+  if (!token || !accountTag) throw new Error('D1_USAGE_NOT_CONFIGURED');
+  const query = `query KclD1DailyUsage($accountTag: String!, $start: Date!, $end: Date!) {
+    viewer {
+      accounts(filter: { accountTag: $accountTag }) {
+        d1AnalyticsAdaptiveGroups(limit: 1, filter: { date_geq: $start, date_leq: $end }) {
+          sum { rowsRead rowsWritten }
+        }
+      }
+    }
+  }`;
+  let response;
+  try {
+    response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer ' + token, 'Content-Type':'application/json' },
+      body:JSON.stringify({ query, variables:{ accountTag, start:day, end:day } })
+    });
+  } catch (_) {
+    throw new Error('D1_USAGE_ANALYTICS_UNAVAILABLE');
+  }
+  let data;
+  try { data = await response.json(); } catch (_) { throw new Error('D1_USAGE_ANALYTICS_UNAVAILABLE'); }
+  if (!response.ok || !data || data.errors || data.success === false) throw new Error('D1_USAGE_ANALYTICS_UNAVAILABLE');
+  const accounts = data && data.data && data.data.viewer && data.data.viewer.accounts;
+  const groups = Array.isArray(accounts) && accounts[0] && accounts[0].d1AnalyticsAdaptiveGroups;
+  if (!Array.isArray(groups)) throw new Error('D1_USAGE_ANALYTICS_UNAVAILABLE');
+  let rowsRead = 0, rowsWritten = 0;
+  groups.forEach(group => {
+    const sum = group && group.sum || {};
+    rowsRead += Math.max(0, Number(sum.rowsRead) || 0);
+    rowsWritten += Math.max(0, Number(sum.rowsWritten) || 0);
+  });
+  return d1UsageSummary_(day, rowsRead, rowsWritten, env, nowIso());
+}
+async function getD1DailyUsage(env, options, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!hasAdmin(actor)) return { success:false, message:'D1 사용량은 전체 관리자만 확인할 수 있습니다.' };
+  if (!safeStr(env && env.D1_USAGE_ANALYTICS_TOKEN)) {
+    return { success:true, configured:false, message:'Cloudflare D1 분석 전용 키가 아직 연결되지 않았습니다.' };
+  }
+  const day = d1UsageUtcDate_();
+  const force = !!(options && options.force);
+  const cached = await d1UsageReadCache_(day, false);
+  const ageMs = cached ? Math.max(0, Date.now() - Number(cached.cachedAtMs || 0)) : Infinity;
+  if (cached && (!force || ageMs < D1_USAGE_FORCE_REFRESH_MIN_MS)) {
+    return { success:true, configured:true, usage:cached.payload, cached:true, cacheAgeSeconds:Math.floor(ageMs / 1000) };
+  }
+  try {
+    const usage = await fetchD1DailyUsageAnalytics_(env, day);
+    const saved = await d1UsageWriteCache_(day, usage);
+    return { success:true, configured:true, usage, cached:false, cacheAgeSeconds:Math.max(0, Math.floor((Date.now() - saved.cachedAtMs) / 1000)) };
+  } catch (_) {
+    const stale = await d1UsageReadCache_(day, true);
+    if (stale && stale.payload) {
+      return { success:true, configured:true, stale:true, usage:stale.payload, cached:true, cacheAgeSeconds:Math.max(0, Math.floor((Date.now() - Number(stale.cachedAtMs || 0)) / 1000)) };
+    }
+    return { success:false, message:'Cloudflare D1 사용량 집계를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.' };
+  }
 }
 
 async function updateCompetitionAdminSettings(env, payload, actorArg) {

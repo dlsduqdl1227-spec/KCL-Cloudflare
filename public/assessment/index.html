@@ -1041,6 +1041,7 @@ input[type=range].kcl-range,
 .admin-form-grid{display:grid;grid-template-columns:1fr;gap:8px}.admin-form-grid input,.admin-form-grid select{margin-bottom:0}
 .admin-check-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}.admin-check-row label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-2)}.admin-check-row input{width:auto;margin:0;appearance:checkbox;-webkit-appearance:checkbox}
 @media (min-width:720px){.admin-form-grid{grid-template-columns:repeat(2,1fr)}.admin-form-grid .wide{grid-column:1/-1}}
+.d1-usage-card{background:linear-gradient(145deg,rgba(90,128,255,.14),rgba(20,20,24,.98) 58%);border:1.5px solid rgba(141,169,255,.42);border-radius:12px;padding:15px;margin-bottom:16px}.d1-usage-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}.d1-usage-title{font-size:15px;font-weight:900}.d1-usage-sub{font-size:11px;color:var(--text-3);margin-top:4px;line-height:1.5}.d1-usage-refresh{margin:0!important;flex:0 0 auto;padding:8px 10px!important;font-size:12px!important}.d1-usage-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.d1-usage-metric{border:1px solid rgba(255,255,255,.13);background:rgba(0,0,0,.24);border-radius:9px;padding:12px}.d1-usage-metric.warning{border-color:rgba(255,207,96,.56)}.d1-usage-metric.danger{border-color:rgba(255,113,113,.72);background:rgba(132,23,23,.14)}.d1-usage-label{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:800;color:var(--text-2)}.d1-usage-percent{color:#b9c9ff;font-variant-numeric:tabular-nums}.d1-usage-value{font-size:17px;font-weight:900;margin-top:8px;font-variant-numeric:tabular-nums}.d1-usage-detail{font-size:11px;color:var(--text-3);margin-top:4px}.d1-usage-track{height:7px;margin-top:11px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}.d1-usage-fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,#8da9ff,#77d6ff);transition:width .24s ease}.d1-usage-metric.warning .d1-usage-fill{background:linear-gradient(90deg,#efc260,#f7db8a)}.d1-usage-metric.danger .d1-usage-fill{background:linear-gradient(90deg,#ff7777,#ffb0a0)}.d1-usage-status{min-height:18px;font-size:11px;line-height:1.55;color:var(--text-3);margin-top:11px}.d1-usage-status.err{color:#ffb4b4}.d1-usage-status.ok{color:#b9f6d8}@media(max-width:560px){.d1-usage-head{display:block}.d1-usage-refresh{margin-top:10px!important}.d1-usage-grid{grid-template-columns:1fr}}
 
 
 /* 순위 화면 */
@@ -2077,6 +2078,17 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     </div>
 
     <div id="admin-section-run" class="admin-manage-section active">
+      <div class="admin-section">D1 일일 사용량</div>
+      <section id="d1-usage-card" class="d1-usage-card" aria-live="polite">
+        <div class="d1-usage-head">
+          <div>
+            <div class="d1-usage-title">D1 무료 티어 사용량</div>
+            <div class="d1-usage-sub">Cloudflare 행 기준 집계 · 읽기 500만 / 쓰기 10만 행 · 매일 한국시간 오전 9시 초기화</div>
+          </div>
+          <button id="d1-usage-refresh" class="btn-outline d1-usage-refresh" type="button" onclick="refreshD1Usage_()">새로고침</button>
+        </div>
+        <div id="d1-usage-body" class="d1-usage-status">D1 사용량을 불러오는 중입니다.</div>
+      </section>
       <div class="admin-section">대회별 실행 / 순위 / 검수</div>
       <div id="admin-comp-list"></div>
     </div>
@@ -5449,6 +5461,83 @@ function adminSwitchSection(section) {
   });
 }
 
+var _d1UsageLoading = false;
+var _d1UsageLast = null;
+var _d1UsageRefreshTimer = null;
+function d1UsageNumber_(value) {
+  var n = Math.max(0, Number(value) || 0);
+  try { return new Intl.NumberFormat('ko-KR').format(Math.round(n)); }
+  catch(e) { return String(Math.round(n)); }
+}
+function d1UsageTimeText_(value) {
+  var d = value ? new Date(value) : null;
+  if (!d || isNaN(d.getTime())) return '-';
+  try { return d.toLocaleString('ko-KR', {timeZone:'Asia/Seoul', hour12:false}); }
+  catch(e) { return d.toLocaleString(); }
+}
+function d1UsageMetricHtml_(label, data) {
+  data = data || {};
+  var used = Math.max(0, Number(data.used) || 0);
+  var limit = Math.max(1, Number(data.limit) || 1);
+  var remain = Math.max(0, Number(data.remaining));
+  var remainPct = Math.max(0, Math.min(100, Number(data.remainingPercent)) || 0);
+  var usedPct = Math.max(0, (used / limit) * 100);
+  var state = usedPct >= 100 ? 'danger' : (usedPct >= 80 ? 'warning' : '');
+  var fill = Math.max(0, Math.min(100, usedPct));
+  return '<div class="d1-usage-metric ' + state + '">' +
+    '<div class="d1-usage-label"><span>' + escHtml(label) + '</span><span class="d1-usage-percent">' + remainPct.toFixed(1) + '% 남음</span></div>' +
+    '<div class="d1-usage-value">' + d1UsageNumber_(remain) + ' 행 남음</div>' +
+    '<div class="d1-usage-detail">사용 ' + d1UsageNumber_(used) + ' / 한도 ' + d1UsageNumber_(limit) + ' 행</div>' +
+    '<div class="d1-usage-track"><div class="d1-usage-fill" style="width:' + fill.toFixed(2) + '%"></div></div>' +
+  '</div>';
+}
+function renderD1Usage_(res) {
+  var body = document.getElementById('d1-usage-body');
+  var refresh = document.getElementById('d1-usage-refresh');
+  if (refresh) { refresh.disabled = _d1UsageLoading; refresh.textContent = _d1UsageLoading ? '불러오는 중…' : '새로고침'; }
+  if (!body) return;
+  if (!res || !res.success) {
+    body.className = 'd1-usage-status err';
+    body.textContent = (res && res.message) || 'D1 사용량을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
+    return;
+  }
+  if (!res.configured) {
+    body.className = 'd1-usage-status err';
+    body.innerHTML = '<strong>사용량 연동 준비 필요</strong><br>Cloudflare 분석 전용 키가 아직 연결되지 않았습니다. 키를 연결하면 이 자리에서 읽기·쓰기 잔여율을 관리자만 확인할 수 있습니다.';
+    return;
+  }
+  var usage = res.usage || {};
+  body.className = 'd1-usage-status ' + (res.stale ? 'err' : 'ok');
+  body.innerHTML = '<div class="d1-usage-grid">' +
+    d1UsageMetricHtml_('읽기', usage.read) + d1UsageMetricHtml_('쓰기', usage.write) +
+    '</div>' +
+    '<div class="d1-usage-status ' + (res.stale ? 'err' : 'ok') + '">' +
+      (res.stale ? 'Cloudflare 최신 집계를 일시적으로 불러오지 못해 마지막 정상 수치를 표시합니다. ' : '') +
+      '기준일(UTC): ' + escHtml(usage.utcDate || '-') + ' · 마지막 갱신: ' + escHtml(d1UsageTimeText_(usage.updatedAt)) +
+      ' · Cloudflare 분석 집계에는 짧은 반영 지연이 있을 수 있습니다.' +
+    '</div>';
+}
+function loadD1UsagePanel_(force) {
+  if (!isAdminRole() || _d1UsageLoading) return;
+  _d1UsageLoading = true;
+  if (_d1UsageLast) renderD1Usage_(_d1UsageLast);
+  else {
+    var pending = document.getElementById('d1-usage-body');
+    var pendingRefresh = document.getElementById('d1-usage-refresh');
+    if (pending) { pending.className = 'd1-usage-status'; pending.textContent = 'D1 사용량을 불러오는 중입니다.'; }
+    if (pendingRefresh) { pendingRefresh.disabled = true; pendingRefresh.textContent = '불러오는 중…'; }
+  }
+  google.script.run.withSuccessHandler(function(res){
+    _d1UsageLoading = false;
+    _d1UsageLast = res || null;
+    renderD1Usage_(res);
+  }).withFailureHandler(function(err){
+    _d1UsageLoading = false;
+    renderD1Usage_({success:false, message:'D1 사용량 조회 실패: ' + ((err && err.message) || err || '')});
+  }).getD1DailyUsage({force:!!force}, adminActorPayload_());
+}
+function refreshD1Usage_() { loadD1UsagePanel_(true); }
+
 var COMP_ROUND_OPTIONS = {
   KBC:['예선','본선','결선'],
   MOC:['예선','본선','결선'],
@@ -5870,6 +5959,11 @@ function loadAdminPanel() {
     showPanel('pAdmin');
     adminSwitchSection(_adminPreferredSection || 'run');
     loadLoginSecurityStatus_();
+    if (isAdminRole()) {
+      loadD1UsagePanel_(false);
+      if (_d1UsageRefreshTimer) clearInterval(_d1UsageRefreshTimer);
+      _d1UsageRefreshTimer = setInterval(function(){ loadD1UsagePanel_(true); }, 3 * 60 * 1000);
+    }
   }).withFailureHandler(function(err){ hideOverlay(); toast('관리 정보를 불러오지 못했습니다: ' + ((err && err.message) || err || ''), true); showPanel('pAdmin'); })
     .getAdminConsoleData(adminActorPayload_());
 }
