@@ -32,8 +32,8 @@ const __readRateLimits = new Map();
 const __d1UsageMemoryCache = new Map();
 const RUNTIME_SCHEMA_OBJECTS = [
   'competitions', 'operators', 'sessions', 'participants', 'scores', 'otps', 'sms_logs', 'rate_limits', 'security_events', 'system_settings',
-  'idx_scores_comp', 'idx_scores_comp_id', 'idx_scores_submitter_unit', 'idx_participants_comp', 'idx_operators_phone',
-  'idx_participants_lookup', 'idx_participants_unit', 'idx_scores_unit', 'idx_otps_lookup', 'idx_sessions_kind',
+  'idx_scores_comp', 'idx_scores_comp_id', 'idx_scores_submitter_unit', 'idx_participants_comp', 'idx_operators_phone', 'idx_operators_phone_id',
+  'idx_participants_lookup', 'idx_participants_unit', 'idx_participants_comp_phone_id', 'idx_scores_unit', 'idx_otps_lookup', 'idx_sessions_kind', 'idx_sessions_expires_at',
   'idx_sms_logs_comp', 'idx_security_events_action', 'idx_scores_client_submission_unit', 'idx_operators_effective_date',
   'trg_participants_registry_revision_insert', 'trg_participants_registry_revision_update', 'trg_participants_registry_revision_delete',
   'trg_operators_registry_revision_insert', 'trg_operators_registry_revision_update', 'trg_operators_registry_revision_delete'
@@ -500,11 +500,14 @@ async function ensureSchema(db) {
     `CREATE INDEX IF NOT EXISTS idx_scores_submitter_unit ON scores(competition_code, round, judge_name, unit, id DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_participants_comp ON participants(competition_code)`,
     `CREATE INDEX IF NOT EXISTS idx_operators_phone ON operators(name, phone)`,
+    `CREATE INDEX IF NOT EXISTS idx_operators_phone_id ON operators(phone, id)`,
     `CREATE INDEX IF NOT EXISTS idx_participants_lookup ON participants(competition_code, name, phone)`,
     `CREATE INDEX IF NOT EXISTS idx_participants_unit ON participants(competition_code, unique_no, cup_no, sample_no, team_no)`,
+    `CREATE INDEX IF NOT EXISTS idx_participants_comp_phone_id ON participants(competition_code, phone, id)`,
     `CREATE INDEX IF NOT EXISTS idx_scores_unit ON scores(competition_code, unit, review_status)`,
     `CREATE INDEX IF NOT EXISTS idx_otps_lookup ON otps(competition_code, name, phone, id DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_kind ON sessions(kind)`,
+    `CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)`,
     `CREATE INDEX IF NOT EXISTS idx_sms_logs_comp ON sms_logs(competition_code, phone, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events(action, created_at)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_client_submission_unit
