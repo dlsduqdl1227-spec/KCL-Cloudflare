@@ -55,6 +55,7 @@ assert.equal(normalized.teamName, '위커피');
 assert.equal(normalized.affiliation, '신예림, 심소현');
 assert.equal(normalized.extra['팀원 이름'], '신예림, 심소현');
 assert.equal(ctx.ktccMemberSummaryFromRow_({ affiliation: '기존 소속' }, { '팀장 성명': '신예림', '팀원1 성명': '심소현' }), '신예림, 심소현');
+assert.equal(ctx.ktccMemberSummaryFromRow_({ affiliation: '이전 팀원' }, { '팀원 이름': '김새봄, 이가을', '팀장 성명': '신예림', '팀원1 성명': '심소현' }), '김새봄, 이가을');
 
 assert.match(rpc, /const displayAff = hideIdentity \? '' : \(code === 'KTCC' \? ktccMemberSummaryFromRow_/);
 assert.match(rpc, /code === 'KTCC' \? '팀원 ' : ''/);

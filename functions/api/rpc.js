@@ -1746,14 +1746,20 @@ function ktccMemberName_(value) {
 }
 function ktccMemberNames_(extra, fallback='') {
   const source = extra && typeof extra === 'object' ? extra : {};
-  const values = [
+  const preferred = source['팀원 이름'] || source.teamMembers;
+  let names = Array.isArray(preferred)
+    ? preferred.map(ktccMemberName_).filter(Boolean)
+    : (safeStr(preferred) ? safeStr(preferred).split(/\s*(?:,|·|\/|&|및)\s*/).map(ktccMemberName_).filter(Boolean) : []);
+  if (!names.length) {
+    const values = [
     source['팀장 성명'], source['팀장명'], source.teamLeaderName,
     source['팀원1 성명'], source['팀원1명'], source['팀원1이름'], source.member1Name,
     source['팀원2 성명'], source['팀원2명'], source['팀원2이름'], source.member2Name,
     source['팀원3 성명'], source['팀원3명'], source['팀원3이름'], source.member3Name,
     source['팀원4 성명'], source['팀원4명'], source['팀원4이름'], source.member4Name
-  ];
-  let names = values.map(ktccMemberName_).filter(Boolean);
+    ];
+    names = values.map(ktccMemberName_).filter(Boolean);
+  }
   if (!names.length && safeStr(fallback)) names = safeStr(fallback).split(/\s*(?:,|·|\/|&|및)\s*/).map(ktccMemberName_).filter(Boolean);
   return names.filter((name, index, list) => list.findIndex(item => item.replace(/\s+/g, '').toLowerCase() === name.replace(/\s+/g, '').toLowerCase()) === index);
 }
@@ -1819,6 +1825,9 @@ function participantPayloadFromRow_(raw, defaultCode='') {
   if (waitingTime) extra['대기시간'] = waitingTime;
   if (stationNo) extra[code === 'IKRC' ? '로스팅위치' : '스테이션번호'] = stationNo;
   if (performanceOrder) extra['경연순서'] = performanceOrder;
+  // 등록 화면에서 팀원 이름을 직접 고친 경우에는 원본 엑셀의 과거 팀원 값보다
+  // 해당 입력을 우선합니다. 원본 팀장·팀원 상세 정보는 extra에 그대로 보존됩니다.
+  if (code === 'KTCC' && Object.prototype.hasOwnProperty.call(raw, 'affiliation') && affiliation) extra['팀원 이름'] = affiliation;
   return normalizeKtccParticipant_({
     competitionCode: code,
     name: name || teamName,
