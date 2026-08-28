@@ -1966,11 +1966,15 @@ async function listParticipants(env, competitionCode, actorArg) {
 function participantScheduleSortMeta_(row) {
   const extra = parseJson(row && row.extra_json, {});
   const date = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date);
+  const operatingDayText = safeStr(extra['운영일차'] || extra.operatingDay || extra.operating_day || extra.scheduleDay);
+  const operatingDayMatch = operatingDayText.match(/(\d+)/);
+  const operatingDay = operatingDayMatch ? Number(operatingDayMatch[1]) : 999999;
   const orderText = safeStr(extra['경연순서'] || extra.performanceOrder || extra.performance_order);
   const order = Number(orderText);
   return {
-    scheduled: !!(date && orderText && Number.isFinite(order)),
+    scheduled: !!(date || operatingDayMatch || orderText),
     date: date || '9999-12-31',
+    operatingDay: Number.isFinite(operatingDay) ? operatingDay : 999999,
     order: Number.isFinite(order) ? order : 999999,
     waitingTime: safeStr(extra['대기시간'] || extra.waitingTime || extra.waiting_time),
   };
@@ -2009,13 +2013,14 @@ function sortParticipantRowsForCompetition_(rows, competitionCode) {
     const aCode = safeStr(a && a.competition_code || requestedCode).toUpperCase();
     const bCode = safeStr(b && b.competition_code || requestedCode).toUpperCase();
     if (aCode !== bCode) return aCode.localeCompare(bCode);
-    // MOB와 KBC 참가자 목록은 DB 등록 순서가 아니라 확정 타임테이블 순서로 표시합니다.
-    // 특히 KBC는 참가자를 역순으로 일괄 등록해도 관리자 목록과 심사 화면이 경연순서 1번부터 보여야 합니다.
-    if (aCode === 'MOB' || aCode === 'KBC') {
+    // 현장 운영 대회는 DB 등록 순서가 아니라 확정 타임테이블 순서로 표시합니다.
+    // MOC는 1일차 전체 후 2일차 전체를, 각 일차 안에서는 경연순서대로 보여야 합니다.
+    if (aCode === 'MOB' || aCode === 'KBC' || aCode === 'MOC') {
       const am = participantScheduleSortMeta_(a);
       const bm = participantScheduleSortMeta_(b);
       if (am.scheduled !== bm.scheduled) return am.scheduled ? -1 : 1;
       if (am.date !== bm.date) return am.date.localeCompare(bm.date);
+      if (am.operatingDay !== bm.operatingDay) return am.operatingDay - bm.operatingDay;
       if (am.order !== bm.order) return am.order - bm.order;
       if (am.waitingTime !== bm.waitingTime) return am.waitingTime.localeCompare(bm.waitingTime);
     }
