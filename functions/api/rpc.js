@@ -5407,6 +5407,13 @@ function itemEndTimeSeconds_(item) {
   const n = Number(s.replace(/[^0-9.]/g,''));
   return Number.isFinite(n) && n > 0 ? n : 999999;
 }
+function formatKtccEndTime_(seconds) {
+  const totalCentiseconds = Math.max(0, Math.round(Number(seconds || 0) * 100));
+  const minute = Math.floor(totalCentiseconds / 6000);
+  const second = Math.floor((totalCentiseconds % 6000) / 100);
+  const centisecond = totalCentiseconds % 100;
+  return String(minute).padStart(2, '0') + '분 ' + String(second).padStart(2, '0') + '.' + String(centisecond).padStart(2, '0') + '초';
+}
 function mocTimeLimitSecondsForRound_(round) {
   return roundName_(round, '예선') === '예선' ? 5 * 60 : 6 * 60;
 }
@@ -5586,7 +5593,10 @@ function rankingTieBreakSummary_(code, tie) {
     if (Number.isFinite(mouthfeel)) parts.push('Mouthfeel ' + roundScoreValue_(mouthfeel).toFixed(1));
     return parts.join(' / ');
   }
-  if ((code === 'MOC' || code === 'KTCC') && Number.isFinite(Number(tie.time)) && Number(tie.time) !== 999999) {
+  if (code === 'KTCC' && Number.isFinite(Number(tie.time)) && Number(tie.time) !== 999999) {
+    return '종료시간 ' + formatKtccEndTime_(tie.time);
+  }
+  if (code === 'MOC' && Number.isFinite(Number(tie.time)) && Number(tie.time) !== 999999) {
     return '종료시간 ' + tie.time + '초';
   }
   if (code === 'KCAC') {
