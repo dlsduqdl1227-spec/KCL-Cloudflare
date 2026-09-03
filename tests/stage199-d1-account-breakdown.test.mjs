@@ -39,6 +39,7 @@ const context = {
   D1_FREE_DAILY_WRITE_LIMIT: 100_000,
   D1_PAID_CYCLE_READ_LIMIT: 25_000_000_000,
   D1_PAID_CYCLE_WRITE_LIMIT: 50_000_000,
+  D1_INCLUDED_STORAGE_LIMIT_BYTES: 5_000_000_000,
   D1_USAGE_DEFAULT_PLAN: 'workers_paid',
   D1_USAGE_DEFAULT_CYCLE_START_DAY: 2,
   D1_USAGE_DEFAULT_ACCOUNT_ID: 'account',
@@ -48,6 +49,18 @@ const context = {
   safeStr: value => value == null ? '' : String(value),
   fetch: async (_url, options) => {
     requestBody = JSON.parse(options.body);
+    if (requestBody.query.includes('d1StorageAdaptiveGroups')) {
+      return {
+        ok: true,
+        json: async () => ({
+          data: { viewer: { accounts: [{ d1StorageAdaptiveGroups: [
+            { dimensions: { databaseId: KCL_ID, date: '2026-09-03' }, max: { databaseSizeBytes: 9_000_000 } },
+            { dimensions: { databaseId: THECUP_ID, date: '2026-09-03' }, max: { databaseSizeBytes: 1_400_000 } },
+            { dimensions: { databaseId: 'old-db', date: '2026-09-03' }, max: { databaseSizeBytes: 200_000 } },
+          ] }] } },
+        }),
+      };
+    }
     return {
       ok: true,
       json: async () => ({
@@ -84,6 +97,9 @@ assert.deepEqual(JSON.parse(JSON.stringify(usage.today)), { utcDate: '2026-09-03
 assert.equal(usage.databaseUsage.find(row => row.key === 'kcl').periodRead, 300);
 assert.equal(usage.databaseUsage.find(row => row.key === 'thecup').todayWrite, 30);
 assert.equal(usage.databaseUsage.find(row => row.key === 'other').periodRead, 400);
-assert.match(requestBody.query, /dimensions \{ databaseId date \}/);
+assert.equal(usage.storageAvailable, true);
+assert.equal(usage.storage.used, 10_600_000);
+assert.equal(usage.databaseUsage.find(row => row.key === 'kcl').storageBytes, 9_000_000);
+assert.match(requestBody.query, /d1StorageAdaptiveGroups/);
 
 process.stdout.write('Stage199 D1 account breakdown tests passed.\n');

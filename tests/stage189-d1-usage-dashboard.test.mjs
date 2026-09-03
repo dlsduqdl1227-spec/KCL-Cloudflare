@@ -34,6 +34,7 @@ const ctx = {
   D1_FREE_DAILY_WRITE_LIMIT: 100_000,
   D1_PAID_CYCLE_READ_LIMIT: 25_000_000_000,
   D1_PAID_CYCLE_WRITE_LIMIT: 50_000_000,
+  D1_INCLUDED_STORAGE_LIMIT_BYTES: 5_000_000_000,
   D1_USAGE_DEFAULT_PLAN: 'workers_paid',
   D1_USAGE_DEFAULT_CYCLE_START_DAY: 2,
   nowIso: () => '2026-08-27T00:30:00.000Z',
@@ -71,6 +72,8 @@ assert.equal(summary.read.limit, 25_000_000_000);
 assert.equal(summary.write.limit, 50_000_000);
 assert.ok(summary.read.remainingPercent > 99.9);
 assert.ok(summary.write.remainingPercent > 99.8);
+assert.equal(summary.storage.limit, 5_000_000_000);
+assert.equal(summary.storage.used, 0);
 
 // 관리자 전용 GraphQL 집계·캐시·마지막 정상 수치 보존이 모두 있어야 합니다.
 const dispatch = functionSource(rpc, 'dispatch');
@@ -84,6 +87,8 @@ assert.match(getUsage, /stale:true/);
 assert.match(analytics, /rowsRead rowsWritten/);
 assert.match(analytics, /dimensions \{ databaseId date \}/);
 assert.match(analytics, /databaseUsage/);
+assert.match(analytics, /d1StorageAdaptiveGroups/);
+assert.match(analytics, /databaseSizeBytes/);
 assert.match(analytics, /api\.cloudflare\.com\/client\/v4\/graphql/);
 assert.doesNotMatch(getUsage, /D1_USAGE_ANALYTICS_TOKEN[^\n]*:/, 'analytics token must never be included in response payloads');
 
@@ -92,12 +97,14 @@ assert.match(assessment, /function loadD1UsagePanel_/);
 assert.match(assessment, /function refreshD1Usage_/);
 assert.match(assessment, /getD1DailyUsage\(\{force:!!force\}, adminActorPayload_\(\)\)/);
 assert.match(assessment, /D1 계정 사용량/);
-assert.match(assessment, /계정 한도는 합산하고, KCL·더컵 사용량은 DB별로 분리해 표시합니다/);
+assert.match(assessment, /읽기·쓰기 한도와 저장공간을 구분하고, KCL·더컵 사용량은 DB별로 표시합니다/);
+assert.match(assessment, /d1UsageMetricHtml_\('저장공간', usage\.storage, 'bytes'\)/);
 assert.match(assessment, /오늘 사용량 \/ 현재 청구 주기 누적/);
 assert.match(wrangler, /D1_USAGE_ACCOUNT_ID\s*=\s*"8a36d483451bf789cbd72a724f6a842a"/);
 assert.match(wrangler, /D1_USAGE_PLAN\s*=\s*"workers_paid"/);
 assert.match(wrangler, /D1_USAGE_READ_LIMIT\s*=\s*"25000000000"/);
 assert.match(wrangler, /D1_USAGE_WRITE_LIMIT\s*=\s*"50000000"/);
+assert.match(wrangler, /D1_USAGE_STORAGE_LIMIT_BYTES\s*=\s*"5000000000"/);
 assert.match(wrangler, /D1_USAGE_KCL_DATABASE_ID\s*=\s*"503c0f26-389c-480c-b109-d5e53de8fc71"/);
 assert.match(wrangler, /D1_USAGE_THECUP_DATABASE_ID\s*=\s*"40d049eb-3cf2-4906-a5ce-c40d2dd63c34"/);
 

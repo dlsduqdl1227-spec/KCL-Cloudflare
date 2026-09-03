@@ -26,6 +26,7 @@ const D1_FREE_DAILY_WRITE_LIMIT = 100000;
 // 청구 주기 기준(읽기 250억 / 쓰기 5천만 행)으로 표시해야 합니다.
 const D1_PAID_CYCLE_READ_LIMIT = 25000000000;
 const D1_PAID_CYCLE_WRITE_LIMIT = 50000000;
+const D1_INCLUDED_STORAGE_LIMIT_BYTES = 5000000000;
 const D1_USAGE_DEFAULT_PLAN = 'workers_paid';
 const D1_USAGE_DEFAULT_CYCLE_START_DAY = 2;
 const D1_USAGE_CACHE_TTL_MS = 3 * 60 * 1000;
@@ -1243,7 +1244,7 @@ function d1UsageMetric_(used, limit) {
     remainingPercent: (remaining / safeLimit) * 100
   };
 }
-function d1UsageSummary_(periodInput, readRows, writeRows, env, updatedAt) {
+function d1UsageSummary_(periodInput, readRows, writeRows, env, updatedAt, storageBytes) {
   const period = typeof periodInput === 'string'
     ? { plan:'free_daily', label:'무료 티어 · 일일 사용량', startDate:periodInput, endDate:periodInput, resetAt:new Date(Date.parse(periodInput + 'T00:00:00.000Z') + 24 * 60 * 60 * 1000).toISOString() }
     : (periodInput || d1UsagePeriod_(env));
@@ -1258,7 +1259,8 @@ function d1UsageSummary_(periodInput, readRows, writeRows, env, updatedAt) {
     updatedAt: updatedAt || nowIso(),
     resetAt:period.resetAt,
     read: d1UsageMetric_(readRows, limits.readLimit),
-    write: d1UsageMetric_(writeRows, limits.writeLimit)
+    write: d1UsageMetric_(writeRows, limits.writeLimit),
+    storage: d1UsageMetric_(storageBytes, d1UsageLimit_(env && env.D1_USAGE_STORAGE_LIMIT_BYTES, D1_INCLUDED_STORAGE_LIMIT_BYTES))
   };
 }
 function d1UsageDatabaseDefinitions_(env) {
@@ -1356,9 +1358,10 @@ async function fetchD1DailyUsageAnalytics_(env, period) {
     periodRead:0,
     periodWrite:0,
     todayRead:0,
-    todayWrite:0
+    todayWrite:0,
+    storageBytes:0
   }]));
-  const other = { key:'other', databaseId:'', label:'기타 D1', periodRead:0, periodWrite:0, todayRead:0, todayWrite:0 };
+  const other = { key:'other', databaseId:'', label:'기타 D1', periodRead:0, periodWrite:0, todayRead:0, todayWrite:0, storageBytes:0 };
   groups.forEach(group => {
     const sum = group && group.sum || {};
     const read = Math.max(0, Number(sum.rowsRead) || 0);
@@ -1378,9 +1381,52 @@ async function fetchD1DailyUsageAnalytics_(env, period) {
       target.todayWrite += write;
     }
   });
-  const usage = d1UsageSummary_(period, rowsRead, rowsWritten, env, nowIso());
+  let storageAvailable = false;
+  let storageBytes = 0;
+  let storageUpdatedDate = '';
+  try {
+    const storageQuery = `query KclD1StorageByDatabase($accountTag: String!, $start: Date!, $end: Date!) {
+      viewer {
+        accounts(filter: { accountTag: $accountTag }) {
+          d1StorageAdaptiveGroups(limit: 10000, filter: { date_geq: $start, date_leq: $end }, orderBy: [date_DESC]) {
+            dimensions { databaseId date }
+            max { databaseSizeBytes }
+          }
+        }
+      }
+    }`;
+    const storageResponse = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+      method:'POST',
+      headers:{ 'Authorization':'Bearer ' + token, 'Content-Type':'application/json' },
+      body:JSON.stringify({ query:storageQuery, variables:{ accountTag, start:period.startDate, end:period.endDate } })
+    });
+    const storageData = await storageResponse.json();
+    const storageAccounts = storageData && storageData.data && storageData.data.viewer && storageData.data.viewer.accounts;
+    const storageGroups = Array.isArray(storageAccounts) && storageAccounts[0] && storageAccounts[0].d1StorageAdaptiveGroups;
+    if (storageResponse.ok && !storageData.errors && Array.isArray(storageGroups)) {
+      const latestByDatabase = new Map();
+      storageGroups.forEach(group => {
+        const dimensions = group && group.dimensions || {};
+        const databaseId = safeStr(dimensions.databaseId);
+        const date = safeStr(dimensions.date).slice(0, 10);
+        const size = Math.max(0, Number(group && group.max && group.max.databaseSizeBytes) || 0);
+        const previous = latestByDatabase.get(databaseId);
+        if (databaseId && (!previous || date >= previous.date)) latestByDatabase.set(databaseId, { date, size });
+      });
+      latestByDatabase.forEach((item, databaseId) => {
+        const target = knownIds.has(databaseId) ? byDatabase.get(databaseId) : other;
+        target.storageBytes += item.size;
+        storageBytes += item.size;
+        if (item.date > storageUpdatedDate) storageUpdatedDate = item.date;
+      });
+      storageAvailable = true;
+    }
+  } catch (_) {}
+  const usage = d1UsageSummary_(period, rowsRead, rowsWritten, env, nowIso(), storageBytes);
   usage.today = { utcDate:period.endDate, read:todayRowsRead, write:todayRowsWritten };
-  usage.databaseUsage = [...byDatabase.values(), other].filter(item => item.key !== 'other' || item.periodRead > 0 || item.periodWrite > 0);
+  usage.storageAvailable = storageAvailable;
+  usage.storageUpdatedDate = storageUpdatedDate;
+  usage.databaseUsage = [...byDatabase.values(), other].filter(item => item.key !== 'other' || item.periodRead > 0 || item.periodWrite > 0 || item.storageBytes > 0);
   return usage;
 }
 async function getD1DailyUsage(env, options, actorArg) {
