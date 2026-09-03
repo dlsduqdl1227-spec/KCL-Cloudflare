@@ -31,6 +31,8 @@ const D1_USAGE_DEFAULT_CYCLE_START_DAY = 2;
 const D1_USAGE_CACHE_TTL_MS = 3 * 60 * 1000;
 const D1_USAGE_FORCE_REFRESH_MIN_MS = 60 * 1000;
 const D1_USAGE_DEFAULT_ACCOUNT_ID = '8a36d483451bf789cbd72a724f6a842a';
+const D1_USAGE_DEFAULT_KCL_DATABASE_ID = '503c0f26-389c-480c-b109-d5e53de8fc71';
+const D1_USAGE_DEFAULT_THECUP_DATABASE_ID = '40d049eb-3cf2-4906-a5ce-c40d2dd63c34';
 
 let __schemaReadyPromise = null;
 let __defaultDataReadyPromise = null;
@@ -1259,6 +1261,20 @@ function d1UsageSummary_(periodInput, readRows, writeRows, env, updatedAt) {
     write: d1UsageMetric_(writeRows, limits.writeLimit)
   };
 }
+function d1UsageDatabaseDefinitions_(env) {
+  return [
+    {
+      key:'kcl',
+      databaseId:safeStr(env && env.D1_USAGE_KCL_DATABASE_ID) || D1_USAGE_DEFAULT_KCL_DATABASE_ID,
+      label:'KCL 평가'
+    },
+    {
+      key:'thecup',
+      databaseId:safeStr(env && env.D1_USAGE_THECUP_DATABASE_ID) || D1_USAGE_DEFAULT_THECUP_DATABASE_ID,
+      label:'더컵에듀'
+    }
+  ];
+}
 function d1UsageCacheKey_(period) {
   const key = typeof period === 'string' ? period : [period && period.plan, period && period.startDate, period && period.endDate].join(':');
   return 'd1-usage:' + safeStr(key);
@@ -1304,10 +1320,11 @@ async function fetchD1DailyUsageAnalytics_(env, period) {
   const token = safeStr(env && env.D1_USAGE_ANALYTICS_TOKEN);
   const accountTag = safeStr(env && env.D1_USAGE_ACCOUNT_ID) || D1_USAGE_DEFAULT_ACCOUNT_ID;
   if (!token || !accountTag) throw new Error('D1_USAGE_NOT_CONFIGURED');
-  const query = `query KclD1DailyUsage($accountTag: String!, $start: Date!, $end: Date!) {
+  const query = `query KclD1UsageByDatabase($accountTag: String!, $start: Date!, $end: Date!) {
     viewer {
       accounts(filter: { accountTag: $accountTag }) {
-        d1AnalyticsAdaptiveGroups(limit: 1, filter: { date_geq: $start, date_leq: $end }) {
+        d1AnalyticsAdaptiveGroups(limit: 10000, filter: { date_geq: $start, date_leq: $end }) {
+          dimensions { databaseId date }
           sum { rowsRead rowsWritten }
         }
       }
@@ -1329,13 +1346,42 @@ async function fetchD1DailyUsageAnalytics_(env, period) {
   const accounts = data && data.data && data.data.viewer && data.data.viewer.accounts;
   const groups = Array.isArray(accounts) && accounts[0] && accounts[0].d1AnalyticsAdaptiveGroups;
   if (!Array.isArray(groups)) throw new Error('D1_USAGE_ANALYTICS_UNAVAILABLE');
-  let rowsRead = 0, rowsWritten = 0;
+  let rowsRead = 0, rowsWritten = 0, todayRowsRead = 0, todayRowsWritten = 0;
+  const definitions = d1UsageDatabaseDefinitions_(env);
+  const knownIds = new Set(definitions.map(item => item.databaseId));
+  const byDatabase = new Map(definitions.map(item => [item.databaseId, {
+    key:item.key,
+    databaseId:item.databaseId,
+    label:item.label,
+    periodRead:0,
+    periodWrite:0,
+    todayRead:0,
+    todayWrite:0
+  }]));
+  const other = { key:'other', databaseId:'', label:'기타 D1', periodRead:0, periodWrite:0, todayRead:0, todayWrite:0 };
   groups.forEach(group => {
     const sum = group && group.sum || {};
-    rowsRead += Math.max(0, Number(sum.rowsRead) || 0);
-    rowsWritten += Math.max(0, Number(sum.rowsWritten) || 0);
+    const read = Math.max(0, Number(sum.rowsRead) || 0);
+    const write = Math.max(0, Number(sum.rowsWritten) || 0);
+    const dimensions = group && group.dimensions || {};
+    const databaseId = safeStr(dimensions.databaseId);
+    const date = safeStr(dimensions.date).slice(0, 10);
+    const target = knownIds.has(databaseId) ? byDatabase.get(databaseId) : other;
+    rowsRead += read;
+    rowsWritten += write;
+    target.periodRead += read;
+    target.periodWrite += write;
+    if (date === period.endDate) {
+      todayRowsRead += read;
+      todayRowsWritten += write;
+      target.todayRead += read;
+      target.todayWrite += write;
+    }
   });
-  return d1UsageSummary_(period, rowsRead, rowsWritten, env, nowIso());
+  const usage = d1UsageSummary_(period, rowsRead, rowsWritten, env, nowIso());
+  usage.today = { utcDate:period.endDate, read:todayRowsRead, write:todayRowsWritten };
+  usage.databaseUsage = [...byDatabase.values(), other].filter(item => item.key !== 'other' || item.periodRead > 0 || item.periodWrite > 0);
+  return usage;
 }
 async function getD1DailyUsage(env, options, actorArg) {
   const actor = await getActor(env, actorArg);

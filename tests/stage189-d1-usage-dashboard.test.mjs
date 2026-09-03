@@ -82,6 +82,8 @@ assert.match(getUsage, /D1_USAGE_ANALYTICS_TOKEN/);
 assert.match(getUsage, /d1UsageReadCache_\(period, true\)/);
 assert.match(getUsage, /stale:true/);
 assert.match(analytics, /rowsRead rowsWritten/);
+assert.match(analytics, /dimensions \{ databaseId date \}/);
+assert.match(analytics, /databaseUsage/);
 assert.match(analytics, /api\.cloudflare\.com\/client\/v4\/graphql/);
 assert.doesNotMatch(getUsage, /D1_USAGE_ANALYTICS_TOKEN[^\n]*:/, 'analytics token must never be included in response payloads');
 
@@ -90,10 +92,13 @@ assert.match(assessment, /function loadD1UsagePanel_/);
 assert.match(assessment, /function refreshD1Usage_/);
 assert.match(assessment, /getD1DailyUsage\(\{force:!!force\}, adminActorPayload_\(\)\)/);
 assert.match(assessment, /D1 계정 사용량/);
-assert.match(assessment, /KCL·더컵을 포함한 동일 Cloudflare 계정 전체 기준입니다/);
+assert.match(assessment, /계정 한도는 합산하고, KCL·더컵 사용량은 DB별로 분리해 표시합니다/);
+assert.match(assessment, /오늘 사용량 \/ 현재 청구 주기 누적/);
 assert.match(wrangler, /D1_USAGE_ACCOUNT_ID\s*=\s*"8a36d483451bf789cbd72a724f6a842a"/);
 assert.match(wrangler, /D1_USAGE_PLAN\s*=\s*"workers_paid"/);
 assert.match(wrangler, /D1_USAGE_READ_LIMIT\s*=\s*"25000000000"/);
 assert.match(wrangler, /D1_USAGE_WRITE_LIMIT\s*=\s*"50000000"/);
+assert.match(wrangler, /D1_USAGE_KCL_DATABASE_ID\s*=\s*"503c0f26-389c-480c-b109-d5e53de8fc71"/);
+assert.match(wrangler, /D1_USAGE_THECUP_DATABASE_ID\s*=\s*"40d049eb-3cf2-4906-a5ce-c40d2dd63c34"/);
 
 process.stdout.write('Stage189 D1 usage dashboard tests passed.\n');
