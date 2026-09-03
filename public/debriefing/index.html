@@ -1213,6 +1213,19 @@ function normalizeKcacRoundForDisplay_(competition, round) {
   if (String(competition || '').toUpperCase() !== 'KCAC') return String(round || '');
   return /결선|본선|본\/?결선|final|main/i.test(String(round || '')) ? '결선' : '예선';
 }
+function kcacDebriefJudgeKey_(score, fallbackIndex) {
+  score = score || {};
+  // KCAC의 FAST/SLOW 두 잔은 같은 제출 행에서 만들어지므로 scoreRowId가 같으면
+  // 같은 익명 심사위원 번호를 사용합니다. 과거 자료는 심사위원 식별값으로 보완합니다.
+  var rowId = score.scoreRowId || score._scoreId || '';
+  if (String(rowId).trim()) return 'submission:' + String(rowId).trim();
+  var judge = score['심사위원명'] || score['심사위원'] || score.judgeName || score.Judge || '';
+  var role = score['역할'] || score.Role || score.JudgeRole || score.role || '';
+  var judgeKey = String(judge).replace(/\s+/g, '').toLowerCase();
+  var roleKey = String(role).replace(/\s+/g, '').toLowerCase();
+  if (judgeKey && judgeKey !== '-') return 'judge:' + judgeKey + ':' + roleKey;
+  return 'card:' + String(fallbackIndex == null ? '' : fallbackIndex);
+}
 function renderResult(res) {
   _lastResult = res;
   var previewNotice = document.getElementById('admin-preview-notice');
@@ -1224,6 +1237,7 @@ function renderResult(res) {
   }
   var isKtcc = String(res.competition || '').toUpperCase() === 'KTCC';
   var isIkrcDebrief = String(res.competition || '').toUpperCase() === 'IKRC';
+  var isKcacDebrief = String(res.competition || '').toUpperCase() === 'KCAC';
   var displayName = isKtcc ? (info.teamName || info.name || '') : info.name;
   document.getElementById('res-name').textContent = displayName;
   var subInfo = '';
@@ -1308,8 +1322,18 @@ function renderResult(res) {
       if (combinedCommentBox) section.appendChild(combinedCommentBox);
     }
 
-    list.forEach(function(s) {
-      var card = buildScoreCard(s, res.competition);
+    var kcacJudgeNumbers = {};
+    var nextKcacJudgeNumber = 1;
+    list.forEach(function(s, scoreIndex) {
+      var kcacJudgeNumber = 0;
+      if (isKcacDebrief) {
+        var judgeKey = kcacDebriefJudgeKey_(s, scoreIndex);
+        if (!Object.prototype.hasOwnProperty.call(kcacJudgeNumbers, judgeKey)) {
+          kcacJudgeNumbers[judgeKey] = nextKcacJudgeNumber++;
+        }
+        kcacJudgeNumber = kcacJudgeNumbers[judgeKey];
+      }
+      var card = buildScoreCard(s, res.competition, kcacJudgeNumber);
       section.appendChild(card);
     });
     body.appendChild(section);
@@ -1905,7 +1929,7 @@ function buildMobBreakdownGrid_(s, compCode) {
   return grid;
 }
 
-function buildScoreCard(s, compCode) {
+function buildScoreCard(s, compCode, anonymousJudgeNo) {
   var card = document.createElement('div');
   card.className = 'score-card';
   var isKtcc = String(compCode || '').toUpperCase() === 'KTCC';
@@ -1916,7 +1940,7 @@ function buildScoreCard(s, compCode) {
   var teamTitle = (s['팀번호'] ? ('Team ' + s['팀번호']) : '') + (s['팀명'] ? ((s['팀번호'] ? ' · ' : '') + s['팀명']) : '');
   var roleRaw = String(s['역할'] || s['Role'] || s['JudgeRole'] || '').toLowerCase();
   var publicTitle = '공식 평가 결과';
-  if (isKcac) publicTitle = '라떼아트 평가 결과';
+  if (isKcac) publicTitle = (Number(anonymousJudgeNo) > 0 ? (Number(anonymousJudgeNo) + '번 심사위원 ') : '') + '라떼아트 평가';
   else if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
   else if (/sensory|센서|감각|심사/.test(roleRaw)) publicTitle = '센서리 평가 결과';
   if (isKtcc) publicTitle = teamTitle || '팀 평가 결과';

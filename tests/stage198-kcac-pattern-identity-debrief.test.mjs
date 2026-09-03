@@ -70,8 +70,21 @@ assert.match(functionSource(assessment, 'validateKcacBeforeSubmit_'), /qualFirst
 
 const scoreCardSource = functionSource(debriefing, 'buildScoreCard');
 assert.match(scoreCardSource, /isKcac/);
-assert.match(scoreCardSource, /라떼아트 평가 결과/);
+assert.match(scoreCardSource, /anonymousJudgeNo/);
+assert.match(scoreCardSource, /번 심사위원 /);
+assert.match(scoreCardSource, /라떼아트 평가/);
+assert.doesNotMatch(scoreCardSource, /judgeLabel[^\n]*publicTitle/, 'KCAC public title must not expose the judge name');
 assert.ok(scoreCardSource.indexOf('if (isKcac)') < scoreCardSource.indexOf('/technical|테크|기술/'), 'KCAC title must take priority over generic role wording');
+const renderResultSource = functionSource(debriefing, 'renderResult');
+assert.match(renderResultSource, /kcacDebriefJudgeKey_[\s\S]*kcacJudgeNumbers[\s\S]*buildScoreCard\(s, res\.competition, kcacJudgeNumber\)/);
+const judgeKeySource = functionSource(debriefing, 'kcacDebriefJudgeKey_');
+assert.match(judgeKeySource, /scoreRowId[\s\S]*submission:/, 'FAST/SLOW rows from one submission must share one judge number');
+assert.match(judgeKeySource, /심사위원명[\s\S]*judge:/, 'older rows must fall back to a stable private judge identity');
+const judgeContext = {};
+vm.createContext(judgeContext);
+vm.runInContext(judgeKeySource, judgeContext);
+assert.equal(judgeContext.kcacDebriefJudgeKey_({scoreRowId:41, payloadRowIndex:0}, 0), judgeContext.kcacDebriefJudgeKey_({scoreRowId:41, payloadRowIndex:1}, 1));
+assert.notEqual(judgeContext.kcacDebriefJudgeKey_({scoreRowId:41}, 0), judgeContext.kcacDebriefJudgeKey_({scoreRowId:42}, 1));
 const introSource = functionSource(debriefing, 'buildReportIntro');
 assert.match(introSource, /라떼아트 공식 평가 결과/);
 assert.match(introSource, /FAST·SLOW 로제타/);
