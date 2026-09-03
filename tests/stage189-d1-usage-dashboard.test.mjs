@@ -28,11 +28,16 @@ function functionSource(source, name) {
   throw new Error(`${name} function incomplete`);
 }
 
-// 무료 플랜 한도 기준과 남은 비율 계산은 D1 행 수(rows) 기준으로 고정합니다.
+// Workers Paid 계정은 청구 주기 포함량(읽기 250억 / 쓰기 5천만 행) 기준으로 표시합니다.
 const ctx = {
   D1_FREE_DAILY_READ_LIMIT: 5_000_000,
   D1_FREE_DAILY_WRITE_LIMIT: 100_000,
+  D1_PAID_CYCLE_READ_LIMIT: 25_000_000_000,
+  D1_PAID_CYCLE_WRITE_LIMIT: 50_000_000,
+  D1_USAGE_DEFAULT_PLAN: 'workers_paid',
+  D1_USAGE_DEFAULT_CYCLE_START_DAY: 2,
   nowIso: () => '2026-08-27T00:30:00.000Z',
+  safeStr: value => value == null ? '' : String(value),
   Number,
   Math,
   Date,
@@ -40,6 +45,10 @@ const ctx = {
 vm.createContext(ctx);
 vm.runInContext([
   functionSource(rpc, 'd1UsageLimit_'),
+  functionSource(rpc, 'd1UsagePlan_'),
+  functionSource(rpc, 'd1UsageCycleStartDay_'),
+  functionSource(rpc, 'd1UsagePeriod_'),
+  functionSource(rpc, 'd1UsageLimits_'),
   functionSource(rpc, 'd1UsageMetric_'),
   functionSource(rpc, 'd1UsageSummary_'),
 ].join('\n'), ctx);
@@ -52,10 +61,16 @@ assert.equal(metric.remainingPercent, 20);
 const exceeded = ctx.d1UsageMetric_(100_100, 100_000);
 assert.equal(exceeded.remaining, 0);
 assert.ok(exceeded.usedPercent > 100);
-const summary = ctx.d1UsageSummary_('2026-08-27', 4_500_000, 70_000, {}, '2026-08-27T00:30:00.000Z');
-assert.equal(summary.read.remainingPercent, 10);
-assert.equal(summary.write.remainingPercent, 30);
-assert.equal(summary.resetAt, '2026-08-28T00:00:00.000Z');
+const period = ctx.d1UsagePeriod_({}, new Date('2026-08-27T00:30:00.000Z'));
+assert.equal(period.startDate, '2026-08-02');
+assert.equal(period.endDate, '2026-08-27');
+assert.equal(period.resetAt, '2026-09-02T00:00:00.000Z');
+const summary = ctx.d1UsageSummary_(period, 2_460_000, 83_220, {}, '2026-08-27T00:30:00.000Z');
+assert.equal(summary.plan, 'workers_paid');
+assert.equal(summary.read.limit, 25_000_000_000);
+assert.equal(summary.write.limit, 50_000_000);
+assert.ok(summary.read.remainingPercent > 99.9);
+assert.ok(summary.write.remainingPercent > 99.8);
 
 // 관리자 전용 GraphQL 집계·캐시·마지막 정상 수치 보존이 모두 있어야 합니다.
 const dispatch = functionSource(rpc, 'dispatch');
@@ -64,7 +79,7 @@ const analytics = functionSource(rpc, 'fetchD1DailyUsageAnalytics_');
 assert.match(dispatch, /getD1DailyUsage/);
 assert.match(getUsage, /hasAdmin\(actor\)/);
 assert.match(getUsage, /D1_USAGE_ANALYTICS_TOKEN/);
-assert.match(getUsage, /d1UsageReadCache_\(day, true\)/);
+assert.match(getUsage, /d1UsageReadCache_\(period, true\)/);
 assert.match(getUsage, /stale:true/);
 assert.match(analytics, /rowsRead rowsWritten/);
 assert.match(analytics, /api\.cloudflare\.com\/client\/v4\/graphql/);
@@ -74,9 +89,11 @@ assert.match(assessment, /id="d1-usage-card"/);
 assert.match(assessment, /function loadD1UsagePanel_/);
 assert.match(assessment, /function refreshD1Usage_/);
 assert.match(assessment, /getD1DailyUsage\(\{force:!!force\}, adminActorPayload_\(\)\)/);
-assert.match(assessment, /읽기 500만 \/ 쓰기 10만 행/);
+assert.match(assessment, /D1 계정 사용량/);
+assert.match(assessment, /KCL·더컵을 포함한 동일 Cloudflare 계정 전체 기준입니다/);
 assert.match(wrangler, /D1_USAGE_ACCOUNT_ID\s*=\s*"8a36d483451bf789cbd72a724f6a842a"/);
-assert.match(wrangler, /D1_USAGE_READ_LIMIT\s*=\s*"5000000"/);
-assert.match(wrangler, /D1_USAGE_WRITE_LIMIT\s*=\s*"100000"/);
+assert.match(wrangler, /D1_USAGE_PLAN\s*=\s*"workers_paid"/);
+assert.match(wrangler, /D1_USAGE_READ_LIMIT\s*=\s*"25000000000"/);
+assert.match(wrangler, /D1_USAGE_WRITE_LIMIT\s*=\s*"50000000"/);
 
 process.stdout.write('Stage189 D1 usage dashboard tests passed.\n');

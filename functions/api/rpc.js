@@ -22,6 +22,12 @@ const LOGIN_SECURITY_HMAC_ALGORITHM = 'HMAC-SHA256';
 const REGISTRY_REVISION_SETTING_KEY = 'registry_live_revision';
 const D1_FREE_DAILY_READ_LIMIT = 5000000;
 const D1_FREE_DAILY_WRITE_LIMIT = 100000;
+// 이 계정은 Workers Paid를 사용합니다. D1의 실제 포함량은 일일 무료 한도가 아니라
+// 청구 주기 기준(읽기 250억 / 쓰기 5천만 행)으로 표시해야 합니다.
+const D1_PAID_CYCLE_READ_LIMIT = 25000000000;
+const D1_PAID_CYCLE_WRITE_LIMIT = 50000000;
+const D1_USAGE_DEFAULT_PLAN = 'workers_paid';
+const D1_USAGE_DEFAULT_CYCLE_START_DAY = 2;
 const D1_USAGE_CACHE_TTL_MS = 3 * 60 * 1000;
 const D1_USAGE_FORCE_REFRESH_MIN_MS = 60 * 1000;
 const D1_USAGE_DEFAULT_ACCOUNT_ID = '8a36d483451bf789cbd72a724f6a842a';
@@ -1179,6 +1185,50 @@ function d1UsageLimit_(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
+function d1UsagePlan_(env) {
+  // 현재 계정은 Workers Paid이므로 값이 비어 있어도 유료 플랜 기준을 기본으로 합니다.
+  // 향후 무료 플랜으로 전환하면 Pages 변수 D1_USAGE_PLAN=free_daily로 명시할 수 있습니다.
+  return safeStr(env && env.D1_USAGE_PLAN).toLowerCase() === 'free_daily' ? 'free_daily' : D1_USAGE_DEFAULT_PLAN;
+}
+function d1UsageCycleStartDay_(env) {
+  return Math.max(1, Math.min(28, d1UsageLimit_(env && env.D1_USAGE_BILLING_CYCLE_START_DAY, D1_USAGE_DEFAULT_CYCLE_START_DAY)));
+}
+function d1UsagePeriod_(env, referenceDate) {
+  const now = referenceDate instanceof Date ? referenceDate : new Date();
+  const plan = d1UsagePlan_(env);
+  if (plan === 'free_daily') {
+    const startDate = now.toISOString().slice(0, 10);
+    return {
+      plan,
+      label:'무료 티어 · 일일 사용량',
+      startDate,
+      endDate:startDate,
+      resetAt:new Date(Date.parse(startDate + 'T00:00:00.000Z') + 24 * 60 * 60 * 1000).toISOString()
+    };
+  }
+  const startDay = d1UsageCycleStartDay_(env);
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), startDay));
+  if (now.getTime() < start.getTime()) start.setUTCMonth(start.getUTCMonth() - 1);
+  const reset = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, startDay));
+  return {
+    plan,
+    label:'Workers Paid · 청구 주기 누적',
+    startDate:start.toISOString().slice(0, 10),
+    endDate:now.toISOString().slice(0, 10),
+    resetAt:reset.toISOString()
+  };
+}
+function d1UsageLimits_(env, plan) {
+  const paid = plan !== 'free_daily';
+  const fallbackRead = paid ? D1_PAID_CYCLE_READ_LIMIT : D1_FREE_DAILY_READ_LIMIT;
+  const fallbackWrite = paid ? D1_PAID_CYCLE_WRITE_LIMIT : D1_FREE_DAILY_WRITE_LIMIT;
+  let readLimit = d1UsageLimit_(env && env.D1_USAGE_READ_LIMIT, fallbackRead);
+  let writeLimit = d1UsageLimit_(env && env.D1_USAGE_WRITE_LIMIT, fallbackWrite);
+  // 과거 배포에서 남아 있을 수 있는 무료 티어 값은 Workers Paid 표시에 적용하지 않습니다.
+  if (paid && readLimit === D1_FREE_DAILY_READ_LIMIT) readLimit = fallbackRead;
+  if (paid && writeLimit === D1_FREE_DAILY_WRITE_LIMIT) writeLimit = fallbackWrite;
+  return { readLimit, writeLimit };
+}
 function d1UsageMetric_(used, limit) {
   const safeUsed = Math.max(0, Number(used) || 0);
   const safeLimit = Math.max(1, Number(limit) || 1);
@@ -1191,32 +1241,39 @@ function d1UsageMetric_(used, limit) {
     remainingPercent: (remaining / safeLimit) * 100
   };
 }
-function d1UsageSummary_(day, readRows, writeRows, env, updatedAt) {
-  const readLimit = d1UsageLimit_(env && env.D1_USAGE_READ_LIMIT, D1_FREE_DAILY_READ_LIMIT);
-  const writeLimit = d1UsageLimit_(env && env.D1_USAGE_WRITE_LIMIT, D1_FREE_DAILY_WRITE_LIMIT);
-  const tomorrow = new Date(Date.parse(day + 'T00:00:00.000Z') + 24 * 60 * 60 * 1000).toISOString();
+function d1UsageSummary_(periodInput, readRows, writeRows, env, updatedAt) {
+  const period = typeof periodInput === 'string'
+    ? { plan:'free_daily', label:'무료 티어 · 일일 사용량', startDate:periodInput, endDate:periodInput, resetAt:new Date(Date.parse(periodInput + 'T00:00:00.000Z') + 24 * 60 * 60 * 1000).toISOString() }
+    : (periodInput || d1UsagePeriod_(env));
+  const limits = d1UsageLimits_(env, period.plan);
   return {
-    utcDate: day,
+    usageScope:'account',
+    plan:period.plan,
+    periodLabel:period.label,
+    periodStart:period.startDate,
+    periodEnd:period.endDate,
+    utcDate:period.endDate,
     updatedAt: updatedAt || nowIso(),
-    resetAt: tomorrow,
-    read: d1UsageMetric_(readRows, readLimit),
-    write: d1UsageMetric_(writeRows, writeLimit)
+    resetAt:period.resetAt,
+    read: d1UsageMetric_(readRows, limits.readLimit),
+    write: d1UsageMetric_(writeRows, limits.writeLimit)
   };
 }
-function d1UsageCacheKey_(day) {
-  return 'd1-usage:' + safeStr(day);
+function d1UsageCacheKey_(period) {
+  const key = typeof period === 'string' ? period : [period && period.plan, period && period.startDate, period && period.endDate].join(':');
+  return 'd1-usage:' + safeStr(key);
 }
-function d1UsageCacheRequest_(day) {
-  return new Request('https://kcl-d1-usage-cache.invalid/' + encodeURIComponent(safeStr(day)));
+function d1UsageCacheRequest_(period) {
+  return new Request('https://kcl-d1-usage-cache.invalid/' + encodeURIComponent(d1UsageCacheKey_(period)));
 }
-async function d1UsageReadCache_(day, allowStale = false) {
-  const key = d1UsageCacheKey_(day);
+async function d1UsageReadCache_(period, allowStale = false) {
+  const key = d1UsageCacheKey_(period);
   const now = Date.now();
   const memory = __d1UsageMemoryCache.get(key);
   if (memory && memory.payload && (allowStale || Number(memory.expiresAtMs || 0) > now)) return memory;
   try {
     if (typeof caches === 'undefined' || !caches.default) return allowStale ? memory : null;
-    const response = await caches.default.match(d1UsageCacheRequest_(day));
+    const response = await caches.default.match(d1UsageCacheRequest_(period));
     if (!response) return allowStale ? memory : null;
     const stored = await response.json();
     if (!stored || !stored.payload) return allowStale ? memory : null;
@@ -1230,20 +1287,20 @@ async function d1UsageReadCache_(day, allowStale = false) {
   } catch (_) {}
   return allowStale ? memory : null;
 }
-async function d1UsageWriteCache_(day, payload) {
+async function d1UsageWriteCache_(period, payload) {
   const now = Date.now();
   const item = { payload, cachedAtMs:now, expiresAtMs:now + D1_USAGE_CACHE_TTL_MS };
-  __d1UsageMemoryCache.set(d1UsageCacheKey_(day), item);
+  __d1UsageMemoryCache.set(d1UsageCacheKey_(period), item);
   try {
     if (typeof caches !== 'undefined' && caches.default) {
-      await caches.default.put(d1UsageCacheRequest_(day), new Response(JSON.stringify(item), {
+      await caches.default.put(d1UsageCacheRequest_(period), new Response(JSON.stringify(item), {
         headers:{ 'Content-Type':'application/json', 'Cache-Control':'max-age=' + Math.floor(D1_USAGE_CACHE_TTL_MS / 1000) }
       }));
     }
   } catch (_) {}
   return item;
 }
-async function fetchD1DailyUsageAnalytics_(env, day) {
+async function fetchD1DailyUsageAnalytics_(env, period) {
   const token = safeStr(env && env.D1_USAGE_ANALYTICS_TOKEN);
   const accountTag = safeStr(env && env.D1_USAGE_ACCOUNT_ID) || D1_USAGE_DEFAULT_ACCOUNT_ID;
   if (!token || !accountTag) throw new Error('D1_USAGE_NOT_CONFIGURED');
@@ -1261,7 +1318,7 @@ async function fetchD1DailyUsageAnalytics_(env, day) {
     response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
       method:'POST',
       headers:{ 'Authorization':'Bearer ' + token, 'Content-Type':'application/json' },
-      body:JSON.stringify({ query, variables:{ accountTag, start:day, end:day } })
+      body:JSON.stringify({ query, variables:{ accountTag, start:period.startDate, end:period.endDate } })
     });
   } catch (_) {
     throw new Error('D1_USAGE_ANALYTICS_UNAVAILABLE');
@@ -1278,7 +1335,7 @@ async function fetchD1DailyUsageAnalytics_(env, day) {
     rowsRead += Math.max(0, Number(sum.rowsRead) || 0);
     rowsWritten += Math.max(0, Number(sum.rowsWritten) || 0);
   });
-  return d1UsageSummary_(day, rowsRead, rowsWritten, env, nowIso());
+  return d1UsageSummary_(period, rowsRead, rowsWritten, env, nowIso());
 }
 async function getD1DailyUsage(env, options, actorArg) {
   const actor = await getActor(env, actorArg);
@@ -1286,19 +1343,19 @@ async function getD1DailyUsage(env, options, actorArg) {
   if (!safeStr(env && env.D1_USAGE_ANALYTICS_TOKEN)) {
     return { success:true, configured:false, message:'Cloudflare D1 분석 전용 키가 아직 연결되지 않았습니다.' };
   }
-  const day = d1UsageUtcDate_();
+  const period = d1UsagePeriod_(env);
   const force = !!(options && options.force);
-  const cached = await d1UsageReadCache_(day, false);
+  const cached = await d1UsageReadCache_(period, false);
   const ageMs = cached ? Math.max(0, Date.now() - Number(cached.cachedAtMs || 0)) : Infinity;
   if (cached && (!force || ageMs < D1_USAGE_FORCE_REFRESH_MIN_MS)) {
     return { success:true, configured:true, usage:cached.payload, cached:true, cacheAgeSeconds:Math.floor(ageMs / 1000) };
   }
   try {
-    const usage = await fetchD1DailyUsageAnalytics_(env, day);
-    const saved = await d1UsageWriteCache_(day, usage);
+    const usage = await fetchD1DailyUsageAnalytics_(env, period);
+    const saved = await d1UsageWriteCache_(period, usage);
     return { success:true, configured:true, usage, cached:false, cacheAgeSeconds:Math.max(0, Math.floor((Date.now() - saved.cachedAtMs) / 1000)) };
   } catch (_) {
-    const stale = await d1UsageReadCache_(day, true);
+    const stale = await d1UsageReadCache_(period, true);
     if (stale && stale.payload) {
       return { success:true, configured:true, stale:true, usage:stale.payload, cached:true, cacheAgeSeconds:Math.max(0, Math.floor((Date.now() - Number(stale.cachedAtMs || 0)) / 1000)) };
     }

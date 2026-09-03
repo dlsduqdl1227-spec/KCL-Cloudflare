@@ -2078,12 +2078,12 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     </div>
 
     <div id="admin-section-run" class="admin-manage-section active">
-      <div class="admin-section">D1 일일 사용량</div>
+      <div class="admin-section">D1 사용량</div>
       <section id="d1-usage-card" class="d1-usage-card" aria-live="polite">
         <div class="d1-usage-head">
           <div>
-            <div class="d1-usage-title">D1 무료 티어 사용량</div>
-            <div class="d1-usage-sub">Cloudflare 행 기준 집계 · 읽기 500만 / 쓰기 10만 행 · 매일 한국시간 오전 9시 초기화</div>
+            <div class="d1-usage-title">D1 계정 사용량</div>
+            <div class="d1-usage-sub">KCL·더컵을 포함한 동일 Cloudflare 계정 전체 기준입니다.</div>
           </div>
           <button id="d1-usage-refresh" class="btn-outline d1-usage-refresh" type="button" onclick="refreshD1Usage_()">새로고침</button>
         </div>
@@ -5523,7 +5523,8 @@ function renderD1Usage_(res) {
     '</div>' +
     '<div class="d1-usage-status ' + (res.stale ? 'err' : 'ok') + '">' +
       (res.stale ? 'Cloudflare 최신 집계를 일시적으로 불러오지 못해 마지막 정상 수치를 표시합니다. ' : '') +
-      '기준일(UTC): ' + escHtml(usage.utcDate || '-') + ' · 마지막 갱신: ' + escHtml(d1UsageTimeText_(usage.updatedAt)) +
+      escHtml(usage.periodLabel || 'D1 사용량') + ' · 집계 기간(UTC): ' + escHtml(usage.periodStart || usage.utcDate || '-') + ' ~ ' + escHtml(usage.periodEnd || usage.utcDate || '-') +
+      ' · 다음 초기화: ' + escHtml(d1UsageTimeText_(usage.resetAt)) + ' · 마지막 갱신: ' + escHtml(d1UsageTimeText_(usage.updatedAt)) +
       ' · Cloudflare 분석 집계에는 짧은 반영 지연이 있을 수 있습니다.' +
     '</div>';
 }
