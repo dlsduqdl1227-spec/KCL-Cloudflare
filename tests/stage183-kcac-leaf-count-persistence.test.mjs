@@ -35,7 +35,7 @@ assert.match(inputMarkup, /onblur="onKcacLeafCountInput\(this\.value,this\.getAt
 assert.match(assessment, /\.kcac-leaf-entry\.is-complete\{[^}]*border-color:#58d68d/i, 'completed leaf count must switch to a green confirmation border');
 assert.match(assessment, /\.kcac-leaf-entry\.is-complete \.kcac-leaf-entry-title::before\{content:'✓'/, 'completed leaf count must show a visible completion mark');
 assert.match(functionSource(assessment, 'syncKcacLeafEntryState_'), /classList\.toggle\('is-complete', entered\)/);
-assert.match(functionSource(assessment, 'syncKcacLeafEntryState_'), /입력 반영 · 리프 감점/);
+assert.match(functionSource(assessment, 'syncKcacLeafEntryState_'), /입력 완료 · 감점/);
 assert.match(functionSource(assessment, 'onKcacLeafCountInput'), /syncKcacLeafEntryState_\(j\)/, 'green completion state must update immediately while typing');
 
 const elements = {

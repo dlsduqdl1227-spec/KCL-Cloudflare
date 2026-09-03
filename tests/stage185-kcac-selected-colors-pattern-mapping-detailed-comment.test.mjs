@@ -46,12 +46,12 @@ const selectedHtml = tagContext.kcacSelectedSmartTagsHtml_('균형');
 assert.match(selectedHtml, /kcac-selected-tag-positive[^>]*>좌우 대칭 유지/);
 assert.match(selectedHtml, /kcac-selected-tag-refinement[^>]*>중심축 이탈/);
 
-// FAST 멸균우유를 선택한 뒤 SLOW 잔에는 다른 우유가 명시되고 현재 잔도 강조한다.
+// 1번·2번 잔은 우유명 없이 FAST/SLOW만 표시하고 현재 잔을 강조한다.
 const elements = {
-  'kcac-fast-milk':{ innerHTML:'' },
+  'kcac-milk-button-grid':{ innerHTML:'' },
   'kcac-milk-pattern-status':{ innerHTML:'', textContent:'' },
   'kcac-current-pattern-title':{ textContent:'' },
-  'kcac-current-milk-label':{ textContent:'' },
+  'kcac-current-cup-label':{ textContent:'' },
   'kcac-selected-pattern-label':{ textContent:'' }
 };
 const mappingContext = {
@@ -66,19 +66,23 @@ const mappingContext = {
 };
 vm.createContext(mappingContext);
 vm.runInContext(functionSource(assessment, 'kcacQualMilkEntries_'), mappingContext);
+vm.runInContext(functionSource(assessment, 'kcacQualCupNumberLabel_'), mappingContext);
 vm.runInContext(functionSource(assessment, 'refreshKcacCurrentCupAssignment_'), mappingContext);
 vm.runInContext(functionSource(assessment, 'syncKcacMilkPatternSelectors_'), mappingContext);
 mappingContext.syncKcacMilkPatternSelectors_();
-assert.match(elements['kcac-milk-pattern-status'].innerHTML, /FAST Rosetta[\s\S]*매일멸균우유/);
-assert.match(elements['kcac-milk-pattern-status'].innerHTML, /kcac-pattern-assignment-card current[\s\S]*SLOW Rosetta[\s\S]*어메이징 오트바리스타/);
+assert.match(elements['kcac-milk-button-grid'].innerHTML, /1번 잔[\s\S]*FAST Rosetta[\s\S]*SLOW Rosetta/);
+assert.match(elements['kcac-milk-button-grid'].innerHTML, /2번 잔[\s\S]*FAST Rosetta[\s\S]*SLOW Rosetta/);
+assert.doesNotMatch(elements['kcac-milk-button-grid'].innerHTML + elements['kcac-milk-pattern-status'].innerHTML, /매일|멸균|어메이징|오트|대체우유/);
+assert.match(elements['kcac-milk-pattern-status'].innerHTML, /FAST Rosetta[\s\S]*1번 잔/);
+assert.match(elements['kcac-milk-pattern-status'].innerHTML, /kcac-pattern-assignment-card current[\s\S]*SLOW Rosetta[\s\S]*2번 잔/);
 assert.equal(elements['kcac-current-pattern-title'].textContent, '현재 잔: SLOW Rosetta');
-assert.equal(elements['kcac-current-milk-label'].textContent, '사용 우유: 어메이징 오트바리스타');
+assert.equal(elements['kcac-current-cup-label'].textContent, '2번 잔');
 assert.equal(elements['kcac-selected-pattern-label'].textContent, '리프 10개 이하');
 
 assert.match(assessment, /\.kcac-qual-nav\{display:grid!important;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
 assert.match(functionSource(assessment, 'renderKcacCupNav'), /FAST|kcacOrderedQualEntries_|종합코멘트/);
-assert.match(functionSource(assessment, 'setKcacQualMilkPattern_'), /loadKcacJar\(_kcac\.currentIdx\)/, '우유 배정 후 실제 FAST 잔을 다시 열어야 합니다');
-assert.match(functionSource(assessment, 'renderKcacLeafRuleBox'), /kcac-leaf-entry-title[\s\S]*리프\(잎\) 수를 입력하세요/);
+assert.match(functionSource(assessment, 'setKcacQualMilkPattern_'), /loadKcacJar\(_kcac\.currentIdx\)/, '로제타 배정 후 선택한 잔을 다시 열어야 합니다');
+assert.match(functionSource(assessment, 'renderKcacLeafRuleBox'), /kcac-leaf-entry-title[\s\S]*리프 수/);
 assert.match(assessment, /id="kcac-header-cup-scores"[\s\S]*>합산</);
 assert.match(functionSource(assessment, 'renderKcacHeaderScores_'), /kcac-header-metric[\s\S]*calcKcacJarFinal\(j, false\)/);
 assert.match(functionSource(assessment, 'updateKcacFinal'), /renderKcacHeaderScores_\(\)[\s\S]*kcac-final-display/);

@@ -24,13 +24,17 @@ function functionSource(source, name) {
   throw new Error(`${name} function incomplete`);
 }
 
-// FAST 사용우유를 상단에서 한 번만 선택하고 SLOW는 자동 배정한다.
+// 1번·2번 잔에서 FAST/SLOW만 선택하고 우유 정보는 표시하지 않는다.
 assert.equal((assessment.match(/id="kcac-milk-button-grid"/g) || []).length, 1);
 assert.doesNotMatch(assessment, /<select[^>]+id="kcac-fast-milk"/);
 assert.doesNotMatch(assessment, /id="kcac-slow-milk"/);
-assert.match(functionSource(assessment, 'syncKcacMilkPatternSelectors_'), /FAST Rosetta[\s\S]*SLOW Rosetta[\s\S]*반대 우유로 자동 배정/);
+const patternSelector = functionSource(assessment, 'syncKcacMilkPatternSelectors_');
+assert.match(patternSelector, /FAST Rosetta[\s\S]*SLOW Rosetta/);
+assert.match(patternSelector, /kcacQualCupNumberLabel_/);
+assert.doesNotMatch(patternSelector, /milkProduct|milkType|멸균|오트|대체우유|사용할 우유/);
 const cupAssignment = functionSource(assessment, 'renderKcacQualPatternSelector_');
-assert.match(cupAssignment, /현재 잔 배정/);
+assert.match(cupAssignment, /현재 잔/);
+assert.doesNotMatch(cupAssignment, /milkProduct|milkType|사용 우유|멸균|오트/);
 assert.doesNotMatch(cupAssignment, /kcac-pattern-choice|setKcacQualPatternType_/);
 
 // 긍정·보완 하위 스마트태그는 부모 탭 클릭 없이 동시에 보인다.

@@ -2365,11 +2365,11 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <input type="text" id="kcac-name" placeholder="선수명 (선택)">
     <div id="kcac-evaluation-body" style="display:none">
     <div id="kcac-milk-pattern-setup" class="kcac-milk-pattern-setup">
-      <div class="section-label" style="margin-bottom:6px">사용 우유 · 로제타 배정</div>
-      <div class="participant-picker-help" style="display:block;margin-bottom:10px">참가자를 선택한 뒤 FAST Rosetta에 사용할 우유만 한 번 선택하세요. 나머지 우유는 SLOW Rosetta로 자동 배정됩니다.</div>
+      <div class="section-label" style="margin-bottom:6px">FAST · SLOW Rosetta 선택</div>
+      <div class="participant-picker-help" style="display:block;margin-bottom:10px">1번 잔과 2번 잔의 로제타를 선택하세요. 한 잔을 선택하면 다른 잔은 반대 로제타로 자동 배정됩니다.</div>
       <div class="kcac-milk-pattern-grid">
         <div class="kcac-milk-pattern-item">
-          <div class="kcac-milk-button-table" id="kcac-milk-button-grid" aria-label="FAST와 SLOW Rosetta 사용 우유 배정"></div>
+          <div class="kcac-milk-button-table" id="kcac-milk-button-grid" aria-label="1번 잔과 2번 잔 FAST SLOW Rosetta 선택"></div>
         </div>
       </div>
       <div id="kcac-milk-pattern-status" class="participant-picker-help" style="display:block;margin-top:9px"></div>
@@ -11807,8 +11807,8 @@ function startKcac() {
   _kcac.isBlindPrelim = !isMainFinal;
 
   if (!isMainFinal) {
-    _kcac.jars.push(makeKcacJar('예선 1잔 · 매일멸균우유', 'qual', '멸균우유', '매일멸균우유', '예선 패턴평가', ''));
-    _kcac.jars.push(makeKcacJar('예선 1잔 · 어메이징 오트바리스타', 'qual', '대체우유', '어메이징 오트바리스타', '예선 패턴평가', ''));
+    _kcac.jars.push(makeKcacJar('예선 1번 잔', 'qual', '멸균우유', '매일멸균우유', '예선 패턴평가', ''));
+    _kcac.jars.push(makeKcacJar('예선 2번 잔', 'qual', '대체우유', '어메이징 오트바리스타', '예선 패턴평가', ''));
   } else {
     // KCAC 결선은 헤드 심사위원으로만 구성되지만 역할별 담당 영역은 분리됩니다.
     if (isSensoryRoleForCode_('KCAC')) {
@@ -11906,16 +11906,21 @@ function calcKcacLeafPenalty(j) {
   j.leafPenalty = kcacLeafPenaltyFromValues_(j.patternType, j.leafCount);
   return j.leafPenalty;
 }
+function kcacQualCupNumberLabel_(j) {
+  var index = (_kcac.jars || []).indexOf(j);
+  return (index >= 0 ? index + 1 : 1) + '번 잔';
+}
 function kcacCupMainLabel(j) {
   var type = String((j && j.type) || '');
   var patternTitle = kcacPatternTypeTitle_(j && j.patternType);
   if (type === 'qual' && patternTitle) return patternTitle;
-  if (type === 'qual') return '예선 패턴 선택';
+  if (type === 'qual') return kcacQualCupNumberLabel_(j);
   if (type === 'final-pattern' || /창작패턴|패턴평가/i.test(String((j && j.label) || ''))) return '패턴평가';
   if (type === 'final-sensory' || /센서리/i.test(String((j && j.label) || ''))) return '센서리용아트';
   return String((j && j.label) || '');
 }
 function kcacCupSubLabel(j) {
+  if (j && j.type === 'qual') return kcacPatternTypeGuide_(j.patternType) || '';
   var product = String((j && j.milkProduct) || '');
   var type = String((j && j.milkType) || '');
   var guide = kcacPatternTypeGuide_(j && j.patternType);
@@ -11930,27 +11935,26 @@ function kcacCupFullLabel(j) {
 
 function renderKcacQualPatternSelector_(j) {
   if (!j || j.type !== 'qual') return '';
-  var milkLabel = j.milkProduct || j.milkType || '지정 우유';
+  var cupLabel = kcacQualCupNumberLabel_(j);
   var selected = kcacPatternTypeTitle_(j.patternType) || '미선택';
   return '<div class="kcac-rule-panel">' +
-    '<div class="kcac-rule-title">현재 잔 배정</div>' +
+    '<div class="kcac-rule-title">현재 잔</div>' +
     '<div class="kcac-pattern-summary">' +
       '<b id="kcac-current-pattern-title">현재 잔: ' + escHtml(selected) + '</b>' +
-      '<span><strong id="kcac-current-milk-label">사용 우유: ' + escHtml(milkLabel) + '</strong><small id="kcac-selected-pattern-label">' + (j.patternType ? escHtml(kcacPatternTypeGuide_(j.patternType)) : '패턴 미선택') + '</small></span>' +
+      '<span><strong id="kcac-current-cup-label">' + escHtml(cupLabel) + '</strong><small id="kcac-selected-pattern-label">' + (j.patternType ? escHtml(kcacPatternTypeGuide_(j.patternType)) : '로제타 미선택') + '</small></span>' +
     '</div>' +
-    '<div class="kcac-rule-note">패턴 변경은 참가자 정보 아래의 상단 선택에서 한 번만 진행합니다. FAST 사용우유를 정하면 다른 우유는 SLOW로 자동 배정됩니다.</div>' +
+    '<div class="kcac-rule-note">FAST/SLOW 선택은 참가자 정보 아래에서 언제든 바꿀 수 있습니다.</div>' +
   '</div>';
 }
 
 function refreshKcacCurrentCupAssignment_(j) {
   if (!j || j.type !== 'qual') return;
   var title = kcacPatternTypeTitle_(j.patternType) || '패턴 미선택';
-  var milk = j.milkProduct || j.milkType || '지정 우유';
   var titleEl = document.getElementById('kcac-current-pattern-title');
-  var milkEl = document.getElementById('kcac-current-milk-label');
+  var cupEl = document.getElementById('kcac-current-cup-label');
   var guideEl = document.getElementById('kcac-selected-pattern-label');
   if (titleEl) titleEl.textContent = '현재 잔: ' + title;
-  if (milkEl) milkEl.textContent = '사용 우유: ' + milk;
+  if (cupEl) cupEl.textContent = kcacQualCupNumberLabel_(j);
   if (guideEl) guideEl.textContent = j.patternType ? kcacPatternTypeGuide_(j.patternType) : '패턴 미선택';
 }
 
@@ -11977,35 +11981,26 @@ function syncKcacMilkPatternSelectors_() {
   var fastEntry = entries.find(function(entry){ return entry.jar.patternType === 'dynamic'; });
   var slowEntry = entries.find(function(entry){ return entry.jar.patternType === 'controlled'; });
   if (grid) {
-    var fastButtons = entries.map(function(entry){
-      var label = entry.jar.milkProduct || entry.jar.milkType || ('사용우유 ' + (entry.index + 1));
-      var selected = !!fastEntry && fastEntry.index === entry.index;
-      return '<button type="button" class="kcac-milk-choice-btn' + (selected ? ' on' : '') + '" data-kcac-milk-index="' + entry.index + '" aria-pressed="' + (selected ? 'true' : 'false') + '" onclick="setKcacQualMilkPattern_(\'dynamic\',' + entry.index + ')">' +
-        '<strong>' + escHtml(label) + '</strong><small>' + (selected ? '✓ FAST 선택 완료' : 'FAST에 사용') + '</small></button>';
+    grid.innerHTML = entries.map(function(entry){
+      var cupLabel = kcacQualCupNumberLabel_(entry.jar);
+      var fastSelected = entry.jar.patternType === 'dynamic';
+      var slowSelected = entry.jar.patternType === 'controlled';
+      return '<div class="kcac-milk-button-row" data-kcac-cup-index="' + entry.index + '">' +
+        '<div class="kcac-milk-button-label"><b>' + escHtml(cupLabel) + '</b><span>로제타 선택</span></div>' +
+        '<button type="button" class="kcac-milk-choice-btn' + (fastSelected ? ' on' : '') + '" aria-pressed="' + (fastSelected ? 'true' : 'false') + '" onclick="setKcacQualMilkPattern_(\'dynamic\',' + entry.index + ')"><strong>FAST Rosetta</strong><small>' + (fastSelected ? '✓ 선택됨' : '선택') + '</small></button>' +
+        '<button type="button" class="kcac-milk-choice-btn' + (slowSelected ? ' on' : '') + '" aria-pressed="' + (slowSelected ? 'true' : 'false') + '" onclick="setKcacQualMilkPattern_(\'controlled\',' + entry.index + ')"><strong>SLOW Rosetta</strong><small>' + (slowSelected ? '✓ 선택됨' : '선택') + '</small></button>' +
+      '</div>';
     }).join('');
-    var slowButtons = entries.map(function(entry){
-      var label = entry.jar.milkProduct || entry.jar.milkType || ('사용우유 ' + (entry.index + 1));
-      var selected = !!slowEntry && slowEntry.index === entry.index;
-      var blockedByFast = !!fastEntry && fastEntry.index === entry.index;
-      var cls = selected ? ' locked-selected' : ' locked';
-      var note = selected ? '✓ SLOW 자동 선택' : (blockedByFast ? '🔒 FAST 사용 중' : '자동 배정 대기');
-      return '<button type="button" class="kcac-milk-choice-btn' + cls + '" data-kcac-slow-milk-index="' + entry.index + '" disabled aria-disabled="true">' +
-        '<strong>' + escHtml(label) + '</strong><small>' + note + '</small></button>';
-    }).join('');
-    grid.innerHTML = '<div class="kcac-milk-button-row">' +
-      '<div class="kcac-milk-button-label"><b>FAST Rosetta</b><span>사용할 우유를 선택하세요</span></div>' + fastButtons + '</div>' +
-      '<div class="kcac-milk-button-row">' +
-      '<div class="kcac-milk-button-label"><b>SLOW Rosetta</b><span>반대 우유로 자동 배정</span></div>' + slowButtons + '</div>';
   }
   if (status) {
     if (fastEntry && slowEntry) {
       var current = Number(_kcac.currentIdx);
       status.innerHTML = '<div class="kcac-pattern-assignment-status">' +
-        '<div class="kcac-pattern-assignment-card' + (fastEntry.index === current ? ' current' : '') + '"><b>FAST Rosetta</b><span>' + escHtml(fastEntry.jar.milkProduct || fastEntry.jar.milkType || '지정 우유') + ' · ' + escHtml(kcacPatternTypeGuide_('dynamic')) + '</span></div>' +
-        '<div class="kcac-pattern-assignment-card' + (slowEntry.index === current ? ' current' : '') + '"><b>SLOW Rosetta</b><span>' + escHtml(slowEntry.jar.milkProduct || slowEntry.jar.milkType || '지정 우유') + ' · ' + escHtml(kcacPatternTypeGuide_('controlled')) + '</span></div>' +
+        '<div class="kcac-pattern-assignment-card' + (fastEntry.index === current ? ' current' : '') + '"><b>FAST Rosetta</b><span>' + escHtml(kcacQualCupNumberLabel_(fastEntry.jar)) + ' · ' + escHtml(kcacPatternTypeGuide_('dynamic')) + '</span></div>' +
+        '<div class="kcac-pattern-assignment-card' + (slowEntry.index === current ? ' current' : '') + '"><b>SLOW Rosetta</b><span>' + escHtml(kcacQualCupNumberLabel_(slowEntry.jar)) + ' · ' + escHtml(kcacPatternTypeGuide_('controlled')) + '</span></div>' +
       '</div>';
     } else {
-      status.textContent = 'FAST에 사용할 우유를 선택하면 SLOW 우유가 자동 배정됩니다.';
+      status.textContent = '1번 잔 또는 2번 잔에서 FAST/SLOW를 선택해주세요.';
     }
   }
   refreshKcacCurrentCupAssignment_(_kcac.jars[Number(_kcac.currentIdx)]);
@@ -12037,7 +12032,7 @@ function onKcacParticipantSelected_() {
 
 function setKcacQualMilkPattern_(patternType, jarIndex) {
   if (patternType !== 'dynamic' && patternType !== 'controlled') return;
-  // 모바일에서 숫자 입력을 마친 직후 FAST 우유 배정을 바꾸면 change/blur가
+  // 모바일에서 숫자 입력을 마친 직후 FAST/SLOW 배정을 바꾸면 change/blur가
   // 늦게 도착할 수 있습니다. 패턴 UI를 다시 그리기 전에 현재 입력을 먼저 보존합니다.
   syncKcacLeafCountFromDOM_();
   var target = _kcac.jars[parseInt(jarIndex, 10)];
@@ -12049,7 +12044,7 @@ function setKcacQualMilkPattern_(patternType, jarIndex) {
     entry.jar.leafPenalty = calcKcacLeafPenalty(entry.jar);
   });
   if (typeof kcacApplyProvidedPhotosForParticipant_ === 'function') kcacApplyProvidedPhotosForParticipant_();
-  // FAST로 선택한 실제 우유 잔을 바로 열어 이전 잔의 우유 문구가 남지 않게 합니다.
+  // 선택한 잔을 바로 열어 현재 로제타와 리프 수 입력 상태를 명확히 보여줍니다.
   _kcac.currentIdx = Math.max(0, _kcac.jars.indexOf(target));
   loadKcacJar(_kcac.currentIdx);
 }
@@ -12471,8 +12466,9 @@ function renderKcacCupNav() {
     var btn = document.createElement('button');
     btn.className = 'cup-btn' + (!(_kcac.overallMode && isUnifiedQual) && i === _kcac.currentIdx ? ' active' : '') +
                     (sub_score > 0 ? ' done' : '');
+    var navDetail = isUnifiedQual ? (kcacCupSubLabel(j) || kcacQualCupNumberLabel_(j)) : kcacCupSubLabel(j);
     btn.innerHTML = '<span class="cup-btn-num">' + escHtml(kcacCupMainLabel(j)) + '</span>' +
-                    '<span class="cup-btn-score">' + escHtml(isUnifiedQual ? (j.milkProduct || j.milkType || '우유 미배정') : kcacCupSubLabel(j)) + ' · ' + fmtScore(fin,2) + '</span>';
+                    '<span class="cup-btn-score">' + escHtml(navDetail) + ' · ' + fmtScore(fin,2) + '</span>';
     btn.onclick = (function(n){ return function(){ switchKcacJar(n); }; })(i);
     nav.insertBefore(btn, sub);
   });
@@ -12782,20 +12778,20 @@ function renderKcacLeafRuleBox(j) {
   if (!j || j.type !== 'qual') { box.style.display = 'none'; box.innerHTML = ''; return; }
   if (!j.patternType) {
     box.style.display = 'block';
-    box.innerHTML = '<b>리프 수 감점</b><br>먼저 상단에서 FAST Rosetta 또는 SLOW Rosetta를 선택하면 지정 리프 수 입력란이 표시됩니다.';
+    box.innerHTML = '<b>리프 수</b><br>위에서 이 잔의 FAST/SLOW Rosetta를 먼저 선택해주세요.';
     return;
   }
   var penalty = calcKcacLeafPenalty(j);
   var guide = kcacPatternTypeGuide_(j.patternType);
+  var patternTitle = kcacPatternTypeTitle_(j.patternType);
   var jarIndex = Math.max(0, _kcac.jars.indexOf(j));
   box.style.display = 'block';
   box.classList.add('kcac-leaf-entry');
-  box.innerHTML = '<div class="kcac-leaf-entry-title">리프(잎) 수를 입력하세요</div>' +
-    '<div class="kcac-leaf-entry-help"><b>' + escHtml(kcacPatternTypeRuleLabel_(j.patternType)) + '</b><br>' +
-    '지정 수를 벗어나면 차이 1개 -5점, 2개 -10점, 3개 이상 -15점이 반영됩니다.</div>' +
+  box.innerHTML = '<div class="kcac-leaf-entry-title">' + escHtml(patternTitle) + ' 리프 수</div>' +
+    '<div class="kcac-leaf-entry-help"><b>기준: ' + escHtml(guide) + '</b><br>숫자를 입력하면 감점 여부가 자동 표시됩니다.</div>' +
     '<div style="display:flex;gap:8px;align-items:center;margin-top:10px">' +
-    '<input type="number" id="kcac-leaf-count" data-jar-index="' + jarIndex + '" min="0" max="40" step="1" inputmode="numeric" aria-label="리프 잎 수 입력" placeholder="' + escHtml(guide || '리프 수 입력') + '" value="' + escHtml(j.leafCount == null ? '' : j.leafCount) + '" oninput="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" onchange="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" onblur="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" style="margin-bottom:0;text-align:center;font-weight:800">' +
-    '<div id="kcac-leaf-penalty-text" style="min-width:112px;text-align:right;font-size:13px;color:var(--text-2);font-weight:800">리프 감점 ' + fmtScore(penalty,0) + '점</div>' +
+    '<input type="number" id="kcac-leaf-count" data-jar-index="' + jarIndex + '" min="0" max="40" step="1" inputmode="numeric" aria-label="' + escHtml(patternTitle) + ' 리프 수 입력" placeholder="리프 수" value="' + escHtml(j.leafCount == null ? '' : j.leafCount) + '" oninput="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" onchange="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" onblur="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" style="margin-bottom:0;text-align:center;font-weight:800">' +
+    '<div id="kcac-leaf-penalty-text" style="min-width:92px;text-align:right;font-size:13px;color:var(--text-2);font-weight:800">감점 ' + fmtScore(penalty,0) + '점</div>' +
     '</div>';
   syncKcacLeafEntryState_(j);
 }
@@ -12811,11 +12807,12 @@ function syncKcacLeafEntryState_(j) {
   var title = box.querySelector('.kcac-leaf-entry-title');
   var input = document.getElementById('kcac-leaf-count');
   var penaltyEl = document.getElementById('kcac-leaf-penalty-text');
-  if (title) title.textContent = entered ? '리프(잎) 수 입력 완료' : '리프(잎) 수를 입력하세요';
+  var patternTitle = kcacPatternTypeTitle_(j.patternType) || '로제타';
+  if (title) title.textContent = entered ? (patternTitle + ' 리프 수 입력 완료') : (patternTitle + ' 리프 수');
   if (input) input.setAttribute('aria-invalid', entered ? 'false' : 'true');
   if (penaltyEl) penaltyEl.textContent = entered
-    ? ('입력 반영 · 리프 감점 ' + fmtScore(penalty,0) + '점')
-    : ('리프 감점 ' + fmtScore(penalty,0) + '점');
+    ? ('입력 완료 · 감점 ' + fmtScore(penalty,0) + '점')
+    : ('감점 ' + fmtScore(penalty,0) + '점');
 }
 
 function setKcacQualPatternType_(patternType) {
@@ -13531,7 +13528,7 @@ function buildKcacCommentReferenceHtml_() {
       var leaf = cup.leafCount === '' || cup.leafCount == null ? '리프 수 미입력' : ('리프 ' + cup.leafCount + '개');
       return '<section class="kcac-overall-guide-section" data-pattern="' + escHtml(cup.patternType || '') + '">' +
         '<div class="kcac-overall-guide-title">' + escHtml(pattern) + '</div>' +
-        '<div class="kcac-overall-guide-milk">사용 우유: ' + escHtml(cup.milkProduct || cup.milkType || '지정 우유') + ' · ' + escHtml(leaf) + '</div>' +
+        '<div class="kcac-overall-guide-milk">' + escHtml(leaf) + '</div>' +
         buildKcacReferenceCardsForJar_(cup) + '</section>';
     }).join('');
     return '<div class="kcac-overall-guide-grid" data-kcac-comment-reference="combined">' + sections + '</div>';
@@ -13540,8 +13537,8 @@ function buildKcacCommentReferenceHtml_() {
   if (j.type === 'qual') {
     var pattern = kcacPatternTypeTitle_(j.patternType) || '패턴 미배정';
     var leaf = j.leafCount === '' || j.leafCount == null ? '리프 수 미입력' : ('리프 ' + j.leafCount + '개');
-    cards = '<div class="mob-comment-reference-card"><div class="mob-comment-reference-title">사용 우유 · 패턴</div>' +
-      '<div class="mob-comment-reference-text">' + escHtml((j.milkProduct || j.milkType || '지정 우유') + ' · ' + pattern + ' · ' + leaf) + '</div></div>' + cards;
+    cards = '<div class="mob-comment-reference-card"><div class="mob-comment-reference-title">로제타 · 리프 수</div>' +
+      '<div class="mob-comment-reference-text">' + escHtml(pattern + ' · ' + leaf) + '</div></div>' + cards;
   }
   var manual = String(j.comment || '').trim();
   var generated = String(j.generatedComment || '').trim();
@@ -13674,18 +13671,14 @@ function validateKcacBeforeSubmit_() {
   syncKcacLeafCountFromDOM_();
   var isQual = !_kcac.jars.some(function(j){ return j.type !== 'qual'; });
   var hasDynamic = false, hasControlled = false;
-  var sterilizedMilkCount = 0, alternativeMilkCount = 0;
   var missingLeafLabels = [];
   for (var i = 0; i < _kcac.jars.length; i++) {
     var j = _kcac.jars[i];
 
-    // 예선은 FAST/SLOW 패턴, 리프 수, 우유 구성까지 규정 검증합니다.
+    // 예선은 FAST/SLOW 로제타와 리프 수를 잔별로 검증합니다.
     if (j.type === 'qual') {
-      var milkText = String((j.milkType || '') + ' ' + (j.milkProduct || '') + ' ' + (j.label || ''));
-      if (/멸균/i.test(milkText)) sterilizedMilkCount++;
-      if (/식물성|대체우유|오트|어메이징/i.test(milkText)) alternativeMilkCount++;
       if (!j.patternType) {
-        toast(kcacCupSubLabel(j) + ' 패턴을 FAST Rosetta 또는 SLOW Rosetta 중 선택해주세요.', true);
+        toast(kcacQualCupNumberLabel_(j) + '의 FAST 또는 SLOW Rosetta를 선택해주세요.', true);
         loadKcacJar(i);
         return false;
       }
@@ -13707,10 +13700,6 @@ function validateKcacBeforeSubmit_() {
   }
   if (isQual && (!hasDynamic || !hasControlled)) {
     toast('예선은 FAST Rosetta 1잔과 SLOW Rosetta 1잔이 필요합니다.', true);
-    return false;
-  }
-  if (isQual && (sterilizedMilkCount !== 1 || alternativeMilkCount !== 1)) {
-    toast('예선은 멸균우유 1잔과 대체우유 1잔이 필요합니다. 우유 구성이 중복되지 않았는지 확인해주세요.', true);
     return false;
   }
   _kcac.leafCountWarnings = missingLeafLabels;

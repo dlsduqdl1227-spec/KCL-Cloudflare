@@ -20,15 +20,18 @@ function functionSource(source, name) {
 const participant = assessment.indexOf('id="kcac-participant-select"');
 const assignment = assessment.indexOf('id="kcac-milk-pattern-setup"');
 const cupTitle = assessment.indexOf('id="kcac-cup-title"');
-assert.ok(participant >= 0 && participant < assignment && assignment < cupTitle, 'milk/pattern assignment must appear immediately after participant selection and before cup evaluation');
+assert.ok(participant >= 0 && participant < assignment && assignment < cupTitle, 'pattern assignment must appear immediately after participant selection and before cup evaluation');
 assert.match(assessment, /id="kcac-milk-button-grid"/);
-assert.doesNotMatch(assessment, /<select[^>]+id="kcac-fast-milk"/, 'FAST milk must use visible buttons instead of a dropdown');
+assert.doesNotMatch(assessment, /<select[^>]+id="kcac-fast-milk"/);
 assert.match(assessment, /kcac-milk-choice-btn/);
 assert.match(assessment, /FAST Rosetta[\s\S]*SLOW Rosetta/);
-assert.doesNotMatch(assessment, /id="kcac-slow-milk"/, 'SLOW must be assigned automatically from the one FAST milk selection');
-assert.match(assessment, /반대 우유로 자동 배정/);
-assert.match(functionSource(assessment, 'syncKcacMilkPatternSelectors_'), /FAST 선택 완료[\s\S]*SLOW 자동 선택[\s\S]*FAST 사용 중/);
-assert.match(functionSource(assessment, 'syncKcacMilkPatternSelectors_'), /disabled aria-disabled="true"/, 'SLOW buttons must be locked because their milk is assigned automatically');
+assert.doesNotMatch(assessment, /id="kcac-slow-milk"/);
+assert.match(assessment, /한 잔을 선택하면 다른 잔은 반대 로제타로 자동 배정됩니다/);
+const selectorSource = functionSource(assessment, 'syncKcacMilkPatternSelectors_');
+assert.match(selectorSource, /1번 잔|kcacQualCupNumberLabel_/);
+assert.ok(selectorSource.includes("setKcacQualMilkPattern_(\\'dynamic\\'"));
+assert.ok(selectorSource.includes("setKcacQualMilkPattern_(\\'controlled\\'"));
+assert.doesNotMatch(selectorSource, /milkProduct|milkType|멸균|오트|대체우유|사용할 우유/);
 
 assert.match(functionSource(assessment, 'applyParticipantSelect_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
 assert.match(functionSource(assessment, 'applyParticipantNumberInput_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
