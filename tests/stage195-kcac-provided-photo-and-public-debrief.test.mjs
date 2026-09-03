@@ -44,6 +44,10 @@ assert.match(assessment, /전체 제출완료/);
 assert.match(functionSource(assessment, 'onKcacParticipantSelected_'), /submitDock\.style\.display = hasParticipant \? 'block' : 'none'/);
 assert.match(assessment, /#kcac-cup-nav\.kcac-qual-nav\{[\s\S]*display:grid!important/);
 assert.match(functionSource(assessment, 'buildKcacScoreSlider_'), /disabled/);
+assert.match(functionSource(assessment, 'buildKcacScoreSlider_'), /kcac-score-slider/);
+assert.match(assessment, /#kcac-attrs input\[type=range\]\.kcac-score-slider\{touch-action:none!important/);
+assert.match(functionSource(assessment, 'onKcacScore'), /if \(finalize\) \{[\s\S]*scheduleKcacFinalUpdate_\(\)[\s\S]*refreshKcacCommentReference_\(\)[\s\S]*scheduleKcacCupNav\(\)/);
+assert.doesNotMatch(functionSource(assessment, 'kcacCommentPayloadForJar_'), /milkType|milkProduct/);
 assert.match(assessment, /점수 고정 \(슬라이더 잠금\)/);
 const lockState = { disabled:false };
 const lockCtx = {

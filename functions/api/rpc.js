@@ -7518,8 +7518,8 @@ function _kcacAreaObservation_(item, tagsByArea, polarity) {
 function _kcacCombinedCupObservation_(cup) {
   cup = cup || {};
   const pattern = safeStr(cup.patternType || cup.pattern || '패턴');
-  const milk = safeStr(cup.milkProduct || cup.milkType);
-  const subject = milk ? `${pattern}(${milk})` : pattern;
+  // 우유 배정은 심사 운영용 정보입니다. 선수용 종합코멘트에는 FAST/SLOW 패턴만 언급합니다.
+  const subject = pattern;
   const evidence = _kcacTagEvidence_({ smartTags:cup.smartTags, smartTagPolarity:cup.smartTagPolarity });
   const clean = values => Array.from(new Set((values || []).map(value => _cleanTagText_(safeStr(value).replace(/^[^:：]{1,40}[:：]\s*/, ''))).filter(Boolean))).slice(0, 2);
   const positive = clean(evidence.positive);
@@ -7581,7 +7581,6 @@ function generateKcacComment(payload) {
   const smartTags = payload.smartTags || {};
   const type = safeStr(payload.type || '');
   const pattern = safeStr(payload.patternType || payload.pattern || '패턴');
-  const milk = safeStr(payload.milkProduct || payload.milkType);
   const scoreItems = Object.keys(scores).map(k => ({name:k, score:scores[k]}));
   const avg = _avg(scoreItems.map(x=>x.score));
   const isSensory = /sensory|맛|질감/i.test(type);
@@ -7619,7 +7618,7 @@ function generateKcacComment(payload) {
   const leafText = leafValue !== '' && /qual/i.test(type)
     ? `리프 ${leafValue}개가 기록되었${_num(payload.leafPenalty) > 0 ? '고 기준 차이는 감점에 반영되었습니다' : '습니다'}.`
     : '';
-  const contextText = `${milk ? milk + ' 조건의 ' : ''}${pattern}`;
+  const contextText = pattern;
   let evidenceText = '';
   if (positiveText && refinementText) evidenceText = `${positiveText}${_subjectParticle_(positiveText)} 강점으로, ${refinementText}${_subjectParticle_(refinementText)} 보완 관찰로 확인됐습니다.`;
   else if (positiveText) evidenceText = `${positiveText}${_subjectParticle_(positiveText)} 주요 강점으로 확인됐습니다.`;

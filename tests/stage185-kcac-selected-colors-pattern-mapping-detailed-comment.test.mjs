@@ -141,8 +141,9 @@ const combined = await rpc('generateKcacComment', {
 assert.equal(combined.success, true);
 assert.equal(combined.comments.length, 2);
 combined.comments.forEach(comment => {
-  assert.match(comment, /FAST Rosetta[\s\S]*매일멸균우유/);
-  assert.match(comment, /SLOW Rosetta[\s\S]*어메이징 오트바리스타/);
+  assert.match(comment, /FAST Rosetta/);
+  assert.match(comment, /SLOW Rosetta/);
+  assert.doesNotMatch(comment, /멸균우유|매일멸균|대체우유|어메이징|오트바리스타|오트밀/);
   assert.match(comment, /리프 15개/);
   assert.match(comment, /리프 9개/);
   assert.match(comment, /전체 항목 흐름에서는/);

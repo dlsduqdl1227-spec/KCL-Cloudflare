@@ -502,6 +502,7 @@ input[type=range].kcl-range,
 .kcac-qual-nav .cup-btn-score{font-size:9px;line-height:1.2;white-space:normal;overflow-wrap:anywhere}
 .kcac-submit-dock{display:none;position:sticky;top:0;z-index:82;padding:8px max(12px,var(--safe-right)) 9px max(12px,var(--safe-left));background:rgba(7,7,7,.96);border-bottom:1px solid var(--border);box-shadow:0 8px 20px rgba(0,0,0,.22)}
 .kcac-submit-dock .submit-btn-nav{display:block;width:min(100%,760px);height:48px;margin:0 auto;font-size:15px;border:1px solid #fff;box-shadow:0 6px 18px rgba(255,255,255,.12)}
+#kcac-attrs input[type=range].kcac-score-slider{touch-action:none!important;-ms-touch-action:none!important;overscroll-behavior:contain!important}
 .kcac-overall-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .kcac-overall-guide-section{min-width:0;border:1px solid var(--border-lt);border-radius:10px;background:#111;padding:12px}
 .kcac-overall-guide-title{font-size:14px;font-weight:950;color:#fff;margin-bottom:4px}
@@ -12617,7 +12618,7 @@ function onKcacCommentInput() {
 
 function buildKcacScoreSlider_(key, value, locked) {
   var score = quantizeScoreStep_(value, 0.2, 0, 5);
-  return '<input type="range" class="score-slider" min="0" max="5" step="0.01" data-score-step="0.2" data-kcac-score="' + escHtml(key) + '" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this)" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this)"' + (locked ? ' disabled' : '') + '>';
+  return '<input type="range" class="score-slider kcac-score-slider" min="0" max="5" step="0.01" data-score-step="0.2" data-kcac-score="' + escHtml(key) + '" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this)" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this)"' + (locked ? ' disabled' : '') + '>';
 }
 
 function toggleKcacScoreLock_(key) {
@@ -12640,11 +12641,14 @@ function onKcacScore(key, val, finalize, el) {
   var descEl = document.getElementById('kcac-d-' + key);
   if (valEl) valEl.textContent = fmtScore(v,2);
   if (descEl) descEl.textContent = kcacGetDesc(v);
-  // 드래그 중에는 thumb 값을 강제로 되돌리지 않아 흔들림을 줄이고, 손을 뗀 뒤 0.2점 단위로 정렬합니다.
-  if (finalize && el) el.value = fmtScore(v,2);
-  scheduleKcacFinalUpdate_();
-  refreshKcacCommentReference_();
-  if (finalize) scheduleKcacCupNav();
+  // 드래그 중에는 현재 행의 숫자만 갱신합니다. 헤더·탭·종합코멘트 가이드를 매 프레임
+  // 다시 그리면 모바일 스크롤 높이가 흔들릴 수 있으므로 손을 뗀 시점에 한 번만 반영합니다.
+  if (finalize) {
+    if (el) el.value = fmtScore(v,2);
+    scheduleKcacFinalUpdate_();
+    refreshKcacCommentReference_();
+    scheduleKcacCupNav();
+  }
 }
 
       function kcacScoreWeight_(j, key) {
@@ -13580,11 +13584,9 @@ function clearKcacGeneratedComment() {
 
 function kcacCommentPayloadForJar_(j) {
   return {
-    label: j.label,
+    label: kcacPatternTypeTitle_(j.patternType) || 'KCAC 평가',
     type: j.type,
     patternType: kcacPatternTypeTitle_(j.patternType) || j.patternType,
-    milkType: j.milkType,
-    milkProduct: j.milkProduct,
     leafCount: j.leafCount,
     leafPenalty: j.leafPenalty,
     purpose: j.purpose,
