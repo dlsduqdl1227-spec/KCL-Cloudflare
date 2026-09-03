@@ -30,7 +30,7 @@ assert.doesNotMatch(assessment, /<select[^>]+id="kcac-fast-milk"/);
 assert.doesNotMatch(assessment, /id="kcac-slow-milk"/);
 const patternSelector = functionSource(assessment, 'syncKcacMilkPatternSelectors_');
 assert.match(patternSelector, /FAST Rosetta[\s\S]*SLOW Rosetta/);
-assert.match(patternSelector, /kcacQualCupNumberLabel_/);
+assert.match(patternSelector, /1번 컵[\s\S]*2번 컵/);
 assert.doesNotMatch(patternSelector, /milkProduct|milkType|멸균|오트|대체우유|사용할 우유/);
 const cupAssignment = functionSource(assessment, 'renderKcacQualPatternSelector_');
 assert.match(cupAssignment, /현재 잔/);

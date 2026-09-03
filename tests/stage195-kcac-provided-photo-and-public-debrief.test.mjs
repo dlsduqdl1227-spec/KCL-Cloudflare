@@ -41,7 +41,7 @@ assert.ok(assetFiles.includes('p22-slow.jpg'));
 // 속성별 슬라이더는 개별 잠금이 가능하고, 제출 버튼은 점수 입력 중에도 고정 표시됩니다.
 assert.match(assessment, /id="kcac-submit-dock"/);
 assert.match(assessment, /전체 제출완료/);
-assert.match(functionSource(assessment, 'onKcacParticipantSelected_'), /submitDock\.style\.display = hasParticipant \? 'block' : 'none'/);
+assert.match(functionSource(assessment, 'onKcacParticipantSelected_'), /submitDock\.style\.display = hasParticipant && hasCupOrder \? 'block' : 'none'/);
 assert.match(assessment, /#kcac-cup-nav\.kcac-qual-nav\{[\s\S]*display:grid!important/);
 assert.match(functionSource(assessment, 'buildKcacScoreSlider_'), /disabled/);
 assert.match(functionSource(assessment, 'buildKcacScoreSlider_'), /kcac-score-slider/);

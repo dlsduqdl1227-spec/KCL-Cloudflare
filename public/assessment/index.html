@@ -502,6 +502,9 @@ input[type=range].kcl-range,
 .kcac-qual-nav .cup-btn-score{font-size:9px;line-height:1.2;white-space:normal;overflow-wrap:anywhere}
 .kcac-submit-dock{display:none;position:sticky;top:0;z-index:82;padding:8px max(12px,var(--safe-right)) 9px max(12px,var(--safe-left));background:rgba(7,7,7,.96);border-bottom:1px solid var(--border);box-shadow:0 8px 20px rgba(0,0,0,.22)}
 .kcac-submit-dock .submit-btn-nav{display:block;width:min(100%,760px);height:48px;margin:0 auto;font-size:15px;border:1px solid #fff;box-shadow:0 6px 18px rgba(255,255,255,.12)}
+.kcac-cup-save-actions{margin:18px 0 4px;padding:12px;border:1px solid #3b4f46;border-radius:12px;background:#101813}
+.kcac-cup-save-actions .btn{margin:0;background:#eafbf2;color:#102118;border-color:#7ce4ac}
+.kcac-cup-save-status{margin-top:7px;text-align:center;font-size:11px;color:#79dfa7;font-weight:750}
 #kcac-attrs input[type=range].kcac-score-slider{touch-action:none!important;-ms-touch-action:none!important;overscroll-behavior:contain!important}
 .kcac-overall-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .kcac-overall-guide-section{min-width:0;border:1px solid var(--border-lt);border-radius:10px;background:#111;padding:12px}
@@ -2365,8 +2368,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <input type="text" id="kcac-name" placeholder="선수명 (선택)">
     <div id="kcac-evaluation-body" style="display:none">
     <div id="kcac-milk-pattern-setup" class="kcac-milk-pattern-setup">
-      <div class="section-label" style="margin-bottom:6px">FAST · SLOW Rosetta 선택</div>
-      <div class="participant-picker-help" style="display:block;margin-bottom:10px">1번 잔과 2번 잔의 로제타를 선택하세요. 한 잔을 선택하면 다른 잔은 반대 로제타로 자동 배정됩니다.</div>
+      <div class="section-label" style="margin-bottom:6px">1번 컵 로제타 선택</div>
+      <div class="participant-picker-help" style="display:block;margin-bottom:10px">먼저 제공된 1번 컵이 FAST인지 SLOW인지 선택하세요. 2번 컵은 반대 로제타로 자동 배정되며, 두 평가 데이터는 서로 섞이지 않습니다.</div>
       <div class="kcac-milk-pattern-grid">
         <div class="kcac-milk-pattern-item">
           <div class="kcac-milk-button-table" id="kcac-milk-button-grid" aria-label="1번 잔과 2번 잔 FAST SLOW Rosetta 선택"></div>
@@ -2422,6 +2425,10 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div id="kcac-pre-eval"></div>
     <div id="kcac-leaf-rule-box" class="time-rule-guide" style="display:none"></div>
     <div id="kcac-attrs"></div>
+    <div class="kcac-cup-save-actions" id="kcac-cup-save-actions" style="display:none">
+      <button type="button" class="btn" id="kcac-save-next-btn" onclick="saveKcacCurrentCupAndNext_()">현재 컵 임시저장 · 다음 컵</button>
+      <div class="kcac-cup-save-status" id="kcac-cup-save-status">점수·잠금·스마트태그·리프 수를 이 컵에 독립 저장합니다.</div>
+    </div>
     </div>
 
     <div id="kcac-overall-comment-panel" style="display:none">
@@ -11886,10 +11893,14 @@ function startKcac() {
   _kcac.leafCountWarnings = [];
   _kcac.roundName = roundName;
   _kcac.isBlindPrelim = !isMainFinal;
+  _kcac.qualMappingVersion = 2;
+  _kcac.qualFirstPattern = '';
 
   if (!isMainFinal) {
-    _kcac.jars.push(makeKcacJar('예선 1번 잔', 'qual', '멸균우유', '매일멸균우유', '예선 패턴평가', ''));
-    _kcac.jars.push(makeKcacJar('예선 2번 잔', 'qual', '대체우유', '어메이징 오트바리스타', '예선 패턴평가', ''));
+    // 예선 평가 데이터는 실제 제공 순서와 무관하게 FAST/SLOW 전용 공간에 고정합니다.
+    // 1번 컵이 어느 패턴인지는 qualFirstPattern 매핑만 바뀌며 점수 객체는 이동하지 않습니다.
+    _kcac.jars.push(makeKcacJar('FAST Rosetta', 'qual', '멸균우유', '매일멸균우유', '예선 패턴평가', 'dynamic'));
+    _kcac.jars.push(makeKcacJar('SLOW Rosetta', 'qual', '대체우유', '어메이징 오트바리스타', '예선 패턴평가', 'controlled'));
   } else {
     // KCAC 결선은 헤드 심사위원으로만 구성되지만 역할별 담당 영역은 분리됩니다.
     if (isSensoryRoleForCode_('KCAC')) {
@@ -11987,9 +11998,17 @@ function calcKcacLeafPenalty(j) {
   j.leafPenalty = kcacLeafPenaltyFromValues_(j.patternType, j.leafCount);
   return j.leafPenalty;
 }
+function kcacValidQualPattern_(patternType) {
+  return patternType === 'dynamic' || patternType === 'controlled';
+}
+function kcacQualCupNumber_(j) {
+  var firstPattern = String((_kcac && _kcac.qualFirstPattern) || '');
+  if (!j || j.type !== 'qual' || !kcacValidQualPattern_(firstPattern)) return 0;
+  return j.patternType === firstPattern ? 1 : 2;
+}
 function kcacQualCupNumberLabel_(j) {
-  var index = (_kcac.jars || []).indexOf(j);
-  return (index >= 0 ? index + 1 : 1) + '번 잔';
+  var cupNumber = kcacQualCupNumber_(j);
+  return cupNumber ? (cupNumber + '번 컵') : '컵 순서 선택 전';
 }
 function kcacCupMainLabel(j) {
   var type = String((j && j.type) || '');
@@ -12017,24 +12036,24 @@ function kcacCupFullLabel(j) {
 function renderKcacQualPatternSelector_(j) {
   if (!j || j.type !== 'qual') return '';
   var cupLabel = kcacQualCupNumberLabel_(j);
-  var selected = kcacPatternTypeTitle_(j.patternType) || '미선택';
+  var selected = kcacPatternTypeTitle_(j.patternType) || '로제타';
   return '<div class="kcac-rule-panel">' +
     '<div class="kcac-rule-title">현재 잔</div>' +
     '<div class="kcac-pattern-summary">' +
-      '<b id="kcac-current-pattern-title">현재 잔: ' + escHtml(selected) + '</b>' +
-      '<span><strong id="kcac-current-cup-label">' + escHtml(cupLabel) + '</strong><small id="kcac-selected-pattern-label">' + (j.patternType ? escHtml(kcacPatternTypeGuide_(j.patternType)) : '로제타 미선택') + '</small></span>' +
+      '<b id="kcac-current-pattern-title">현재: ' + escHtml(selected) + '</b>' +
+      '<span><strong id="kcac-current-cup-label">' + escHtml(cupLabel) + '</strong><small id="kcac-selected-pattern-label">' + escHtml(kcacPatternTypeGuide_(j.patternType)) + '</small></span>' +
     '</div>' +
-    '<div class="kcac-rule-note">FAST/SLOW 선택은 참가자 정보 아래에서 언제든 바꿀 수 있습니다.</div>' +
+    '<div class="kcac-rule-note">이 탭의 점수·잠금·스마트태그·리프 수는 다른 로제타 탭과 완전히 별도로 저장됩니다.</div>' +
   '</div>';
 }
 
 function refreshKcacCurrentCupAssignment_(j) {
   if (!j || j.type !== 'qual') return;
-  var title = kcacPatternTypeTitle_(j.patternType) || '패턴 미선택';
+  var title = kcacPatternTypeTitle_(j.patternType) || '로제타';
   var titleEl = document.getElementById('kcac-current-pattern-title');
   var cupEl = document.getElementById('kcac-current-cup-label');
   var guideEl = document.getElementById('kcac-selected-pattern-label');
-  if (titleEl) titleEl.textContent = '현재 잔: ' + title;
+  if (titleEl) titleEl.textContent = '현재: ' + title;
   if (cupEl) cupEl.textContent = kcacQualCupNumberLabel_(j);
   if (guideEl) guideEl.textContent = j.patternType ? kcacPatternTypeGuide_(j.patternType) : '패턴 미선택';
 }
@@ -12056,32 +12075,25 @@ function kcacQualMilkEntries_() {
 }
 
 function syncKcacMilkPatternSelectors_() {
-  var entries = kcacQualMilkEntries_();
   var grid = document.getElementById('kcac-milk-button-grid');
   var status = document.getElementById('kcac-milk-pattern-status');
-  var fastEntry = entries.find(function(entry){ return entry.jar.patternType === 'dynamic'; });
-  var slowEntry = entries.find(function(entry){ return entry.jar.patternType === 'controlled'; });
+  var firstPattern = String((_kcac && _kcac.qualFirstPattern) || '');
   if (grid) {
-    grid.innerHTML = entries.map(function(entry){
-      var cupLabel = kcacQualCupNumberLabel_(entry.jar);
-      var fastSelected = entry.jar.patternType === 'dynamic';
-      var slowSelected = entry.jar.patternType === 'controlled';
-      return '<div class="kcac-milk-button-row" data-kcac-cup-index="' + entry.index + '">' +
-        '<div class="kcac-milk-button-label"><b>' + escHtml(cupLabel) + '</b><span>로제타 선택</span></div>' +
-        '<button type="button" class="kcac-milk-choice-btn' + (fastSelected ? ' on' : '') + '" aria-pressed="' + (fastSelected ? 'true' : 'false') + '" onclick="setKcacQualMilkPattern_(\'dynamic\',' + entry.index + ')"><strong>FAST Rosetta</strong><small>' + (fastSelected ? '✓ 선택됨' : '선택') + '</small></button>' +
-        '<button type="button" class="kcac-milk-choice-btn' + (slowSelected ? ' on' : '') + '" aria-pressed="' + (slowSelected ? 'true' : 'false') + '" onclick="setKcacQualMilkPattern_(\'controlled\',' + entry.index + ')"><strong>SLOW Rosetta</strong><small>' + (slowSelected ? '✓ 선택됨' : '선택') + '</small></button>' +
-      '</div>';
-    }).join('');
+    grid.innerHTML = '<div class="kcac-milk-button-row" data-kcac-cup-index="0">' +
+      '<div class="kcac-milk-button-label"><b>1번 컵</b><span>먼저 제공된 로제타 선택</span></div>' +
+      '<button type="button" class="kcac-milk-choice-btn' + (firstPattern === 'dynamic' ? ' on' : '') + '" aria-pressed="' + (firstPattern === 'dynamic' ? 'true' : 'false') + '" onclick="setKcacQualFirstPattern_(\'dynamic\')"><strong>FAST Rosetta</strong><small>' + (firstPattern === 'dynamic' ? '✓ 1번 컵' : '선택') + '</small></button>' +
+      '<button type="button" class="kcac-milk-choice-btn' + (firstPattern === 'controlled' ? ' on' : '') + '" aria-pressed="' + (firstPattern === 'controlled' ? 'true' : 'false') + '" onclick="setKcacQualFirstPattern_(\'controlled\')"><strong>SLOW Rosetta</strong><small>' + (firstPattern === 'controlled' ? '✓ 1번 컵' : '선택') + '</small></button>' +
+    '</div>';
   }
   if (status) {
-    if (fastEntry && slowEntry) {
-      var current = Number(_kcac.currentIdx);
+    if (kcacValidQualPattern_(firstPattern)) {
+      var secondPattern = kcacOppositePatternType_(firstPattern);
       status.innerHTML = '<div class="kcac-pattern-assignment-status">' +
-        '<div class="kcac-pattern-assignment-card' + (fastEntry.index === current ? ' current' : '') + '"><b>FAST Rosetta</b><span>' + escHtml(kcacQualCupNumberLabel_(fastEntry.jar)) + ' · ' + escHtml(kcacPatternTypeGuide_('dynamic')) + '</span></div>' +
-        '<div class="kcac-pattern-assignment-card' + (slowEntry.index === current ? ' current' : '') + '"><b>SLOW Rosetta</b><span>' + escHtml(kcacQualCupNumberLabel_(slowEntry.jar)) + ' · ' + escHtml(kcacPatternTypeGuide_('controlled')) + '</span></div>' +
+        '<div class="kcac-pattern-assignment-card"><b>1번 컵 · ' + escHtml(kcacPatternTypeTitle_(firstPattern)) + '</b><span>선택 완료</span></div>' +
+        '<div class="kcac-pattern-assignment-card"><b>2번 컵 · ' + escHtml(kcacPatternTypeTitle_(secondPattern)) + '</b><span>자동 배정</span></div>' +
       '</div>';
     } else {
-      status.textContent = '1번 잔 또는 2번 잔에서 FAST/SLOW를 선택해주세요.';
+      status.textContent = '1번 컵이 FAST인지 SLOW인지 한 번만 선택해주세요. 2번 컵은 자동으로 반대 로제타가 됩니다.';
     }
   }
   refreshKcacCurrentCupAssignment_(_kcac.jars[Number(_kcac.currentIdx)]);
@@ -12097,44 +12109,51 @@ function onKcacParticipantSelected_() {
   var isQual = normalizeKcacRoundDisplay_((_selComp && _selComp.currentRound) || '') !== '결선';
   var hasParticipant = !!(num && String(num.value || '').trim());
   var showMilkSetup = !!(hasParticipant && isQual);
+  var hasCupOrder = !isQual || kcacValidQualPattern_(String((_kcac && _kcac.qualFirstPattern) || ''));
   var assignment = num ? participantAssignmentByNumber_('KCAC', num.value) : null;
   if (body) body.style.display = hasParticipant ? '' : 'none';
-  if (nav) nav.style.display = hasParticipant ? '' : 'none';
+  if (nav) nav.style.display = hasParticipant && hasCupOrder ? '' : 'none';
   // CSS 기본값은 숨김이므로, 참가자 선택 뒤에는 명시적으로 표시해야 모바일에서도 유지됩니다.
-  if (submitDock) submitDock.style.display = hasParticipant ? 'block' : 'none';
+  if (submitDock) submitDock.style.display = hasParticipant && hasCupOrder ? 'block' : 'none';
   if (setup) setup.style.display = showMilkSetup ? 'block' : 'none';
   if (completeBadge) completeBadge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
   if (showMilkSetup) {
     if (typeof kcacApplyProvidedPhotosForParticipant_ === 'function') kcacApplyProvidedPhotosForParticipant_();
     syncKcacMilkPatternSelectors_();
-    if (typeof _kcac !== 'undefined' && _kcac.jars.length) loadKcacJar(_kcac.currentIdx);
+    var panel = document.getElementById('kcac-jar-evaluation-panel');
+    if (panel) panel.style.display = hasCupOrder ? '' : 'none';
+    if (hasCupOrder && typeof _kcac !== 'undefined' && _kcac.jars.length) loadKcacJar(_kcac.currentIdx);
   }
 }
 
 function setKcacQualMilkPattern_(patternType, jarIndex) {
-  if (patternType !== 'dynamic' && patternType !== 'controlled') return;
-  // 모바일에서 숫자 입력을 마친 직후 FAST/SLOW 배정을 바꾸면 change/blur가
-  // 늦게 도착할 수 있습니다. 패턴 UI를 다시 그리기 전에 현재 입력을 먼저 보존합니다.
+  if (!kcacValidQualPattern_(patternType)) return;
+  // 기존 화면 호출과의 호환용입니다. 저장 데이터는 절대 교환하지 않고
+  // 실제 1번 컵의 패턴 매핑만 변경합니다.
+  var physicalIndex = parseInt(jarIndex, 10);
+  var firstPattern = physicalIndex === 1 ? kcacOppositePatternType_(patternType) : patternType;
+  setKcacQualFirstPattern_(firstPattern);
+}
+
+function setKcacQualFirstPattern_(patternType) {
+  if (!kcacValidQualPattern_(patternType)) return;
   syncKcacScoresFromDOM_();
   syncKcacLeafCountFromDOM_();
-  var target = _kcac.jars[parseInt(jarIndex, 10)];
-  if (!target || target.type !== 'qual') { syncKcacMilkPatternSelectors_(); return; }
-  var existing = kcacQualMilkEntries_().find(function(entry){ return entry.jar.patternType === patternType; });
-  // 배정을 뒤집더라도 이미 입력한 평가는 물리적인 1·2번 위치가 아닌
-  // FAST/SLOW 평가 정체성을 따라가도록 두 잔의 평가 상태를 함께 교환합니다.
-  if (target.patternType && target.patternType !== patternType && existing && existing.jar !== target) {
-    kcacSwapJarEvaluationState_(target, existing.jar);
-  }
-  var opposite = kcacOppositePatternType_(patternType);
-  kcacQualMilkEntries_().forEach(function(entry){
-    entry.jar.patternType = entry.jar === target ? patternType : opposite;
-    kcacCleanPatternSpecificSmartTags_(entry.jar);
-    entry.jar.leafPenalty = calcKcacLeafPenalty(entry.jar);
-  });
+  _kcac.qualMappingVersion = 2;
+  _kcac.qualFirstPattern = patternType;
+  var targetIndex = (_kcac.jars || []).findIndex(function(j){ return j && j.type === 'qual' && j.patternType === patternType; });
+  if (targetIndex < 0) return;
+  _kcac.currentIdx = targetIndex;
   if (typeof kcacApplyProvidedPhotosForParticipant_ === 'function') kcacApplyProvidedPhotosForParticipant_();
-  // 선택한 잔을 바로 열어 현재 로제타와 리프 수 입력 상태를 명확히 보여줍니다.
-  _kcac.currentIdx = Math.max(0, _kcac.jars.indexOf(target));
-  loadKcacJar(_kcac.currentIdx);
+  var nav = document.getElementById('kcac-cup-nav');
+  var submitDock = document.getElementById('kcac-submit-dock');
+  var panel = document.getElementById('kcac-jar-evaluation-panel');
+  if (nav) nav.style.display = '';
+  if (submitDock) submitDock.style.display = 'block';
+  if (panel) panel.style.display = '';
+  loadKcacJar(targetIndex);
+  if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
+  toast('1번 컵은 ' + kcacPatternTypeTitle_(patternType) + ', 2번 컵은 ' + kcacPatternTypeTitle_(kcacOppositePatternType_(patternType)) + '로 설정되었습니다.');
 }
 
 function kcacMilkTypeFromLabel_(label) {
@@ -12408,20 +12427,39 @@ function makeKcacJar(label, type, milkType, milkProduct, purpose, patternType) {
   };
 }
 
-var KCAC_JAR_EVALUATION_STATE_FIELDS_ = [
-  'leafCount','leafCountMissing','leafPenalty','scores','scoreLocks','photoSrc',
-  'photoParticipantNo','providedPhotoDisabledFor','mediaSource','mediaName',
-  'guidePos','guides','sizePct','guideOpacity','comment','generatedComment',
-  'commentEdited','smartTags','penalty','snapshots','mediaOptionalStatus'
-];
-
-function kcacSwapJarEvaluationState_(left, right) {
-  if (!left || !right || left === right) return;
-  KCAC_JAR_EVALUATION_STATE_FIELDS_.forEach(function(key){
-    var temp = left[key];
-    left[key] = right[key];
-    right[key] = temp;
-  });
+function normalizeKcacQualStorage_() {
+  var entries = kcacQualMilkEntries_();
+  if (entries.length !== 2) return;
+  var active = _kcac.jars[Number(_kcac.currentIdx) || 0];
+  var activePattern = active && active.patternType;
+  var dynamicEntry = entries.find(function(entry){ return entry.jar.patternType === 'dynamic'; });
+  var controlledEntry = entries.find(function(entry){ return entry.jar.patternType === 'controlled'; });
+  if (!dynamicEntry && !controlledEntry) {
+    entries[0].jar.patternType = 'dynamic';
+    entries[1].jar.patternType = 'controlled';
+    dynamicEntry = entries[0];
+    controlledEntry = entries[1];
+  } else if (!dynamicEntry) {
+    dynamicEntry = entries.find(function(entry){ return entry !== controlledEntry; });
+    dynamicEntry.jar.patternType = 'dynamic';
+  } else if (!controlledEntry) {
+    controlledEntry = entries.find(function(entry){ return entry !== dynamicEntry; });
+    controlledEntry.jar.patternType = 'controlled';
+  }
+  // 기존 임시저장은 배열의 0번째가 실제 1번 컵이었습니다. 최초 한 번만 그 순서를
+  // 매핑으로 옮긴 뒤, 배열 자체는 FAST → SLOW의 고정 순서로 정규화합니다.
+  if (!kcacValidQualPattern_(String(_kcac.qualFirstPattern || '')) && Number(_kcac.qualMappingVersion || 0) < 2) {
+    var originalFirst = entries.slice().sort(function(a, b){ return a.index - b.index; })[0];
+    if (originalFirst && kcacValidQualPattern_(originalFirst.jar.patternType)) _kcac.qualFirstPattern = originalFirst.jar.patternType;
+  }
+  _kcac.jars = [dynamicEntry.jar, controlledEntry.jar];
+  _kcac.qualMappingVersion = 2;
+  if (kcacValidQualPattern_(activePattern)) {
+    var normalizedIdx = _kcac.jars.findIndex(function(j){ return j.patternType === activePattern; });
+    _kcac.currentIdx = normalizedIdx >= 0 ? normalizedIdx : 0;
+  } else {
+    _kcac.currentIdx = 0;
+  }
 }
 
 function kcacUsesPatternMedia_(j) {
@@ -12568,9 +12606,12 @@ function renderKcacCupNav() {
     var sub_score = calcKcacJarSubtotal(j);
     var fin = calcKcacJarFinal(j, false);
     var btn = document.createElement('button');
+    var isSaved = isUnifiedQual ? !!j.manualDraftSavedAt : sub_score > 0;
     btn.className = 'cup-btn' + (!(_kcac.overallMode && isUnifiedQual) && i === _kcac.currentIdx ? ' active' : '') +
-                    (sub_score > 0 ? ' done' : '');
-    var navDetail = isUnifiedQual ? (kcacCupSubLabel(j) || kcacQualCupNumberLabel_(j)) : kcacCupSubLabel(j);
+                    (isSaved ? ' done' : '');
+    var navDetail = isUnifiedQual
+      ? [kcacQualCupNumberLabel_(j), kcacCupSubLabel(j), j.manualDraftSavedAt ? '저장됨' : '작성 중'].filter(Boolean).join(' · ')
+      : kcacCupSubLabel(j);
     btn.innerHTML = '<span class="cup-btn-num">' + escHtml(kcacCupMainLabel(j)) + '</span>' +
                     '<span class="cup-btn-score">' + escHtml(navDetail) + ' · ' + fmtScore(fin,2) + '</span>';
     btn.onclick = (function(n){ return function(){ switchKcacJar(n); }; })(i);
@@ -12588,6 +12629,42 @@ function switchKcacJar(idx) {
     return;
   }
   loadKcacJar(idx);
+}
+
+function updateKcacCupSaveActions_(j) {
+  var wrap = document.getElementById('kcac-cup-save-actions');
+  var button = document.getElementById('kcac-save-next-btn');
+  var status = document.getElementById('kcac-cup-save-status');
+  if (!wrap) return;
+  var isQual = !!(j && j.type === 'qual');
+  wrap.style.display = isQual ? 'block' : 'none';
+  if (!isQual) return;
+  var cupNumber = kcacQualCupNumber_(j);
+  var nextText = cupNumber === 1 ? '2번 컵 평가로 이동' : '종합코멘트로 이동';
+  if (button) button.textContent = cupNumber + '번 컵 임시저장 · ' + nextText;
+  if (status) status.textContent = j.manualDraftSavedAt
+    ? (cupNumber + '번 컵 저장됨 · ' + new Date(j.manualDraftSavedAt).toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'}))
+    : '점수·잠금·스마트태그·리프 수를 이 컵에 독립 저장합니다.';
+}
+
+function saveKcacCurrentCupAndNext_() {
+  if (!_kcac.jars || !_kcac.jars.length) return;
+  saveKcacJarFromDOM();
+  var current = _kcac.jars[_kcac.currentIdx];
+  if (!current || current.type !== 'qual') return;
+  var cupNumber = kcacQualCupNumber_(current);
+  current.manualDraftSavedAt = new Date().toISOString();
+  current.manualDraftSavedPattern = current.patternType;
+  if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
+  renderKcacCupNav();
+  if (cupNumber === 1) {
+    var nextIndex = _kcac.jars.findIndex(function(j){ return j && j.type === 'qual' && kcacQualCupNumber_(j) === 2; });
+    toast('1번 컵 평가를 임시저장했습니다. 2번 컵으로 이동합니다.');
+    if (nextIndex >= 0) loadKcacJar(nextIndex);
+    return;
+  }
+  toast('2번 컵 평가를 임시저장했습니다. 종합코멘트로 이동합니다.');
+  openKcacOverallComment_();
 }
 
 function openKcacOverallComment_() {
@@ -12648,6 +12725,7 @@ function loadKcacJar(idx) {
 
   document.getElementById('kcac-attrs').innerHTML = html;
   renderKcacLeafRuleBox(j);
+  updateKcacCupSaveActions_(j);
   refreshKcacCommentReference_();
 
   var usesPatternMedia = kcacUsesPatternMedia_(j);
@@ -13810,6 +13888,10 @@ function kcacBuildPersistedMedia_(j) {
 function validateKcacBeforeSubmit_() {
   syncKcacLeafCountFromDOM_();
   var isQual = !_kcac.jars.some(function(j){ return j.type !== 'qual'; });
+  if (isQual && !kcacValidQualPattern_(String((_kcac && _kcac.qualFirstPattern) || ''))) {
+    toast('1번 컵이 FAST Rosetta인지 SLOW Rosetta인지 먼저 선택해주세요.', true);
+    return false;
+  }
   var hasDynamic = false, hasControlled = false;
   var missingLeafLabels = [];
   for (var i = 0; i < _kcac.jars.length; i++) {
@@ -13906,6 +13988,7 @@ function kcacSubmitAll() {
     var dqReason = kcacDqInfo.reason;
     var extra = {
       '패턴종류': kcacPatternTypeTitle_(j.patternType) || j.patternType || '',
+      '실제컵번호': j.type === 'qual' ? kcacQualCupNumber_(j) : '',
       '리프수': j.type === 'qual' ? (j.leafCount || '') : '',
       '리프수입력상태': j.type === 'qual' ? (j.leafCountMissing ? '확인필요' : '입력완료') : '',
       '리프수감점': j.type === 'qual' ? leafPenalty : '',
@@ -13948,6 +14031,7 @@ function kcacSubmitAll() {
     .withSuccessHandler(function(res) {
       hideOverlay();
       if (res.success) {
+        kclClearActiveEvalDraftAfterSubmit({competitionCode:'KCAC'});
         toast('제출 완료');
         setTimeout(function(){ hideEval(); showPanel(adminHomePanel_()); }, 1500);
       } else {
@@ -18929,7 +19013,11 @@ function kclSlimKcacForDraft_(src) {
 function kclBuildDraftState_(code) {
   var state = {};
   if (code === 'KCR') state.cupping = JSON.parse(JSON.stringify(_cupping || {}));
-  if (code === 'KCAC') state.kcac = kclSlimKcacForDraft_(_kcac);
+  if (code === 'KCAC') {
+    if (typeof saveKcacJarFromDOM === 'function') saveKcacJarFromDOM();
+    if (typeof normalizeKcacQualStorage_ === 'function') normalizeKcacQualStorage_();
+    state.kcac = kclSlimKcacForDraft_(_kcac);
+  }
   if (code === 'KBC') { state.kbcYN = JSON.parse(JSON.stringify(_kbcYN || {})); state.kbcTags = JSON.parse(JSON.stringify(_kbcTags || {})); state.kbcCommentMeta = { generated:_kbcGeneratedComment || '', edited:!!_kbcCommentEdited, autoEnabled:!!_kbcAutoCommentEnabled }; state.kbcClientSubmissionId = _kbcClientSubmissionId || ''; state.kbcClientSubmissionUnit = _kbcClientSubmissionUnit || ''; }
   if (code === 'MOB') { state.mobTags = JSON.parse(JSON.stringify(_mobTags || {})); state.mobScoreLocks = JSON.parse(JSON.stringify(_mobScoreLocks || {})); state.mobCommentMeta = { generated:_mobGeneratedComment || '', edited:!!_mobCommentEdited }; state.mobClientSubmissionId = _mobClientSubmissionId || ''; }
   if (code === 'IKRC') { if (typeof saveIkrc === 'function') saveIkrc(); state.ikrcSamples = JSON.parse(JSON.stringify(_ikrcSamples || [])); state.ikrcIdx = _ikrcIdx || 0; state.ikrcCurrentAttr = _ikrcCurrentAttr || 'flavor'; state.ikrcStation = _ikrcStation ? JSON.parse(JSON.stringify(_ikrcStation)) : null; state.ikrcClientSubmissionId = _ikrcClientSubmissionId || ''; }
@@ -19000,6 +19088,7 @@ function kclRestoreDraftForCode_(code, draft) {
     }
     if (code === 'KCAC' && draft.state.kcac) {
       _kcac = draft.state.kcac;
+      if (typeof normalizeKcacQualStorage_ === 'function') normalizeKcacQualStorage_();
       _kcacOpenSmartTagBranches = {};
       if (!_kcac.dragStart) _kcac.dragStart = {x:0,y:0,rx:0,ry:0};
       if (typeof _kcac.overallComment !== 'string') {

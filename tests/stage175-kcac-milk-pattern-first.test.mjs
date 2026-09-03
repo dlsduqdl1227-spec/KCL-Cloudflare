@@ -26,11 +26,11 @@ assert.doesNotMatch(assessment, /<select[^>]+id="kcac-fast-milk"/);
 assert.match(assessment, /kcac-milk-choice-btn/);
 assert.match(assessment, /FAST Rosetta[\s\S]*SLOW Rosetta/);
 assert.doesNotMatch(assessment, /id="kcac-slow-milk"/);
-assert.match(assessment, /한 잔을 선택하면 다른 잔은 반대 로제타로 자동 배정됩니다/);
+assert.match(assessment, /1번 컵이 FAST인지 SLOW인지 선택하세요/);
 const selectorSource = functionSource(assessment, 'syncKcacMilkPatternSelectors_');
-assert.match(selectorSource, /1번 잔|kcacQualCupNumberLabel_/);
-assert.ok(selectorSource.includes("setKcacQualMilkPattern_(\\'dynamic\\'"));
-assert.ok(selectorSource.includes("setKcacQualMilkPattern_(\\'controlled\\'"));
+assert.match(selectorSource, /1번 컵/);
+assert.ok(selectorSource.includes("setKcacQualFirstPattern_(\\'dynamic\\')"));
+assert.ok(selectorSource.includes("setKcacQualFirstPattern_(\\'controlled\\')"));
 assert.doesNotMatch(selectorSource, /milkProduct|milkType|멸균|오트|대체우유|사용할 우유/);
 
 assert.match(functionSource(assessment, 'applyParticipantSelect_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
@@ -40,21 +40,17 @@ assert.match(functionSource(assessment, 'onKcacParticipantSelected_'), /hasParti
 const context = {
   _kcac: {
     jars: [
-      { type:'qual', milkProduct:'매일멸균우유', patternType:'', leafCount:'', smartTags:{} },
-      { type:'qual', milkProduct:'어메이징 오트바리스타', patternType:'', leafCount:'', smartTags:{} }
+      { type:'qual', milkProduct:'매일멸균우유', patternType:'dynamic', leafCount:'', smartTags:{}, scores:{완성도:4.2} },
+      { type:'qual', milkProduct:'어메이징 오트바리스타', patternType:'controlled', leafCount:'', smartTags:{}, scores:{완성도:2.4} }
     ],
-    currentIdx:0
+    currentIdx:0,
+    qualFirstPattern:''
   },
   KCAC_QUAL_ATTRS:[],
-  document:{ getElementById:()=>({ textContent:'' }) },
+  document:{ getElementById:()=>({ textContent:'', style:{} }) },
   kcacCleanPatternSpecificSmartTags_:()=>{},
   syncKcacScoresFromDOM_:()=>{},
   syncKcacLeafCountFromDOM_:()=>{},
-  kcacSwapJarEvaluationState_:(left, right)=>{
-    ['leafCount','scores','scoreLocks','smartTags'].forEach(key => {
-      const temp = left[key]; left[key] = right[key]; right[key] = temp;
-    });
-  },
   calcKcacLeafPenalty:()=>0,
   kcacCupFullLabel:()=>'',
   refreshKcacPatternChoiceUI_:()=>{},
@@ -64,23 +60,33 @@ const context = {
   syncKcacMilkPatternSelectors_:()=>{},
   updateKcacFinal:()=>{},
   renderKcacCupNav:()=>{},
-  loadKcacJar:(idx)=>{ context._kcac.currentIdx = idx; }
+  loadKcacJar:(idx)=>{ context._kcac.currentIdx = idx; },
+  kcacApplyProvidedPhotosForParticipant_:()=>{},
+  kclSaveActiveEvalDraftNow_:()=>{},
+  toast:()=>{}
 };
 vm.createContext(context);
 vm.runInContext([
+  functionSource(assessment, 'kcacValidQualPattern_'),
+  functionSource(assessment, 'kcacPatternTypeTitle_'),
   functionSource(assessment, 'kcacOppositePatternType_'),
   functionSource(assessment, 'kcacQualMilkEntries_'),
-  functionSource(assessment, 'setKcacQualMilkPattern_')
+  functionSource(assessment, 'setKcacQualFirstPattern_')
 ].join('\n'), context);
 
-context.setKcacQualMilkPattern_('dynamic', '0');
+context.setKcacQualFirstPattern_('dynamic');
 assert.equal(context._kcac.jars[0].patternType, 'dynamic');
 assert.equal(context._kcac.jars[1].patternType, 'controlled');
+assert.equal(context._kcac.qualFirstPattern, 'dynamic');
 assert.equal(context._kcac.currentIdx, 0, 'FAST로 배정한 실제 우유 잔이 즉시 열려야 합니다');
 
-context.setKcacQualMilkPattern_('controlled', '0');
-assert.equal(context._kcac.jars[0].patternType, 'controlled');
-assert.equal(context._kcac.jars[1].patternType, 'dynamic');
+context.setKcacQualFirstPattern_('controlled');
+assert.equal(context._kcac.jars[0].patternType, 'dynamic');
+assert.equal(context._kcac.jars[1].patternType, 'controlled');
+assert.equal(context._kcac.jars[0].scores.완성도, 4.2, 'changing physical cup order must never move FAST scores');
+assert.equal(context._kcac.jars[1].scores.완성도, 2.4, 'changing physical cup order must never move SLOW scores');
+assert.equal(context._kcac.qualFirstPattern, 'controlled');
+assert.equal(context._kcac.currentIdx, 1, 'SLOW를 1번 컵으로 선택하면 SLOW 전용 탭이 먼저 열려야 합니다');
 
 assert.match(functionSource(assessment, 'validateKcacBeforeSubmit_'), /!hasDynamic \|\| !hasControlled/);
 

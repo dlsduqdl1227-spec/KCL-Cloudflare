@@ -32,14 +32,18 @@ const elements = {
   'kcac-milk-pattern-setup': { style:{} },
   'kcac-evaluation-body': { style:{} },
   'kcac-cup-nav': { style:{} },
+  'kcac-submit-dock': { style:{} },
+  'kcac-jar-evaluation-panel': { style:{} },
   'kcac-num': { value:'' },
   'kcac-participant-complete': { style:{} }
 };
 let syncCount = 0;
 const context = {
+  _kcac: { qualFirstPattern:'', jars:[], currentIdx:0 },
   _selComp: { currentRound:'예선' },
   document: { getElementById:(id)=>elements[id] || null },
   normalizeKcacRoundDisplay_:(round)=>round,
+  kcacValidQualPattern_:(pattern)=>pattern === 'dynamic' || pattern === 'controlled',
   participantAssignmentByNumber_:()=>null,
   syncKcacMilkPatternSelectors_:()=>{ syncCount += 1; }
 };
@@ -55,15 +59,23 @@ assert.equal(syncCount, 0);
 elements['kcac-num'].value = '1';
 context.onKcacParticipantSelected_();
 assert.equal(elements['kcac-evaluation-body'].style.display, '');
-assert.equal(elements['kcac-cup-nav'].style.display, '');
+assert.equal(elements['kcac-cup-nav'].style.display, 'none');
 assert.equal(elements['kcac-milk-pattern-setup'].style.display, 'block');
+assert.equal(elements['kcac-jar-evaluation-panel'].style.display, 'none');
 assert.equal(syncCount, 1);
+
+context._kcac.qualFirstPattern = 'dynamic';
+context.onKcacParticipantSelected_();
+assert.equal(elements['kcac-cup-nav'].style.display, '');
+assert.equal(elements['kcac-submit-dock'].style.display, 'block');
+assert.equal(elements['kcac-jar-evaluation-panel'].style.display, '');
+assert.equal(syncCount, 2);
 
 context._selComp.currentRound = '결선';
 context.onKcacParticipantSelected_();
 assert.equal(elements['kcac-evaluation-body'].style.display, '');
 assert.equal(elements['kcac-cup-nav'].style.display, '');
 assert.equal(elements['kcac-milk-pattern-setup'].style.display, 'none');
-assert.equal(syncCount, 1);
+assert.equal(syncCount, 2);
 
 process.stdout.write('Stage177 KCAC participant-first evaluation gate tests passed.\n');
