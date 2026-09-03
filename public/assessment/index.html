@@ -1520,6 +1520,18 @@ html,body{width:100%;overflow-x:hidden}.panel{width:min(100%,560px);padding-top:
   }
   .review-eval-grid,.score-grid,.timer-actions,.pen-grid{grid-template-columns:1fr!important;}
   .review-score-inline-input{max-width:100%!important;}
+
+  /* KCAC 예선은 모바일에서도 FAST · SLOW · 종합코멘트가 한 화면에 모두 보여야 합니다.
+     공통 컵 내비게이션의 가로 스크롤 규칙보다 우선 적용합니다. */
+  #kcac-cup-nav.kcac-qual-nav{
+    display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:5px!important;overflow:visible!important;
+  }
+  #kcac-cup-nav.kcac-qual-nav .cup-btn,
+  #kcac-cup-nav.kcac-qual-nav .submit-btn-nav{
+    width:100%!important;min-width:0!important;max-width:100%!important;
+    height:60px!important;padding:6px 3px!important;margin:0!important;flex:initial!important;
+  }
 }
 @media (max-width: 380px){
   .global-nav-btn{font-size:11px!important;padding:0 10px!important;max-width:46vw!important;}
@@ -12011,7 +12023,8 @@ function onKcacParticipantSelected_() {
   var assignment = num ? participantAssignmentByNumber_('KCAC', num.value) : null;
   if (body) body.style.display = hasParticipant ? '' : 'none';
   if (nav) nav.style.display = hasParticipant ? '' : 'none';
-  if (submitDock) submitDock.style.display = hasParticipant ? '' : 'none';
+  // CSS 기본값은 숨김이므로, 참가자 선택 뒤에는 명시적으로 표시해야 모바일에서도 유지됩니다.
+  if (submitDock) submitDock.style.display = hasParticipant ? 'block' : 'none';
   if (setup) setup.style.display = showMilkSetup ? 'block' : 'none';
   if (completeBadge) completeBadge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
   if (showMilkSetup) {
