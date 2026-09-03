@@ -12534,10 +12534,10 @@ function loadKcacJar(idx) {
     html += '<div style="text-align:right"><div class="score-row-bignum" id="kcac-v-' + a.key + '">' + fmtScore(v,2) + '</div><div class="score-row-desc" id="kcac-d-' + a.key + '">' + kcacGetDesc(v) + '</div></div>';
     html += '</div>';
     html += '<div class="score-row-slider-wrap">';
-    html += buildKcacScoreSlider_(a.key, v, !!(j.scoreLocks && j.scoreLocks[a.key]));
+    html += buildKcacScoreSlider_(a.key, v, !!(j.scoreLocks && j.scoreLocks[a.key]), idx);
     html += '<div class="score-row-scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>';
     html += '</div>';
-    html += '<div class="score-lock"><input type="checkbox" id="kcac-lock-' + escHtml(a.key) + '"' + (j.scoreLocks && j.scoreLocks[a.key] ? ' checked' : '') + ' onchange="toggleKcacScoreLock_(\'' + escapeJsString_(a.key) + '\')"><label for="kcac-lock-' + escHtml(a.key) + '">점수 고정 (슬라이더 잠금)</label></div>';
+    html += '<div class="score-lock"><input type="checkbox" id="kcac-lock-' + escHtml(a.key) + '" data-kcac-jar-index="' + idx + '"' + (j.scoreLocks && j.scoreLocks[a.key] ? ' checked' : '') + ' onchange="toggleKcacScoreLock_(\'' + escapeJsString_(a.key) + '\',this.getAttribute(\'data-kcac-jar-index\'))"><label for="kcac-lock-' + escHtml(a.key) + '">점수 고정 (슬라이더 잠금)</label></div>';
     html += renderKcacSmartTagSection_(j, a);
     html += '</div>';
   });
@@ -12583,6 +12583,8 @@ function loadKcacJar(idx) {
 function saveKcacJarFromDOM() {
   if (!_kcac.jars.length) return;
   var j = _kcac.jars[_kcac.currentIdx];
+  // 모바일에서 잔을 전환하는 순간 늦게 끝나는 슬라이더 이벤트도 생성 당시의 잔에만 저장합니다.
+  syncKcacScoresFromDOM_();
   // 모바일 숫자 입력은 키보드의 완료/화면 버튼을 바로 누르면 oninput이 늦게 전달될 수 있습니다.
   // 잔 이동·최종 제출 직전에 현재 DOM 값을 다시 읽어 입력한 리프 수가 누락되지 않게 합니다.
   syncKcacLeafCountFromDOM_();
@@ -12612,37 +12614,65 @@ function onKcacCommentInput() {
   refreshKcacCommentReference_();
 }
 
-function buildKcacScoreSlider_(key, value, locked) {
+function buildKcacScoreSlider_(key, value, locked, jarIndex) {
   var score = quantizeScoreStep_(value, 0.2, 0, 5);
-  return '<input type="range" class="score-slider kcac-score-slider" min="0" max="5" step="0.01" data-score-step="0.2" data-kcac-score="' + escHtml(key) + '" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this)" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this)"' + (locked ? ' disabled' : '') + '>';
+  var index = Number.isInteger(Number(jarIndex)) ? Number(jarIndex) : Number(_kcac.currentIdx) || 0;
+  return '<input type="range" class="score-slider kcac-score-slider" min="0" max="5" step="0.01" data-score-step="0.2" data-kcac-score="' + escHtml(key) + '" data-kcac-jar-index="' + index + '" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this,this.getAttribute(\'data-kcac-jar-index\'))" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this,this.getAttribute(\'data-kcac-jar-index\'))"' + (locked ? ' disabled' : '') + '>';
 }
 
-function toggleKcacScoreLock_(key) {
-  var j = _kcac.jars[_kcac.currentIdx];
+function kcacBoundJarIndex_(jarIndex, el) {
+  var raw = jarIndex;
+  if ((raw === '' || raw == null) && el && el.getAttribute) raw = el.getAttribute('data-kcac-jar-index');
+  var idx = parseInt(raw, 10);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= _kcac.jars.length) idx = Number(_kcac.currentIdx) || 0;
+  return idx;
+}
+
+function syncKcacScoresFromDOM_() {
+  if (typeof document === 'undefined' || !document.querySelectorAll) return;
+  Array.from(document.querySelectorAll('#kcac-attrs input[data-kcac-score][data-kcac-jar-index]')).forEach(function(el){
+    var idx = kcacBoundJarIndex_(el.getAttribute('data-kcac-jar-index'), el);
+    var j = _kcac.jars[idx];
+    var key = String(el.getAttribute('data-kcac-score') || '');
+    if (!j || !key) return;
+    var step = parseFloat(el.getAttribute('data-score-step') || '0.2');
+    j.scores = j.scores || {};
+    j.scores[key] = quantizeScoreStep_(el.value, step, 0, 5);
+  });
+}
+
+function toggleKcacScoreLock_(key, jarIndex) {
+  var idx = kcacBoundJarIndex_(jarIndex, null);
+  var j = _kcac.jars[idx];
   if (!j) return;
   j.scoreLocks = j.scoreLocks || {};
   j.scoreLocks[key] = !j.scoreLocks[key];
-  var slider = document.querySelector('#kcac-attrs input[data-kcac-score="' + String(key).replace(/"/g, '\\"') + '"]');
+  var slider = document.querySelector('#kcac-attrs input[data-kcac-score="' + String(key).replace(/"/g, '\\"') + '"][data-kcac-jar-index="' + idx + '"]');
   if (slider) slider.disabled = !!j.scoreLocks[key];
   toast(j.scoreLocks[key] ? '점수 고정됨' : '점수 고정 해제됨');
 }
 
-function onKcacScore(key, val, finalize, el) {
-  var j = _kcac.jars[_kcac.currentIdx];
+function onKcacScore(key, val, finalize, el, jarIndex) {
+  var idx = kcacBoundJarIndex_(jarIndex, el);
+  var j = _kcac.jars[idx];
   if (!j) return;
   var step = el && el.getAttribute ? parseFloat(el.getAttribute('data-score-step') || '0.2') : 0.2;
   var v = quantizeScoreStep_(val, step, 0, 5);
+  j.scores = j.scores || {};
   j.scores[key] = v;
-  var valEl = document.getElementById('kcac-v-' + key);
-  var descEl = document.getElementById('kcac-d-' + key);
-  if (valEl) valEl.textContent = fmtScore(v,2);
-  if (descEl) descEl.textContent = kcacGetDesc(v);
+  var isCurrentJar = idx === Number(_kcac.currentIdx);
+  if (isCurrentJar) {
+    var valEl = document.getElementById('kcac-v-' + key);
+    var descEl = document.getElementById('kcac-d-' + key);
+    if (valEl) valEl.textContent = fmtScore(v,2);
+    if (descEl) descEl.textContent = kcacGetDesc(v);
+  }
   // 드래그 중에는 현재 행의 숫자만 갱신합니다. 헤더·탭·종합코멘트 가이드를 매 프레임
   // 다시 그리면 모바일 스크롤 높이가 흔들릴 수 있으므로 손을 뗀 시점에 한 번만 반영합니다.
   if (finalize) {
     if (el) el.value = fmtScore(v,2);
     scheduleKcacFinalUpdate_();
-    refreshKcacCommentReference_();
+    if (isCurrentJar) refreshKcacCommentReference_();
     scheduleKcacCupNav();
   }
 }

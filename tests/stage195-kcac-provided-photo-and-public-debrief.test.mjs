@@ -56,6 +56,7 @@ const lockCtx = {
   toast:()=>{}
 };
 vm.createContext(lockCtx);
+vm.runInContext(functionSource(assessment, 'kcacBoundJarIndex_'), lockCtx);
 vm.runInContext(functionSource(assessment, 'toggleKcacScoreLock_'), lockCtx);
 lockCtx.toggleKcacScoreLock_('완성도');
 assert.equal(lockCtx._kcac.jars[0].scoreLocks['완성도'], true);

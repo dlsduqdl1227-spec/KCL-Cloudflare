@@ -46,6 +46,7 @@ const context = {
   _kcac:{ currentIdx:0, overallComment:'', overallGeneratedComment:'', overallCommentEdited:true, jars:[{ type:'qual', patternType:'dynamic', leafCount:'', leafPenalty:0, generatedComment:'', commentEdited:true }] },
   document:{ getElementById:id => elements[id] || null },
   kcacIsUnifiedQualComment_:()=>true,
+  syncKcacScoresFromDOM_:()=>{},
   calcKcacLeafPenalty:j => {
     j.leafPenalty = j.patternType === 'dynamic' && Number(j.leafCount) < 14 ? 5 : 0;
     return j.leafPenalty;
