@@ -48,7 +48,13 @@ const context = {
   KCAC_QUAL_ATTRS:[],
   document:{ getElementById:()=>({ textContent:'' }) },
   kcacCleanPatternSpecificSmartTags_:()=>{},
+  syncKcacScoresFromDOM_:()=>{},
   syncKcacLeafCountFromDOM_:()=>{},
+  kcacSwapJarEvaluationState_:(left, right)=>{
+    ['leafCount','scores','scoreLocks','smartTags'].forEach(key => {
+      const temp = left[key]; left[key] = right[key]; right[key] = temp;
+    });
+  },
   calcKcacLeafPenalty:()=>0,
   kcacCupFullLabel:()=>'',
   refreshKcacPatternChoiceUI_:()=>{},

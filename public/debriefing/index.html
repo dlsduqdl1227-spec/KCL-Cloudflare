@@ -1359,10 +1359,10 @@ function buildReportIntro(res, scores) {
   var box = document.createElement('div');
   box.className = 'report-intro';
   var countText = code === 'IKRC' ? (' 심사위원 평가표 ' + count + '건') : (' 공개 항목 ' + count + '건');
-  var introTitle = code === 'IKRC' ? '공식 제출 평가 결과' : '공식 검수 완료 평가 결과';
+  var introTitle = code === 'IKRC' ? '공식 제출 평가 결과' : (code === 'KCAC' ? '라떼아트 공식 평가 결과' : '공식 검수 완료 평가 결과');
   var introText = code === 'IKRC'
     ? '켈리브레이션을 제외하고, 이 선수의 블라인드코드에 정확히 제출된 헤드·센서리 심사만 표시합니다.'
-    : '이 리포트는 운영팀 검수를 완료한 공식 평가 항목만 기준으로 표시됩니다.';
+    : (code === 'KCAC' ? 'FAST·SLOW 로제타의 라떼아트 평가 항목과 심사 코멘트를 기준으로 표시됩니다.' : '이 리포트는 운영팀 검수를 완료한 공식 평가 항목만 기준으로 표시됩니다.');
   box.innerHTML = '<div class="intro-title">' + escHtml(introTitle) + '</div>' +
     '<div class="intro-text">' + escHtml(introText) +
     (count ? countText : '') + (rounds.length ? ' · 라운드 ' + rounds.join(', ') : '') + '</div>';
@@ -1910,12 +1910,14 @@ function buildScoreCard(s, compCode) {
   card.className = 'score-card';
   var isKtcc = String(compCode || '').toUpperCase() === 'KTCC';
   var isIkrc = String(compCode || '').toUpperCase() === 'IKRC';
+  var isKcac = String(compCode || '').toUpperCase() === 'KCAC';
   var judge = s['심사위원명'] || s['심사위원'] || s['Judge'] || '-';
   var judgeLabel = displayJudgeLabel(judge, s['역할'] || s['Role'] || s['JudgeRole'] || '', '심사위원');
   var teamTitle = (s['팀번호'] ? ('Team ' + s['팀번호']) : '') + (s['팀명'] ? ((s['팀번호'] ? ' · ' : '') + s['팀명']) : '');
   var roleRaw = String(s['역할'] || s['Role'] || s['JudgeRole'] || '').toLowerCase();
   var publicTitle = '공식 평가 결과';
-  if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
+  if (isKcac) publicTitle = '라떼아트 평가 결과';
+  else if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
   else if (/sensory|센서|감각|심사/.test(roleRaw)) publicTitle = '센서리 평가 결과';
   if (isKtcc) publicTitle = teamTitle || '팀 평가 결과';
   var statusRaw = String(s['검수상태'] || s.status || '').replace(/\s/g, '');

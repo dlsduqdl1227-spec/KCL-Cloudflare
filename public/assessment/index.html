@@ -12115,9 +12115,16 @@ function setKcacQualMilkPattern_(patternType, jarIndex) {
   if (patternType !== 'dynamic' && patternType !== 'controlled') return;
   // 모바일에서 숫자 입력을 마친 직후 FAST/SLOW 배정을 바꾸면 change/blur가
   // 늦게 도착할 수 있습니다. 패턴 UI를 다시 그리기 전에 현재 입력을 먼저 보존합니다.
+  syncKcacScoresFromDOM_();
   syncKcacLeafCountFromDOM_();
   var target = _kcac.jars[parseInt(jarIndex, 10)];
   if (!target || target.type !== 'qual') { syncKcacMilkPatternSelectors_(); return; }
+  var existing = kcacQualMilkEntries_().find(function(entry){ return entry.jar.patternType === patternType; });
+  // 배정을 뒤집더라도 이미 입력한 평가는 물리적인 1·2번 위치가 아닌
+  // FAST/SLOW 평가 정체성을 따라가도록 두 잔의 평가 상태를 함께 교환합니다.
+  if (target.patternType && target.patternType !== patternType && existing && existing.jar !== target) {
+    kcacSwapJarEvaluationState_(target, existing.jar);
+  }
   var opposite = kcacOppositePatternType_(patternType);
   kcacQualMilkEntries_().forEach(function(entry){
     entry.jar.patternType = entry.jar === target ? patternType : opposite;
@@ -12401,6 +12408,22 @@ function makeKcacJar(label, type, milkType, milkProduct, purpose, patternType) {
   };
 }
 
+var KCAC_JAR_EVALUATION_STATE_FIELDS_ = [
+  'leafCount','leafCountMissing','leafPenalty','scores','scoreLocks','photoSrc',
+  'photoParticipantNo','providedPhotoDisabledFor','mediaSource','mediaName',
+  'guidePos','guides','sizePct','guideOpacity','comment','generatedComment',
+  'commentEdited','smartTags','penalty','snapshots','mediaOptionalStatus'
+];
+
+function kcacSwapJarEvaluationState_(left, right) {
+  if (!left || !right || left === right) return;
+  KCAC_JAR_EVALUATION_STATE_FIELDS_.forEach(function(key){
+    var temp = left[key];
+    left[key] = right[key];
+    right[key] = temp;
+  });
+}
+
 function kcacUsesPatternMedia_(j) {
   return !!j && j.type !== 'final-sensory';
 }
@@ -12618,7 +12641,7 @@ function loadKcacJar(idx) {
     html += buildKcacScoreSlider_(a.key, v, !!(j.scoreLocks && j.scoreLocks[a.key]), idx);
     html += '<div class="score-row-scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>';
     html += '</div>';
-    html += '<div class="score-lock"><input type="checkbox" id="kcac-lock-' + escHtml(a.key) + '" data-kcac-jar-index="' + idx + '"' + (j.scoreLocks && j.scoreLocks[a.key] ? ' checked' : '') + ' onchange="toggleKcacScoreLock_(\'' + escapeJsString_(a.key) + '\',this.getAttribute(\'data-kcac-jar-index\'))"><label for="kcac-lock-' + escHtml(a.key) + '">점수 고정 (슬라이더 잠금)</label></div>';
+    html += '<div class="score-lock"><input type="checkbox" id="kcac-lock-' + escHtml(a.key) + '" data-kcac-jar-index="' + idx + '" data-kcac-pattern-type="' + escHtml(j.patternType || '') + '"' + (j.scoreLocks && j.scoreLocks[a.key] ? ' checked' : '') + ' onchange="toggleKcacScoreLock_(\'' + escapeJsString_(a.key) + '\',this.getAttribute(\'data-kcac-jar-index\'),this.getAttribute(\'data-kcac-pattern-type\'))"><label for="kcac-lock-' + escHtml(a.key) + '">점수 고정 (슬라이더 잠금)</label></div>';
     html += renderKcacSmartTagSection_(j, a);
     html += '</div>';
   });
@@ -12698,21 +12721,27 @@ function onKcacCommentInput() {
 function buildKcacScoreSlider_(key, value, locked, jarIndex) {
   var score = quantizeScoreStep_(value, 0.2, 0, 5);
   var index = Number.isInteger(Number(jarIndex)) ? Number(jarIndex) : Number(_kcac.currentIdx) || 0;
-  return '<input type="range" class="score-slider kcac-score-slider" min="0" max="5" step="0.01" data-score-step="0.2" data-kcac-score="' + escHtml(key) + '" data-kcac-jar-index="' + index + '" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this,this.getAttribute(\'data-kcac-jar-index\'))" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this,this.getAttribute(\'data-kcac-jar-index\'))"' + (locked ? ' disabled' : '') + '>';
+  var patternType = String((_kcac.jars[index] && _kcac.jars[index].patternType) || '');
+  return '<input type="range" class="score-slider kcac-score-slider" min="0" max="5" step="0.01" data-score-step="0.2" data-kcac-score="' + escHtml(key) + '" data-kcac-jar-index="' + index + '" data-kcac-pattern-type="' + escHtml(patternType) + '" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this,this.getAttribute(\'data-kcac-jar-index\'),this.getAttribute(\'data-kcac-pattern-type\'))" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this,this.getAttribute(\'data-kcac-jar-index\'),this.getAttribute(\'data-kcac-pattern-type\'))"' + (locked ? ' disabled' : '') + '>';
 }
 
-function kcacBoundJarIndex_(jarIndex, el) {
+function kcacBoundJarIndex_(jarIndex, el, patternType) {
   var raw = jarIndex;
   if ((raw === '' || raw == null) && el && el.getAttribute) raw = el.getAttribute('data-kcac-jar-index');
   var idx = parseInt(raw, 10);
   if (!Number.isInteger(idx) || idx < 0 || idx >= _kcac.jars.length) idx = Number(_kcac.currentIdx) || 0;
+  var boundPattern = String(patternType || (el && el.getAttribute ? el.getAttribute('data-kcac-pattern-type') : '') || '');
+  if (boundPattern === 'dynamic' || boundPattern === 'controlled') {
+    var patternIdx = _kcac.jars.findIndex(function(j){ return j && j.type === 'qual' && j.patternType === boundPattern; });
+    if (patternIdx >= 0) idx = patternIdx;
+  }
   return idx;
 }
 
 function syncKcacScoresFromDOM_() {
   if (typeof document === 'undefined' || !document.querySelectorAll) return;
   Array.from(document.querySelectorAll('#kcac-attrs input[data-kcac-score][data-kcac-jar-index]')).forEach(function(el){
-    var idx = kcacBoundJarIndex_(el.getAttribute('data-kcac-jar-index'), el);
+    var idx = kcacBoundJarIndex_(el.getAttribute('data-kcac-jar-index'), el, el.getAttribute('data-kcac-pattern-type'));
     var j = _kcac.jars[idx];
     var key = String(el.getAttribute('data-kcac-score') || '');
     if (!j || !key) return;
@@ -12722,8 +12751,8 @@ function syncKcacScoresFromDOM_() {
   });
 }
 
-function toggleKcacScoreLock_(key, jarIndex) {
-  var idx = kcacBoundJarIndex_(jarIndex, null);
+function toggleKcacScoreLock_(key, jarIndex, patternType) {
+  var idx = kcacBoundJarIndex_(jarIndex, null, patternType);
   var j = _kcac.jars[idx];
   if (!j) return;
   j.scoreLocks = j.scoreLocks || {};
@@ -12733,8 +12762,8 @@ function toggleKcacScoreLock_(key, jarIndex) {
   toast(j.scoreLocks[key] ? '점수 고정됨' : '점수 고정 해제됨');
 }
 
-function onKcacScore(key, val, finalize, el, jarIndex) {
-  var idx = kcacBoundJarIndex_(jarIndex, el);
+function onKcacScore(key, val, finalize, el, jarIndex, patternType) {
+  var idx = kcacBoundJarIndex_(jarIndex, el, patternType);
   var j = _kcac.jars[idx];
   if (!j) return;
   var step = el && el.getAttribute ? parseFloat(el.getAttribute('data-score-step') || '0.2') : 0.2;
@@ -12901,7 +12930,7 @@ function renderKcacLeafRuleBox(j) {
   box.innerHTML = '<div class="kcac-leaf-entry-title">' + escHtml(patternTitle) + ' 리프 수</div>' +
     '<div class="kcac-leaf-entry-help"><b>기준: ' + escHtml(guide) + '</b><br>숫자를 입력하면 감점 여부가 자동 표시됩니다.</div>' +
     '<div style="display:flex;gap:8px;align-items:center;margin-top:10px">' +
-    '<input type="number" id="kcac-leaf-count" data-jar-index="' + jarIndex + '" min="0" max="40" step="1" inputmode="numeric" aria-label="' + escHtml(patternTitle) + ' 리프 수 입력" placeholder="리프 수" value="' + escHtml(j.leafCount == null ? '' : j.leafCount) + '" oninput="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" onchange="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" onblur="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'))" style="margin-bottom:0;text-align:center;font-weight:800">' +
+    '<input type="number" id="kcac-leaf-count" data-jar-index="' + jarIndex + '" data-kcac-pattern-type="' + escHtml(j.patternType || '') + '" min="0" max="40" step="1" inputmode="numeric" aria-label="' + escHtml(patternTitle) + ' 리프 수 입력" placeholder="리프 수" value="' + escHtml(j.leafCount == null ? '' : j.leafCount) + '" oninput="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'),this.getAttribute(\'data-kcac-pattern-type\'))" onchange="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'),this.getAttribute(\'data-kcac-pattern-type\'))" onblur="onKcacLeafCountInput(this.value,this.getAttribute(\'data-jar-index\'),this.getAttribute(\'data-kcac-pattern-type\'))" style="margin-bottom:0;text-align:center;font-weight:800">' +
     '<div id="kcac-leaf-penalty-text" style="min-width:92px;text-align:right;font-size:13px;color:var(--text-2);font-weight:800">감점 ' + fmtScore(penalty,0) + '점</div>' +
     '</div>';
   syncKcacLeafEntryState_(j);
@@ -12932,9 +12961,8 @@ function setKcacQualPatternType_(patternType) {
   setKcacQualMilkPattern_(patternType, _kcac.currentIdx);
 }
 
-function onKcacLeafCountInput(value, jarIndex) {
-  var idx = parseInt(jarIndex, 10);
-  if (!Number.isInteger(idx) || idx < 0 || idx >= _kcac.jars.length) idx = _kcac.currentIdx;
+function onKcacLeafCountInput(value, jarIndex, patternType) {
+  var idx = kcacBoundJarIndex_(jarIndex, null, patternType);
   var j = _kcac.jars[idx];
   if (!j) return;
   j.leafCount = String(value == null ? '' : value).replace(/[^0-9]/g,'');
@@ -12950,8 +12978,9 @@ function onKcacLeafCountInput(value, jarIndex) {
 
 function syncKcacLeafCountFromDOM_() {
   var input = document.getElementById('kcac-leaf-count');
-  var idx = input && input.getAttribute ? parseInt(input.getAttribute('data-jar-index'), 10) : _kcac.currentIdx;
-  if (!Number.isInteger(idx) || idx < 0 || idx >= _kcac.jars.length) idx = _kcac.currentIdx;
+  var idx = input && input.getAttribute
+    ? kcacBoundJarIndex_(input.getAttribute('data-jar-index'), input, input.getAttribute('data-kcac-pattern-type'))
+    : _kcac.currentIdx;
   var j = _kcac.jars[idx];
   if (!j || j.type !== 'qual' || !input) return;
   j.leafCount = String(input.value == null ? '' : input.value).replace(/[^0-9]/g,'');

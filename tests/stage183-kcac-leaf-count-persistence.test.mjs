@@ -29,9 +29,10 @@ function functionSource(source, name) {
 
 const inputMarkup = assessment.match(/<input type="number" id="kcac-leaf-count"[^>]+>/)?.[0] || '';
 assert.match(inputMarkup, /data-jar-index=/);
-assert.match(inputMarkup, /oninput="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\)\)"/);
-assert.match(inputMarkup, /onchange="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\)\)"/);
-assert.match(inputMarkup, /onblur="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\)\)"/);
+assert.match(inputMarkup, /data-kcac-pattern-type=/);
+assert.match(inputMarkup, /oninput="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\),this\.getAttribute\(\\'data-kcac-pattern-type\\'\)\)"/);
+assert.match(inputMarkup, /onchange="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\),this\.getAttribute\(\\'data-kcac-pattern-type\\'\)\)"/);
+assert.match(inputMarkup, /onblur="onKcacLeafCountInput\(this\.value,this\.getAttribute\(\\'data-jar-index\\'\),this\.getAttribute\(\\'data-kcac-pattern-type\\'\)\)"/);
 assert.match(assessment, /\.kcac-leaf-entry\.is-complete\{[^}]*border-color:#58d68d/i, 'completed leaf count must switch to a green confirmation border');
 assert.match(assessment, /\.kcac-leaf-entry\.is-complete \.kcac-leaf-entry-title::before\{content:'✓'/, 'completed leaf count must show a visible completion mark');
 assert.match(functionSource(assessment, 'syncKcacLeafEntryState_'), /classList\.toggle\('is-complete', entered\)/);
@@ -53,6 +54,7 @@ const context = {
   }
 };
 vm.createContext(context);
+vm.runInContext(functionSource(assessment, 'kcacBoundJarIndex_'), context);
 vm.runInContext(functionSource(assessment, 'syncKcacLeafCountFromDOM_'), context);
 vm.runInContext(functionSource(assessment, 'saveKcacJarFromDOM'), context);
 
