@@ -2975,6 +2975,10 @@ function expectedHeadersForCompetition(code) {
   else if (code === 'IKRC') data = ['샘플번호','Flavor(플레이버) ×3','Flavor 강도','Clean Cup(클린컵) ×2','Clean Cup 강도','Sweetness(스윗니스) ×2','Sweetness 강도','Acidity(산미)','Acidity 강도','Mouthfeel(마우스필) ×2','Mouthfeel 강도','종합코멘트','총점','실격여부','검수상태','참가자 번호','선수명','Seed to Cup 가산점','Seed to Cup 메모','최종점수','Flavor 스마트태그','Clean Cup 스마트태그','Sweetness 스마트태그','Acidity 스마트태그','Mouthfeel 스마트태그','실격사유','스테이션ID','스테이션','스테이션코드'];
   else if (code === 'MOC') data = ['참가자번호','평가구분','정답수','가산점','총점','종료시간','서명','실격여부','실격사유','검수상태','Section1 지정국가','Section2 지정국가','Section1 농장','Section1 발효방식','Section2 농장','Section2 발효방식','선수명'];
   else if (code === 'KTCC') data = ['팀번호','팀명','Section1 주제','Section1 선택컵','Section1 정답수','Section2 주제','Section2 선택컵','Section2 정답수','Section3 주제','Section3 선택컵','Section3 정답수','Section3 가산점','총점','종료시간','서명','실격여부','실격사유','검수상태','토너먼트 단계','매치번호','상대팀','진출판정','Section1 전체오답(Y/N)','Section1 전체오답사유','Section1 원기록 정답수','Section2 전체오답(Y/N)','Section2 전체오답사유','Section2 원기록 정답수','Section3 전체오답(Y/N)','Section3 전체오답사유','Section3 원기록 정답수'];
+  if (code === 'KCAC' && data.indexOf('점수잠금') < 0) {
+    // 기존 KCAC row.data의 위치 매핑을 바꾸지 않도록 새 메타데이터는 반드시 마지막에 추가한다.
+    data.push('점수잠금');
+  }
   return meta.concat(data);
 }
 function firstNonEmpty(list) { for (const v of list || []) { const s = safeStr(v); if (s) return s; } return ''; }
@@ -3423,6 +3427,9 @@ function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0) {
   let totalScore = computedTotal !== null && computedTotal !== undefined ? computedTotal : (r.total_score === null || r.total_score === undefined ? firstNonEmpty([extra['총점'], extra['최종점수'], extra['Total'], extra['Total Score']]) : Number(r.total_score));
   if (r.disqualified || isDisqualifiedValue_(extra['실격여부']) || isDisqualifiedValue_(extra['DQ']) || isDisqualifiedValue_(extra.disqualified)) totalScore = 0;
   const item = Object.assign({}, extra);
+  if (normalizedCode === 'KCAC' && payload.overallCommentMode === 'combined' && safeStr(payload.overallComment)) {
+    item['종합코멘트'] = safeStr(payload.overallComment);
+  }
   item.rowIndex = isVirtualMulti ? (String(r.id) + ':' + String(payloadRowIndex)) : r.id;
   item.scoreRowId = r.id;
   item.payloadRowIndex = payloadRowIndex;
@@ -4625,8 +4632,12 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   const dataHeaders = dataHeadersForCompetition_(code);
   let explicitDq = null;
   let explicitDqTouched = false;
+  let kcacCombinedCommentValue = null;
   Object.keys(updateObj).forEach(col => {
     const idx = Number(col); const header = headers[idx]; if (!header) return; const value = updateObj[col];
+    if (code === 'KCAC' && payload.overallCommentMode === 'combined' && /종합\s*코멘트|Overall\s*Comment|General\s*Comment/i.test(header)) {
+      kcacCombinedCommentValue = safeStr(value);
+    }
     if (isDisqualificationHeader_(header)) {
       explicitDqTouched = true;
       const parsedDq = parseExplicitDisqualificationValue_(value);
@@ -4643,6 +4654,19 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
     row0.extraFields[header] = value;
     if ((code !== 'KCAC' && code !== 'IKRC') || payload.rows.length <= 1) payload.extraFields[header] = value;
   });
+  if (kcacCombinedCommentValue !== null) {
+    payload.overallComment = kcacCombinedCommentValue;
+    const commentIdx = dataHeaders.indexOf('종합코멘트');
+    payload.rows.forEach(row => {
+      if (!Array.isArray(row.data)) row.data = [];
+      if (!row.extraFields || typeof row.extraFields !== 'object') row.extraFields = {};
+      if (commentIdx >= 0) {
+        while (row.data.length <= commentIdx) row.data.push('');
+        row.data[commentIdx] = kcacCombinedCommentValue;
+      }
+      row.extraFields['종합코멘트'] = kcacCombinedCommentValue;
+    });
+  }
   if (explicitDqTouched && explicitDq === null) explicitDq = false;
   if (explicitDq !== null) {
     if (explicitDq === false && !!current.disqualified && !manager) {

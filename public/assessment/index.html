@@ -6576,20 +6576,23 @@ function isKcacFinalReviewItem_(item) {
   return !!milk;
 }
 function kcacReviewTabLabel_(item) {
+  var patternType = String((item && (item['패턴종류'] || item['Pattern Type'])) || '').trim();
+  // 예선은 우유 종류가 아니라 실제 제출 당시의 FAST/SLOW 배정이 잔의 정체성이다.
+  // 1번/2번 잔의 FAST/SLOW가 바뀔 수 있으므로 우유 기준 라벨을 쓰면 검수 점수가 뒤바뀐 것처럼 보인다.
+  if (/FAST\s*Rosetta|dynamic/i.test(patternType)) return 'FAST Rosetta';
+  if (/SLOW\s*Rosetta|controlled/i.test(patternType)) return 'SLOW Rosetta';
   var milk = String((item && (item['우유종류'] || item._col9)) || '');
   var purpose = String((item && (item['잔용도'] || item['컵용도'] || item['평가용도'])) || '');
-  var product = String((item && (item['우유명'] || item['우유제품'] || item['제품명'])) || '');
-  var milkText = milk + (product ? '(' + product + ')' : '');
   var hasPattern = false;
   ['결선 Theme Expression(주제 표현력)','결선 Technical Execution(작업 수행 완성도)','결선 Cleanliness(청결)','결선 Surface Quality(표면 품질)','결선 Position & Symmetry(위치와 대칭)','결선 Design Completion(디자인 완성도)'].forEach(function(k){ if (item && item[k] !== undefined && String(item[k]).trim() !== '') hasPattern = true; });
-  if (/창작패턴|패턴평가/i.test(purpose + ' ' + milk) || hasPattern) return '패턴평가 · ' + (milkText || '일반우유');
-  if (/예선/i.test(purpose)) return '예선평가 · ' + (milkText || milk || '우유');
-  if (/식물성|대체우유|오트|어메이징/i.test(milk + ' ' + product)) return '센서리용아트 · ' + (milkText || '대체우유');
-  return '센서리용아트 · ' + (milkText || '일반우유');
+  if (/예선/i.test(purpose)) return (Number(item && item.payloadRowIndex) || 0) + 1 + '번 잔';
+  if (/창작패턴|패턴평가/i.test(purpose + ' ' + milk) || hasPattern) return '패턴평가';
+  // KCAC 검수 화면에는 내부 배정용 우유 정보가 아닌 실제 평가 구분만 표시한다.
+  return '센서리용아트 ' + ((Number(item && item.payloadRowIndex) || 0) + 1);
 }
 function kcacReviewSortItems_(items) {
   return (items || []).slice().sort(function(a,b){
-    function ord(x){ var t = kcacReviewTabLabel_(x); if (/예선평가.*멸균/.test(t)) return 1; if (/예선평가.*대체/.test(t)) return 2; if (/패턴평가/.test(t)) return 3; if (/센서리(평가|용아트).*일반/.test(t)) return 4; if (/센서리(평가|용아트).*대체/.test(t)) return 5; return 9; }
+    function ord(x){ var t = kcacReviewTabLabel_(x); if (/^FAST\s*Rosetta$/i.test(t)) return 1; if (/^SLOW\s*Rosetta$/i.test(t)) return 2; if (/예선평가.*멸균/.test(t)) return 3; if (/예선평가.*대체/.test(t)) return 4; if (/패턴평가/.test(t)) return 5; if (/센서리(평가|용아트).*일반/.test(t)) return 6; if (/센서리(평가|용아트).*대체/.test(t)) return 7; return 9; }
     return ord(a) - ord(b);
   });
 }
@@ -7219,6 +7222,69 @@ function reviewIsKcacPenaltyDetailHeader_(h) {
 }
 function reviewIsKcacCountDetailHeader_(h) {
   return reviewIsKcac_() && (/패턴종류|Pattern\s*Type/i.test(String(h || '')) || /^리프수$|리프\s*수|Leaf\s*Count/i.test(String(h || '')));
+}
+function reviewIsKcacScoreLockHeader_(h) {
+  return reviewIsKcac_() && /^(점수\s*잠금|Score\s*Locks?)$/i.test(String(h || '').trim());
+}
+function reviewKcacScoreKeyForHeader_(h) {
+  h = String(h || '');
+  if (/Theme\s*Expression|주제\s*표현/i.test(h)) return '주제표현';
+  if (/Technical\s*Execution|작업\s*수행/i.test(h)) return '작업수행';
+  if (/Cleanliness|청결/i.test(h)) return '청결';
+  if (/Taste\s*Balance|맛의?\s*균형/i.test(h)) return '맛균형';
+  if (/Mouthfeel|질감|촉감/i.test(h)) return '질감';
+  if (/Presentation|프레젠/i.test(h)) return '프레젠';
+  if (/Pattern\s*Symmetry|Pattern\s*Balance|대칭.*균형/i.test(h)) return '균형';
+  if (/Surface\s*Quality|표면\s*품질/i.test(h)) return '표면';
+  if (/Position.*(?:Proportion|Symmetry)|위치.*(?:비율|대칭)/i.test(h)) return '위치';
+  if (/Pattern\s*Definition|Line\s*Clarity|패턴\s*선명|선명도/i.test(h)) return '선명도';
+  if (/Pattern\s*Completion|Design\s*Completion|패턴\s*완성|디자인\s*완성/i.test(h)) return '완성도';
+  return '';
+}
+function reviewKcacScoreLockInfo_() {
+  var item = (_reviewState && _reviewState.current) || {};
+  var input = document.getElementById('review-kcac-score-locks-input');
+  var raw = input ? input.value : (item['점수잠금'] || item['Score Locks'] || '');
+  raw = String(raw == null ? '' : raw).trim();
+  if (!raw) return {map:{}, hasStored:false};
+  try {
+    var parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? {map:parsed, hasStored:true}
+      : {map:{}, hasStored:false};
+  } catch (e) {
+    return {map:{}, hasStored:false};
+  }
+}
+function reviewKcacScoreLocked_(header) {
+  if (!reviewIsKcac_()) return false;
+  var key = reviewKcacScoreKeyForHeader_(header);
+  if (!key) return false;
+  var info = reviewKcacScoreLockInfo_();
+  if (Object.prototype.hasOwnProperty.call(info.map, key)) return !!info.map[key];
+  // 기존 제출에는 잠금 메타데이터가 없으므로 검수에서 우발적으로 점수가 움직이지 않게 잠금으로 시작한다.
+  return !info.hasStored;
+}
+function toggleReviewKcacScoreLock_(idx, checkbox) {
+  if (!reviewIsKcac_()) return;
+  var headers = (_reviewState && _reviewState.headers) || [];
+  var key = reviewKcacScoreKeyForHeader_(headers[idx] || '');
+  var input = document.getElementById('review-kcac-score-locks-input');
+  if (!key || !input) return;
+  var info = reviewKcacScoreLockInfo_();
+  var map = info.map || {};
+  if (!info.hasStored) {
+    headers.forEach(function(h){
+      var scoreKey = reviewKcacScoreKeyForHeader_(h);
+      if (scoreKey && !Object.prototype.hasOwnProperty.call(map, scoreKey)) map[scoreKey] = true;
+    });
+  }
+  map[key] = !!(checkbox && checkbox.checked);
+  input.value = JSON.stringify(map);
+  var range = document.getElementById('review-eval-range-' + idx);
+  if (range) range.disabled = !!map[key];
+  scheduleReviewAutoSave(true);
+  toast(map[key] ? '점수 고정됨' : '점수 고정 해제됨');
 }
 function isMobDerivedDisplayHeader_(h) {
   return /^(총점|테크니컬 총점|센서리 총점|창작메뉴 총점|감점 전 합산|감점 적용 후 점수|순위 반영점수|총평가 반영점수)$/i.test(String(h || '').trim());
@@ -9438,6 +9504,7 @@ function appendReviewEvalLikeFields(wrap, groups) {
     var html = '<h3 style="text-align:center;margin-bottom:16px;font-size:18px;font-weight:700;letter-spacing:.2px">' + escHtml(g.label) + '</h3>';
     if (g.score) {
       var h = g.score.h, idx = g.score.idx, val = reviewValueForDisplay(g.score.val);
+      var kcacScoreLocked = reviewIsKcac_() && reviewKcacScoreLocked_(h);
       var bounds = reviewScoreBounds(h, val);
       var min = bounds[0], max = bounds[1];
       if (val === '') val = '0.0';
@@ -9447,8 +9514,11 @@ function appendReviewEvalLikeFields(wrap, groups) {
       var step = reviewScoreStep(h);
       var visualStep = step === '0.2' ? '0.01' : step;
       html += '<div class="score-desc-text">' + reviewScoreUnitText(h) + '</div>';
-      html += '<input type="range" class="score-slider" id="review-eval-range-' + idx + '" min="' + min + '" max="' + max + '" step="' + visualStep + '" data-score-step="' + step + '" value="' + escHtml(val) + '" oninput="reviewEvalLikeSlide(' + idx + ', this.value, true)" onchange="normalizeRangeStepValue_(this); reviewEvalLikeSlide(' + idx + ', this.value, true); scheduleReviewAutoSave(true)"' + (!g.score.editable ? ' disabled' : '') + '>';
+      html += '<input type="range" class="score-slider" id="review-eval-range-' + idx + '" min="' + min + '" max="' + max + '" step="' + visualStep + '" data-score-step="' + step + '" data-review-score-lock="' + (kcacScoreLocked ? '1' : '0') + '" value="' + escHtml(val) + '" oninput="reviewEvalLikeSlide(' + idx + ', this.value, true)" onchange="normalizeRangeStepValue_(this); reviewEvalLikeSlide(' + idx + ', this.value, true); scheduleReviewAutoSave(true)"' + (!g.score.editable || kcacScoreLocked ? ' disabled' : '') + '>';
       html += '<div class="score-labels"><span>' + min + '</span><span>' + max + '</span></div>';
+      if (reviewIsKcac_() && g.score.editable) {
+        html += '<div class="score-lock"><input type="checkbox" id="review-kcac-lock-' + idx + '"' + (kcacScoreLocked ? ' checked' : '') + ' onchange="toggleReviewKcacScoreLock_(' + idx + ',this)"><label for="review-kcac-lock-' + idx + '">점수 고정 (슬라이더 잠금)</label></div>';
+      }
       html += '<div class="review-eval-original-score">기존 저장값 ' + escHtml(val) + (isReviewCountHeader(h) ? '개' : '점') + '</div>';
       html += '<input id="review-eval-input-' + idx + '" type="hidden" data-score="1" data-col="' + idx + '" value="' + escHtml(val) + '">';
     }
@@ -9753,6 +9823,8 @@ function appendReviewGroupTabs_(wrap, groupItems, activeRowIndex) {
 function switchReviewGroupItem_(next) {
   if (!next) return;
   if (!canReviewEditAny_()) { openReviewEdit(next); return; }
+  // 단순 탭 전환은 저장 요청을 만들지 않는다. 실제 수정이 있을 때만 현재 잔을 저장한 뒤 이동한다.
+  if (!_reviewDraftDirty && !_reviewAutoSaving && !_reviewAutoSaveTimer) { openReviewEdit(next); return; }
   setReviewAutoSaveState('현재 컵 수정 내용을 저장한 뒤 이동합니다.', 'review-autosaving');
   flushReviewAutoSaveThen_(function(ok){
     if (!ok) {
@@ -9828,6 +9900,15 @@ function openReviewEdit(item) {
   var scoreItems = [], intensityItems = [], ynItems = [], commentItems = [], tagItems = [], disqItems = [], disqReasonItems = [], infoItems = [], resultTextItems = [], resultReadonlyItems = [], otherItems = [];
   headers.forEach(function(h, idx){
     if (!h || h === '서명') return;
+    if (reviewIsKcacScoreLockHeader_(h)) {
+      var lockInput = document.createElement('input');
+      lockInput.type = 'hidden';
+      lockInput.id = 'review-kcac-score-locks-input';
+      lockInput.setAttribute('data-col', idx);
+      lockInput.value = item[h] == null ? (item['_col' + idx] || '') : item[h];
+      wrap.appendChild(lockInput);
+      return;
+    }
     if (String(_reviewState.code || '').toUpperCase() === 'KCR' && /자동생성상태/.test(String(h))) {
       var stateInput = document.createElement('input');
       stateInput.type = 'hidden';
@@ -13801,6 +13882,7 @@ function kcacSubmitAll() {
       '리프수감점': j.type === 'qual' ? leafPenalty : '',
       '시간감점': rowIdx === penaltyTargetIdx ? ((Number(_kcac.penalty) || 0) >= 999 ? 999 : (Number(_kcac.penalty) || 0)) : ''
     };
+    extra['점수잠금'] = JSON.stringify(j.scoreLocks || {});
     extra['평가구분'] = '대회평가';
     extra['켈리브레이션범위'] = '';
     var attrExtra = kcacSmartTagExtraFields_(j);
@@ -13851,6 +13933,8 @@ function kcacSubmitAll() {
       judgeRole: roleTextForCode_('KCAC'),
       team: judgeTeamForSubmit(),
       mode: 'judge',
+      overallCommentMode: isQualSubmission ? 'combined' : 'per-row',
+      overallComment: isQualSubmission ? String(_kcac.overallComment || '') : '',
       rows: rows
     });
 }
