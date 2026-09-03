@@ -5517,6 +5517,10 @@ function d1UsageBytes_(value) {
   if (bytes >= 1000) return (bytes / 1000).toFixed(1) + ' KB';
   return Math.round(bytes) + ' B';
 }
+function d1UsagePercentText_(value) {
+  var percent = Math.max(0, Math.min(100, Number(value)) || 0);
+  return percent.toFixed(percent >= 99 ? 2 : 1) + '%';
+}
 function d1UsageMetricHtml_(label, data, unit) {
   data = data || {};
   var used = Math.max(0, Number(data.used) || 0);
@@ -5531,7 +5535,7 @@ function d1UsageMetricHtml_(label, data, unit) {
     ? '사용 ' + d1UsageBytes_(used) + ' / 포함 ' + d1UsageBytes_(limit)
     : '사용 ' + d1UsageNumber_(used) + ' / 한도 ' + d1UsageNumber_(limit) + ' 행';
   return '<div class="d1-usage-metric ' + state + '">' +
-    '<div class="d1-usage-label"><span>' + escHtml(label) + '</span><span class="d1-usage-percent">' + remainPct.toFixed(1) + '% 남음</span></div>' +
+    '<div class="d1-usage-label"><span>' + escHtml(label) + '</span><span class="d1-usage-percent">' + d1UsagePercentText_(remainPct) + ' 남음</span></div>' +
     '<div class="d1-usage-value">' + remainingText + ' 남음</div>' +
     '<div class="d1-usage-detail">' + detailText + '</div>' +
     '<div class="d1-usage-track"><div class="d1-usage-fill" style="width:' + fill.toFixed(2) + '%"></div></div>' +
