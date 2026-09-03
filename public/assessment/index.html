@@ -500,6 +500,8 @@ input[type=range].kcl-range,
 .kcac-qual-nav .submit-btn-nav.active{background:#fff;color:#000;border-color:#fff}
 .kcac-qual-nav .cup-btn-num{font-size:12px;line-height:1.15;white-space:normal}
 .kcac-qual-nav .cup-btn-score{font-size:9px;line-height:1.2;white-space:normal;overflow-wrap:anywhere}
+.kcac-submit-dock{display:none;position:sticky;top:0;z-index:82;padding:8px max(12px,var(--safe-right)) 9px max(12px,var(--safe-left));background:rgba(7,7,7,.96);border-bottom:1px solid var(--border);box-shadow:0 8px 20px rgba(0,0,0,.22)}
+.kcac-submit-dock .submit-btn-nav{display:block;width:min(100%,760px);height:48px;margin:0 auto;font-size:15px;border:1px solid #fff;box-shadow:0 6px 18px rgba(255,255,255,.12)}
 .kcac-overall-guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
 .kcac-overall-guide-section{min-width:0;border:1px solid var(--border-lt);border-radius:10px;background:#111;padding:12px}
 .kcac-overall-guide-title{font-size:14px;font-weight:950;color:#fff;margin-bottom:4px}
@@ -515,7 +517,7 @@ input[type=range].kcl-range,
 .kcac-leaf-entry.is-complete input{border-color:#58d68d!important;box-shadow:0 0 0 3px rgba(88,214,141,.13)!important}
 .kcac-leaf-entry.is-complete #kcac-leaf-penalty-text{color:#8ee8b2!important}
 .kcac-leaf-entry.is-complete.has-penalty #kcac-leaf-penalty-text{color:#ffcb66!important}
-@media(max-width:640px){.kcac-overall-guide-grid{grid-template-columns:1fr}.kcac-qual-nav{gap:5px}.kcac-qual-nav .cup-btn,.kcac-qual-nav .submit-btn-nav{height:60px;padding:6px 3px}.kcac-qual-nav .cup-btn-num{font-size:11px!important}.kcac-qual-nav .cup-btn-score{font-size:8px!important}}
+@media(max-width:640px){.kcac-overall-guide-grid{grid-template-columns:1fr}.kcac-qual-nav{gap:5px}.kcac-qual-nav .cup-btn,.kcac-qual-nav .submit-btn-nav{height:60px;padding:6px 3px}.kcac-qual-nav .cup-btn-num{font-size:11px!important}.kcac-qual-nav .cup-btn-score{font-size:8px!important}.kcac-submit-dock{padding-top:7px;padding-bottom:8px}.kcac-submit-dock .submit-btn-nav{height:46px;font-size:14px}}
 .kcac-smart-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:100%;margin-top:8px}
 .kcac-smart-group{min-width:0;border:1px solid var(--border);border-radius:8px;background:rgba(0,0,0,.28);padding:9px}
 .kcac-smart-group-label{font-size:12px;font-weight:900;margin:0 0 7px;padding:0 2px}
@@ -2337,6 +2339,9 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <div class="cup-nav" id="kcac-cup-nav" style="display:none">
     <button class="submit-btn-nav" onclick="kcacSubmitAll()">전체 제출</button>
   </div>
+  <div class="kcac-submit-dock" id="kcac-submit-dock" style="display:none">
+    <button class="submit-btn-nav" type="button" onclick="kcacSubmitAll()">전체 제출완료</button>
+  </div>
   <div class="eval-content">
     <div class="eval-hero-logo" data-comp-logo="KCAC"></div>
     <div class="section-label">참가자 정보</div>
@@ -2362,8 +2367,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 
     <div class="kcac-cam-wrap" id="kcac-cam-wrap">
       <div class="kcac-cam-empty" id="kcac-cam-empty">
-        사진을 촬영하거나 앨범에서 사진을 불러오세요<br>
-        <span style="font-size:11px;color:#333">원을 드래그해 위치 조정</span>
+        운영 제공 사진을 자동으로 불러옵니다<br>
+        <span style="font-size:11px;color:#333">사진 저장은 선택 사항 · 원을 드래그해 위치 조정</span>
       </div>
       <img id="kcac-photo-img" draggable="false">
       <canvas id="kcac-canvas"></canvas>
@@ -2396,7 +2401,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <button class="cam-ctl-btn save" onclick="saveKcacSnapshot()">가이드 함께 저장</button>
       <button class="cam-ctl-btn" onclick="resetKcacPhoto()">현재 사진 제거</button>
     </div>
-    <div class="kcac-media-help" id="kcac-media-help">촬영하기와 앨범에서 사진 불러오기는 분리되어 있습니다. 영상 파일은 용량 안정성을 위해 지원하지 않습니다.</div>
+    <div class="kcac-media-help" id="kcac-media-help">사진은 선택 사항입니다. 저장하지 않아도 점수·스마트태그·코멘트를 제출할 수 있습니다.</div>
     <div class="kcac-saved-wrap" id="kcac-saved-wrap">
       <div class="kcac-saved-title" id="kcac-saved-title">저장된 평가용 스냅샷 (0)</div>
       <div class="kcac-saved-list" id="kcac-saved-list"></div>
@@ -11997,6 +12002,7 @@ function onKcacParticipantSelected_() {
   var setup = document.getElementById('kcac-milk-pattern-setup');
   var body = document.getElementById('kcac-evaluation-body');
   var nav = document.getElementById('kcac-cup-nav');
+  var submitDock = document.getElementById('kcac-submit-dock');
   var num = document.getElementById('kcac-num');
   var completeBadge = document.getElementById('kcac-participant-complete');
   var isQual = normalizeKcacRoundDisplay_((_selComp && _selComp.currentRound) || '') !== '결선';
@@ -12005,9 +12011,14 @@ function onKcacParticipantSelected_() {
   var assignment = num ? participantAssignmentByNumber_('KCAC', num.value) : null;
   if (body) body.style.display = hasParticipant ? '' : 'none';
   if (nav) nav.style.display = hasParticipant ? '' : 'none';
+  if (submitDock) submitDock.style.display = hasParticipant ? '' : 'none';
   if (setup) setup.style.display = showMilkSetup ? 'block' : 'none';
   if (completeBadge) completeBadge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
-  if (showMilkSetup) syncKcacMilkPatternSelectors_();
+  if (showMilkSetup) {
+    if (typeof kcacApplyProvidedPhotosForParticipant_ === 'function') kcacApplyProvidedPhotosForParticipant_();
+    syncKcacMilkPatternSelectors_();
+    if (typeof _kcac !== 'undefined' && _kcac.jars.length) loadKcacJar(_kcac.currentIdx);
+  }
 }
 
 function setKcacQualMilkPattern_(patternType, jarIndex) {
@@ -12023,6 +12034,7 @@ function setKcacQualMilkPattern_(patternType, jarIndex) {
     kcacCleanPatternSpecificSmartTags_(entry.jar);
     entry.jar.leafPenalty = calcKcacLeafPenalty(entry.jar);
   });
+  if (typeof kcacApplyProvidedPhotosForParticipant_ === 'function') kcacApplyProvidedPhotosForParticipant_();
   // FAST로 선택한 실제 우유 잔을 바로 열어 이전 잔의 우유 문구가 남지 않게 합니다.
   _kcac.currentIdx = Math.max(0, _kcac.jars.indexOf(target));
   loadKcacJar(_kcac.currentIdx);
@@ -12280,7 +12292,10 @@ function makeKcacJar(label, type, milkType, milkProduct, purpose, patternType) {
     leafCount: '',
     leafPenalty: 0,
     scores: {},
+    scoreLocks: {},
     photoSrc: null,
+    photoParticipantNo: '',
+    providedPhotoDisabledFor: '',
     mediaSource: '',
     mediaName: '',
     guidePos: {rx:0.5, ry:0.5},
@@ -12298,6 +12313,62 @@ function makeKcacJar(label, type, milkType, milkProduct, purpose, patternType) {
 
 function kcacUsesPatternMedia_(j) {
   return !!j && j.type !== 'final-sensory';
+}
+
+// 운영진이 제공한 예선 시연 사진입니다. 참가자를 고르면 FAST/SLOW 잔에만 자동으로
+// 연결하며, 사진 자체는 점수 제출의 필수 조건이 아닙니다.
+var KCAC_PRELIM_PHOTO_ASSETS = {
+  '1':{fast:'/assets/kcac-prelim/p01-fast.png',slow:'/assets/kcac-prelim/p01-slow.png'},
+  '2':{fast:'/assets/kcac-prelim/p02-fast.jpg',slow:'/assets/kcac-prelim/p02-slow.jpg'},
+  '3':{fast:'/assets/kcac-prelim/p03-fast.png',slow:'/assets/kcac-prelim/p03-slow.png'},
+  '4':{fast:'/assets/kcac-prelim/p04-fast.jpg',slow:'/assets/kcac-prelim/p04-slow.jpg'},
+  '5':{fast:'/assets/kcac-prelim/p05-fast.jpg',slow:'/assets/kcac-prelim/p05-slow.jpg'},
+  '7':{fast:'/assets/kcac-prelim/p07-fast.png',slow:'/assets/kcac-prelim/p07-slow.png'},
+  '9':{fast:'/assets/kcac-prelim/p09-fast.png',slow:'/assets/kcac-prelim/p09-slow.png'},
+  '10':{fast:'/assets/kcac-prelim/p10-fast.jpeg',slow:'/assets/kcac-prelim/p10-slow.jpeg'},
+  '11':{fast:'/assets/kcac-prelim/p11-fast.jpg',slow:'/assets/kcac-prelim/p11-slow.jpg'},
+  '12':{fast:'/assets/kcac-prelim/p12-fast.jpg',slow:'/assets/kcac-prelim/p12-slow.jpg'},
+  '13':{fast:'/assets/kcac-prelim/p13-fast.jpeg',slow:'/assets/kcac-prelim/p13-slow.jpeg'},
+  '14':{fast:'/assets/kcac-prelim/p14-fast.png',slow:'/assets/kcac-prelim/p14-slow.png'},
+  '15':{fast:'/assets/kcac-prelim/p15-fast.png',slow:'/assets/kcac-prelim/p15-slow.png'},
+  '16':{fast:'/assets/kcac-prelim/p16-fast.jpg',slow:'/assets/kcac-prelim/p16-slow.jpg'},
+  '17':{fast:'/assets/kcac-prelim/p17-fast.jpeg',slow:'/assets/kcac-prelim/p17-slow.jpeg'},
+  '18':{fast:'/assets/kcac-prelim/p18-fast.png',slow:'/assets/kcac-prelim/p18-slow.png'},
+  '19':{fast:'/assets/kcac-prelim/p19-fast.jpg',slow:'/assets/kcac-prelim/p19-slow.jpg'},
+  '20':{fast:'/assets/kcac-prelim/p20-fast.jpeg',slow:'/assets/kcac-prelim/p20-slow.jpeg'},
+  '22':{fast:'/assets/kcac-prelim/p22-fast.jpg',slow:'/assets/kcac-prelim/p22-slow.jpg'}
+};
+function kcacSelectedParticipantPhotoNo_() {
+  var input = document.getElementById('kcac-num');
+  var raw = String(input && input.value || '').trim();
+  var match = raw.match(/\d+/);
+  return match ? String(parseInt(match[0], 10)) : '';
+}
+function kcacProvidedPhotoKind_(jar, index) {
+  if (jar && jar.patternType === 'dynamic') return 'fast';
+  if (jar && jar.patternType === 'controlled') return 'slow';
+  return Number(index) === 1 ? 'slow' : 'fast';
+}
+function kcacApplyProvidedPhotosForParticipant_() {
+  var participantNo = kcacSelectedParticipantPhotoNo_();
+  var photos = participantNo ? KCAC_PRELIM_PHOTO_ASSETS[participantNo] : null;
+  var changed = false;
+  (_kcac.jars || []).forEach(function(j, index){
+    if (!j || j.type !== 'qual') return;
+    if (j.providedPhotoDisabledFor === participantNo) return;
+    var kind = kcacProvidedPhotoKind_(j, index);
+    var src = photos && photos[kind] || '';
+    // 참가자 전환 시 이전 참가자의 수동/자동 사진이 남지 않도록 현재 선수 기준으로만 표시합니다.
+    if (j.photoParticipantNo !== participantNo || j.mediaSource === 'provided-photo' || !j.photoSrc) {
+      if (j.photoSrc !== src || j.mediaSource !== (src ? 'provided-photo' : '') || j.photoParticipantNo !== participantNo) changed = true;
+      j.photoSrc = src || null;
+      j.mediaSource = src ? 'provided-photo' : '';
+      j.mediaName = src ? ('운영 제공 · ' + (kind === 'fast' ? 'FAST Rosetta' : 'SLOW Rosetta')) : '';
+      j.photoParticipantNo = participantNo;
+      j.guidePos = {rx:0.5, ry:0.5};
+    }
+  });
+  return changed;
 }
 
 function clearKcacMediaDisplay_() {
@@ -12453,9 +12524,10 @@ function loadKcacJar(idx) {
     html += '<div style="text-align:right"><div class="score-row-bignum" id="kcac-v-' + a.key + '">' + fmtScore(v,2) + '</div><div class="score-row-desc" id="kcac-d-' + a.key + '">' + kcacGetDesc(v) + '</div></div>';
     html += '</div>';
     html += '<div class="score-row-slider-wrap">';
-    html += buildKcacScoreSlider_(a.key, v);
+    html += buildKcacScoreSlider_(a.key, v, !!(j.scoreLocks && j.scoreLocks[a.key]));
     html += '<div class="score-row-scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>';
     html += '</div>';
+    html += '<div class="score-lock"><input type="checkbox" id="kcac-lock-' + escHtml(a.key) + '"' + (j.scoreLocks && j.scoreLocks[a.key] ? ' checked' : '') + ' onchange="toggleKcacScoreLock_(\'' + escapeJsString_(a.key) + '\')"><label for="kcac-lock-' + escHtml(a.key) + '">점수 고정 (슬라이더 잠금)</label></div>';
     html += renderKcacSmartTagSection_(j, a);
     html += '</div>';
   });
@@ -12530,9 +12602,19 @@ function onKcacCommentInput() {
   refreshKcacCommentReference_();
 }
 
-function buildKcacScoreSlider_(key, value) {
+function buildKcacScoreSlider_(key, value, locked) {
   var score = quantizeScoreStep_(value, 0.2, 0, 5);
-  return '<input type="range" class="score-slider" min="0" max="5" step="0.01" data-score-step="0.2" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this)" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this)">';
+  return '<input type="range" class="score-slider" min="0" max="5" step="0.01" data-score-step="0.2" data-kcac-score="' + escHtml(key) + '" value="' + fmtFixedScore_(score,2) + '" oninput="onKcacScore(\'' + escapeJsString_(key) + '\',this.value,false,this)" onchange="normalizeRangeStepValue_(this);onKcacScore(\'' + escapeJsString_(key) + '\',this.value,true,this)"' + (locked ? ' disabled' : '') + '>';
+}
+
+function toggleKcacScoreLock_(key) {
+  var j = _kcac.jars[_kcac.currentIdx];
+  if (!j) return;
+  j.scoreLocks = j.scoreLocks || {};
+  j.scoreLocks[key] = !j.scoreLocks[key];
+  var slider = document.querySelector('#kcac-attrs input[data-kcac-score="' + String(key).replace(/"/g, '\\"') + '"]');
+  if (slider) slider.disabled = !!j.scoreLocks[key];
+  toast(j.scoreLocks[key] ? '점수 고정됨' : '점수 고정 해제됨');
 }
 
 function onKcacScore(key, val, finalize, el) {
@@ -12840,6 +12922,7 @@ function triggerKcacMediaInput(kind) {
 }
 
 function kcacMediaSourceLabel_(source) {
+  if (source === 'provided-photo') return '운영 제공 사진';
   if (source === 'capture') return '촬영 사진';
   if (source === 'album-photo') return '앨범 사진';
   return source || '사진';
@@ -12850,11 +12933,14 @@ function updateKcacMediaHelp_() {
   if (!el) return;
   var j = _kcac.jars[_kcac.currentIdx];
   if (!kcacUsesPatternMedia_(j)) { el.classList.remove('active'); return; }
-  var base = '촬영하기와 앨범에서 사진 불러오기는 분리되어 있습니다. 영상 파일은 용량 안정성을 위해 지원하지 않습니다.';
+  var base = '사진은 선택 사항입니다. 저장하지 않아도 점수·스마트태그·코멘트를 제출할 수 있습니다.';
   if (j && j.photoSrc) {
     var src = kcacMediaSourceLabel_(j.mediaSource);
     var name = j.mediaName ? ' · ' + j.mediaName : '';
-    el.textContent = '현재 불러온 자료: ' + src + name + ' / 가이드 위치를 맞춘 뒤 “가이드 함께 저장”을 눌러주세요.';
+    var isProvided = j.mediaSource === 'provided-photo';
+    el.textContent = isProvided
+      ? ('현재 선수의 ' + src + name + '이 자동으로 연결되었습니다. 사진 저장은 선택 사항입니다.')
+      : ('현재 불러온 자료: ' + src + name + ' / 사진 저장은 선택 사항입니다.');
     el.classList.add('active');
   } else {
     el.textContent = base;
@@ -12868,6 +12954,8 @@ function setKcacPhotoDataUrl_(dataUrl, source, file) {
   j.photoSrc = dataUrl;
   j.mediaSource = source || 'album-photo';
   j.mediaName = file && file.name ? file.name : '';
+  j.photoParticipantNo = kcacSelectedParticipantPhotoNo_();
+  j.providedPhotoDisabledFor = '';
   j.guidePos = {rx:0.5, ry:0.5};
   var img = document.getElementById('kcac-photo-img');
   img.onload = function() {
@@ -12965,6 +13053,8 @@ function resetKcacPhoto() {
   j.photoSrc = null;
   j.mediaSource = '';
   j.mediaName = '';
+  j.photoParticipantNo = kcacSelectedParticipantPhotoNo_();
+  j.providedPhotoDisabledFor = j.photoParticipantNo;
   document.getElementById('kcac-photo-img').src = '';
   document.getElementById('kcac-photo-img').style.display = 'none';
   document.getElementById('kcac-cam-empty').style.display = 'flex';

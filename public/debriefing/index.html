@@ -2056,14 +2056,15 @@ function buildKcrScoreGrid(s, compCode) {
 
 function buildKcacCupMetaLine(s) {
   var purpose = s['잔용도'] || s['컵용도'] || s['평가용도'] || '';
-  if (purpose === '센서리평가') purpose = '센서리용아트';
-  var milk = s['우유종류'] || s['사용우유'] || '';
-  var product = s['우유명'] || s['우유제품'] || s['제품명'] || '';
   var patternType = s['패턴종류'] || s['Pattern Type'] || '';
   var leafCount = s['리프수'] || s['Leaf Count'] || '';
-  var milkText = milk ? milk + (product ? '(' + product + ')' : '') : product;
+  var source = String(patternType + ' ' + purpose).toLowerCase();
+  var publicLabel = /fast|패스트/.test(source) ? 'FAST Rosetta'
+    : (/slow|슬로우/.test(source) ? 'SLOW Rosetta'
+      : (/창작|pattern/.test(source) ? '창작패턴' : (/센서리/.test(source) ? '센서리용아트' : '평가 결과')));
   var leafText = leafCount !== '' ? ('리프 ' + leafCount + '개') : '';
-  return [purpose, milkText, patternType, leafText].filter(function(v){ return v != null && String(v).trim() !== ''; }).join(' · ');
+  // 선수 디브리핑에서는 평가 결과 자체만 안내하고, 심사 운영용 우유 종류·제품명은 노출하지 않습니다.
+  return [publicLabel, leafText].filter(function(v){ return v != null && String(v).trim() !== ''; }).join(' · ');
 }
 
 function firstKcacVal_(s, keys) {
