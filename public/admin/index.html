@@ -2,8 +2,11 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>KCL 관리자</title>
+<meta name="description" content="KCL 관리자 인증 및 대회 운영·등록·권한 관리 메뉴입니다.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#050505">
 <style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 :root{--bg:#050505;--panel:rgba(16,16,18,.88);--line:rgba(255,255,255,.14);--text:#fff;--muted:rgba(255,255,255,.62);--ok:#6ee7b7;--danger:#ff6b6b;--accent:#c98a52}
@@ -30,13 +33,15 @@ html,body{width:100%;overflow-x:hidden}.wrap,.panel{max-width:100%}.top{flex-wra
 html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavior-y:auto!important;-webkit-overflow-scrolling:touch!important;}
 @media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}}
 </style>
+<link rel="stylesheet" href="/assets/kcl-ui.css?v=203">
+<script defer src="/assets/kcl-ui.js?v=203"></script>
 </head>
 <body>
 <main class="wrap">
   <section class="panel">
     <div class="top">
       <div>
-        <div class="badge"><i class="dot"></i>DEV / ADMIN CENTER</div>
+        <div class="badge"><i class="dot"></i>KCL ADMIN CENTER</div>
         <h1>KCL 관리자</h1>
         <p class="sub">전체 관리자 인증 후 대회 운영과 등록·권한, 선수 디브리핑 확인을 관리합니다. 대회팀장과 심사위원은 첫 화면의 ‘평가 / 대회팀장 / 심사위원’ 메뉴에서 로그인합니다.</p>
       </div>
@@ -44,12 +49,12 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
     </div>
 
     <div id="loginBox">
-      <div class="login">
-        <input id="loginName" placeholder="관리자 아이디" autocomplete="username">
-        <input id="loginPhone" placeholder="관리자 비밀번호" type="password" autocomplete="current-password">
-        <input id="loginSecret" placeholder="시크릿 코드" type="password" inputmode="numeric" autocomplete="one-time-code">
-        <button onclick="login()">관리자 로그인</button>
-      </div>
+      <form class="login" onsubmit="event.preventDefault();login()">
+        <div class="kcl-login-field"><label class="kcl-field-label" for="loginName">관리자 아이디</label><input id="loginName" placeholder="관리자 아이디" autocomplete="username"></div>
+        <div class="kcl-login-field"><label class="kcl-field-label" for="loginPhone">비밀번호</label><input id="loginPhone" placeholder="관리자 비밀번호" type="password" autocomplete="current-password"></div>
+        <div class="kcl-login-field"><label class="kcl-field-label" for="loginSecret">시크릿 코드</label><input id="loginSecret" placeholder="시크릿 코드" type="password" inputmode="numeric" autocomplete="one-time-code"></div>
+        <button id="admin-login-button" type="submit">관리자 로그인</button>
+      </form>
       <div class="msg" id="msg"></div>
     </div>
 
@@ -99,17 +104,21 @@ function sendTestSms(){var actor=readActor();var phone=document.getElementById('
 function isAdmin(res){var t=String((res&&(res.accountType||res.type))||'').toUpperCase();var rows=Array.isArray(res&&res.operatorRows)?res.operatorRows:[];return res && (t==='ADMIN'||/관리자|admin|총괄/i.test(res.role||'')||rows.some(function(r){return String(r.accountType||'').toUpperCase()==='ADMIN'||/관리자|admin|총괄/i.test(r.role||'');}));}
 function logoutAdmin(){clearSavedActor();document.getElementById('adminMain').classList.add('hidden');document.getElementById('loginBox').classList.remove('hidden');msg('저장된 권한을 지웠습니다. 아이디/비밀번호/시크릿 코드로 다시 로그인해주세요.','ok');}
 function login(){
-  msg('로그인 중...');
   var adminId=document.getElementById('loginName').value.trim();
   var password=document.getElementById('loginPhone').value;
   var secret=document.getElementById('loginSecret').value.trim();
+  if(!adminId){msg('관리자 아이디를 입력해주세요.','err');document.getElementById('loginName').focus();return;}
+  if(!password){msg('비밀번호를 입력해주세요.','err');document.getElementById('loginPhone').focus();return;}
   if(!secret){ msg('시크릿 코드를 입력해주세요.','err'); return; }
   if(adminId==='관리자' && password.replace(/[^0-9]/g,'')==='01000000000'){
     clearSavedActor();
     msg('기본 관리자 계정은 비활성화되었습니다. 새로 등록한 관리자 아이디/비밀번호로 로그인해주세요.','err');
     return;
   }
-  google.script.run.withSuccessHandler(function(res){if(!res||!res.success){msg((res&&res.message)||'로그인 실패','err');return;} if(!isAdmin(res)){msg('전체 관리자 권한이 필요합니다. 대회팀장·심사위원은 첫 화면의 평가 메뉴에서 로그인해주세요.','err');return;} saveActor(res);showAdmin(res);}).withFailureHandler(function(e){msg(e.message||String(e),'err');}).adminLogin(adminId,password,secret);
+  var action=kclUi.beginAction(document.getElementById('admin-login-button'),'로그인 중...',function(){msg('응답이 지연되고 있습니다. 연결을 확인한 후 다시 시도해주세요.','err');});
+  if(!action)return;
+  msg('로그인 중...');
+  google.script.run.withSuccessHandler(function(res){if(!action.finish())return;if(!res||!res.success){msg((res&&res.message)||'로그인 실패','err');return;} if(!isAdmin(res)){msg('전체 관리자 권한이 필요합니다. 대회팀장·심사위원은 첫 화면의 평가 메뉴에서 로그인해주세요.','err');return;} saveActor(res);showAdmin(res);}).withFailureHandler(function(e){if(action.finish())msg(e.message||String(e),'err');}).adminLogin(adminId,password,secret);
 }
 var existing=readActor();if(existing&&isAdmin(existing)) refreshActorAndShow(existing);
 </script>

@@ -1,0 +1,48 @@
+/* Shared, presentation-only defaults. Competition scoring and storage stay in their own modules. */
+:root { --kcl-focus: #7dd3fc; }
+:where(button,a,input,select,textarea,summary,[role="button"],[tabindex]):focus-visible {
+  outline: 3px solid var(--kcl-focus) !important;
+  outline-offset: 3px !important;
+}
+:where(input,textarea)::placeholder { color: #a3a3a3; opacity: 1; }
+button:disabled { cursor: not-allowed; }
+.kcl-field-label { display:block; color:#c6c6c6; font-size:13px; font-weight:700; margin:0 0 7px; }
+.kcl-login-field { min-width:0; }
+.kcl-login-field input { margin-bottom:0; }
+#pLogin form { display:grid; gap:14px; }
+#pLogin form .btn { margin:0; }
+#pLogin > p { color:#aaa !important; }
+.login { align-items:end; }
+.msg[role="status"] { overflow-wrap:anywhere; }
+.toast { box-sizing:border-box; white-space:normal; overflow-wrap:anywhere; max-width:calc(100vw - 32px); line-height:1.5; }
+.toast.err { background:#652b32; color:#fff; }
+.kcl-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+.kcl-skip-link { position:fixed; top:8px; left:8px; z-index:10000; padding:12px 18px; border-radius:10px; background:#fff; color:#111; transform:translateY(-160%); }
+.kcl-skip-link:focus { transform:translateY(0); }
+.kcl-camera-home { color:#e5e5e5; font-size:13px; padding:8px; white-space:nowrap; }
+input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
+.logo-chip span { color:#aaa; }
+@media screen and (min-width:1120px) {
+  .eval-wrap .eval-content { width:100%; max-width:1120px; margin-inline:auto; }
+}
+/* Score summaries must fit without a hidden horizontal scroll area. */
+.mob-header-scorebox { overflow:visible; max-width:none; flex-shrink:0; }
+@media screen and (max-width:640px) {
+  #tabbtn-players, #tabbtn-operators, #tabbtn-admins { flex:1 1 0; min-width:0; padding:12px 8px; font-size:13px; }
+  #evalMob.active .eval-header, #evalKcac.active .eval-header { grid-template-columns:minmax(0,1fr) !important; }
+  #evalMob .mob-header-scorebox, #evalKcac .kcac-header-scorebox { width:100%; min-width:0; max-width:none; justify-content:space-between; gap:10px; border-top:1px solid #333; padding-top:9px; }
+  #evalMob .mob-header-metric { flex:1 1 0; min-width:0; }
+  #evalMob .mob-header-metric .eval-total-val { font-size:24px !important; line-height:1.2 !important; }
+  #evalMob .mob-header-metric .eval-total-label { white-space:normal; overflow-wrap:anywhere; }
+  #evalKcac .kcac-header-cup-scores { flex:1; overflow:visible; justify-content:flex-start; }
+  #evalKcac .kcac-header-metric { flex:1 1 0; min-width:0; }
+  #evalKcac .kcac-header-metric.total { flex:0 0 76px; }
+}
+@media (pointer:coarse) {
+  input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), select, textarea { font-size:max(16px,1em); }
+  .global-nav-btn { min-height:40px !important; }
+}
+@media (prefers-reduced-motion:reduce) {
+  *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+}
+@media print { .kcl-skip-link { display:none; } }

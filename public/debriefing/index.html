@@ -2,12 +2,15 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="format-detection" content="telephone=no">
 <title>KCL 디브리핑</title>
+<meta name="description" content="본인 확인 후 KCL 대회별 점수와 심사위원 평가 내용을 조회합니다.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#050505">
 <style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
@@ -635,6 +638,8 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
 </style>
 <script src="/assets/kcr-sensory-tags.js?v=stage111"></script>
 <script src="/assets/kcl-api-shim.js?v=stage154"></script>
+<link rel="stylesheet" href="/assets/kcl-ui.css?v=203">
+<script defer src="/assets/kcl-ui.js?v=203"></script>
 </head>
 <body>
 
@@ -659,7 +664,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
     <div class="section-label" id="identity-label">본인 확인</div>
     <input type="text" id="inp-name" placeholder="이름" autocomplete="name" autocapitalize="off">
     <input type="tel" id="inp-phone" placeholder="연락처 (숫자만)" maxlength="11" inputmode="numeric"
-      autocomplete="one-time-code" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+      autocomplete="tel" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter'&&!event.isComposing)doSendOTP()">
     <button class="btn" id="btn-send-otp" onclick="doSendOTP()">인증번호 받기</button>
   </div>
   <div id="admin-preview-box" class="admin-preview-box">
@@ -710,6 +715,9 @@ var _timerInterval = null;
 var _configs = [];
 var _adminPreviewActor = null;
 var _adminPreviewOptions = [];
+var _adminPreviewOptionsCode = '';
+var _adminPreviewOptionsRequest = 0;
+var _adminPreviewResultRequest = 0;
 
 function debriefHomeTarget_() {
   return adminPreviewRequested_() ? '/admin/' : '/';
@@ -893,6 +901,11 @@ function loadAdminDebriefPreviewOptions_() {
   var button = document.getElementById('admin-preview-open');
   var status = document.getElementById('admin-preview-status');
   _adminPreviewOptions = [];
+  _adminPreviewOptionsCode = '';
+  var request = ++_adminPreviewOptionsRequest;
+  ++_adminPreviewResultRequest;
+  hideOverlay();
+  function current(){return request===_adminPreviewOptionsRequest && String((document.getElementById('sel-comp')||{}).value||'').toUpperCase()===code;}
   if (!code) {
     select.innerHTML = '<option value="">대회를 먼저 선택해주세요</option>';
     select.disabled = true; button.disabled = true; status.textContent = '';
@@ -901,12 +914,14 @@ function loadAdminDebriefPreviewOptions_() {
   select.innerHTML = '<option value="">' + (code === 'IKRC' ? '공식 제출 평가 목록을 불러오는 중...' : '검수 완료 평가 목록을 불러오는 중...') + '</option>';
   select.disabled = true; button.disabled = true; status.textContent = '';
   gasRun_('getAdminDebriefPreviewOptions', [code, adminPreviewActorPayload_()], function(res){
+    if(!current())return;
     if (!res || !res.success) {
       select.innerHTML = '<option value="">목록을 불러오지 못했습니다</option>';
       status.textContent = (res && res.message) || '관리자 권한을 확인해주세요.';
       return;
     }
     _adminPreviewOptions = res.options || [];
+    _adminPreviewOptionsCode = code;
     select.innerHTML = '<option value="">-- 미리볼 선수·팀을 선택하세요 --</option>';
     _adminPreviewOptions.forEach(function(item, index){
       var option = document.createElement('option');
@@ -920,6 +935,7 @@ function loadAdminDebriefPreviewOptions_() {
       ? (code === 'IKRC' ? '공식 제출 평가가 있는 선수 ' : '검수 완료 평가가 있는 대상 ') + _adminPreviewOptions.length + (code === 'IKRC' ? '명' : '명·팀')
       : (code === 'IKRC' ? '현재 선수 화면에 표시할 공식 제출 평가가 없습니다.' : '현재 선수 화면에 표시할 검수 완료 평가가 없습니다.');
   }, function(){
+    if(!current())return;
     select.innerHTML = '<option value="">목록을 불러오지 못했습니다</option>';
     status.textContent = '서버 연결을 확인해주세요.';
   });
@@ -930,14 +946,18 @@ function openAdminDebriefPreview_() {
   var rawIndex = String((document.getElementById('admin-preview-unit') || {}).value || '');
   var index = rawIndex === '' ? -1 : Number(rawIndex);
   var item = _adminPreviewOptions[index];
-  if (!code || !item) { toast('미리볼 선수·팀을 선택해주세요.', true); return; }
+  if (!code || !item || _adminPreviewOptionsCode!==code) { toast('현재 대회에서 미리볼 선수·팀을 선택해주세요.', true); return; }
+  var request = ++_adminPreviewResultRequest;
+  function current(){return request===_adminPreviewResultRequest && String((document.getElementById('sel-comp')||{}).value||'').toUpperCase()===code;}
   showOverlay();
   gasRun_('getAdminDebriefPreview', [code, item.unit, item.round, adminPreviewActorPayload_()], function(res){
+    if(!current())return;
     hideOverlay();
     if (!res || !res.success) { toast((res && res.message) || '디브리핑 미리보기를 불러오지 못했습니다.', true); return; }
     renderResult(res);
     showPanel('pResult');
   }, function(){
+    if(!current())return;
     hideOverlay();
     toast('디브리핑 미리보기 중 서버 오류가 발생했습니다.', true);
   });

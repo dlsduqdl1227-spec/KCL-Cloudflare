@@ -125,6 +125,7 @@ try {
     await page.evaluate(()=>{
       actor={name:'QA 관리자',accountType:'ADMIN'};
       document.getElementById('main').classList.remove('hidden');
+      document.getElementById('comp').innerHTML='<option value="KBC">KBC</option>';
       document.getElementById('comp').value='KBC';
       participantRows=[{rowIndex:1,competitionCode:'KBC',name:'QA 선수',affiliation:'QA',phone:'01012340000',uniqueNo:'8',prelimCupNo:'8',mainCupNo:'3',finalCupNo:'1',extra:{'예선일':'2026-08-19',roundSchedules:{본선:{date:'2026-10-01'},결선:{date:'2026-10-02'}}}}];
       rpc=(action,args,callback)=>{if(action==='upsertParticipant')window.qaRegistration=args[0];};
