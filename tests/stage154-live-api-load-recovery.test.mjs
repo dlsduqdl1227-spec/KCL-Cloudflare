@@ -47,7 +47,7 @@ assert.equal(result.success, true);
 
 for (const page of ['assessment', 'registry', 'debriefing', 'admin']) {
   const html = fs.readFileSync(path.join(root, 'public', page, 'index.html'), 'utf8');
-  assert.match(html, /kcl-api-shim\.js\?v=stage154/);
+  assert.match(html, /kcl-api-shim\.js\?v=stage(?:154|202)/);
 }
 
 process.stdout.write('Stage154 live API load recovery tests passed.\n');

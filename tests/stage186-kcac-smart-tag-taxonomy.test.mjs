@@ -25,7 +25,7 @@ function functionSource(source, name) {
 }
 
 const dataStart = assessment.indexOf('var KCAC_SMART_TAGS =');
-const dataEnd = assessment.indexOf('function startKcac()', dataStart);
+const dataEnd = assessment.indexOf('function startKcac(', dataStart);
 assert.ok(dataStart >= 0 && dataEnd > dataStart, 'KCAC smart-tag data block missing');
 const context = { KCL_SENSORY_SMART_TAGS:{ milkTasteBalance:{}, mouthfeel:{} } };
 vm.createContext(context);

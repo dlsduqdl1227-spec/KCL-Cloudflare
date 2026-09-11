@@ -69,6 +69,7 @@ assert.deepEqual(
 assert.deepEqual(unsortedParticipants.map(row => row.prelimCupNo), ["1", "10", "8", "2"], "sorting must not mutate stored participant rows");
 
 const elements = {};
+for (const id of ['mMainNo','mMainDate','mFinalNo','mFinalDate','participantFinalsFields']) elements[id]={value:'',open:false};
 for (const id of ["comp", "mNo", "mName", "mPhone", "mAff", "mCup", "mSample", "mDate", "mDay", "mOrder", "mStation", "mWaiting", "mPrep", "mPerformance", "mCleanup", "participantEditState", "participantCancelBtn", "participantSaveBtn", "participantFormLabel"]) {
   elements[id] = { value: "", textContent: "", focus() {}, classList: { toggle() {}, add() {}, remove() {} } };
 }
@@ -107,6 +108,7 @@ vm.runInContext([
   functionSource(registry, "participantPrimaryNumber_"),
   functionSource(registry, "participantPrelimDate_"),
   functionSource(registry, "saveOneParticipant"),
+  functionSource(registry, "loadParticipantFinalsFields_"),
   functionSource(registry, "editParticipant"),
 ].join("\n"), context);
 
@@ -114,6 +116,7 @@ context.saveOneParticipant();
 assert.equal(savedPayload.competitionCode, "KBC");
 assert.equal(savedPayload.competitionDate, "2026-08-19");
 assert.deepEqual(JSON.parse(JSON.stringify(savedPayload.extra)), {
+  "roundSchedules": {"본선":{"date":""},"결선":{"date":""}},
   "대회일": "2026-08-19",
   "예선일": "2026-08-19",
   "competitionDate": "2026-08-19",

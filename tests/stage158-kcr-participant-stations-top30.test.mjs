@@ -70,7 +70,7 @@ assert.match(rankingActions, /순위 PDF 저장/);
 assert.match(rankingActions, /최종디브리핑 엑셀/);
 assert.doesNotMatch(rankingActions, /점수·검수 백업/);
 assert.match(functionSource(assessment, "renderRanking"), /rankingCode === 'KCR'/);
-assert.match(functionSource(assessment, "renderRanking"), /slice\(0, 30\)/);
+assert.match(functionSource(assessment, "renderRanking"), /slice\(0, 40\)/, "September rulebook qualifies the Top40");
 assert.match(functionSource(assessment, "finalReportFileBase_"), /_최종디브리핑_/);
 
 const serverNormalize = functionSource(rpc, "normalizeKcrStationListServer_");
@@ -89,4 +89,4 @@ assert.match(functionSource(rpc, "getReviewList"), /kcrCalibrationReviewComparis
 assert.match(functionSource(rpc, "shouldCountItemInRanking_"), /isCalibrationMode_/);
 assert.match(functionSource(rpc, "getReviewList"), /list\.filter\(item => !isCalibrationMode_/);
 
-process.stdout.write("Stage158 KCR participant-station, calibration, mobile, and Top30 tests passed.\n");
+process.stdout.write("Stage158 KCR participant-station, calibration, mobile, and Top40 tests passed.\n");

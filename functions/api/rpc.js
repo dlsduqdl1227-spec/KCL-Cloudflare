@@ -2129,6 +2129,9 @@ function participantScheduleSortMeta_(row) {
   };
 }
 function mobActiveParticipantDateFromConfig_(cfg) {
+  // 현장 예선의 표시일(예: 8/7)을 결선 선수 필터로 재사용하지 않습니다.
+  const round = normalizeRoundForCompetition_('MOB', cfg && (cfg.current_round || cfg.currentRound) || '예선');
+  if (round !== '예선') return '';
   const options = cfg && cfg.optionSettings && typeof cfg.optionSettings === 'object'
     ? cfg.optionSettings
     : parseJson(cfg && cfg.option_settings, {});
@@ -2235,8 +2238,6 @@ async function upsertParticipant(env, payload, actorArg) {
     const keys = [
       ['unique_no', data.uniqueNo],
       ['prelim_cup_no', data.prelimCupNo],
-      ['main_cup_no', data.mainCupNo],
-      ['final_cup_no', data.finalCupNo],
       ['cup_no', data.cupNo],
       ['sample_no', data.sampleNo],
       ['team_no', data.teamNo]
@@ -2249,6 +2250,11 @@ async function upsertParticipant(env, payload, actorArg) {
     }
   }
 
+  for (const [column, number, label] of [['main_cup_no',data.mainCupNo,'본선'],['final_cup_no',data.finalCupNo,'결선']]) {
+    if (!safeStr(number)) continue;
+    const duplicate = await env.DB.prepare(`SELECT id FROM participants WHERE competition_code=? AND ${column}=? AND id<>? LIMIT 1`).bind(code,safeStr(number),id || 0).first();
+    if (duplicate) return {success:false, message:`${label} 번호 ${number}은(는) 이미 다른 선수에게 배정되어 있습니다. 번호를 확인해주세요.`};
+  }
   if (id) {
     await env.DB.prepare(`UPDATE participants SET competition_code=?, name=?, affiliation=?, phone=?, unique_no=?, prelim_cup_no=?, main_cup_no=?, final_cup_no=?, cup_no=?, sample_no=?, team_name=?, team_no=?, extra_json=?, updated_at=? WHERE id=? AND competition_code=?`)
       .bind(...bind, id, code).run();
@@ -2590,11 +2596,10 @@ function getRegistrationTemplates() {
 function participantRoundNumber_(r, code, round) {
   const normalized = normalizeRoundForCompetition_(code, round || '예선');
   if (normalized === '예선') return r.prelim_cup_no || r.cup_no || r.sample_no || r.team_no || r.unique_no || String(r.id);
-  if (normalized === '본선') return r.main_cup_no || r.prelim_cup_no || r.cup_no || r.sample_no || r.team_no || r.unique_no || String(r.id);
-  // 블라인드 출품/샘플 대회는 결선 코드가 없을 때 예선 코드를 재사용하면 다른 선수에게
-  // 점수가 연결될 수 있으므로 결선 배정을 명시적으로 완료해야 합니다.
-  if (code === 'KCR' || code === 'IKRC') return r.final_cup_no || '';
-  return r.final_cup_no || r.main_cup_no || r.prelim_cup_no || r.cup_no || r.sample_no || r.team_no || r.unique_no || String(r.id);
+  // 진출 라운드 번호를 명시한 선수만 연결합니다. 예선 번호를 대체값으로 쓰면
+  // 탈락 선수와 진출 선수의 번호가 겹쳐 평가/디브리핑 대상이 달라질 수 있습니다.
+  if (normalized === '본선') return r.main_cup_no || '';
+  return r.final_cup_no || '';
 }
 
 function normalizeKcacParticipantUnit_(value) {
@@ -2760,6 +2765,19 @@ function redactKcacIdentityForActor_(actor, code, value, headers) {
     ? redactParticipantIdentityObject_(value, headers)
     : value;
 }
+function participantScheduleForRound_(row, round) {
+  const extra = parseJson(row && row.extra_json, {});
+  const assigned = extra.roundSchedules && extra.roundSchedules[round];
+  if (assigned && typeof assigned === 'object') return {
+    date:normalizeEffectiveDate_(assigned.date), day:safeStr(assigned.day), team:safeStr(assigned.team)
+  };
+  if (round !== '예선' && safeStr(extra['일정구분']) !== round) return {date:'',day:'',team:''};
+  return {
+    date:normalizeEffectiveDate_((round === '예선' && extra['예선일']) || extra['대회일'] || extra.competitionDate || extra.competition_date || extra['날짜']),
+    day:safeStr(extra['운영일차'] || extra.operatingDay || extra.scheduleDay),
+    team:safeStr(extra['심사조'] || extra.judgeTeam || extra.teamGroup || extra['평가조'])
+  };
+}
 async function getParticipantAssignments(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
   const actor = await getActor(env, actorArg);
@@ -2771,6 +2789,10 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const canSeeIdentity = actorCanSeeParticipantIdentity_(actor, code);
   const hideIdentity = !!(policy.identityHidden && !canSeeIdentity);
   let sourceRows = sortParticipantRowsForCompetition_(rows.results || [], code);
+  if (currentRound !== '예선') {
+    sourceRows = sourceRows.filter(row => safeStr(participantRoundNumber_(row, code, currentRound)))
+      .sort((a, b) => safeStr(participantRoundNumber_(a, code, currentRound)).localeCompare(safeStr(participantRoundNumber_(b, code, currentRound)), 'ko', {numeric:true}));
+  }
   if (code === 'KCAC') sourceRows = dedupeKcacParticipantRows_(sourceRows, currentRound);
   const completedOfficialUnits = new Map();
   if (code === 'KCAC' || code === 'KBC') {
@@ -2786,24 +2808,26 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const mobPermissionRows = code === 'MOB' && Array.isArray(actor && actor.operatorRows)
     ? actor.operatorRows.filter(row => accessCodes_(row && row.access).some(value => value === 'ALL' || value === 'MOB'))
     : [];
-  const mobDatedPermission = !mobManager && mobPermissionRows.some(row => !!normalizeEffectiveDate_(row && (row.effectiveDate || row.effective_date)));
+  const hasCurrentMobSchedule = currentRound === '예선' || sourceRows.some(row => !!participantScheduleForRound_(row, currentRound).date);
+  const mobDatedPermission = !mobManager && hasCurrentMobSchedule && mobPermissionRows.some(row => !!normalizeEffectiveDate_(row && (row.effectiveDate || row.effective_date)));
   const mobPermissionDate = normalizeEffectiveDate_(actor && actor.permissionDate) || koreaDateKey_();
   const mobActiveParticipantDate = code === 'MOB' ? mobActiveParticipantDateFromConfig_(cfg) : '';
   const mobParticipantScopeDate = mobActiveParticipantDate || (mobDatedPermission ? mobPermissionDate : '');
   const mobActorTeam = safeStr(actor && actor.teamMap && actor.teamMap.MOB || actor && (actor.teamGroup || actor.team));
   const scopedRows = code !== 'MOB' || mobManager ? sourceRows : sourceRows.filter(r => {
-    const extra = parseJson(r.extra_json, {});
-    const participantDate = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date || extra['예선일'] || extra['날짜']);
-    const participantTeam = safeStr(extra['심사조'] || extra.judgeTeam || extra.teamGroup || extra['평가조']);
+    const schedule = participantScheduleForRound_(r, currentRound);
+    const participantDate = schedule.date;
+    const participantTeam = schedule.team;
     if (mobParticipantScopeDate && participantDate !== mobParticipantScopeDate) return false;
     if (mobActorTeam && participantTeam && !mobTeamMatchesServer_(mobActorTeam, participantTeam)) return false;
     return true;
   });
   const assignments = scopedRows.map(r => {
     const extra = parseJson(r.extra_json, {});
-    const competitionDate = normalizeEffectiveDate_(extra['대회일'] || extra.competitionDate || extra.competition_date || extra['예선일'] || extra['날짜']);
-    const operatingDay = safeStr(extra['\uC6B4\uC601\uC77C\uCC28'] || extra.operatingDay || extra.scheduleDay);
-    const scheduleTeam = safeStr(extra['심사조'] || extra.judgeTeam || extra.teamGroup || extra['평가조']);
+    const schedule = participantScheduleForRound_(r, currentRound);
+    const competitionDate = schedule.date;
+    const operatingDay = schedule.day;
+    const scheduleTeam = schedule.team;
     const scheduleLabel = competitionDate || operatingDay;
     const number = participantRoundNumber_(r, code, currentRound);
     const rawName = code === 'KTCC' ? (r.team_name || r.name || '') : (r.name || '');
@@ -3289,7 +3313,8 @@ function kcacSubtotalFromRaw_(extra) {
   const purpose = safeStr(extra && (extra['잔용도'] || extra['컵용도'] || extra['평가용도'] || extra['우유종류'] || extra['우유명'] || extra.purpose || ''));
   const hasFinalPattern = itemHasAnyScore_(extra, ['결선 Theme Expression(주제 표현력)','결선 Design Completion(디자인 완성도)','결선 Technical Execution(작업 수행 완성도)','결선 Cleanliness(청결)']);
   const hasFinalSensory = itemHasAnyScore_(extra, ['결선 Taste Balance(맛의 균형)','결선 Mouthfeel(질감)','결선 Presentation(프레젠테이션)']);
-  if (hasFinalPattern || /창작패턴|패턴평가|pattern/i.test(purpose)) return weightedSubtotalFromSpec_(extra, KCAC_FINAL_PATTERN_SPEC_);
+  if (itemHasAnyScore_(extra, ['예선 Pattern Completion(패턴 완성도)','예선 Pattern Symmetry & Balance(대칭과 균형)','예선 Pattern Definition(패턴 선명도)'])) return weightedSubtotalFromSpec_(extra, KCAC_QUAL_TOTAL_SPEC_);
+  if (hasFinalPattern || (!/예선|qual|prelim/i.test(purpose) && /창작패턴|패턴평가|pattern/i.test(purpose))) return weightedSubtotalFromSpec_(extra, KCAC_FINAL_PATTERN_SPEC_);
   if (hasFinalSensory || /센서리|sensory/i.test(purpose)) return weightedSubtotalFromSpec_(extra, KCAC_FINAL_SENSORY_SPEC_);
   return weightedSubtotalFromSpec_(extra, KCAC_QUAL_TOTAL_SPEC_);
 }
@@ -4322,6 +4347,10 @@ async function submitScores(env, payload, signature, request = null) {
     return { success:false, message:'KCR은 기록 안전을 위해 한 번에 최대 20개 컵까지 제출할 수 있습니다. 범위를 나누어 진행해주세요.' };
   }
   const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(initial.code).first();
+  const requestedRound = safeStr(initial.round);
+  if (requestedRound && cfg && normalizeRoundForCompetition_(initial.code, requestedRound) !== normalizeRoundForCompetition_(initial.code, cfg.current_round)) {
+    return { success:false, message:'평가를 시작한 라운드와 현재 운영 라운드가 다릅니다. 입력 내용은 유지됩니다. 운영팀장에게 라운드를 확인한 뒤 다시 제출해주세요.' };
+  }
   const submitRound = safeStr(initial.round || (cfg && cfg.current_round) || '예선');
   if (initial.code === 'MOB' && !hasManageAccess(auth.actor, 'MOB')) {
     const mobParticipantDate = mobActiveParticipantDateFromConfig_(cfg);
@@ -5966,7 +5995,7 @@ function kcacAggregateSubmission_(items, round) {
   const r = roundName_(round);
   let total = 0, patternTotal = 0, sensoryTotal = 0;
   let completion = 0, balance = 0, sensory = 0, presentation = 0, patternCompletion = 0;
-  let hasPattern = false, hasSensory = false;
+  let hasPattern = false, hasSensory = false, timePenalty = 0;
   const times = [];
   (items || []).forEach(item => {
     const n = toNumber(item && (item['총점'] ?? item['최종점수'] ?? item.totalScore));
@@ -5975,14 +6004,20 @@ function kcacAggregateSubmission_(items, round) {
     if (r === '결선') {
       const isPattern = kcacIsPatternItem_(item);
       const isSensory = kcacIsSensoryItem_(item);
+      // 역할별 제출에 기록된 시간감점은 참가자의 최종 합산에서 한 번만 차감합니다.
+      const penalty = positivePenaltyValue_(firstNumberFromKeys_(item, ['시간감점','Time Penalty','감점','Penalty']));
+      timePenalty = Math.max(timePenalty, penalty);
+      const raw = firstNumberFromKeys_(item, ['소계','Subtotal']);
+      const subtotal = raw !== null ? raw : kcacSubtotalFromRaw_(item);
+      const gross = subtotal !== null ? subtotal : (n !== null ? n + penalty : 0);
       if (isPattern) {
         hasPattern = true;
-        if (n !== null) patternTotal += n;
+        patternTotal += gross;
         patternCompletion += weightedSubtotalFromSpec_(item, KCAC_FINAL_PATTERN_COMPLETION_TIE_SPEC_) || 0;
       }
       if (isSensory) {
         hasSensory = true;
-        if (n !== null) sensoryTotal += n;
+        sensoryTotal += gross;
         sensory += weightedSubtotalFromSpec_(item, KCAC_FINAL_SENSORY_TIE_SPEC_) || 0;
         presentation += weightedSubtotalFromSpec_(item, KCAC_FINAL_PRESENTATION_TIE_SPEC_) || 0;
       }
@@ -5991,7 +6026,7 @@ function kcacAggregateSubmission_(items, round) {
       balance += weightedSubtotalFromSpec_(item, KCAC_QUAL_BALANCE_TIE_SPEC_) || 0;
     }
   });
-  return { total:roundScoreValue_(total), patternTotal:roundScoreValue_(patternTotal), sensoryTotal:roundScoreValue_(sensoryTotal), completion, balance, sensory, presentation, patternCompletion, hasPattern, hasSensory, time:times.length ? Math.min(...times) : 999999 };
+  return { total:roundScoreValue_(total), patternTotal:roundScoreValue_(patternTotal), sensoryTotal:roundScoreValue_(sensoryTotal), timePenalty, completion, balance, sensory, presentation, patternCompletion, hasPattern, hasSensory, time:times.length ? Math.min(...times) : 999999 };
 }
 function avgFinite_(values) {
   const nums = (values || []).map(Number).filter(Number.isFinite);
@@ -6198,10 +6233,12 @@ function aggregateRankingGroup_(code, g, round) {
       const sensoryAggs = submissionAggs.filter(x => x.hasSensory);
       const patternTotal = avgFinite_(patternAggs.map(x => x.patternTotal));
       const sensoryTotal = avgFinite_(sensoryAggs.map(x => x.sensoryTotal));
-      const score = roundScoreValue_(patternTotal + sensoryTotal) || 0;
+      const timePenalty = Math.max(0, ...submissionAggs.map(x => x.timePenalty || 0));
+      const score = Math.max(0, roundScoreValue_(patternTotal + sensoryTotal - timePenalty)) || 0;
       return {
-        score, total:score, basis:'결선 최종 총점',
+        score, total:score, basis:'패턴 평균 + 센서리 평균 - 시간감점',
         tie:{
+          timePenalty,
           sensory: roundScoreValue_(avgFinite_(sensoryAggs.map(x => x.sensory))) || 0,
           presentation: roundScoreValue_(avgFinite_(sensoryAggs.map(x => x.presentation))) || 0,
           patternCompletion: roundScoreValue_(avgFinite_(patternAggs.map(x => x.patternCompletion))) || 0,

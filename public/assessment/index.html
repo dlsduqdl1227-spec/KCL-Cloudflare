@@ -1980,7 +1980,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/kcr-sensory-comments.js?v=stage111"></script>
 <script src="/assets/shared-sensory-tags.js?v=stage116"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
-<script src="/assets/kcl-api-shim.js?v=stage154"></script>
+<script src="/assets/kcl-api-shim.js?v=stage202"></script>
 </head>
 <body>
 
@@ -2328,7 +2328,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="attr-tab" data-attr="overall" onclick="switchCuppingAttr('overall')">Overall(오버롤)</div>
       <div class="attr-tab" data-attr="comment" onclick="switchCuppingAttr('comment')">전체 코멘트</div>
     </div>
-    <div class="review-edit-help">물 붓기 10분 경과 후 Flavor → Aftertaste → Acidity → Sweetness → Mouthfeel → Overall 순으로 평가하며, 30분 내 모든 평가를 종료합니다.</div>
+    <div class="review-edit-help">KCR 커핑 기준: 원두 11g · 물 200ml · 800~850µm · 93~95℃ · 4분 브레이킹. 물 붓기 10분 경과 후 Flavor → Aftertaste → Acidity → Sweetness → Mouthfeel → Overall 순으로 평가하며, 30분 내 모든 평가를 종료합니다.</div>
     <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
     <div id="cupping-attr-card"></div>
     <div class="divider"></div>
@@ -2338,6 +2338,18 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 </div>
 
 <!-- 7: KCAC 커피아트 -->
+<style>
+#kcac-cup-nav .cup-btn.active .cup-btn-num{color:#111}
+#kcac-cup-nav .cup-btn.active .cup-btn-score{color:#444}
+</style>
+<div id="pKcacFinalArea" class="panel">
+  <div class="hero-logo-wrap" data-comp-logo="KCAC"></div>
+  <h2>결선 평가 영역</h2>
+  <p class="review-edit-help">오늘 담당하는 평가 영역을 선택하세요.</p>
+  <button class="btn" type="button" onclick="startKcac('pattern')">창작패턴 · 테크니컬 평가 (1잔 · 60점)</button>
+  <button class="btn-outline" type="button" onclick="startKcac('sensory')">센서리 · 프레젠테이션 평가 (2잔 · 40점)</button>
+  <button class="btn-danger" type="button" onclick="goHomePanel_()">대회 선택으로</button>
+</div>
 <div id="evalKcac" class="eval-wrap">
   <div class="eval-header">
     <div>
@@ -4854,6 +4866,7 @@ function showEval(id) {
   try { document.body.classList.remove('kcl-admin-scroll-mode'); } catch(e) {}
   document.querySelectorAll('.eval-wrap').forEach(function(e){ e.classList.remove('active'); });
   document.getElementById(id).classList.add('active');
+  document.getElementById(id).dataset.evaluationRound = String((_selComp && _selComp.currentRound) || '');
   window.scrollTo(0, 0);
   try {
     setTimeout(function(){
@@ -10492,25 +10505,27 @@ function renderDetailCard(row, headers, idx, compCode) {
 // ══════════════════════════════════════════
 // 순위 / 디브리핑
 // ══════════════════════════════════════════
+var _rankingRequestToken = 0;
 function goRankingByCode(code, name, round) {
+  var requestToken = ++_rankingRequestToken;
   var rankingCode = String(code || '').toUpperCase();
-  var rankingLabel = rankingCode === 'KCR' ? 'Top 30' : '순위';
+  var rankingLabel = rankingCode === 'KCR' ? 'Top 40' : '순위';
   var cachedRanking = _rankingCacheByCode[rankingCode] || null;
   var reportActions = document.getElementById('ranking-report-actions');
   if (reportActions) reportActions.style.display = canPrintRanking(code) ? 'flex' : 'none';
   var rankingPdfButton = document.getElementById('ranking-pdf-button');
-  if (rankingPdfButton) rankingPdfButton.textContent = rankingCode === 'MOB' ? 'Top 12 순위 PDF 저장' : (rankingCode === 'KCR' ? 'Top 30 순위 PDF 저장' : '순위 PDF 저장');
+  if (rankingPdfButton) rankingPdfButton.textContent = rankingCode === 'MOB' ? 'Top 12 순위 PDF 저장' : (rankingCode === 'KCR' ? 'Top 40 순위 PDF 저장' : '순위 PDF 저장');
   document.getElementById('ranking-title').textContent = (name || code) + ' ' + rankingLabel;
   document.getElementById('ranking-sub').textContent = '현재 라운드: ' + (round || '-');
   if (!cachedRanking) document.getElementById('ranking-list').innerHTML = '';
-  document.getElementById('rank-summary-title').textContent = rankingCode === 'KCR' ? 'Top 30' : '순위표';
+  document.getElementById('rank-summary-title').textContent = rankingCode === 'KCR' ? 'Top 40' : '순위표';
   if (cachedRanking) {
     renderRanking(cachedRanking);
     document.getElementById('rank-summary-sub').textContent = '기존 순위 표시 중 · 최신 정보 확인 중...';
   } else {
     document.getElementById('rank-summary-sub').textContent = '불러오는 중...';
   }
-  document.getElementById('rank-print-title').textContent = (name || code) + (rankingCode === 'KCR' ? ' Top 30' : ' 순위표');
+  document.getElementById('rank-print-title').textContent = (name || code) + (rankingCode === 'KCR' ? ' Top 40' : ' 순위표');
   var now = new Date();
   document.getElementById('rank-print-date').textContent =
     now.toLocaleDateString('ko-KR') + ' ' + now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
@@ -10519,6 +10534,7 @@ function goRankingByCode(code, name, round) {
 
   var timedOut = false;
   var timer = setTimeout(function(){
+    if (requestToken !== _rankingRequestToken) return;
     timedOut = true;
     hideOverlay();
     document.getElementById('rank-summary-sub').textContent = cachedRanking
@@ -10528,7 +10544,7 @@ function goRankingByCode(code, name, round) {
 
   google.script.run
     .withSuccessHandler(function(res){
-      if (timedOut) return;
+      if (timedOut || requestToken !== _rankingRequestToken) return;
       clearTimeout(timer);
       hideOverlay();
       if (!res || !res.success) {
@@ -10541,7 +10557,7 @@ function goRankingByCode(code, name, round) {
       renderRanking(res);
     })
     .withFailureHandler(function(err){
-      if (timedOut) return;
+      if (timedOut || requestToken !== _rankingRequestToken) return;
       clearTimeout(timer);
       hideOverlay();
       document.getElementById('rank-summary-sub').textContent =
@@ -10554,7 +10570,7 @@ function renderRanking(res) {
   var list = res.ranking || [];
   var rankingCode = String(res.compCode || '').toUpperCase();
   document.getElementById('rank-summary-sub').textContent =
-    '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 라운드별 상위 30위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
+    '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 라운드별 상위 40위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
 
   var wrap = document.getElementById('ranking-list');
   wrap.innerHTML = '';
@@ -10570,7 +10586,7 @@ function renderRanking(res) {
     byRound[item.round].push(item);
   });
   if (rankingCode === 'KCR') {
-    Object.keys(byRound).forEach(function(round){ byRound[round] = byRound[round].slice(0, 30); });
+    Object.keys(byRound).forEach(function(round){ byRound[round] = byRound[round].slice(0, 40); });
   }
 
   var roundOrder = ['결선', '본선', '예선'];
@@ -11905,13 +11921,31 @@ var KCAC_SMART_TAGS = {
   }
 };
 
-function startKcac() {
+// 결선은 예선에서 개선한 시각적 표현을 해당 규정 항목 안에 그대로 이어서 제공합니다.
+// 예선 태그 원본과 저장된 선택값은 변경하지 않습니다.
+function kcacInheritFinalPatternTags_() {
+  var mapping = {완성도:['완성도'], 표면:['표면','선명도'], 위치:['균형','위치']};
+  Object.keys(mapping).forEach(function(key){
+    ['긍정','보완'].forEach(function(polarity){
+      var inherited = [];
+      mapping[key].forEach(function(source){ inherited = inherited.concat(KCAC_SMART_TAGS.qual[source][polarity] || []); });
+      KCAC_SMART_TAGS.finalPattern[key][polarity] = Array.from(new Set(inherited.concat(KCAC_SMART_TAGS.finalPattern[key][polarity] || [])));
+    });
+  });
+}
+kcacInheritFinalPatternTags_();
+
+function startKcac(finalArea) {
   // KCAC는 예선·결선 모두 헤드 심사위원 4명의 공식 평가만 사용합니다.
   // 이전 대회에서 남은 공통 켈리브레이션 상태가 KCAC에 유입되지 않도록 항상 초기화합니다.
   setEvaluationPurpose_('competition');
   var rawRoundName = String((_selComp && _selComp.currentRound) || '');
   var roundName = normalizeKcacRoundDisplay_(rawRoundName);
   var isMainFinal = roundName === '결선';
+  if (isMainFinal && !isSensoryRoleForCode_('KCAC') && !isTechnicalRoleForCode_('KCAC') && finalArea !== 'pattern' && finalArea !== 'sensory') {
+    showPanel('pKcacFinalArea');
+    return;
+  }
   document.getElementById('kcac-round-badge').textContent = roundName;
   document.getElementById('kcac-sub').textContent = judgeLineText() + '  ' + roundName + ' · 헤드 심사위원 공식평가 · 공식 점수 반영';
 
@@ -11936,15 +11970,11 @@ function startKcac() {
     _kcac.jars.push(makeKcacJar('SLOW Rosetta', 'qual', '대체우유', '어메이징 오트바리스타', '예선 패턴평가', 'controlled'));
   } else {
     // KCAC 결선은 헤드 심사위원으로만 구성되지만 역할별 담당 영역은 분리됩니다.
-    if (isSensoryRoleForCode_('KCAC')) {
+    if (isSensoryRoleForCode_('KCAC') || (!isTechnicalRoleForCode_('KCAC') && finalArea === 'sensory')) {
       _kcac.jars.push(makeKcacJar('일반우유 센서리용아트', 'final-sensory', '일반우유', '매일우유 오리지널', '센서리용아트', 'sensory-regular'));
       _kcac.jars.push(makeKcacJar('대체우유 센서리용아트', 'final-sensory', '대체우유', '어메이징 오트바리스타', '센서리용아트', 'sensory-oat'));
-    } else if (isTechnicalRoleForCode_('KCAC')) {
-      _kcac.jars.push(makeKcacJar('일반우유 창작패턴', 'final-pattern', '일반우유', '매일우유 오리지널', '창작패턴평가', 'final-pattern'));
     } else {
       _kcac.jars.push(makeKcacJar('일반우유 창작패턴', 'final-pattern', '일반우유', '매일우유 오리지널', '창작패턴평가', 'final-pattern'));
-      _kcac.jars.push(makeKcacJar('일반우유 센서리용아트', 'final-sensory', '일반우유', '매일우유 오리지널', '센서리용아트', 'sensory-regular'));
-      _kcac.jars.push(makeKcacJar('대체우유 센서리용아트', 'final-sensory', '대체우유', '어메이징 오트바리스타', '센서리용아트', 'sensory-oat'));
     }
   }
 
@@ -12626,6 +12656,8 @@ function renderKcacCupNav() {
   var isUnifiedQual = kcacIsUnifiedQualComment_();
   nav.classList.toggle('kcac-qual-nav', isUnifiedQual);
   if (sub) {
+    // 결선의 제출은 고정 제출 버튼 하나로 통일합니다. 예선은 통합 코멘트 탭을 유지합니다.
+    sub.style.display = isUnifiedQual ? '' : 'none';
     sub.textContent = isUnifiedQual ? '종합코멘트' : '전체 제출';
     sub.classList.toggle('active', !!(isUnifiedQual && _kcac.overallMode));
     sub.onclick = isUnifiedQual ? openKcacOverallComment_ : kcacSubmitAll;
@@ -12654,6 +12686,7 @@ function renderKcacCupNav() {
 
 function switchKcacJar(idx) {
   saveKcacJarFromDOM();
+  if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
   var cur = _kcac.jars[_kcac.currentIdx];
   if (!kcacIsUnifiedQualComment_() && cur && cur.generatedComment && !cur.commentEdited) {
     setCommentWarning('kcac-comment-warning', cur.generatedComment, false);
@@ -12715,6 +12748,7 @@ function openKcacOverallComment_() {
 }
 
 function loadKcacJar(idx) {
+  ++_kcacCommentRequestToken;
   setKcacEvaluationPanelMode_(false);
   _kcac.currentIdx = idx;
   var j = _kcac.jars[idx];
@@ -13651,8 +13685,8 @@ function delKcacSnapshot(i) {
 }
 
 // ── KCAC 종합 코멘트 자동 생성 ──
-function kcacAttrDisplayName_(key) {
-  var all = KCAC_QUAL_ATTRS.concat(KCAC_FINAL_PATTERN_ATTRS).concat(KCAC_FINAL_SENSORY_ATTRS);
+function kcacAttrDisplayName_(key, jar) {
+  var all = jar ? kcacCommentReferenceAttrs_(jar) : KCAC_QUAL_ATTRS.concat(KCAC_FINAL_PATTERN_ATTRS).concat(KCAC_FINAL_SENSORY_ATTRS);
   for (var i = 0; i < all.length; i++) if (all[i].key === key) return all[i].name;
   return key;
 }
@@ -13664,7 +13698,7 @@ function kcacSmartTagPayload_(j) {
   Object.keys(tags).forEach(function(key){
     var arr = kcacFilterSmartTags_(tags[key] || []);
     if (!arr.length) return;
-    out[kcacAttrDisplayName_(key)] = arr.slice();
+    out[kcacAttrDisplayName_(key, j)] = arr.slice();
   });
   return out;
 }
@@ -13805,6 +13839,7 @@ function refreshKcacCommentReference_() {
 }
 
 function clearKcacGeneratedComment() {
+  ++_kcacCommentRequestToken;
   var j = _kcac.jars[_kcac.currentIdx];
   if (!j) return;
   var ta = document.getElementById('kcac-comment');
@@ -13845,10 +13880,18 @@ function kcacCommentPayloadForJar_(j) {
   };
 }
 
+var _kcacCommentRequestToken = 0;
 function generateKcacComment() {
+  var requestToken = ++_kcacCommentRequestToken;
   saveKcacJarFromDOM();
   var j = _kcac.jars[_kcac.currentIdx];
   var unified = kcacIsUnifiedQualComment_();
+  var participant = val_('kcac-num');
+  var jars = _kcac.jars;
+  function isCurrentRequest() {
+    return requestToken === _kcacCommentRequestToken && jars === _kcac.jars && participant === val_('kcac-num') &&
+      (unified ? kcacIsUnifiedQualComment_() && _kcac.overallMode : _kcac.jars[_kcac.currentIdx] === j);
+  }
   if (unified && _kcac.jars.some(function(cup){ return !cup.patternType; })) {
     toast('먼저 FAST Rosetta와 SLOW Rosetta 배정을 완료해주세요.', true);
     return;
@@ -13873,6 +13916,7 @@ function generateKcacComment() {
 
   google.script.run
     .withSuccessHandler(function(res){
+      if (!isCurrentRequest()) return;
       if (!res || !res.comments) {
         area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>';
         return;
@@ -13882,6 +13926,7 @@ function generateKcacComment() {
       }).join('');
     })
     .withFailureHandler(function(){
+      if (!isCurrentRequest()) return;
       area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 실패</p>';
     })
     .generateKcacComment(payload);
@@ -15640,7 +15685,7 @@ function startMob() {
   var menuEl = document.getElementById('mob-menu');
   var creativeOption = menuEl ? Array.prototype.slice.call(menuEl.options).filter(function(o){ return o.value === '창작'; })[0] : null;
   if (creativeOption) creativeOption.disabled = !mobCreativeAllowed_();
-  if (menuEl) menuEl.value = '브루잉';
+  if (menuEl) menuEl.value = mobCreativeAllowed_() && !isMobCalibrationMode_() ? '창작' : '브루잉';
   setVal_('mob-name', '');
   refreshParticipantAssignmentsForActiveComp_('MOB');
   var ga = document.getElementById('mob-comment-gen');
@@ -15667,6 +15712,11 @@ function startMob() {
 
 function toggleMobSig() {
   var menuEl = document.getElementById('mob-menu');
+  if (menuEl && mobCreativeAllowed_() && !isMobCalibrationMode_()) menuEl.value = '창작';
+  if (menuEl) Array.prototype.forEach.call(menuEl.options, function(option){
+    if (option.value === '브루잉') option.disabled = mobCreativeAllowed_() && !isMobCalibrationMode_();
+    if (option.value === '창작') option.textContent = '브루잉 + 창작메뉴';
+  });
   if (menuEl && menuEl.value === '창작' && !mobCreativeAllowed_()) {
     menuEl.value = '브루잉';
     toast('예선은 브루잉 커피만 평가 가능합니다.', true);
@@ -18985,7 +19035,14 @@ function kclActiveEvalCode_() {
   return '';
 }
 function kclDraftRound_() {
+  var context = kclEvaluationSubmissionContext_();
+  if (context && context.round) return context.round;
   return String((_selComp && _selComp.currentRound) || (_cupping && _cupping.mode) || 'ROUND');
+}
+function kclEvaluationSubmissionContext_() {
+  var el = kclActiveEvalEl_();
+  if (!el || !el.dataset || !el.dataset.evaluationRound) return null;
+  return {code:kclActiveEvalCode_(), round:el.dataset.evaluationRound};
 }
 function kclDraftActor_(code) {
   code = String(code || kclActiveEvalCode_() || '').toUpperCase();
@@ -19005,6 +19062,8 @@ function kclDraftContextKey_(code) {
   var station = '';
   if (code === 'KCR' && typeof _cupping !== 'undefined' && _cupping && _cupping.station) station = _cupping.station.id || _cupping.station.prefix || '';
   if (code === 'IKRC' && typeof _ikrcStation !== 'undefined' && _ikrcStation) station = _ikrcStation.id || _ikrcStation.prefix || '';
+  // 결선 패턴/센서리는 서로 다른 평가표입니다. 같은 헤드가 화면을 바꿔도 임시저장을 섞지 않습니다.
+  if (code === 'KCAC' && typeof _kcac !== 'undefined' && _kcac && _kcac.jars && _kcac.jars[0] && _kcac.jars[0].type !== 'qual') station = _kcac.jars[0].type;
   return [type, scope, station].filter(Boolean).join('_') || 'competition';
 }
 function kclDraftKey_(code) {

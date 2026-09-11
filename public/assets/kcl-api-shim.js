@@ -104,7 +104,15 @@
         if (prop in target) return target[prop];
         if (typeof prop !== 'string') return target[prop];
         return function () {
-          var args = arguments;
+          var args = Array.prototype.slice.call(arguments);
+          // Capture the round once, before any network retries or live configuration refreshes.
+          if ((prop === 'submitScores' || prop === 'submitWithSignature') && args[0] && typeof window.kclEvaluationSubmissionContext_ === 'function') {
+            var context = window.kclEvaluationSubmissionContext_();
+            var code = String(args[0].competitionCode || args[0].code || '').toUpperCase();
+            if (context && context.code === code && context.round && !args[0].round && !args[0].currentRound) {
+              args[0] = Object.assign({}, args[0], {round:context.round});
+            }
+          }
           callRpc(prop, args)
             .then(function (data) {
               try {
