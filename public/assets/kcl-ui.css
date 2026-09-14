@@ -27,6 +27,10 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
 .round-mode-control select { margin:0; min-width:0; }
 .round-stage-control { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:10px; margin-top:2px; }
 .round-stage-control[hidden] { display:none; }
+.ranking-round-controls { display:flex; align-items:center; gap:10px; margin:0 0 16px; min-width:0; }
+.ranking-round-controls label { flex:0 0 auto; font-size:13px; }
+.ranking-round-controls select { flex:1 1 auto; min-width:0; margin:0; }
+.ranking-round-controls button { flex:0 0 auto; margin:0; }
 @media screen and (min-width:1120px) {
   .eval-wrap .eval-content { width:100%; max-width:1120px; margin-inline:auto; }
 }
@@ -50,4 +54,4 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
 }
-@media print { .kcl-skip-link { display:none; } }
+@media print { .kcl-skip-link, .ranking-round-controls { display:none !important; } }

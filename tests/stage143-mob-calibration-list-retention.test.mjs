@@ -19,7 +19,7 @@ assert.doesNotMatch(assessment, /확인완료 항목 숨김|검수완료된 항�
 assert.match(assessment, /item\.checked \? '검수완료' : '검수확인'/, '완료 여부는 목록 배지로 구분되어야 합니다.');
 assert.match(assessment, /if \(code === 'MOB'\) return false;/, 'MOB 검수완료 제출은 진행 중 목록에서 숨기면 안 됩니다.');
 assert.match(assessment, /var _rankingCacheByCode = \{\};/, '대회별 마지막 정상 순위를 화면에 보존해야 합니다.');
-assert.match(assessment, /_rankingCacheByCode\[rankingCode\] = res;/, '정상 순위 응답을 대회별로 저장해야 합니다.');
+assert.match(assessment, /_rankingCacheByCode\[rankingCacheKey\] = scoped;/, '정상 순위 응답을 대회·라운드별로 저장해야 합니다.');
 assert.match(assessment, /기존 순위 표시 중 · 최신 정보/, '순위 재조회 중 기존 표를 유지해야 합니다.');
 assert.match(assessment, /cachedMobReview/, 'MOB 검수 재조회 중 기존 목록을 유지해야 합니다.');
 

@@ -1984,7 +1984,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/shared-sensory-tags.js?v=stage116"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js?v=stage202"></script>
-<link rel="stylesheet" href="/assets/kcl-ui.css?v=206">
+<link rel="stylesheet" href="/assets/kcl-ui.css?v=207">
 <script defer src="/assets/kcl-ui.js?v=203"></script>
 </head>
 <body>
@@ -2218,6 +2218,11 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 
   <h2 id="ranking-title" style="margin-top:32px">대회 순위</h2>
   <p style="text-align:center;color:var(--text-3);margin-bottom:14px;font-size:13px" id="ranking-sub"></p>
+  <div class="ranking-round-controls no-print">
+    <label for="ranking-round-select">조회 라운드</label>
+    <select id="ranking-round-select" onchange="changeRankingRound_(this.value)"></select>
+    <button type="button" class="list-refresh-btn" onclick="refreshRanking_()" aria-label="선택한 라운드 순위 새로고침" title="순위 새로고침">↻</button>
+  </div>
 
   <div class="rank-summary">
     <div>
@@ -3553,6 +3558,8 @@ var _registryLiveSyncInFlight = false;
 var _ranking = null;
 var _rankingDetail = null;
 var _rankingCacheByCode = {};
+var _rankingContext = null;
+var _rankingDetailRequestToken = 0;
 var _reviewState = { code:null, name:null, headers:[], list:[], current:null, backPanel:'pSelect', stationScope:null, stationScopes:[], readOnlyHeadMonitor:false };
 var _reviewCalibrationOnly = false;
 var _kbcGeneratedComment = '', _kbcCommentEdited = true, _kbcAutoCommentEnabled = false;
@@ -6240,7 +6247,8 @@ function loadTeamPanel() {
             document.getElementById('ranking-back-btn').onclick = function(){ showPanel('pTeam'); };
             goRankingByCode(cfg.code, cfg.name, cfg.currentRound);
           }; })(c);
-          div.querySelector('[data-act="review"]').onclick = (function(cfg){ return function(){
+          var reviewBtn = div.querySelector('[data-act="review"]');
+          if (reviewBtn) reviewBtn.onclick = (function(cfg){ return function(){
             _selComp = cfg;
             _reviewCalibrationOnly = false;
             document.getElementById('review-back-btn').onclick = function(){ showPanel('pTeam'); };
@@ -10559,17 +10567,38 @@ function renderDetailCard(row, headers, idx, compCode) {
 // 순위 / 디브리핑
 // ══════════════════════════════════════════
 var _rankingRequestToken = 0;
+function changeRankingRound_(round) {
+  if (_rankingContext) goRankingByCode(_rankingContext.code, _rankingContext.name, round);
+}
+function refreshRanking_() {
+  if (_rankingContext) goRankingByCode(_rankingContext.code, _rankingContext.name, _rankingContext.round);
+}
+function rankingScopedResponse_(res, code, round) {
+  if (!res || !res.success || String(res.compCode || '').toUpperCase() !== code ||
+      (res.selectedRound && res.selectedRound !== round)) return null;
+  // Also filters old API responses during a rolling deployment.
+  return Object.assign({}, res, {selectedRound:round, ranking:(res.ranking || []).filter(function(item){ return item.round === round; })});
+}
 function goRankingByCode(code, name, round) {
   var requestToken = ++_rankingRequestToken;
+  ++_rankingDetailRequestToken;
   var rankingCode = String(code || '').toUpperCase();
+  var selectedRound = normalizeRoundForCompetition_(rankingCode, round || ((_selComp && _selComp.code === rankingCode) ? _selComp.currentRound : '') || '예선');
+  var rankingCacheKey = rankingCode + '::' + selectedRound;
+  _rankingContext = {code:rankingCode, name:name || code, round:selectedRound};
+  _rankingDetail = null;
+  var roundSelect = document.getElementById('ranking-round-select');
+  roundSelect.innerHTML = adminRoundOptionsHtml_(rankingCode, selectedRound);
+  roundSelect.value = selectedRound;
   var rankingLabel = rankingCode === 'KCR' ? 'Top 40' : '순위';
-  var cachedRanking = _rankingCacheByCode[rankingCode] || null;
+  var cachedRanking = rankingScopedResponse_(_rankingCacheByCode[rankingCacheKey], rankingCode, selectedRound);
+  _ranking = cachedRanking;
   var reportActions = document.getElementById('ranking-report-actions');
   if (reportActions) reportActions.style.display = canPrintRanking(code) ? 'flex' : 'none';
   var rankingPdfButton = document.getElementById('ranking-pdf-button');
   if (rankingPdfButton) rankingPdfButton.textContent = rankingCode === 'MOB' ? 'Top 12 순위 PDF 저장' : (rankingCode === 'KCR' ? 'Top 40 순위 PDF 저장' : '순위 PDF 저장');
   document.getElementById('ranking-title').textContent = (name || code) + ' ' + rankingLabel;
-  document.getElementById('ranking-sub').textContent = '현재 라운드: ' + (round || '-');
+  document.getElementById('ranking-sub').textContent = '조회 라운드: ' + selectedRound;
   if (!cachedRanking) document.getElementById('ranking-list').innerHTML = '';
   document.getElementById('rank-summary-title').textContent = rankingCode === 'KCR' ? 'Top 40' : '순위표';
   if (cachedRanking) {
@@ -10578,7 +10607,7 @@ function goRankingByCode(code, name, round) {
   } else {
     document.getElementById('rank-summary-sub').textContent = '불러오는 중...';
   }
-  document.getElementById('rank-print-title').textContent = (name || code) + (rankingCode === 'KCR' ? ' Top 40' : ' 순위표');
+  document.getElementById('rank-print-title').textContent = (name || code) + ' · ' + selectedRound + (rankingCode === 'KCR' ? ' Top 40' : ' 순위표');
   var now = new Date();
   document.getElementById('rank-print-date').textContent =
     now.toLocaleDateString('ko-KR') + ' ' + now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
@@ -10605,9 +10634,14 @@ function goRankingByCode(code, name, round) {
           (cachedRanking ? '기존 순위 표시 중 · ' : '') + '오류: ' + ((res && res.message) || '알 수 없는 오류');
         return;
       }
-      _ranking = res;
-      _rankingCacheByCode[rankingCode] = res;
-      renderRanking(res);
+      var scoped = rankingScopedResponse_(res, rankingCode, selectedRound);
+      if (!scoped) {
+        document.getElementById('rank-summary-sub').textContent = '조회 라운드가 일치하지 않습니다. 새로고침해주세요.';
+        return;
+      }
+      _ranking = scoped;
+      _rankingCacheByCode[rankingCacheKey] = scoped;
+      renderRanking(scoped);
     })
     .withFailureHandler(function(err){
       if (timedOut || requestToken !== _rankingRequestToken) return;
@@ -10616,20 +10650,20 @@ function goRankingByCode(code, name, round) {
       document.getElementById('rank-summary-sub').textContent =
         (cachedRanking ? '기존 순위 표시 중 · ' : '') + '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
-    .getRanking(code, adminActorPayload_());
+    .getRanking(code, adminActorPayload_(), selectedRound);
 }
 
 function renderRanking(res) {
-  var list = res.ranking || [];
+  var list = (res.ranking || []).filter(function(item){ return !res.selectedRound || item.round === res.selectedRound; });
   var rankingCode = String(res.compCode || '').toUpperCase();
   document.getElementById('rank-summary-sub').textContent =
-    '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 라운드별 상위 40위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
+    (res.selectedRound ? res.selectedRound + ' · ' : '') + '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 상위 40위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
 
   var wrap = document.getElementById('ranking-list');
   wrap.innerHTML = '';
 
   if (list.length === 0) {
-    wrap.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:14px">집계 가능한 데이터가 없습니다</p>';
+    wrap.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:14px">' + escHtml(res.selectedRound || '선택한 라운드') + '에 아직 집계된 평가가 없습니다.</p>';
     return;
   }
 
@@ -10712,7 +10746,7 @@ function renderRanking(res) {
 function finalReportFileBase_(res) {
   var now = new Date();
   var stamp = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
-  return 'KCL_' + String((res && res.compCode) || (_ranking && _ranking.compCode) || 'REPORT').toUpperCase() + '_최종디브리핑_' + stamp;
+  return 'KCL_' + String((res && res.compCode) || (_ranking && _ranking.compCode) || 'REPORT').toUpperCase() + ((res && res.selectedRound) ? '_' + res.selectedRound : '') + '_최종디브리핑_' + stamp;
 }
 function scoreBackupFileBase_(res) {
   var now = new Date();
@@ -10993,7 +11027,8 @@ function downloadScoreBackupExcel(codeOverride) {
     .getScoreBackupReport(code, adminActorPayload_());
 }
 function downloadFinalReportExcel() {
-  var code = String((_ranking && _ranking.compCode) || (_selComp && _selComp.code) || '').toUpperCase();
+  var code = String((_rankingContext && _rankingContext.code) || (_ranking && _ranking.compCode) || (_selComp && _selComp.code) || '').toUpperCase();
+  var selectedRound = (_rankingContext && _rankingContext.round) || (_ranking && _ranking.selectedRound) || (_selComp && _selComp.currentRound) || '예선';
   if (!code) { toast('대회를 먼저 선택해주세요.', true); return; }
   if (!canPrintRanking(code)) { toast('최종디브리핑 파일은 관리자 또는 대회팀장 권한에서만 다운로드할 수 있습니다.', true); return; }
   showOverlay();
@@ -11014,7 +11049,7 @@ function downloadFinalReportExcel() {
       });
     })
     .withFailureHandler(function(err){ hideOverlay(); toast('최종디브리핑 파일 다운로드 실패: ' + (err && err.message ? err.message : '서버 오류'), true); })
-    .getFinalReport(code, adminActorPayload_());
+    .getFinalReport(code, adminActorPayload_(), selectedRound);
 }
 function printRanking() {
   if (!canPrintRanking()) { toast('PDF 출력은 관리자 또는 대회팀장 권한에서만 가능합니다.', true); return; }
@@ -11069,6 +11104,9 @@ function printRanking() {
 
 function openRankingDetail(item) {
   if (!item || !_ranking) return;
+  if (item.round !== _ranking.selectedRound) return;
+  var requestToken = ++_rankingDetailRequestToken;
+  var rankingToken = _rankingRequestToken;
   document.getElementById('ranking-detail-title').textContent = (_ranking.compName || _ranking.compCode || '') + ' 상세 디브리핑';
   document.getElementById('ranking-detail-sub').textContent = (_ranking.unitLabel || '식별자') + ' ' + (item.unitDisplay || item.unit) + ' · ' + item.round + ' · 불러오는 중...';
   document.getElementById('ranking-detail-body').innerHTML = '';
@@ -11076,6 +11114,7 @@ function openRankingDetail(item) {
   showOverlay();
   google.script.run
     .withSuccessHandler(function(res){
+      if (requestToken !== _rankingDetailRequestToken || rankingToken !== _rankingRequestToken) return;
       hideOverlay();
       if (!res || !res.success) {
         document.getElementById('ranking-detail-sub').textContent = '오류: ' + ((res && res.message) || '알 수 없는 오류');
@@ -11085,6 +11124,7 @@ function openRankingDetail(item) {
       renderRankingDetail(res);
     })
     .withFailureHandler(function(err){
+      if (requestToken !== _rankingDetailRequestToken || rankingToken !== _rankingRequestToken) return;
       hideOverlay();
       document.getElementById('ranking-detail-sub').textContent = '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
@@ -11122,6 +11162,8 @@ function renderRankingDetail(res) {
 }
 
 function backToRanking() {
+  ++_rankingDetailRequestToken;
+  hideOverlay();
   showPanel('pRanking');
 }
 
