@@ -1734,6 +1734,14 @@ body.kcl-admin-scroll-mode{height:100dvh!important;min-height:100dvh!important;o
 .kcr-station-manager-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
 .kcr-station-manager-title{font-size:15px;font-weight:950;color:#fff}
 .kcr-station-manager-panel.focused{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.09)}
+.kcr-station-day-filter{display:grid;gap:6px;max-width:320px;margin:12px 0;font-size:12px;color:var(--text-2)}
+.kcr-station-day-filter select{margin:0!important;min-height:44px}
+.kcr-station-manager-panel[data-kcr-round="결선"] .kcr-station-day-filter,.kcr-station-manager-panel[data-kcr-round="결선"] .kcr-station-day-field{display:none}
+.ikrc-station-config-row.kcr-station-config-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kcr-station-config-row .ikrc-station-row-title{grid-column:1/-1;min-height:auto}
+.kcr-station-config-row .kcr-station-purpose-field{grid-column:1/-1}
+.kcr-station-config-row[hidden]{display:none!important}
+@media(min-width:1100px){.ikrc-station-config-row.kcr-station-config-row{grid-template-columns:repeat(4,minmax(0,1fr))}.kcr-station-config-row .kcr-station-purpose-field{grid-column:span 2}.kcr-station-config-row .ikrc-station-remove{justify-self:end}}
 .ikrc-station-divider{margin:18px 0!important}
 #pIkrcBlindManager .ikrc-station-config-list{margin:0 0 10px}
 #pIkrcBlindManager .ikrc-blind-refresh{min-height:48px;margin:0 0 12px}
@@ -2267,6 +2275,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
         <span id="cuppingCalibrationPurposeText">대회 선택 화면에서 선택한 대회평가/켈리브레이션 구분이 적용됩니다.</span>
       </label>
     </div>
+    <label class="kcr-station-day-filter" id="kcr-evaluation-day-wrap">예선 일차<select id="kcr-evaluation-day" onchange="renderKcrStationChoices_()"><option value="all">전체 예선</option><option value="1">1일차 예선</option><option value="2">2일차 예선</option><option value="">미지정</option></select></label>
     <div class="ikrc-station-grid" id="kcr-station-grid"></div>
     <div class="participant-picker-help" id="kcr-station-help" style="display:block;margin-top:12px"></div>
   </div>
@@ -4183,7 +4192,7 @@ function kcrStationSettings_(cfg) {
     {prefix:'C', start:1, end:10, process:'Blending'}
   ]);
   var used = {}, usedIds = {};
-  return source.slice(0, 12).map(function(item, index){
+  return source.slice(0, 40).map(function(item, index){
     item = item || {};
     var fallback = ikrcDefaultStationPrefix_(index);
     var stationId = ikrcStationId_(item.id, index);
@@ -4212,6 +4221,7 @@ function kcrStationSettings_(cfg) {
       start:start,
       end:end,
       process:kcrStationProcess_(item.process, index),
+      prelimDay:[1,2].indexOf(Number(item.prelimDay)) >= 0 ? Number(item.prelimDay) : null,
       useForCalibration:kcrStationPurposeFlag_(item.useForCalibration),
       useForCompetition:kcrStationPurposeFlag_(item.useForCompetition),
       numberMode:'participant'
@@ -4330,7 +4340,12 @@ function ikrcStationConfigRowHtml_(station, index, competitionCode) {
   var end = ikrcStationRangeNumber_(station.end, 10, stationRangeMax);
   var processHtml = '';
   var purposeHtml = '';
+  var dayHtml = '';
   if (code === 'KCR') {
+    dayHtml = '<label class="kcr-station-day-field">예선 일차<select data-field="prelimDay" onchange="kcrFilterStationConfigRows_(this.closest(\'[data-kcr-station-manager]\'))">' +
+      [['','미지정'],['1','1일차 예선'],['2','2일차 예선']].map(function(option){
+        return '<option value="' + option[0] + '"' + (String(station.prelimDay || '') === option[0] ? ' selected' : '') + '>' + option[1] + '</option>';
+      }).join('') + '</select></label>';
     var currentProcess = kcrStationProcess_(station.process, index);
     processHtml = '<label class="kcr-station-process-field">프로세스<select data-field="process">' + KCR_PROCESS_OPTIONS.map(function(opt){ return '<option value="' + escHtml(opt.value) + '"' + (opt.value === currentProcess ? ' selected' : '') + '>' + escHtml(opt.label) + '</option>'; }).join('') + '</select></label>';
   }
@@ -4347,7 +4362,7 @@ function ikrcStationConfigRowHtml_(station, index, competitionCode) {
   return '<div class="ikrc-station-config-row' + (code === 'KCR' ? ' kcr-station-config-row' : '') + '" data-ikrc-station-row data-station-id="' + escHtml(stationId) + '" data-station-label="' + escHtml(stationLabel) + '" data-station-prefix="' + escHtml(stationPrefix) + '" data-competition-code="' + code + '">' +
     '<div class="ikrc-station-row-title" data-field="label">' + escHtml(stationLabel) + '</div>' +
     (code === 'KCR' ? '' : '<label>코드<input type="text" maxlength="8" autocapitalize="characters" data-field="prefix" value="' + escHtml(stationPrefix) + '" placeholder="' + escHtml(ikrcDefaultStationPrefix_(index)) + '"></label>') +
-    processHtml +
+    dayHtml + processHtml +
     purposeHtml +
     '<label class="' + (code === 'KCR' ? 'kcr-station-range-field' : '') + '">' + (code === 'KCR' ? '참가자 시작번호' : '시작 번호') + '<input type="number" min="1" max="999" inputmode="numeric" data-field="start" value="' + start + '"></label>' +
     '<label class="' + (code === 'KCR' ? 'kcr-station-range-field' : '') + '">' + (code === 'KCR' ? '참가자 끝번호' : '끝 번호') + '<input type="number" min="1" max="999" inputmode="numeric" data-field="end" value="' + end + '"></label>' +
@@ -4413,7 +4428,11 @@ function ikrcAddStationConfigRow_(prefix, code) {
   var container = document.getElementById(prefix + '-ikrc-stations-' + code);
   if (!container) return;
   var count = container.querySelectorAll('[data-ikrc-station-row]').length;
-  if (count >= 12) { toast(code + ' 스테이션은 최대 12개까지 등록할 수 있습니다.', true); return; }
+  var maxStations = code === 'KCR' ? 40 : 12;
+  if (count >= maxStations) { toast(code + ' 스테이션은 최대 ' + maxStations + '개까지 등록할 수 있습니다.', true); return; }
+  var panel = container.closest('[data-kcr-station-manager]');
+  var dayFilter = panel && panel.querySelector('[data-kcr-day-filter]');
+  var newDay = dayFilter && panel.dataset.kcrRound === '예선' && /^[12]$/.test(dayFilter.value) ? Number(dayFilter.value) : null;
   var usedPrefixes = {};
   Array.prototype.forEach.call(container.querySelectorAll('[data-ikrc-station-row]'), function(row){
     var input = row.querySelector('[data-field="prefix"]');
@@ -4423,8 +4442,9 @@ function ikrcAddStationConfigRow_(prefix, code) {
   var prefixIndex = 0;
   while (usedPrefixes[ikrcDefaultStationPrefix_(prefixIndex)] && prefixIndex < 100) prefixIndex++;
   var nextStationId = ikrcNextStationId_(container);
-  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({id:nextStationId,label:'스테이션 ' + (count + 1),prefix:ikrcDefaultStationPrefix_(prefixIndex),start:1,end:10,process:kcrDefaultStationProcess_(count),useForCalibration:code !== 'KCR',useForCompetition:true}, count, code));
+  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({id:nextStationId,label:'스테이션 ' + (count + 1),prefix:ikrcDefaultStationPrefix_(prefixIndex),start:1,end:10,process:kcrDefaultStationProcess_(count),prelimDay:newDay,useForCalibration:code !== 'KCR',useForCompetition:true}, count, code));
   ikrcRenumberStationConfigRows_(container);
+  if (panel) kcrFilterStationConfigRows_(panel);
 }
 function ikrcRemoveStationConfigRow_(button) {
   var row = button && button.closest ? button.closest('[data-ikrc-station-row]') : null;
@@ -4435,6 +4455,22 @@ function ikrcRemoveStationConfigRow_(button) {
   if (!confirm((row.dataset.stationLabel || '이 스테이션') + '을 현재 운영 설정에서 제거하시겠습니까?\n이미 제출된 점수와 백업 데이터는 삭제되지 않습니다.')) return;
   row.remove();
   ikrcRenumberStationConfigRows_(container);
+  var panel = container.closest('[data-kcr-station-manager]');
+  if (panel) kcrFilterStationConfigRows_(panel);
+}
+function kcrFilterStationConfigRows_(panel) {
+  if (!panel) return;
+  var filter = panel.querySelector('[data-kcr-day-filter]');
+  var selected = panel.dataset.kcrRound === '예선' && filter ? filter.value : 'all';
+  var visible = 0;
+  var rows = panel.querySelectorAll('[data-ikrc-station-row]');
+  Array.prototype.forEach.call(rows, function(row){
+    var day = row.querySelector('[data-field="prelimDay"]');
+    row.hidden = selected !== 'all' && String(day && day.value || '') !== selected;
+    if (!row.hidden) visible++;
+  });
+  var status = panel.querySelector('[data-kcr-day-count]');
+  if (status) status.textContent = visible + '개 표시 / 전체 ' + rows.length + '개';
 }
 function ikrcRenderStationConfigForRound_(prefix, cfg, round) {
   var code = String(cfg && cfg.code || 'IKRC').toUpperCase();
@@ -4444,6 +4480,13 @@ function ikrcRenderStationConfigForRound_(prefix, cfg, round) {
   var stations = code === 'KCR' ? kcrStationSettings_(scopedCfg) : ikrcStationSettings_(scopedCfg);
   container.innerHTML = stations.map(function(station, index){ return ikrcStationConfigRowHtml_(station, index, code); }).join('');
   ikrcRenumberStationConfigRows_(container);
+  var panel = container.closest('[data-kcr-station-manager]');
+  if (panel) {
+    panel.dataset.kcrRound = ikrcStationRoundKey_(scopedCfg.currentRound);
+    var filter = panel.querySelector('[data-kcr-day-filter]');
+    if (filter) filter.value = 'all';
+    kcrFilterStationConfigRows_(panel);
+  }
 }
 function configSelectableOptionsHtml_(cfg, prefix) {
   var code = String(cfg && cfg.code || '').toUpperCase();
@@ -4464,7 +4507,7 @@ function configSelectableOptionsHtml_(cfg, prefix) {
   if (code === 'KCR') {
     var settings = kcrProcessSettings_(cfg);
     var kcrStations = kcrStationSettings_(cfg);
-    var html = '<section class="kcr-station-manager-panel" data-kcr-station-manager><div class="kcr-station-manager-head"><div class="kcr-station-manager-title">KCR 스테이션 만들기 / 관리</div></div>' +
+    var html = '<section class="kcr-station-manager-panel" data-kcr-station-manager data-kcr-round="' + ikrcStationRoundKey_(cfg.currentRound) + '"><div class="kcr-station-manager-head"><div class="kcr-station-manager-title">KCR 스테이션 만들기 / 관리</div></div>' +
       '<div class="review-edit-help" style="margin:10px 0 8px">현재 라운드에서 사용할 스테이션을 추가하고 프로세스·참가자번호 범위·사용 모드를 정한 뒤 아래 <b>스테이션 설정 저장</b> 버튼을 눌러주세요.</div>' +
       '<div class="review-edit-help" style="margin:10px 0 8px">KCR 프로세스 오픈/닫기 - 닫힌 프로세스는 평가 스테이션에서 선택할 수 없습니다.</div>';
     html += '<div class="admin-check-row wide">';
@@ -4474,6 +4517,8 @@ function configSelectableOptionsHtml_(cfg, prefix) {
     });
     html += '</div>';
     html += '<div class="review-edit-help" style="margin:12px 0 8px">KCR 스테이션은 <b>선수등록의 참가자번호</b>만 사용합니다. 켈리브레이션용은 점수·코멘트·표준편차 확인에만 쓰이고 공식 순위에 포함되지 않으며, 대회평가용 제출만 참가자별 공식 점수에 합산됩니다. 스테이션을 변경하거나 제거해도 이미 제출된 평가는 삭제되지 않습니다.</div>' +
+      '<label class="kcr-station-day-filter">예선 일차별 보기<select data-kcr-day-filter onchange="kcrFilterStationConfigRows_(this.closest(\'[data-kcr-station-manager]\'))"><option value="all">전체 예선</option><option value="1">1일차 예선</option><option value="2">2일차 예선</option><option value="">미지정</option></select><span>두 일차의 평가 점수는 예선 순위에 함께 반영됩니다.</span></label>' +
+      '<div class="label" data-kcr-day-count role="status">' + kcrStations.length + '개 표시 / 전체 ' + kcrStations.length + '개</div>' +
       '<div class="ikrc-station-config-list" id="' + prefix + '-ikrc-stations-' + code + '">' +
         kcrStations.map(function(station, index){ return ikrcStationConfigRowHtml_(station, index, code); }).join('') +
       '</div>' +
@@ -4550,7 +4595,7 @@ function configSelectableOptionsPayload_(code, prefix, cfg) {
     var kcrContainer = document.getElementById(prefix + '-ikrc-stations-' + code);
     var kcrRows = kcrContainer ? Array.prototype.slice.call(kcrContainer.querySelectorAll('[data-ikrc-station-row]')) : [];
     if (!kcrRows.length) { toast('KCR 스테이션을 1개 이상 등록해주세요.', true); return false; }
-    if (kcrRows.length > 12) { toast('KCR 스테이션은 최대 12개까지 등록할 수 있습니다.', true); return false; }
+    if (kcrRows.length > 40) { toast('KCR 스테이션은 최대 40개까지 등록할 수 있습니다.', true); return false; }
     ikrcRepairDuplicateStationIds_(kcrRows);
     var kcrStations = [], kcrUsedIds = {};
     for (var k=0;k<kcrRows.length;k++) {
@@ -4560,6 +4605,8 @@ function configSelectableOptionsPayload_(code, prefix, cfg) {
       var kcrCalibrationEl = kcrRows[k].querySelector('[data-field="useForCalibration"]');
       var kcrCompetitionEl = kcrRows[k].querySelector('[data-field="useForCompetition"]');
       var kcrPurposeEl = kcrRows[k].querySelector('[data-field="purpose"]');
+      var kcrDayEl = kcrRows[k].querySelector('[data-field="prelimDay"]');
+      var kcrDay = kcrDayEl && /^[12]$/.test(kcrDayEl.value) ? Number(kcrDayEl.value) : null;
       var kcrPrefix = ikrcStationPrefix_(kcrRows[k].dataset.stationPrefix, ikrcDefaultStationPrefix_(k));
       var kcrStationId = ikrcStationId_(kcrRows[k].dataset.stationId, k);
       var kcrStationLabel = '스테이션 ' + (k + 1);
@@ -4577,7 +4624,7 @@ function configSelectableOptionsPayload_(code, prefix, cfg) {
       if (kcrEnd - kcrStart + 1 > 20) { toast('KCR은 한 스테이션에서 최대 20명의 참가자를 평가할 수 있습니다.', true); return false; }
       if (!kcrUseForCalibration && !kcrUseForCompetition) { toast(kcrStationLabel + '은 켈리브레이션용 또는 대회평가용 중 하나 이상을 체크해주세요.', true); return false; }
       kcrUsedIds[kcrStationId] = true;
-      kcrStations.push({id:kcrStationId, label:kcrStationLabel, prefix:kcrPrefix, start:kcrStart, end:kcrEnd, process:kcrProcess, useForCalibration:kcrUseForCalibration, useForCompetition:kcrUseForCompetition, numberMode:'participant'});
+      kcrStations.push({id:kcrStationId, label:kcrStationLabel, prefix:kcrPrefix, start:kcrStart, end:kcrEnd, process:kcrProcess, prelimDay:kcrDay, useForCalibration:kcrUseForCalibration, useForCompetition:kcrUseForCompetition, numberMode:'participant'});
     }
     var kcrExistingRaw = competitionOptionSettings_(cfg).kcrStations || {};
     var kcrByRound = Object.assign({}, kcrExistingRaw.byRound || {});
@@ -11412,6 +11459,9 @@ function getRoundEvalLabel(round) {
   return round ? round + ' 평가' : '평가';
 }
 function showCuppingSetup() {
+  // A new evaluation/calibration entry must not inherit a hidden day filter.
+  var daySelect = document.getElementById('kcr-evaluation-day');
+  if (daySelect) daySelect.value = 'all';
   var label = getRoundEvalLabel(_selComp.currentRound);
   var purpose = evaluationPurposeDisplayLabel_();
   _cupping.station = null;
@@ -11436,7 +11486,13 @@ function renderKcrStationChoices_() {
   var help = document.getElementById('kcr-station-help');
   if (!wrap) return;
   var allStations = kcrStationSettings_(_selComp);
+  var dayWrap = document.getElementById('kcr-evaluation-day-wrap');
+  var daySelect = document.getElementById('kcr-evaluation-day');
+  var preliminary = ikrcStationRoundKey_(_selComp && _selComp.currentRound) === '예선';
+  if (dayWrap) dayWrap.style.display = preliminary ? '' : 'none';
+  var day = preliminary && daySelect ? daySelect.value : 'all';
   var stations = allStations.filter(function(station){
+    if (day !== 'all' && String(station.prelimDay || '') !== day) return false;
     if (isActiveCalibrationMode_()) return station.useForCalibration !== false;
     return station.useForCompetition !== false && kcrProcessIsOpen_(_selComp, station.process);
   });
@@ -11444,12 +11500,13 @@ function renderKcrStationChoices_() {
     var cups = kcrStationParticipantNumbers_(station);
     return '<button type="button" class="ikrc-station-btn" onclick="startKcrStation_(\'' + escapeJsString_(station.id) + '\')">' +
       '<strong>' + escHtml(station.label) + '</strong>' +
+      (preliminary && station.prelimDay ? '<span>' + station.prelimDay + '일차 예선</span>' : '') +
       '<span>참가자번호 ' + escHtml(cups[0] + ' ~ ' + cups[cups.length - 1]) + '</span>' +
       '<span>' + (isActiveCalibrationMode_() ? '켈리브레이션 · 프로세스 구분 없음' : escHtml(kcrProcessOptionLabel_(kcrProcessKeyFromValue_(station.process)))) + '</span>' +
       '<span>총 ' + cups.length + '명 자동 선택</span>' +
     '</button>';
   }).join('');
-  if (!stations.length) wrap.innerHTML = '<div class="review-edit-help" style="grid-column:1/-1">현재 라운드에 오픈된 KCR 스테이션이 없습니다. 대회팀장 화면에서 스테이션과 프로세스를 저장해주세요.</div>';
+  if (!stations.length) wrap.innerHTML = '<div class="review-edit-help" style="grid-column:1/-1">선택한 조건에 오픈된 스테이션이 없습니다. 예선 일차 또는 운영 설정을 확인해주세요.</div>';
   if (help) help.textContent = isActiveCalibrationMode_()
     ? '켈리브레이션용 스테이션의 참가자번호만 표시됩니다. 제출 결과는 점수·코멘트·표준편차 확인용이며 공식 순위에는 반영되지 않습니다.'
     : '심사위원은 번호를 직접 입력하지 않습니다. 대회평가용 스테이션을 선택하면 등록 참가자번호와 프로세스가 자동 적용됩니다.';

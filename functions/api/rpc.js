@@ -3997,7 +3997,8 @@ function normalizeIkrcStationListServer_(source, strict=false, competitionCode='
     return !/^(?:0|false|no|n|off|미사용)$/i.test(safeStr(value));
   };
   if (!Array.isArray(source) || !source.length) return { ok:false, message:`${code} 스테이션을 1개 이상 등록해주세요.`, list:[] };
-  if (source.length > 12) return { ok:false, message:`${code} 스테이션은 최대 12개까지 등록할 수 있습니다.`, list:[] };
+  const maxStations = code === 'KCR' ? 40 : 12;
+  if (source.length > maxStations) return { ok:false, message:`${code} 스테이션은 최대 ${maxStations}개까지 등록할 수 있습니다.`, list:[] };
   const used = new Set();
   const usedIds = new Set();
   const list = [];
@@ -4207,6 +4208,8 @@ function normalizeKcrStationListServer_(source, strict=false) {
   checked.list = checked.list.map((station, index) => Object.assign({}, station, {
     label:`스테이션 ${index + 1}`,
     process:kcrStationProcessServer_(source && source[index] && source[index].process, index),
+    // Management-only day metadata: both days retain the same preliminary round.
+    prelimDay:[1,2].includes(Number(source[index]?.prelimDay)) ? Number(source[index].prelimDay) : null,
     useForCalibration:station.useForCalibration !== false,
     useForCompetition:station.useForCompetition !== false,
     numberMode:'participant'
@@ -4251,7 +4254,7 @@ function kcrStationSettingsServer_(cfg, roundOverride) {
   return normalized.ok ? normalized.list : normalizeKcrStationListServer_(defaults, false).list;
 }
 function kcrStationFingerprintServer_(stations) {
-  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end, station.process, station.useForCalibration !== false, station.useForCompetition !== false, station.numberMode || 'participant'].join(':')).join('|');
+  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end, station.process, station.useForCalibration !== false, station.useForCompetition !== false, station.numberMode || 'participant', station.prelimDay || ''].join(':')).join('|');
 }
 
 function kcrStationsForPurposeServer_(cfg, roundOverride, purpose) {

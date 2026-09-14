@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kcr-days": "node tests/stage222-kcr-preliminary-days.test.mjs && node tests/stage223-kcr-preliminary-days-browser.test.mjs",
     "test:debrief-preview-rank": "node tests/stage221-admin-debrief-preview-rank-browser.test.mjs",
     "test:debrief-isolation": "node tests/stage219-all-debrief-isolation.test.mjs && node tests/stage220-all-debrief-browser.test.mjs",
     "test:moc-debrief": "node tests/stage217-moc-debrief-exact-match.test.mjs && node tests/stage218-moc-debrief-browser.test.mjs",
