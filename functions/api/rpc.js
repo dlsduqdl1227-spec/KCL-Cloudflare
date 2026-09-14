@@ -6611,6 +6611,19 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
   const auth = await requireAdminPreviewActor_(env, actorArg);
   if (!auth.ok) return auth.res;
   if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
+  if (code === 'MOC') {
+    const selectedRound = rankingRoundScope_(round);
+    if (!selectedRound || !safeStr(unit)) return { success:false, message:'참가자번호와 예선, 본선 또는 결선을 선택해주세요.' };
+    const bundle = await buildMocPublicDebriefBundle_(env, [{ round:selectedRound, unit:safeStr(unit) }]);
+    const rank = bundle.rankInfo;
+    return {
+      success:true, isAdminPreview:true, competition:code, competitionCode:code,
+      compName:COMPETITION_NAMES[code],
+      playerInfo:{ name:safeStr(rank && (rank.playerNameSummary || rank.nameSummary) || unit), affiliation:safeStr(rank && rank.playerAffiliationSummary), teamName:'', teamNo:'', maskedPhone:'' },
+      scores:bundle.scores, headers:bundle.headers, rankInfos:bundle.rankInfos, rankInfo:rank,
+      previewUnit:safeStr(unit), previewRound:selectedRound, previewDataBasis:bundle.dataBasis
+    };
+  }
   if (code === 'IKRC') {
     const bundle = await buildIkrcPublicDebriefBundle_(env, [{ round:roundName_(round, '예선'), unit:safeStr(unit) }]);
     const rankInfo = bundle.rankInfo;
@@ -6679,8 +6692,10 @@ async function sendOTP(env, name, phone, competitionCode, request = null) {
   if (!phoneLimit.ok) return { success: false, message: '인증 요청이 많습니다. 10분 후 다시 시도해주세요.' };
   const ipLimit = await rateLimit_(env, 'otp-send-ip:' + await sha256Hex_(clientIp_(request) || 'unknown'), 30, 10 * 60);
   if (!ipLimit.ok) return { success: false, message: '인증 요청이 많습니다. 잠시 후 다시 시도해주세요.' };
-  const pRows = await env.DB.prepare(`SELECT * FROM participants WHERE competition_code=? AND phone=? AND (name=? OR team_name=? OR extra_json LIKE ?) ORDER BY id LIMIT 3`)
-    .bind(code, phone, name, name, `%${name}%`).all();
+  const pRows = code === 'MOC'
+    ? await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? AND phone=? AND name=? ORDER BY id LIMIT 3').bind(code, phone, name).all()
+    : await env.DB.prepare(`SELECT * FROM participants WHERE competition_code=? AND phone=? AND (name=? OR team_name=? OR extra_json LIKE ?) ORDER BY id LIMIT 3`)
+      .bind(code, phone, name, name, `%${name}%`).all();
   if (!(pRows.results || []).length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다. 이름과 연락처, 선택한 대회를 확인해주세요.' };
 
   // 최근 60초 내 과도한 재요청 방지
@@ -6883,6 +6898,33 @@ function participantIdentifiers_(p) {
     .map(safeStr).filter(Boolean);
   return Array.from(new Set(list));
 }
+function mocParticipantDebriefTargets_(p) {
+  // A database row ID is never a MOC competitor number. Final-round numbers
+  // belong only to their assigned round, even if another player reuses them.
+  return [
+    { round:'예선', unit:firstNonEmpty([p.prelim_cup_no, p.cup_no, p.sample_no, p.unique_no]) },
+    { round:'본선', unit:safeStr(p.main_cup_no) },
+    { round:'결선', unit:safeStr(p.final_cup_no) }
+  ].filter(target => target.unit);
+}
+function mocDebriefTargetKey_(round, unit) {
+  const selectedRound = rankingRoundScope_(round);
+  const number = safeStr(unit);
+  return selectedRound && number ? selectedRound + '::' + number : '';
+}
+async function buildMocPublicDebriefBundle_(env, targets) {
+  const targetKeys = new Set((targets || []).map(target => mocDebriefTargetKey_(target.round, target.unit)).filter(Boolean));
+  const empty = { scores:[], headers:[], rankInfos:[], rankInfo:null, dataBasis:'MOC 라운드별 참가번호의 검수완료·수정완료 공식평가' };
+  if (!targetKeys.size) return empty;
+  const data = await buildRankingData_(env, 'MOC');
+  const matches = item => targetKeys.has(mocDebriefTargetKey_(item.round || item['라운드'], itemNumber_(item)));
+  const scores = officialScoreItemsForOutput_('MOC', data.rows.filter(item =>
+    matches(item) && shouldCountItemInRanking_('MOC', item) && officialReviewCompleted_('MOC', item)
+  ));
+  const publicKeys = new Set(scores.map(item => mocDebriefTargetKey_(item.round || item['라운드'], itemNumber_(item))));
+  const rankInfos = data.ranking.filter(rank => publicKeys.has(mocDebriefTargetKey_(rank.round, rank.unit)));
+  return { ...empty, scores, headers:data.headers, rankInfos, rankInfo:rankInfos[0] || null };
+}
 function ikrcParticipantBlindTargets_(participant) {
   const p = participant || {};
   const extra = parseJson(p.extra_json, {});
@@ -6961,13 +7003,16 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
   if (!row) return { success: false, message: '유효한 인증번호가 없습니다.' };
   if (safeStr(row.otp) !== safeStr(otp)) return { success: false, message: '인증번호가 일치하지 않습니다.' };
   await env.DB.prepare('UPDATE otps SET used_at=? WHERE id=?').bind(nowIso(), row.id).run();
-  const pr = await env.DB.prepare(`SELECT * FROM participants WHERE competition_code=? AND phone=? AND (name=? OR team_name=? OR extra_json LIKE ?) ORDER BY id`)
-    .bind(code, phone, name, name, `%${name}%`).all();
+  const pr = code === 'MOC'
+    ? await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? AND phone=? AND name=? ORDER BY id').bind(code, phone, name).all()
+    : await env.DB.prepare(`SELECT * FROM participants WHERE competition_code=? AND phone=? AND (name=? OR team_name=? OR extra_json LIKE ?) ORDER BY id`)
+      .bind(code, phone, name, name, `%${name}%`).all();
   const participants = pr.results || [];
   if (!participants.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다.' };
   const ikrcBlindTargets = code === 'IKRC' ? participants.flatMap(ikrcParticipantBlindTargets_) : [];
   const ikrcBlindUnits = Array.from(new Set(ikrcBlindTargets.map(target => target.unit)));
-  const ids = Array.from(new Set(participants.flatMap(participantIdentifiers_).concat(ikrcBlindUnits))).filter(Boolean);
+  const mocTargets = code === 'MOC' ? participants.flatMap(mocParticipantDebriefTargets_) : [];
+  const ids = Array.from(new Set(code === 'MOC' ? mocTargets.map(target => target.unit) : participants.flatMap(participantIdentifiers_).concat(ikrcBlindUnits))).filter(Boolean);
   let headers = [];
   let scoreItems = [];
   let rankInfos = [];
@@ -6978,23 +7023,28 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
     headers = publicBundle.headers;
     scoreItems = publicBundle.scores;
     rankInfos = publicBundle.rankInfos;
+  } else if (code === 'MOC') {
+    const publicBundle = await buildMocPublicDebriefBundle_(env, mocTargets);
+    headers = publicBundle.headers;
+    scoreItems = publicBundle.scores;
+    rankInfos = publicBundle.rankInfos;
   } else if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
     const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND unit IN (${placeholders}) ORDER BY id`).bind(code, ...ids).all();
     scoreRows = rs.results || [];
   }
-  if (code !== 'IKRC' && !scoreRows.length && ids.length) {
+  if (code !== 'IKRC' && !scoreRows.length && ids.length && code !== 'MOC') {
     const likeConds = ids.map(() => 'payload_json LIKE ?').join(' OR ');
     const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND (${likeConds}) ORDER BY id`)
       .bind(code, ...ids.map(id => `%${id}%`)).all();
     scoreRows = rs.results || [];
   }
-  if (code !== 'IKRC' && !scoreRows.length) {
+  if (code !== 'IKRC' && !scoreRows.length && code !== 'MOC') {
     const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND (participant_name=? OR payload_json LIKE ?) ORDER BY id`)
       .bind(code, name, `%${name}%`).all();
     scoreRows = rs.results || [];
   }
-  if (code !== 'IKRC') {
+  if (code !== 'IKRC' && code !== 'MOC') {
     headers = mergeHeaders(code, scoreRows);
     scoreItems = scoreRows.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
     scoreItems = officialScoreItemsForOutput_(code, scoreItems.filter(item => shouldCountItemInRanking_(code, item)));

@@ -1421,22 +1421,23 @@ function buildRankBox(res) {
   var isIkrc = String(res.competition || '').toUpperCase() === 'IKRC';
   var isKcr = String(res.competition || '').toUpperCase() === 'KCR';
   var isMob = String(res.competition || '').toUpperCase() === 'MOB';
+  var isMoc = String(res.competition || '').toUpperCase() === 'MOC';
   var box = document.createElement('div');
   box.className = 'rank-box';
-  if (isKcr || isMob) {
+  if (isKcr || isMob || isMoc) {
     var order = {'예선':1, '본선':2, '결선':3};
     ranks = ranks.slice().sort(function(a,b){
       return (order[a.round] || 99) - (order[b.round] || 99);
     });
     var html = '';
     ranks.forEach(function(r){
-      var round = r.round || (isMob ? 'MOB' : 'KCR');
+      var round = r.round || (isMob ? 'MOB' : (isMoc ? 'MOC' : 'KCR'));
       var rankText = r.rank ? (r.totalInRound ? (r.rank + ' / ' + r.totalInRound) : String(r.rank)) : '-';
       var score = r.totalScore != null ? r.totalScore : (r.rankingScore != null ? r.rankingScore : (r.avgScore || 0));
       html += '<div class="cell"><small>' + escHtml(round + ' 순위') + '</small><b>' + escHtml(rankText) + '</b></div>';
       html += '<div class="cell"><small>' + escHtml(round + ' 총점') + '</small><b>' + escHtml(fmtScore(score, 2)) + '</b></div>';
     });
-    box.innerHTML = html + '<div class="tie-rule">동점 기준: ' + escHtml(main.tieBreakRule || (isMob ? '총점 → 센서리 → 테크니컬 → 경기시간' : '총점 → Sweetness → Overall → 재심사')) + '</div>';
+    box.innerHTML = html + '<div class="tie-rule">동점 기준: ' + escHtml(main.tieBreakRule || (isMob ? '총점 → 센서리 → 테크니컬 → 경기시간' : (isMoc ? '총점 → 종료시간 짧은 순' : '총점 → Sweetness → Overall → 재심사'))) + '</div>';
     return box;
   }
   var rankFullText = main.rank ? (main.totalInRound ? (main.rank + ' / ' + main.totalInRound) : String(main.rank)) : '-';
