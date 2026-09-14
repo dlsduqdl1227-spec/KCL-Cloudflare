@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:debrief-preview-rank": "node tests/stage221-admin-debrief-preview-rank-browser.test.mjs",
     "test:debrief-isolation": "node tests/stage219-all-debrief-isolation.test.mjs && node tests/stage220-all-debrief-browser.test.mjs",
     "test:moc-debrief": "node tests/stage217-moc-debrief-exact-match.test.mjs && node tests/stage218-moc-debrief-browser.test.mjs",
     "pretest": "node tests/stage198-kcac-pattern-identity-debrief.test.mjs && node tests/stage200-finals-readiness.test.mjs && node tests/stage202-submission-round-context.test.mjs && node tests/stage205-shared-final-rounds.test.mjs && node tests/stage207-ranking-round-isolation.test.mjs && node tests/stage209-kcr-station-session.test.mjs && node tests/stage211-kcr-head-comparison.test.mjs && node tests/stage215-kcr-immediate-official-ranking.test.mjs",

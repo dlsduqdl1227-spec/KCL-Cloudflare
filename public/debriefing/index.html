@@ -894,6 +894,13 @@ window.onload = function() {
   initializeDebriefPage_();
 };
 
+function adminPreviewRankLabel_(rank) {
+  var value = String(rank == null ? '' : rank).trim();
+  if (/^\d+$/.test(value) && Number(value) > 0) return Number(value) + '위';
+  if (value === '실격' || /위$/.test(value)) return value;
+  return '순위 미집계';
+}
+
 function loadAdminDebriefPreviewOptions_() {
   if (!_adminPreviewActor) return;
   var code = String((document.getElementById('sel-comp') || {}).value || '').toUpperCase();
@@ -926,7 +933,7 @@ function loadAdminDebriefPreviewOptions_() {
     _adminPreviewOptions.forEach(function(item, index){
       var option = document.createElement('option');
       option.value = String(index);
-      option.textContent = [item.round, item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
+      option.textContent = [item.round, adminPreviewRankLabel_(item.rank), item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
       select.appendChild(option);
     });
     select.disabled = !_adminPreviewOptions.length;
