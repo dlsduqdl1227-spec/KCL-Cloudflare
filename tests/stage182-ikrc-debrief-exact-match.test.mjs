@@ -47,13 +47,14 @@ assert.deepEqual(JSON.parse(JSON.stringify(targets)), [
 ]);
 
 const verifySource = functionSource(rpc, 'verifyOTP');
-assert.match(verifySource, /code === 'IKRC'[\s\S]*buildIkrcPublicDebriefBundle_\(env, ikrcBlindTargets\)/, 'IKRC player verification must use the shared public debrief bundle');
-assert.match(verifySource, /if \(code !== 'IKRC' && !scoreRows\.length/, 'broad legacy fallbacks must remain unreachable for IKRC');
+assert.match(verifySource, /buildPublicDebriefBundle_\(env, code, targets\)/, 'player verification must use the shared public debrief bundle');
+assert.doesNotMatch(verifySource, /payload_json LIKE|participantIdentifiers_/, 'broad legacy fallbacks must not exist');
+assert.match(functionSource(rpc, 'buildPublicDebriefBundle_'), /code === 'IKRC'[\s\S]*buildIkrcPublicDebriefBundle_\(env, targets, data\)/, 'shared bundle must retain IKRC panel and average logic');
 
 const previewOptions = functionSource(rpc, 'getAdminDebriefPreviewOptions');
 const preview = functionSource(rpc, 'getAdminDebriefPreview');
 assert.match(previewOptions, /code === 'IKRC' \|\| officialReviewCompleted_\(code, item\)/, 'IKRC submitted official scores must remain previewable even without a manual review-status change');
-assert.match(preview, /code === 'IKRC'[\s\S]*buildIkrcPublicDebriefBundle_\(env/, 'admin preview must use the same shared bundle as the player route');
+assert.match(preview, /buildPublicDebriefBundle_\(env, code,/, 'admin preview must use the same shared bundle as the player route');
 
 const bundleContext = {
   buildRankingData_: async () => { throw new Error('the supplied ranking data must be used'); },

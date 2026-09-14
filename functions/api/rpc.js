@@ -2697,8 +2697,9 @@ function indexParticipantIdentities_(participantRows, code) {
 function lookupParticipantIdentity_(idx, round, unit) {
   const key = participantKey_(unit);
   if (!idx || !key) return null;
-  const r = normalizeRoundForCompetition_('', round || '예선');
-  return idx.get(r + '::' + key) || idx.get(String(round || '').trim() + '::' + key) || idx.get('ANY::' + key) || null;
+  const r = roundName_(round, '');
+  // A final/main number must never resolve to a different preliminary entrant.
+  return r ? (idx.get(r + '::' + key) || null) : (idx.get('ANY::' + key) || null);
 }
 function enrichReviewItemWithParticipant_(item, identity, code) {
   if (!item || !identity) return item;
@@ -6530,7 +6531,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='') {
       judgeCount: g.rows.length
     }));
   });
-  return { cfg, headers, rows: converted, ranking };
+  return { cfg, headers, rows: converted, ranking, participantRows };
 }
 
 async function getRanking(env, competitionCode, actorArg, requestedRound) {
@@ -6611,71 +6612,32 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
   const auth = await requireAdminPreviewActor_(env, actorArg);
   if (!auth.ok) return auth.res;
   if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
-  if (code === 'MOC') {
-    const selectedRound = rankingRoundScope_(round);
-    if (!selectedRound || !safeStr(unit)) return { success:false, message:'참가자번호와 예선, 본선 또는 결선을 선택해주세요.' };
-    const bundle = await buildMocPublicDebriefBundle_(env, [{ round:selectedRound, unit:safeStr(unit) }]);
-    const rank = bundle.rankInfo;
-    return {
-      success:true, isAdminPreview:true, competition:code, competitionCode:code,
-      compName:COMPETITION_NAMES[code],
-      playerInfo:{ name:safeStr(rank && (rank.playerNameSummary || rank.nameSummary) || unit), affiliation:safeStr(rank && rank.playerAffiliationSummary), teamName:'', teamNo:'', maskedPhone:'' },
-      scores:bundle.scores, headers:bundle.headers, rankInfos:bundle.rankInfos, rankInfo:rank,
-      previewUnit:safeStr(unit), previewRound:selectedRound, previewDataBasis:bundle.dataBasis
-    };
-  }
-  if (code === 'IKRC') {
-    const bundle = await buildIkrcPublicDebriefBundle_(env, [{ round:roundName_(round, '예선'), unit:safeStr(unit) }]);
-    const rankInfo = bundle.rankInfo;
-    return {
-      success:true,
-      isAdminPreview:true,
-      competition:code,
-      competitionCode:code,
-      compName:COMPETITION_NAMES[code] || code,
-      playerInfo:{
-        name:safeStr(rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary) || unit),
-        affiliation:safeStr(rankInfo && rankInfo.playerAffiliationSummary),
-        teamName:'',
-        teamNo:'',
-        maskedPhone:''
-      },
-      scores:bundle.scores,
-      headers:bundle.headers,
-      rankInfos:bundle.rankInfos,
-      rankInfo,
-      previewUnit:safeStr(unit),
-      previewRound:roundName_(round, ''),
-      previewDataBasis:bundle.dataBasis,
-      dataBasis:bundle.dataBasis
-    };
-  }
-  const detail = await getRankingDetail(env, code, unit, round, { judgeToken:auth.actor.judgeToken || (actorArg && actorArg.judgeToken) || '' });
-  if (!detail || !detail.success) return detail || { success:false, message:'디브리핑 미리보기를 불러오지 못했습니다.' };
-  const publicScores = officialScoreItemsForOutput_(code, (detail.scores || detail.rows || []).filter(item =>
-    officialReviewCompleted_(code, item)
-  ));
-  const rankInfo = detail.rankInfo || null;
+  const selectedRound = rankingRoundScope_(round);
+  if (!debriefTargetKey_(code, selectedRound, unit)) return { success:false, message:'참가자번호와 해당 대회의 라운드를 선택해주세요.' };
+  const bundle = await buildPublicDebriefBundle_(env, code, [{round:selectedRound, unit:safeStr(unit)}]);
+  if (bundle.assignmentConflict) return debriefAssignmentConflict_();
+  const rankInfo = bundle.rankInfo;
   return {
     success:true,
     isAdminPreview:true,
     competition:code,
     competitionCode:code,
-    compName:detail.compName || (COMPETITION_NAMES[code] || code),
+    compName:COMPETITION_NAMES[code] || code,
     playerInfo:{
-      name:safeStr(detail.playerNameSummary || (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || detail.unitDisplay || detail.unit),
-      affiliation:safeStr(detail.playerAffiliationSummary || (rankInfo && rankInfo.playerAffiliationSummary)),
+      name:safeStr((rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || unit),
+      affiliation:safeStr(rankInfo && rankInfo.playerAffiliationSummary),
       teamName:safeStr(rankInfo && rankInfo.teamNameSummary),
-      teamNo:code === 'KTCC' ? safeStr(detail.unitDisplay || detail.unit) : '',
+      teamNo:code === 'KTCC' ? safeStr(unit) : '',
       maskedPhone:''
     },
-    scores:publicScores,
-    headers:detail.headers || [],
-    rankInfos:detail.rankInfos || (rankInfo ? [rankInfo] : []),
+    scores:bundle.scores,
+    headers:bundle.headers,
+    rankInfos:bundle.rankInfos,
     rankInfo,
-    previewUnit:safeStr(detail.unitDisplay || detail.unit),
-    previewRound:roundName_(detail.round || round, ''),
-    previewDataBasis:code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가'
+    previewUnit:safeStr(unit),
+    previewRound:selectedRound,
+    previewDataBasis:bundle.dataBasis,
+    dataBasis:bundle.dataBasis
   };
 }
 
@@ -6692,11 +6654,8 @@ async function sendOTP(env, name, phone, competitionCode, request = null) {
   if (!phoneLimit.ok) return { success: false, message: '인증 요청이 많습니다. 10분 후 다시 시도해주세요.' };
   const ipLimit = await rateLimit_(env, 'otp-send-ip:' + await sha256Hex_(clientIp_(request) || 'unknown'), 30, 10 * 60);
   if (!ipLimit.ok) return { success: false, message: '인증 요청이 많습니다. 잠시 후 다시 시도해주세요.' };
-  const pRows = code === 'MOC'
-    ? await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? AND phone=? AND name=? ORDER BY id LIMIT 3').bind(code, phone, name).all()
-    : await env.DB.prepare(`SELECT * FROM participants WHERE competition_code=? AND phone=? AND (name=? OR team_name=? OR extra_json LIKE ?) ORDER BY id LIMIT 3`)
-      .bind(code, phone, name, name, `%${name}%`).all();
-  if (!(pRows.results || []).length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다. 이름과 연락처, 선택한 대회를 확인해주세요.' };
+  const pRows = await findDebriefParticipants_(env, code, name, phone);
+  if (!pRows.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다. 이름과 연락처, 선택한 대회를 확인해주세요.' };
 
   // 최근 60초 내 과도한 재요청 방지
   const latest = await env.DB.prepare(`SELECT created_at FROM otps WHERE competition_code=? AND name=? AND phone=? ORDER BY id DESC LIMIT 1`)
@@ -6893,37 +6852,63 @@ async function rateLimit_(env, key, limit, windowSeconds) {
   }
 }
 function maskPhone_(phone) { phone = normalizePhone(phone); return phone.length >= 7 ? phone.slice(0,3) + '-****-' + phone.slice(-4) : phone; }
-function participantIdentifiers_(p) {
-  const list = [p.final_cup_no, p.main_cup_no, p.prelim_cup_no, p.cup_no, p.sample_no, p.team_no, p.unique_no, String(p.id || '')]
-    .map(safeStr).filter(Boolean);
-  return Array.from(new Set(list));
+async function findDebriefParticipants_(env, code, name, phone) {
+  const result = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? AND phone=? ORDER BY id').bind(code, phone).all();
+  return (result.results || []).filter(p => {
+    if (safeStr(p.name) === name) return true;
+    if (code !== 'KTCC') return false;
+    // Team members may use the registered team contact, but arbitrary metadata
+    // and partial names are not proof that somebody belongs to this team.
+    return safeStr(p.team_name) === name || ktccMemberNames_(parseJson(p.extra_json, {}), p.affiliation).includes(name);
+  });
 }
-function mocParticipantDebriefTargets_(p) {
-  // A database row ID is never a MOC competitor number. Final-round numbers
-  // belong only to their assigned round, even if another player reuses them.
-  return [
-    { round:'예선', unit:firstNonEmpty([p.prelim_cup_no, p.cup_no, p.sample_no, p.unique_no]) },
-    { round:'본선', unit:safeStr(p.main_cup_no) },
-    { round:'결선', unit:safeStr(p.final_cup_no) }
-  ].filter(target => target.unit);
+function participantDebriefTargets_(p, code) {
+  if (code === 'IKRC') return ikrcParticipantBlindTargets_(p);
+  return (COMPETITION_ROUNDS[code] || []).map(round => ({
+    round,
+    unit:round === '예선' ? firstNonEmpty([p.prelim_cup_no, p.cup_no, p.sample_no, code === 'KTCC' ? p.team_no : '', p.unique_no])
+      : safeStr(round === '본선' ? p.main_cup_no : p.final_cup_no)
+  })).filter(target => target.unit);
 }
-function mocDebriefTargetKey_(round, unit) {
+function debriefTargetKey_(code, round, unit) {
   const selectedRound = rankingRoundScope_(round);
-  const number = safeStr(unit);
-  return selectedRound && number ? selectedRound + '::' + number : '';
+  const number = code === 'IKRC' ? participantKey_(unit) : (['KBC','KCAC'].includes(code) ? normalizeKcacParticipantUnit_(unit) : safeStr(unit));
+  return selectedRound && (COMPETITION_ROUNDS[code] || []).includes(selectedRound) && number ? code + '::' + selectedRound + '::' + number : '';
 }
-async function buildMocPublicDebriefBundle_(env, targets) {
-  const targetKeys = new Set((targets || []).map(target => mocDebriefTargetKey_(target.round, target.unit)).filter(Boolean));
-  const empty = { scores:[], headers:[], rankInfos:[], rankInfo:null, dataBasis:'MOC 라운드별 참가번호의 검수완료·수정완료 공식평가' };
+function debriefAssignmentConflict_() {
+  return {success:false, code:'DEBRIEF_ASSIGNMENT_CONFLICT', message:'동일 라운드의 참가번호가 여러 선수에게 연결되어 있습니다. 운영팀에 번호 배정 확인을 요청해주세요.'};
+}
+function publicDebriefScore_(item) {
+  // The rendered row already contains its scores, tags, comments and media.
+  // Raw batch payloads may also contain other entrants and are not public data.
+  const {payload, ...publicItem} = item;
+  return publicItem;
+}
+async function buildPublicDebriefBundle_(env, code, targets) {
+  const targetKeys = new Set((targets || []).map(target => debriefTargetKey_(code, target.round, target.unit)).filter(Boolean));
+  const empty = { scores:[], headers:[], rankInfos:[], rankInfo:null, dataBasis:code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가' };
   if (!targetKeys.size) return empty;
-  const data = await buildRankingData_(env, 'MOC');
-  const matches = item => targetKeys.has(mocDebriefTargetKey_(item.round || item['라운드'], itemNumber_(item)));
-  const scores = officialScoreItemsForOutput_('MOC', data.rows.filter(item =>
-    matches(item) && shouldCountItemInRanking_('MOC', item) && officialReviewCompleted_('MOC', item)
+  const data = await buildRankingData_(env, code);
+  const owners = new Map();
+  for (const p of data.participantRows || []) for (const t of participantDebriefTargets_(p, code)) {
+    const key = debriefTargetKey_(code, t.round, t.unit);
+    if (!targetKeys.has(key)) continue;
+    if (!owners.has(key)) owners.set(key, new Set());
+    owners.get(key).add(safeStr(p.name) + '::' + normalizePhone(p.phone));
+  }
+  if ([...owners.values()].some(values => values.size > 1)) return {...empty, assignmentConflict:true};
+  // Keep the IKRC panel/seed/average rules with the same exact target guard.
+  if (code === 'IKRC') {
+    const bundle = await buildIkrcPublicDebriefBundle_(env, targets, data);
+    return {...bundle, scores:bundle.scores.map(publicDebriefScore_)};
+  }
+  const matches = item => targetKeys.has(debriefTargetKey_(code, item.round || item['라운드'], itemNumber_(item)));
+  const scores = officialScoreItemsForOutput_(code, data.rows.filter(item =>
+    matches(item) && shouldCountItemInRanking_(code, item) && officialReviewCompleted_(code, item)
   ));
-  const publicKeys = new Set(scores.map(item => mocDebriefTargetKey_(item.round || item['라운드'], itemNumber_(item))));
-  const rankInfos = data.ranking.filter(rank => publicKeys.has(mocDebriefTargetKey_(rank.round, rank.unit)));
-  return { ...empty, scores, headers:data.headers, rankInfos, rankInfo:rankInfos[0] || null };
+  const publicKeys = new Set(scores.map(item => debriefTargetKey_(code, item.round || item['라운드'], itemNumber_(item))));
+  const rankInfos = data.ranking.filter(rank => publicKeys.has(debriefTargetKey_(code, rank.round, rank.unit)));
+  return { ...empty, scores:scores.map(publicDebriefScore_), headers:data.headers, rankInfos, rankInfo:rankInfos[0] || null };
 }
 function ikrcParticipantBlindTargets_(participant) {
   const p = participant || {};
@@ -7003,54 +6988,13 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
   if (!row) return { success: false, message: '유효한 인증번호가 없습니다.' };
   if (safeStr(row.otp) !== safeStr(otp)) return { success: false, message: '인증번호가 일치하지 않습니다.' };
   await env.DB.prepare('UPDATE otps SET used_at=? WHERE id=?').bind(nowIso(), row.id).run();
-  const pr = code === 'MOC'
-    ? await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? AND phone=? AND name=? ORDER BY id').bind(code, phone, name).all()
-    : await env.DB.prepare(`SELECT * FROM participants WHERE competition_code=? AND phone=? AND (name=? OR team_name=? OR extra_json LIKE ?) ORDER BY id`)
-      .bind(code, phone, name, name, `%${name}%`).all();
-  const participants = pr.results || [];
+  const participants = await findDebriefParticipants_(env, code, name, phone);
   if (!participants.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다.' };
-  const ikrcBlindTargets = code === 'IKRC' ? participants.flatMap(ikrcParticipantBlindTargets_) : [];
-  const ikrcBlindUnits = Array.from(new Set(ikrcBlindTargets.map(target => target.unit)));
-  const mocTargets = code === 'MOC' ? participants.flatMap(mocParticipantDebriefTargets_) : [];
-  const ids = Array.from(new Set(code === 'MOC' ? mocTargets.map(target => target.unit) : participants.flatMap(participantIdentifiers_).concat(ikrcBlindUnits))).filter(Boolean);
-  let headers = [];
-  let scoreItems = [];
-  let rankInfos = [];
-  let scoreRows = [];
-  const publicReviewFilter = code === 'KCR' ? '' : " AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료')";
-  if (code === 'IKRC') {
-    const publicBundle = await buildIkrcPublicDebriefBundle_(env, ikrcBlindTargets);
-    headers = publicBundle.headers;
-    scoreItems = publicBundle.scores;
-    rankInfos = publicBundle.rankInfos;
-  } else if (code === 'MOC') {
-    const publicBundle = await buildMocPublicDebriefBundle_(env, mocTargets);
-    headers = publicBundle.headers;
-    scoreItems = publicBundle.scores;
-    rankInfos = publicBundle.rankInfos;
-  } else if (ids.length) {
-    const placeholders = ids.map(() => '?').join(',');
-    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND unit IN (${placeholders}) ORDER BY id`).bind(code, ...ids).all();
-    scoreRows = rs.results || [];
-  }
-  if (code !== 'IKRC' && !scoreRows.length && ids.length && code !== 'MOC') {
-    const likeConds = ids.map(() => 'payload_json LIKE ?').join(' OR ');
-    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND (${likeConds}) ORDER BY id`)
-      .bind(code, ...ids.map(id => `%${id}%`)).all();
-    scoreRows = rs.results || [];
-  }
-  if (code !== 'IKRC' && !scoreRows.length && code !== 'MOC') {
-    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND (participant_name=? OR payload_json LIKE ?) ORDER BY id`)
-      .bind(code, name, `%${name}%`).all();
-    scoreRows = rs.results || [];
-  }
-  if (code !== 'IKRC' && code !== 'MOC') {
-    headers = mergeHeaders(code, scoreRows);
-    scoreItems = scoreRows.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
-    scoreItems = officialScoreItemsForOutput_(code, scoreItems.filter(item => shouldCountItemInRanking_(code, item)));
-    const rankingData = await buildRankingData_(env, code);
-    rankInfos = rankingData.ranking.filter(r => ids.includes(safeStr(r.unit)) || scoreItems.some(s => itemNumber_(s) === safeStr(r.unit)));
-  }
+  const targets = participants.flatMap(p => participantDebriefTargets_(p, code));
+  const ids = [...new Set(targets.map(target => target.unit))];
+  const publicBundle = await buildPublicDebriefBundle_(env, code, targets);
+  if (publicBundle.assignmentConflict) return debriefAssignmentConflict_();
+  const {headers, scores:scoreItems, rankInfos} = publicBundle;
   const p0 = participants[0];
   const info = {
     name: p0.name || name,

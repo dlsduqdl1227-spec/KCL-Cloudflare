@@ -1424,7 +1424,7 @@ function buildRankBox(res) {
   var isMoc = String(res.competition || '').toUpperCase() === 'MOC';
   var box = document.createElement('div');
   box.className = 'rank-box';
-  if (isKcr || isMob || isMoc) {
+  if (isKcr || isMob || isMoc || ranks.length > 1) {
     var order = {'예선':1, '본선':2, '결선':3};
     ranks = ranks.slice().sort(function(a,b){
       return (order[a.round] || 99) - (order[b.round] || 99);
@@ -1434,8 +1434,9 @@ function buildRankBox(res) {
       var round = r.round || (isMob ? 'MOB' : (isMoc ? 'MOC' : 'KCR'));
       var rankText = r.rank ? (r.totalInRound ? (r.rank + ' / ' + r.totalInRound) : String(r.rank)) : '-';
       var score = r.totalScore != null ? r.totalScore : (r.rankingScore != null ? r.rankingScore : (r.avgScore || 0));
+      if (isIkrc && r.avgScore != null) score = r.avgScore;
       html += '<div class="cell"><small>' + escHtml(round + ' 순위') + '</small><b>' + escHtml(rankText) + '</b></div>';
-      html += '<div class="cell"><small>' + escHtml(round + ' 총점') + '</small><b>' + escHtml(fmtScore(score, 2)) + '</b></div>';
+      html += '<div class="cell"><small>' + escHtml(round + (isIkrc ? ' 평균점수' : ' 총점')) + '</small><b>' + escHtml(fmtScore(score, 2)) + '</b></div>';
     });
     box.innerHTML = html + '<div class="tie-rule">동점 기준: ' + escHtml(main.tieBreakRule || (isMob ? '총점 → 센서리 → 테크니컬 → 경기시간' : (isMoc ? '총점 → 종료시간 짧은 순' : '총점 → Sweetness → Overall → 재심사'))) + '</div>';
     return box;

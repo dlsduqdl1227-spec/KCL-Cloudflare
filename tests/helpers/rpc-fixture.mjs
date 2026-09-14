@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 
 // Real Pages RPC + disposable SQLite. No Cloudflare credentials or network calls.
-export async function createRpcFixture() {
-  const source = fs.readFileSync(new URL('../../functions/api/rpc.js',import.meta.url),'utf8');
+export async function createRpcFixture(options = {}) {
+  const source = options.source || fs.readFileSync(new URL('../../functions/api/rpc.js',import.meta.url),'utf8');
   const api = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
   const db = new DatabaseSync(':memory:');
   class Statement {

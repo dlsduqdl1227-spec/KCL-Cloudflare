@@ -39,8 +39,9 @@ assert.match(functionSource(rpc, "getAdminDebriefPreviewOptions"), /requireAdmin
 assert.match(functionSource(rpc, "getAdminDebriefPreviewOptions"), /officialReviewCompleted_/, "preview choices must use each competition's official public-evaluation rule");
 const previewServer = functionSource(rpc, "getAdminDebriefPreview");
 assert.match(previewServer, /requireAdminPreviewActor_/, "preview result must be admin-only");
-assert.match(previewServer, /officialReviewCompleted_/, "preview must mirror the public official-score filter");
-assert.match(previewServer, /officialScoreItemsForOutput_/, "preview must use the same official score selection as public debriefing");
+assert.match(previewServer, /buildPublicDebriefBundle_/, "preview must call the shared public-score selection");
+assert.match(functionSource(rpc, "buildPublicDebriefBundle_"), /officialReviewCompleted_/, "shared bundle must preserve official review policy");
+assert.match(functionSource(rpc, "buildPublicDebriefBundle_"), /officialScoreItemsForOutput_/, "shared bundle must select the official scorecards");
 assert.doesNotMatch(previewServer, /UPDATE|INSERT|DELETE/, "preview must remain read-only");
 
 assert.match(admin, /\/debriefing\/\?from=admin&amp;preview=1|\/debriefing\/\?from=admin&preview=1/, "admin center must link directly to preview mode");
