@@ -1,5 +1,33 @@
 /* Shared, presentation-only defaults. Competition scoring and storage stay in their own modules. */
 :root { --kcl-focus: #7dd3fc; }
+.kcr-comparison-filters { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:12px; margin:16px 0; }
+.kcr-comparison-filters label { display:grid; gap:7px; font-size:13px; min-width:0; }
+.kcr-comparison-filters select { width:100%; min-width:0; margin:0; }
+.kcr-station-comparison { min-width:0; width:100%; padding:14px; border:1px solid #393939; border-radius:12px; background:#131313; box-sizing:border-box; }
+.kcr-station-comparison h3 { font-size:17px; margin:0 0 8px; line-height:1.5; overflow-wrap:anywhere; }
+.kcr-station-comparison h4 { font-size:15px; margin:8px 0; }
+.kcr-comparison-note { font-size:12px; color:#bbb; line-height:1.6; margin:8px 0 14px; }
+.kcr-comparison-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:12px 0; }
+.kcr-comparison-summary > div { border:1px solid #444; border-radius:10px; padding:12px; font-size:13px; line-height:1.5; }
+.kcr-comparison-summary strong { display:block; font-size:19px; margin:4px 0; }
+.kcr-comparison-summary span { color:#ccc; }
+.kcr-comparison-table-wrap { width:100%; min-width:0; overflow-x:auto; margin:14px 0; border:1px solid #3b3b3b; border-radius:8px; }
+.kcr-comparison-table-wrap table { width:100%; min-width:660px; border-collapse:collapse; font-size:12px; font-variant-numeric:tabular-nums; }
+.kcr-comparison-table-wrap caption { text-align:left; padding:12px; color:#eee; font-weight:800; background:#202020; }
+.kcr-comparison-table-wrap th,.kcr-comparison-table-wrap td { padding:10px; border-bottom:1px solid #333; text-align:right; white-space:nowrap; }
+.kcr-comparison-table-wrap th:first-child { text-align:left; min-width:120px; }
+.kcr-comparison-table-wrap thead th { background:#202020; color:#ddd; }
+.kcr-comparison-table-wrap small { display:block; color:#bbb; font-size:10px; font-weight:400; margin-top:5px; }
+.kcr-score-delta { display:block; color:#aadcf3; font-size:11px; margin-top:4px; }
+.kcr-comparison-comments { display:grid; gap:10px; }
+.kcr-comparison-comments article { background:#1e1e1e; border:1px solid #333; border-radius:9px; padding:12px; min-width:0; }
+.kcr-comparison-comments small { display:block; color:#aaa; margin:5px 0; }
+.kcr-comparison-comments p { font-size:13px; line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; margin:8px 0 0; }
+.kcr-review-comparison { width:100%; min-width:0; grid-column:1/-1; margin:12px 0; }
+.kcr-review-comparison > summary { padding:12px; font-weight:800; border:1px solid #444; border-radius:8px; cursor:pointer; }
+.kcr-review-comparison > button { margin:10px 0 !important; }
+.review-compare-btn { padding:9px 12px; border:1px solid #555; border-radius:7px; background:#222; color:#fff; font-size:12px; cursor:pointer; }
+@media(max-width:520px) { .kcr-comparison-filters { grid-template-columns:minmax(0,1fr); } .kcr-station-comparison { padding:10px; } .kcr-comparison-summary strong { font-size:17px; } }
 @media screen {
   body .global-nav-buttons {
     position:fixed; top:max(8px,env(safe-area-inset-top,0px)) !important;

@@ -13,7 +13,8 @@ assert.doesNotMatch(rpc, /memoOnce_\('schema', \(\) => ensureSchema\(env\.DB\)\)
 assert.match(rpc, /WHERE competition_code=\? AND round=\? AND unit=\? ORDER BY id DESC/, 'IKRC 중복 제출은 역할명이 바뀌어도 동일 계정·샘플 기준으로 차단해야 합니다.');
 assert.match(rpc, /if \(competitionCode === 'IKRC' && judge\) return judge;/, 'IKRC 평균은 역할 변경과 관계없이 한 계정당 한 표만 사용해야 합니다.');
 
-assert.match(assessment, /var cachedReview = normalizedCode === String\(_reviewState\.code \|\| ''\)\.toUpperCase\(\)/, 'IKRC 검수 새로고침 중 기존 목록을 유지해야 합니다.');
+assert.match(assessment, /var cachedReview = _reviewState\.fetchKey === requestKey && normalizedCode === String\(_reviewState\.code \|\| ''\)\.toUpperCase\(\)/, '동일 계정·대회·조회 목적에서만 검수 새로고침 중 기존 목록을 유지해야 합니다.');
+assert.match(assessment, /var requestKey = \[normalizedCode, requestToken, backPanel \|\| '', !!_reviewCalibrationOnly, roleTextForCode_\(normalizedCode\)\]/, '켈리브레이션과 대회 검수, 다른 계정의 캐시를 공유하면 안 됩니다.');
 assert.match(assessment, /var cachedMobReview = normalizedCode === 'MOB' \? cachedReview : null;/, '기존 MOB 날짜 병합과 새 공통 목록 보존이 함께 동작해야 합니다.');
 assert.match(assessment, /var _ikrcCalibrationRequestSeq = 0;/, 'IKRC 결과 조회는 응답 순서를 식별해야 합니다.');
 assert.match(assessment, /requestSeq !== _ikrcCalibrationRequestSeq/, '이전 스테이션의 늦은 응답이 현재 화면을 덮어쓰면 안 됩니다.');

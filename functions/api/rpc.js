@@ -3701,22 +3701,26 @@ function ikrcOfficialReviewComparison_(targetItem, officialItems) {
 }
 
 function kcrCalibrationReviewComparison_(targetItem, calibrationItems) {
+  return kcrStationReviewComparison_(targetItem, calibrationItems, true);
+}
+function kcrStationReviewComparison_(targetItem, items, calibration) {
   if (!targetItem) return null;
   const targetRound = safeStr(targetItem.round || targetItem['라운드']).replace(/\s+/g, '').toLowerCase();
   const targetUnit = safeStr(targetItem.unit || targetItem['컵번호'] || targetItem['참가자번호']).replace(/\s+/g, '').toUpperCase();
   if (!targetUnit) return null;
-  const peers = latestOfficialJudgeRows_((calibrationItems || []).filter(item => {
-    if (!item || !isCalibrationMode_(item.mode || item['모드'])) return false;
+  const peers = latestOfficialJudgeRows_((items || []).filter(item => {
+    if (!item || isCalibrationMode_(item.mode || item['모드']) !== calibration) return false;
     const itemRound = safeStr(item.round || item['라운드']).replace(/\s+/g, '').toLowerCase();
     const itemUnit = safeStr(item.unit || item['컵번호'] || item['참가자번호']).replace(/\s+/g, '').toUpperCase();
-    return itemRound === targetRound && itemUnit === targetUnit && kcrReviewStationMatches_(targetItem, item);
+    return itemRound === targetRound && itemUnit === targetUnit && kcrReviewStationMatches_(targetItem, item)
+      && (calibration || kcrProcessKeyFromPayload_(targetItem.payload || targetItem) === kcrProcessKeyFromPayload_(item.payload || item));
   }));
   if (!peers.length) return null;
   const specs = [
     ['flavor', ['Flavor(플레이버)','Flavor','플레이버']],
-    ['aftertaste', ['Aftertaste(애프터테이스트)','Aftertaste','애프터테이스트']],
+    ['aftertaste', ['Aftertaste(에프터테이스트)','Aftertaste(애프터테이스트)','Aftertaste','애프터테이스트']],
     ['acidity', ['Acidity(산미)','Acidity','산미']],
-    ['sweetness', ['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness','스윗니스','단맛']],
+    ['sweetness', ['Sweetness(단맛) ×2','Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness','스윗니스','단맛']],
     ['mouthfeel', ['Mouthfeel(마우스필)','Mouthfeel','마우스필','질감']],
     ['overall', ['Overall(오버롤)','Overall','오버롤']]
   ];
@@ -3724,24 +3728,51 @@ function kcrCalibrationReviewComparison_(targetItem, calibrationItems) {
     const row = {
       judgeName:safeStr(item.judgeName || item['심사위원명']) || '심사위원',
       role:safeStr(item.role || item['역할']),
-      total:rankingScoreFromItem_(item) || 0,
+      total:kcrOfficialScoreFromItem_(item),
+      isHead:isHeadRole_(item.role || item['역할']),
+      isCurrentJudge:itemJudgeIdentityKey_(item) === itemJudgeIdentityKey_(targetItem),
       comment:safeStr(item['종합코멘트'] || item['Overall Comment(종합 코멘트)'] || item['Overall Comment'] || item['코멘트'])
     };
-    specs.forEach(([key, labels]) => { row[key] = firstNumberFromKeys_(item, labels) || 0; });
+    row.attributeComments = specs.map(([key, labels]) => ({label:labels[0],text:safeStr(item[key.charAt(0).toUpperCase() + key.slice(1) + ' 코멘트'])})).filter(note => note.text);
+    specs.forEach(([key, labels]) => { row[key] = firstNumberFromKeys_(item, labels); });
     return row;
   });
-  const totalStats = reviewPopulationStats_(scoreRows.map(row => row.total));
+  const heads = scoreRows.filter(row => row.isHead);
+  const summarize = (rows, key) => {
+    const values = rows.map(row => row[key]).filter(value => value !== null && value !== undefined && Number.isFinite(Number(value)));
+    return values.length ? reviewPopulationStats_(values) : {avg:null, stddev:null, count:0};
+  };
+  const totalStats = summarize(scoreRows, 'total');
+  const headTotalStats = summarize(heads, 'total');
   const metrics = specs.map(([key, labels]) => {
-    const stat = reviewPopulationStats_(scoreRows.map(row => row[key]));
-    return { key, label:labels[0], avg:stat.avg, stddev:stat.stddev, count:stat.count };
+    const stat = summarize(scoreRows, key), head = summarize(heads, key);
+    return { key, label:labels[0], avg:stat.avg, stddev:stat.stddev, count:stat.count, headAvg:head.avg, headStddev:head.stddev, headCount:head.count };
+  });
+  const difference = (score, average) => score == null || average == null ? null : Math.round((score - average) * 10000) / 10000;
+  scoreRows.forEach(row => {
+    row.deviations = {total:difference(row.total, totalStats.avg)};
+    row.headDeviations = row.isHead ? {total:difference(row.total, headTotalStats.avg)} : null;
+    metrics.forEach(metric => {
+      row.deviations[metric.key] = difference(row[metric.key], metric.avg);
+      if (row.isHead) row.headDeviations[metric.key] = difference(row[metric.key], metric.headAvg);
+    });
   });
   return {
-    competitionCode:'KCR', purpose:'calibration-review', scope:'station',
+    competitionCode:'KCR', purpose:calibration ? 'calibration-review' : 'official-review', scope:'station',
+    stationId:safeStr(targetItem.stationId || (targetItem.payload && targetItem.payload.stationId) || targetItem['스테이션ID']),
     station:ikrcReviewStationLabel_(targetItem), team:ikrcReviewStationLabel_(targetItem),
     round:safeStr(targetItem.round || targetItem['라운드']), participantNo:targetUnit,
     judgeCount:scoreRows.length, totalAvg:totalStats.avg, totalStddev:totalStats.stddev,
+    headCount:heads.length, headTotalAvg:headTotalStats.avg, headTotalStddev:headTotalStats.stddev,
     metrics, judges:scoreRows
   };
+}
+
+function kcrHeadParticipatedRows_(rawRows, actor, calibration) {
+  const purposeRows = rawRows.filter(row => isCalibrationMode_(row.mode) === calibration);
+  const ownRows = purposeRows.filter(row => scoreOwnedByActor_(row, actor));
+  return purposeRows.filter(row => ownRows.some(own => own.round === row.round &&
+    kcrReviewStationMatches_({payload:parseJson(own.payload_json,{})}, {payload:parseJson(row.payload_json,{})})));
 }
 
 function mediaSummaryForPayload_(payload) {
@@ -4667,12 +4698,16 @@ async function getReviewList(env, competitionCode, actorArg) {
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
   const calibrationOnly = code === 'KCR' && !!(actorArg && actorArg.calibrationOnly);
   const actorRoleForCode = safeStr(auth.actor && auth.actor.roleMap && auth.actor.roleMap[code] || auth.actor && (auth.actor.role || auth.actor.judgeRole));
-  if (calibrationOnly && !manager && !isHeadRole_(actorRoleForCode)) {
+  const kcrCanCompare = code === 'KCR' && (hasManageAccess(auth.actor, code) || isHeadRole_(actorRoleForCode));
+  if (calibrationOnly && !kcrCanCompare) {
     return { success:false, message:'KCR 켈리브레이션 결과는 헤드 심사위원 또는 대회팀장·관리자만 확인할 수 있습니다.' };
   }
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
-  const raw = calibrationOnly ? managerRows : (manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
+  const kcrPeerRows = kcrCanCompare ? (hasManageAccess(auth.actor, code)
+    ? rawAll.filter(row => isCalibrationMode_(row.mode) === calibrationOnly)
+    : kcrHeadParticipatedRows_(rawAll, auth.actor, calibrationOnly)) : [];
+  const raw = calibrationOnly ? kcrPeerRows : (manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
   const headers = mergeHeaders(code, raw);
   let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
   if (manager && list.length) {
@@ -4692,6 +4727,11 @@ async function getReviewList(env, competitionCode, actorArg) {
       item._stddev = kcrCalibrationReviewComparison_(item, list);
       return item;
     });
+  }
+  if (code === 'KCR' && !calibrationOnly && kcrCanCompare) {
+    const peerHeaders = mergeHeaders(code, kcrPeerRows);
+    const peers = kcrPeerRows.flatMap(row => rowToReviewItems_(row, code, peerHeaders, cfg && cfg.current_round));
+    list = list.map(item => ({...item, _stddev:kcrStationReviewComparison_(item, peers, false)}));
   }
   if (code === 'IKRC') {
     const latest = latestIkrcReviewItems_(list);
