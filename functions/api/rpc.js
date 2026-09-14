@@ -1463,6 +1463,9 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
   const current = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
   if (!current) return { success: false, message: '대회를 찾을 수 없습니다: ' + code };
   const nextRound = safeStr(payload.currentRound) || current.current_round || '';
+  if ((code === 'KBC' || code === 'MOC') && /본.*결선/.test(nextRound)) {
+    return {success:false, message:'본·결선의 진행 단계를 본선 또는 결선으로 선택해주세요.'};
+  }
   const currentOptions = parseJson(current.option_settings, {});
   const nextOptions = Object.assign({}, currentOptions, payload.optionSettings && typeof payload.optionSettings === 'object' ? payload.optionSettings : {});
   let ikrcStationChanged = false;

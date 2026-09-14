@@ -22,6 +22,11 @@ button:disabled { cursor: not-allowed; }
 .kcl-camera-home { color:#e5e5e5; font-size:13px; padding:8px; white-space:nowrap; }
 input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
 .logo-chip span { color:#aaa; }
+.round-mode-control { display:grid; gap:7px; min-width:0; align-content:start; }
+.round-mode-control > label,.round-mode-control > span,.round-stage-control > label { font-size:12px; color:#bdbdbd; }
+.round-mode-control select { margin:0; min-width:0; }
+.round-stage-control { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:10px; margin-top:2px; }
+.round-stage-control[hidden] { display:none; }
 @media screen and (min-width:1120px) {
   .eval-wrap .eval-content { width:100%; max-width:1120px; margin-inline:auto; }
 }
