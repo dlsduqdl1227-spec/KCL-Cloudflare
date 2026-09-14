@@ -43,7 +43,7 @@ const RUNTIME_SCHEMA_OBJECTS = [
   'competitions', 'operators', 'sessions', 'participants', 'scores', 'otps', 'sms_logs', 'rate_limits', 'security_events', 'system_settings',
   'idx_scores_comp', 'idx_scores_comp_id', 'idx_scores_submitter_unit', 'idx_participants_comp', 'idx_operators_phone', 'idx_operators_phone_id',
   'idx_participants_lookup', 'idx_participants_unit', 'idx_participants_comp_phone_id', 'idx_scores_unit', 'idx_otps_lookup', 'idx_sessions_kind', 'idx_sessions_expires_at',
-  'idx_sms_logs_comp', 'idx_security_events_action', 'idx_scores_client_submission_unit', 'idx_operators_effective_date',
+  'idx_sms_logs_comp', 'idx_security_events_action', 'idx_scores_client_submission_unit', 'idx_scores_kcr_evaluation_key', 'idx_operators_effective_date',
   'trg_participants_registry_revision_insert', 'trg_participants_registry_revision_update', 'trg_participants_registry_revision_delete',
   'trg_operators_registry_revision_insert', 'trg_operators_registry_revision_update', 'trg_operators_registry_revision_delete'
 ];
@@ -522,6 +522,9 @@ async function ensureSchema(db) {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_client_submission_unit
       ON scores(competition_code, judge_name, json_extract(payload_json, '$.clientSubmissionId'), unit)
       WHERE COALESCE(json_extract(payload_json, '$.clientSubmissionId'), '') <> ''`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_kcr_evaluation_key
+      ON scores(json_extract(payload_json, '$.kcrEvaluationKey'))
+      WHERE competition_code='KCR' AND COALESCE(json_extract(payload_json, '$.kcrEvaluationKey'), '') <> ''`,
     ...['INSERT','UPDATE','DELETE'].flatMap(operation => ['participants','operators'].map(table => `
       CREATE TRIGGER IF NOT EXISTS trg_${table}_registry_revision_${operation.toLowerCase()}
       AFTER ${operation} ON ${table}
@@ -593,6 +596,7 @@ async function dispatch(action, args, env, request) {
   const handlers = {
     ping: async () => ({ success: true, message: 'KCL Cloudflare API 연결 성공', now: nowIso() }),
     getConfig: () => getConfig(env),
+    getKcrStationEvaluationState: () => getKcrStationEvaluationState(env, args[0]),
     judgeLogin: () => judgeLogin(env, args[0], args[1], args[2], request),
     adminLogin: () => adminLogin(env, args[0], args[1], args[2], request),
     getLoginSecurityStatus: () => getLoginSecurityStatus(env, args[0]),
@@ -675,6 +679,41 @@ async function dispatch(action, args, env, request) {
 async function getConfig(env) {
   const rows = await env.DB.prepare('SELECT * FROM competitions ORDER BY id').all();
   return { success: true, configs: (rows.results || []).map(rowToConfig) };
+}
+async function kcrOwnCompletionRows_(env, actor, round) {
+  const identity = operatorIdentityKey_(actor.name || actor.judgeName || actor.operatorName || '', normalizePhone(actor.phone));
+  // Fetch modern records for this identity only. Keep legacy fallback ownership
+  // checks, without loading every judge's full comment payload on each refresh.
+  const result = await env.DB.prepare(`SELECT id, unit, mode, judge_name, submitted_at, payload_json FROM scores
+    WHERE competition_code=? AND round=? AND (
+      json_extract(payload_json, '$.operatorIdentityKey')=? OR json_extract(payload_json, '$.judgeIdentityKey')=? OR
+      json_extract(payload_json, '$.judge.operatorIdentityKey')=? OR json_extract(payload_json, '$.judge.identityKey')=? OR
+      (COALESCE(json_extract(payload_json, '$.operatorIdentityKey'), '')='' AND COALESCE(json_extract(payload_json, '$.judgeIdentityKey'), '')=''
+       AND COALESCE(json_extract(payload_json, '$.judge.operatorIdentityKey'), '')='' AND COALESCE(json_extract(payload_json, '$.judge.identityKey'), '')='')
+    ) ORDER BY id DESC`)
+    .bind('KCR', round, identity, identity, identity, identity).all();
+  return (result.results || []).filter(row => scoreOwnedByActor_(row, actor));
+}
+function kcrCompletedUnits_(rows, calibration, station) {
+  return new Set((rows || []).filter(row => {
+    if (isCalibrationMode_(row.mode) !== !!calibration) return false;
+    return !calibration || kcrReviewStationMatches_({payload:station}, {payload:parseJson(row.payload_json, {})});
+  }).map(row => safeStr(row.unit)));
+}
+async function getKcrStationEvaluationState(env, actorArg) {
+  const auth = await requireActorForCode_(env, actorArg, 'KCR', 'KCR 평가 목록 조회 로그인이 필요합니다.');
+  if (!auth.ok) return auth.res;
+  const config = await getConfig(env);
+  const cfg = config.configs.find(item => item.code === 'KCR');
+  if (!cfg) return {success:false, message:'KCR 대회 설정을 찾지 못했습니다.'};
+  const round = normalizeRoundForCompetition_('KCR', cfg.currentRound);
+  const own = await kcrOwnCompletionRows_(env, auth.actor, round);
+  const stations = kcrStationSettingsServer_(cfg).map(station => ({
+    stationId:station.id,
+    calibrationUnits:[...kcrCompletedUnits_(own, true, {stationId:station.id, stationLabel:station.label, stationPrefix:station.prefix})]
+  }));
+  // Only completion identifiers are exposed; never peer scores, names or comments.
+  return {...config, completion:{round, officialUnits:[...kcrCompletedUnits_(own, false)], stations}};
 }
 function rowToConfig(r) {
   return {
@@ -4262,16 +4301,17 @@ function kcrStationsForPurposeServer_(cfg, roundOverride, purpose) {
   return kcrStationSettingsServer_(cfg, roundOverride).filter(station => calibration ? station.useForCalibration !== false : station.useForCompetition !== false);
 }
 
-function validateKcrStationSubmission_(payload, cfg) {
+function validateKcrStationSubmission_(payload, cfg, completedUnits = new Set()) {
   const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
   const purpose = isCalibrationMode_(payload && payload.mode) ? 'calibration' : 'competition';
   const settings = kcrStationsForPurposeServer_(cfg, payload && payload.round, purpose);
   const stationId = safeStr(payload && payload.stationId).toLowerCase();
   const station = settings.find(item => safeStr(item.id).toLowerCase() === stationId);
   if (!station) return { ok:false, message:`현재 ${purpose === 'calibration' ? '켈리브레이션' : '대회평가'}용으로 열린 KCR 스테이션을 다시 선택해주세요.` };
-  const expectedUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => String(station.start + idx));
+  const expectedUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => String(station.start + idx)).filter(unit => !completedUnits.has(unit));
+  if (!expectedUnits.length) return {ok:false, duplicate:true, message:'이미 평가완료된 스테이션입니다. 내평가 검수에서 확인·수정해주세요.'};
   if (rows.length !== expectedUnits.length) {
-    return { ok:false, message:`${station.label} 평가는 참가자번호 ${expectedUnits[0]}부터 ${expectedUnits[expectedUnits.length - 1]}까지 ${expectedUnits.length}명이 모두 있어야 저장됩니다.` };
+    return { ok:false, duplicate:completedUnits.size > 0, message:`${station.label}의 미제출 참가자 ${expectedUnits.join(', ')} (${expectedUnits.length}명)을 함께 제출해주세요. 이미 제출한 평가는 내평가 검수에서 수정할 수 있습니다.` };
   }
   const actualUnits = rows.map(row => {
     const inferred = inferScorePayload(Object.assign({}, payload, {rows:[row]}));
@@ -4402,7 +4442,10 @@ async function submitScores(env, payload, signature, request = null) {
   if (requestedRound && cfg && normalizeRoundForCompetition_(initial.code, requestedRound) !== normalizeRoundForCompetition_(initial.code, cfg.current_round)) {
     return { success:false, message:'평가를 시작한 라운드와 현재 운영 라운드가 다릅니다. 입력 내용은 유지됩니다. 운영팀장에게 라운드를 확인한 뒤 다시 제출해주세요.' };
   }
-  const submitRound = safeStr(initial.round || (cfg && cfg.current_round) || '예선');
+  const submitRound = initial.code === 'KCR'
+    ? normalizeRoundForCompetition_('KCR', initial.round || (cfg && cfg.current_round) || '예선')
+    : safeStr(initial.round || (cfg && cfg.current_round) || '예선');
+  if (initial.code === 'KCR') basePayload.round = submitRound;
   if (initial.code === 'MOB' && !hasManageAccess(auth.actor, 'MOB')) {
     const mobParticipantDate = mobActiveParticipantDateFromConfig_(cfg);
     if (mobParticipantDate) {
@@ -4436,8 +4479,10 @@ async function submitScores(env, payload, signature, request = null) {
     });
   }
   if (initial.code === 'KCR') {
-    const stationValidation = validateKcrStationSubmission_(basePayload, cfg);
-    if (!stationValidation.ok) return {success:false, message:stationValidation.message};
+    const own = await kcrOwnCompletionRows_(env, auth.actor, submitRound);
+    const completedUnits = kcrCompletedUnits_(own, isCalibrationMode_(basePayload.mode || basePayload.evalMode), basePayload);
+    const stationValidation = validateKcrStationSubmission_(basePayload, cfg, completedUnits);
+    if (!stationValidation.ok) return {success:false, duplicate:!!stationValidation.duplicate, message:stationValidation.message};
     const participantRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('KCR').all();
     const registeredNumbers = new Set((participantRows.results || [])
       .map(row => safeStr(participantRoundNumber_(row, 'KCR', submitRound)))
@@ -4548,6 +4593,14 @@ async function submitScores(env, payload, signature, request = null) {
     onePayload.computedTotalScore = x.total;
     onePayload.currentRound = x.round;
     if (!x.unit) return { success: false, message: '참가자번호/컵번호/샘플번호/팀번호를 찾지 못했습니다. 번호 입력을 확인해주세요.' };
+    if (x.code === 'KCR') {
+      // A judge has one official evaluation per entrant/round. Role, day, process
+      // and display label changes cannot create a second vote. Calibration is station-scoped.
+      onePayload.kcrEvaluationKey = await sha256Hex_(JSON.stringify([
+        'KCR', x.round, actorIdentityKey, x.unit,
+        isCalibrationMode_(x.mode) ? ['calibration', safeStr(basePayload.stationId)] : ['competition']
+      ]));
+    }
     const payloadJson = JSON.stringify(onePayload || {});
     const payloadBytes = utf8ByteLength_(payloadJson);
     if (payloadBytes > 1750000) {
@@ -4577,21 +4630,19 @@ async function submitScores(env, payload, signature, request = null) {
       }
     }
     if (x.code === 'KCR') {
-      const processKey = kcrProcessKeyFromPayload_(onePayload);
-      const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
-        .bind(x.code, x.round, x.role, x.unit).all();
-      const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
+      const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND unit=? ORDER BY id DESC`)
+        .bind(x.code, x.round, x.unit).all();
       const existingSameCategory = (existingRows.results || []).find(existing => {
         const existingPayload = parseJson(existing.payload_json, {});
         return scoreOwnedByActor_(existing, auth.actor)
-          && scoreEvaluationCategoryKey_(existing.mode) === submittedCategory
-          && (!isCalibrationMode_(x.mode) || kcrReviewStationMatches_({payload:onePayload}, {payload:existingPayload}))
-          && kcrProcessKeyFromPayload_(existingPayload) === processKey;
+          && isCalibrationMode_(existing.mode) === isCalibrationMode_(x.mode)
+          && (!isCalibrationMode_(x.mode) || kcrReviewStationMatches_({payload:onePayload}, {payload:existingPayload}));
       });
       if (existingSameCategory) {
         return {
           success:false,
           message:`이미 제출된 KCR ${x.unit} 평가입니다. 중복 제출하지 말고 검수 화면에서 수정해주세요.`,
+          duplicate:true,
           duplicateId:existingSameCategory.id
         };
       }
@@ -4647,7 +4698,7 @@ async function submitScores(env, payload, signature, request = null) {
     // 제출 인원은 현장 구성에 따라 달라질 수 있으므로 스테이션 확정과 집계에서 고정 인원수를 강제하지 않습니다.
     const ikrcOfficialHead = x.code === 'IKRC' && !isCalibrationMode_(x.mode) && isHeadRole_(x.role);
     const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (ikrcOfficialHead ? '검수완료' : '미검수');
-    const insertVerb = safeStr(onePayload.clientSubmissionId) ? 'INSERT OR IGNORE' : 'INSERT';
+    const insertVerb = x.code !== 'KCR' && safeStr(onePayload.clientSubmissionId) ? 'INSERT OR IGNORE' : 'INSERT';
     const insertStatement = env.DB.prepare(`${insertVerb} INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(nowIso(), x.code, x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
@@ -4671,7 +4722,16 @@ async function submitScores(env, payload, signature, request = null) {
       batchStatements.push(env.DB.prepare('INSERT OR REPLACE INTO sessions (token, kind, payload_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
         .bind(receiptInfo.token, 'SCORE_SUBMISSION_RECEIPT', JSON.stringify(receiptPayload), '2035-12-31T23:59:59.000Z', receiptPayload.completedAt));
     }
-    await env.DB.batch(batchStatements);
+    try {
+      await env.DB.batch(batchStatements);
+    } catch (error) {
+      if (initial.code !== 'KCR' || !/UNIQUE constraint|idx_scores_kcr_evaluation_key|idx_scores_client_submission_unit/i.test(String(error && error.message || error))) throw error;
+      // Another tab/device may win between the read check and this atomic batch.
+      // The unique index rolls back this entire batch, including its receipt.
+      const saved = await scoreSubmissionReceipt_(env, 'KCR', basePayload.clientSubmissionId, actorIdentityKey);
+      if (saved.receipt && Number(saved.receipt.inserted || 0) > 0) return {success:true, idempotent:true, inserted:Number(saved.receipt.inserted), skipped:0, message:'이미 안전하게 저장된 동일 전체제출입니다.'};
+      return {success:false, duplicate:true, message:'이미 제출된 KCR 평가입니다. 중복 저장하지 않았습니다. 내평가 검수에서 확인·수정해주세요.'};
+    }
     inserted += scoreInsertCount;
   }
   if (inserted && initial.code === 'IKRC' && !isCalibrationMode_(initial.mode)) {

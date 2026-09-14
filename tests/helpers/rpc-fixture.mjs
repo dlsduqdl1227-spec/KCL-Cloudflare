@@ -11,10 +11,13 @@ export async function createRpcFixture(options = {}) {
     bind(...params) { return new Statement(this.sql,params); }
     async first() { return db.prepare(this.sql).get(...this.params) || null; }
     async all() { return {results:db.prepare(this.sql).all(...this.params)}; }
-    async run() { const r=db.prepare(this.sql).run(...this.params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}; }
+    runSync() { const r=db.prepare(this.sql).run(...this.params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}; }
+    async run() { return this.runSync(); }
   }
   const env = {DB:{prepare:sql=>new Statement(sql),async batch(statements){
-    db.exec('BEGIN');try{const result=[];for(const s of statements)result.push(await s.run());db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}
+    if(options.beforeBatch)await options.beforeBatch(statements);
+    // A D1 batch is atomic. Do not yield mid-transaction when testing concurrent requests.
+    db.exec('BEGIN');try{const result=[];for(const s of statements)result.push(s.runSync());db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}
   }},KCL_ADMIN_NAME:'검수 QA',KCL_ADMIN_PHONE:'01099990000',KCL_ADMIN_PASSWORD:'local-qa-only',KCL_ADMIN_SECRET_CODE:'5061'};
   let sequence=0;
   async function handle(body) {

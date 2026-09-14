@@ -66,7 +66,7 @@ assert.match(submitClient, /'스테이션':_cupping\.station\.label/);
 assert.match(rpc, /function validateKcrStationOptionSettings_/);
 assert.match(rpc, /function validateKcrStationSubmission_/);
 assert.match(rpc, /function kcrStationSettingsServer_/);
-assert.match(functionSource(rpc, "submitScores"), /validateKcrStationSubmission_\(basePayload, cfg\)/);
+assert.match(functionSource(rpc, "submitScores"), /validateKcrStationSubmission_\(basePayload, cfg, completedUnits\)/);
 assert.match(functionSource(rpc, "submitScores"), /missingParticipantNumbers/);
 assert.match(functionSource(rpc, "submitScores"), /stationTeam/);
 assert.match(functionSource(rpc, "rowToReviewItem"), /normalizedCode === 'IKRC' \|\| normalizedCode === 'KCR'/);

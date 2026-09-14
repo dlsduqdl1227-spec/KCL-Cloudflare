@@ -541,7 +541,7 @@ partialKcrPayload.rows.pop();
 partialKcrPayload.stationSampleCount = 1;
 const partialKcrSubmit = await rpc("submitScores", partialKcrPayload);
 assert.equal(partialKcrSubmit.success, false, "KCR station submission must reject a missing participant");
-assert.match(partialKcrSubmit.message, /2명이 모두 있어야/);
+assert.match(partialKcrSubmit.message, /미제출 참가자 1, 2 \(2명\).*함께 제출/);
 
 const participantSave = await rpc(
   "upsertParticipant",
