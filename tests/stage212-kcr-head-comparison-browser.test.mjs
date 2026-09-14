@@ -37,6 +37,14 @@ try{
     assert.ok(!(await page.locator('.review-stddev-panel').innerText()).includes('켈리 기록'));
     await page.locator('#review-list .review-edit-btn').first().click();
     await page.waitForSelector('#pReviewEdit.active');
+    const layout=await page.evaluate(()=>{
+      const panel=document.getElementById('pReviewEdit').getBoundingClientRect(),nav=document.querySelector('.global-nav-buttons').getBoundingClientRect();
+      return {panelWidth:panel.width,panelTop:panel.top,navBottom:nav.bottom};
+    });
+    assert.ok(layout.panelTop>=layout.navBottom,'KCR review heading must not overlap global navigation');
+    assert.ok(layout.panelWidth>=Math.min(width,1120)-1,'KCR review uses desktop width instead of a 560px phone column');
+    assert.equal(await page.locator('#review-edit-save-only').isVisible(),true,'persistent top save remains accessible');
+    assert.equal(await page.locator('#review-edit-sticky-actions').isVisible(),false,'duplicate save bar must not cover station statistics');
     assert.equal(await page.evaluate(()=>canReviewEditDetails()),true);
     assert.ok(await page.locator('#review-edit-fields input[type=range]').count()>0);
     await page.locator('.kcr-review-comparison > summary').click();
@@ -44,6 +52,7 @@ try{
     const refreshed=page.waitForResponse(r=>r.request().postDataJSON()?.action==='getReviewList');
     await page.getByRole('button',{name:'통계 새로고침',exact:true}).click();await refreshed;
     await page.waitForFunction(()=>!document.querySelector('.kcr-review-comparison > button').disabled);
+    assert.ok(await page.locator('.kcr-comparison-refresh').evaluate(b=>b.offsetWidth>=128&&b.offsetHeight>=44&&b.scrollWidth<=b.clientWidth),'refresh label fits inside a touch-sized button');
     assert.deepEqual(await page.locator('#review-edit-fields input,#review-edit-fields textarea').evaluateAll(nodes=>nodes.map(n=>[n.id,n.value,n.disabled])),originalInputs);
     assert.match(await page.locator('.kcr-review-comparison-body').innerText(),/QA 두 번째 헤드 대회 기록/);
     assert.equal((await inspectPage(page)).pageOverflow,false);

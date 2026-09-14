@@ -1984,8 +1984,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/shared-sensory-tags.js?v=stage116"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js?v=stage202"></script>
-<link rel="stylesheet" href="/assets/kcl-ui.css?v=212">
-<script defer src="/assets/kcl-ui.js?v=212"></script>
+<link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
+<script defer src="/assets/kcl-ui.js?v=213"></script>
 </head>
 <body>
 
@@ -6606,6 +6606,8 @@ function setReviewEditMetric_(item) {
 
 function goReviewByCode(code, name, backPanel) {
   var normalizedCode = String(code || '').toUpperCase();
+  document.getElementById('pReview').dataset.competition = normalizedCode;
+  document.getElementById('pReviewEdit').dataset.competition = normalizedCode;
   var requestGeneration = ++_reviewRequestGeneration;
   var requestToken = _judge.judgeToken || '';
   var requestKey = [normalizedCode, requestToken, backPanel || '', !!_reviewCalibrationOnly, roleTextForCode_(normalizedCode)].join('|');
@@ -10165,7 +10167,7 @@ function openReviewEdit(item) {
   if (String(_reviewState.code || '').toUpperCase() === 'KCR' && item._stddev) {
     var comparison = document.createElement('details');
     comparison.className = 'kcr-review-comparison';
-    comparison.innerHTML = '<summary>스테이션 점수·코멘트·편차 확인</summary><button type="button" class="list-refresh-btn">통계 새로고침</button><div class="kcr-review-comparison-body">' + buildKcrStationComparisonHtml_(item._stddev) + '</div>';
+    comparison.innerHTML = '<summary>스테이션 점수·코멘트·편차 확인</summary><button type="button" class="kcr-comparison-refresh">통계 새로고침</button><div class="kcr-review-comparison-body">' + buildKcrStationComparisonHtml_(item._stddev) + '</div>';
     comparison.querySelector('button').onclick = function(){ refreshKcrReviewComparison_(item, comparison); };
     wrap.appendChild(comparison);
   }

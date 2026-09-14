@@ -26,6 +26,16 @@
 .kcr-review-comparison { width:100%; min-width:0; grid-column:1/-1; margin:12px 0; }
 .kcr-review-comparison > summary { padding:12px; font-weight:800; border:1px solid #444; border-radius:8px; cursor:pointer; }
 .kcr-review-comparison > button { margin:10px 0 !important; }
+.kcr-comparison-refresh { display:inline-flex; align-items:center; justify-content:center; width:auto; min-width:128px; min-height:44px; padding:10px 16px; font-family:inherit; font-size:13px; font-weight:700; line-height:1.4; color:#eee; background:#222; border:1px solid #555; border-radius:8px; white-space:nowrap; cursor:pointer; }
+@media screen {
+  #pReview[data-competition="KCR"],#pReviewEdit[data-competition="KCR"] { width:100%; max-width:1120px; margin-inline:auto; min-height:0 !important; top:max(56px,calc(env(safe-area-inset-top,0px) + 56px)); }
+  #pReview[data-competition="KCR"] .eval-content,#pReviewEdit[data-competition="KCR"] .eval-content { width:100%; max-width:none; min-height:0; overflow-y:auto !important; }
+  #pReviewEdit[data-competition="KCR"] .eval-content { padding-bottom:24px; }
+  #pReview[data-competition="KCR"] .eval-header,#pReviewEdit[data-competition="KCR"] .eval-header { gap:16px; padding-top:14px !important; }
+  #pReview[data-competition="KCR"] .eval-header > div:first-child,#pReviewEdit[data-competition="KCR"] .eval-header > div:first-child { min-width:0; overflow-wrap:anywhere; }
+  /* The fixed top navigation already contains Save; avoid covering the comparison table twice. */
+  #pReviewEdit[data-competition="KCR"] .review-edit-sticky-actions { display:none !important; }
+}
 .review-compare-btn { padding:9px 12px; border:1px solid #555; border-radius:7px; background:#222; color:#fff; font-size:12px; cursor:pointer; }
 @media(max-width:520px) { .kcr-comparison-filters { grid-template-columns:minmax(0,1fr); } .kcr-station-comparison { padding:10px; } .kcr-comparison-summary strong { font-size:17px; } }
 @media screen {
