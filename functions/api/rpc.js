@@ -127,7 +127,8 @@ function participantRoundPolicy_(code, round) {
   return base;
 }
 function actorCanSeeParticipantIdentity_(actor, code) {
-  if (['KCAC','KCR'].includes(safeStr(code).toUpperCase())) return !!hasAdmin(actor);
+  if (safeStr(code).toUpperCase() === 'KCAC') return !!hasAdmin(actor);
+  if (safeStr(code).toUpperCase() === 'KCR') return !!hasAdmin(actor);
   return !!(hasAdmin(actor) || hasManageAccess(actor, code));
 }
 
