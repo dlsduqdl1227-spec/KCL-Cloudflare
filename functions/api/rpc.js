@@ -3206,6 +3206,7 @@ function ikrcOfficialHeadItem_(code, item) {
 }
 function officialReviewCompleted_(code, item) {
   const normalizedCode = safeStr(code).toUpperCase();
+  if (normalizedCode === 'KCR') return !!item && shouldCountItemInRanking_(normalizedCode, item);
   if (normalizedCode === 'IKRC' && item && !isCalibrationMode_(item['모드'] || item.mode)) return true;
   return ikrcOfficialHeadItem_(code, item) || reviewCompletedStatus_(item && (item['검수상태'] || item.status));
 }
@@ -4790,7 +4791,8 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
     return { success:false, message:`${managerStation.label}에 배정된 팀장은 다른 스테이션 평가를 검수할 수 없습니다.` };
   }
   if (!canReviewScoreRow_(current, actor, code, manager)) return { success: false, message: '본인이 제출한 평가만 직접 검수할 수 있습니다. 전체 검수는 관리자 또는 대회팀장 권한이 필요합니다.' };
-  const statusRequested = safeStr(newStatus) || current.review_status || '미검수';
+  const statusRequested = code === 'KCR' && !isCalibrationMode_(current.mode)
+    ? '수정완료' : (safeStr(newStatus) || current.review_status || '미검수');
   if (safeStr(current.review_status) === '검수완료' && statusRequested === '미검수' && !manager) {
     return { success: false, message: '검수완료 항목을 미검수로 되돌리는 권한은 관리자 또는 대회팀장에게만 있습니다.' };
   }
@@ -5713,6 +5715,7 @@ function roundName_(v, fallback='예선') { const s=safeStr(v); if (/final|결�
 function shouldCountItemInRanking_(code, item) {
   if (!item) return false;
   if (isCalibrationMode_(item['모드'] || item.mode)) return false;
+  if (safeStr(code).toUpperCase() === 'KCR') return !isCalibrationMode_(item['검수상태'] || item.status);
   if (safeStr(code).toUpperCase() === 'IKRC') return true;
   // 기존 OT 데이터의 헤드 점수가 '미검수'로 저장되어 있어도 새 운영규칙상 별도 검수 없이 공식점수로 인정한다.
   if (ikrcOfficialHeadItem_(code, item)) return true;
@@ -6553,7 +6556,7 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const rows = rawRows.map(item => redactKcacIdentityForActor_(auth.actor, code, item, data.headers));
   const rankInfo = redactKcacIdentityForActor_(auth.actor, code, rawRankInfo, data.headers);
   let totalScore = 0, count = 0, reviewedCount = 0, disqualified = false; const reasons = [];
-  rows.forEach(item => { const n = toNumber(item['총점'] ?? item['최종점수'] ?? item.totalScore); if (n !== null) { totalScore += n; count++; } if (reviewCompletedStatus_(item['검수상태'])) reviewedCount++; if (item.disqualified || item['실격여부'] === 'Y') { disqualified = true; if (item['실격사유']) reasons.push(item['실격사유']); } });
+  rows.forEach(item => { const n = toNumber(item['총점'] ?? item['최종점수'] ?? item.totalScore); if (n !== null) { totalScore += n; count++; } if (code === 'KCR' ? shouldCountItemInRanking_(code,item) : reviewCompletedStatus_(item['검수상태'])) reviewedCount++; if (item.disqualified || item['실격여부'] === 'Y') { disqualified = true; if (item['실격사유']) reasons.push(item['실격사유']); } });
   totalScore = Math.round(totalScore * 100) / 100;
   const rankingTotal = rankInfo && rankInfo.totalScore !== undefined && rankInfo.totalScore !== null ? Number(rankInfo.totalScore) : null;
   const displayTotal = Number.isFinite(rankingTotal) ? rankingTotal : totalScore;
@@ -6659,7 +6662,7 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
     rankInfo,
     previewUnit:safeStr(detail.unitDisplay || detail.unit),
     previewRound:roundName_(detail.round || round, ''),
-    previewDataBasis:'검수완료·수정완료 공식평가'
+    previewDataBasis:code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가'
   };
 }
 
@@ -6969,6 +6972,7 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
   let scoreItems = [];
   let rankInfos = [];
   let scoreRows = [];
+  const publicReviewFilter = code === 'KCR' ? '' : " AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료')";
   if (code === 'IKRC') {
     const publicBundle = await buildIkrcPublicDebriefBundle_(env, ikrcBlindTargets);
     headers = publicBundle.headers;
@@ -6976,17 +6980,17 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
     rankInfos = publicBundle.rankInfos;
   } else if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
-    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료') AND unit IN (${placeholders}) ORDER BY id`).bind(code, ...ids).all();
+    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND unit IN (${placeholders}) ORDER BY id`).bind(code, ...ids).all();
     scoreRows = rs.results || [];
   }
   if (code !== 'IKRC' && !scoreRows.length && ids.length) {
     const likeConds = ids.map(() => 'payload_json LIKE ?').join(' OR ');
-    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료') AND (${likeConds}) ORDER BY id`)
+    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND (${likeConds}) ORDER BY id`)
       .bind(code, ...ids.map(id => `%${id}%`)).all();
     scoreRows = rs.results || [];
   }
   if (code !== 'IKRC' && !scoreRows.length) {
-    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=? AND REPLACE(review_status, ' ', '') IN ('검수완료','수정완료') AND (participant_name=? OR payload_json LIKE ?) ORDER BY id`)
+    const rs = await env.DB.prepare(`SELECT * FROM scores WHERE competition_code=?${publicReviewFilter} AND (participant_name=? OR payload_json LIKE ?) ORDER BY id`)
       .bind(code, name, `%${name}%`).all();
     scoreRows = rs.results || [];
   }
@@ -7007,7 +7011,7 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
     identifiers: ids
   };
   const token = await issueSession(env, 'debrief', { competition: code, name, phone, identifiers: ids }, 3600);
-  return { success: true, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : '검수완료·수정완료 공식평가' };
+  return { success: true, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : (code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가') };
 }
 
 function _num(v) {

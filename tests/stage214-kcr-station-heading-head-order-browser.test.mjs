@@ -52,8 +52,8 @@ try{
     // Official comparison uses the same head-first order, including own-review details.
     await page.evaluate(actor=>{_judge=actor;loadSelectPanel();},judges[0]);
     await page.locator('[data-kcr-mode=review]').click();
-    await page.waitForSelector('.review-compare-btn');await page.locator('.review-compare-btn').first().click();
-    await assertHeadFirst(page.locator('.review-stddev-panel'));
+    await page.waitForSelector('#kcr-review-comparison .kcr-station-comparison');
+    await assertHeadFirst(page.locator('#kcr-review-comparison'));
     await page.locator('.review-edit-btn').first().click();await page.waitForSelector('#pReviewEdit.active');
     await page.locator('.kcr-review-comparison > summary').click();
     await assertHeadFirst(page.locator('.kcr-review-comparison-body'));

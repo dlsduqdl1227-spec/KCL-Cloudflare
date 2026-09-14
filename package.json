@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "pretest": "node tests/stage198-kcac-pattern-identity-debrief.test.mjs && node tests/stage200-finals-readiness.test.mjs && node tests/stage202-submission-round-context.test.mjs && node tests/stage205-shared-final-rounds.test.mjs && node tests/stage207-ranking-round-isolation.test.mjs && node tests/stage209-kcr-station-session.test.mjs && node tests/stage211-kcr-head-comparison.test.mjs",
-    "test:kcr-head-ui": "node tests/stage212-kcr-head-comparison-browser.test.mjs && node tests/stage214-kcr-station-heading-head-order-browser.test.mjs",
+    "pretest": "node tests/stage198-kcac-pattern-identity-debrief.test.mjs && node tests/stage200-finals-readiness.test.mjs && node tests/stage202-submission-round-context.test.mjs && node tests/stage205-shared-final-rounds.test.mjs && node tests/stage207-ranking-round-isolation.test.mjs && node tests/stage209-kcr-station-session.test.mjs && node tests/stage211-kcr-head-comparison.test.mjs && node tests/stage215-kcr-immediate-official-ranking.test.mjs",
+    "test:kcr-head-ui": "node tests/stage212-kcr-head-comparison-browser.test.mjs && node tests/stage214-kcr-station-heading-head-order-browser.test.mjs && node tests/stage216-kcr-official-selection-browser.test.mjs",
     "test:kcr-ui": "node tests/stage210-kcr-navigation-session-browser.test.mjs",
     "test:browser:finals": "node tests/stage201-finals-browser.test.mjs",
     "test:browser:release": "node tests/stage203-release-browser.test.mjs && node tests/stage204-review-debrief-browser.test.mjs && node tests/stage206-shared-final-rounds-browser.test.mjs && node tests/stage208-ranking-round-browser.test.mjs",

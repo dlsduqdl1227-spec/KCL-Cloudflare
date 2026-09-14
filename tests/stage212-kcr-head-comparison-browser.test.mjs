@@ -31,10 +31,10 @@ try{
     await page.evaluate(()=>goReview());
     await page.waitForSelector('#review-list .review-edit-btn');
     assert.equal(await page.locator('#kcr-comparison-result').count(),0,'no calibration cache leaks into official review');
-    assert.equal(await page.locator('#review-list .review-compare-btn').count(),2,'two own cup submissions only');
-    await page.locator('#review-list .review-compare-btn').first().click();
-    assert.match(await page.locator('.review-stddev-panel').innerText(),/대회평가/);
-    assert.ok(!(await page.locator('.review-stddev-panel').innerText()).includes('켈리 기록'));
+    assert.equal(await page.locator('#kcr-review-unit option').count(),2,'two own cup submissions available in selector');
+    assert.equal(await page.locator('#review-list .review-edit-btn').count(),1,'only selected cup is shown');
+    assert.match(await page.locator('#kcr-review-comparison').innerText(),/대회평가/);
+    assert.ok(!(await page.locator('#kcr-review-comparison').innerText()).includes('켈리 기록'));
     await page.locator('#review-list .review-edit-btn').first().click();
     await page.waitForSelector('#pReviewEdit.active');
     const layout=await page.evaluate(()=>{

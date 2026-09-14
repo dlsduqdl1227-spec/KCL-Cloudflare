@@ -48,6 +48,6 @@ const renderReviewEnd = assessment.indexOf('function isReviewEditableHeader', re
 const renderReview = assessment.slice(renderReviewStart, renderReviewEnd);
 assert.doesNotMatch(renderReview, /stddev-btn|>표준편차</);
 // KCR now has an explicitly requested station comparison; MOB must not inherit it.
-assert.match(renderReview, /if \(reviewCode === 'KCR' && getItemStddev_\(item\) && canShowStddevButton_\(code, item\)\) actionHtml \+= '<button type="button" class="review-compare-btn">스테이션 비교<\/button>'/);
+assert.match(renderReview, /if \(!target && reviewCode === 'KCR' && getItemStddev_\(item\) && canShowStddevButton_\(code, item\)\) actionHtml \+= '<button type="button" class="review-compare-btn">스테이션 비교<\/button>'/);
 
 process.stdout.write('Stage156 list refresh and MOB stddev visibility tests passed.\n');
