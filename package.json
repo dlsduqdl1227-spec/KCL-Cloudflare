@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kcr-edit-blind": "node tests/stage226-kcr-edit-blind.test.mjs",
     "test:kcr-completion": "node tests/stage224-kcr-completion-duplicate.test.mjs && node tests/stage225-kcr-completion-browser.test.mjs",
     "test:kcr-days": "node tests/stage222-kcr-preliminary-days.test.mjs && node tests/stage223-kcr-preliminary-days-browser.test.mjs",
     "test:debrief-preview-rank": "node tests/stage221-admin-debrief-preview-rank-browser.test.mjs",

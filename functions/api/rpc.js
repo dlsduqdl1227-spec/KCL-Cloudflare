@@ -127,7 +127,7 @@ function participantRoundPolicy_(code, round) {
   return base;
 }
 function actorCanSeeParticipantIdentity_(actor, code) {
-  if (safeStr(code).toUpperCase() === 'KCAC') return !!hasAdmin(actor);
+  if (['KCAC','KCR'].includes(safeStr(code).toUpperCase())) return !!hasAdmin(actor);
   return !!(hasAdmin(actor) || hasManageAccess(actor, code));
 }
 
@@ -713,7 +713,11 @@ async function getKcrStationEvaluationState(env, actorArg) {
     calibrationUnits:[...kcrCompletedUnits_(own, true, {stationId:station.id, stationLabel:station.label, stationPrefix:station.prefix})]
   }));
   // Only completion identifiers are exposed; never peer scores, names or comments.
-  return {...config, completion:{round, officialUnits:[...kcrCompletedUnits_(own, false)], stations}};
+  const participants = hasAdmin(auth.actor)
+    ? (await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('KCR').all()).results
+      .map(row => ({number:safeStr(participantRoundNumber_(row, 'KCR', round)), name:row.name || '', affiliation:row.affiliation || ''})).filter(row => row.number)
+    : [];
+  return {...config, completion:{round, officialUnits:[...kcrCompletedUnits_(own, false)], stations, participants}};
 }
 function rowToConfig(r) {
   return {
@@ -2805,9 +2809,24 @@ function redactParticipantIdentityObject_(value, headers) {
   return out;
 }
 function redactKcacIdentityForActor_(actor, code, value, headers) {
+  if (safeStr(code).toUpperCase() === 'KCR' && !hasAdmin(actor)) return redactKcrParticipantIdentity_(value, headers);
   return safeStr(code).toUpperCase() === 'KCAC' && !hasAdmin(actor)
     ? redactParticipantIdentityObject_(value, headers)
     : value;
+}
+function redactKcrParticipantIdentity_(value, headers) {
+  // Redact response copies only, including nested payload/extraFields/comparison
+  // objects. Never alter saved scores, judge identities, tags or authored comments.
+  function copy(input) {
+    if (Array.isArray(input)) return input.map(copy);
+    if (!input || typeof input !== 'object') return input;
+    const out = {};
+    for (const [key, item] of Object.entries(input)) {
+      out[key] = isParticipantIdentityField_(key) || /^(name|teamName|participantTeamName)$/.test(key) ? '' : copy(item);
+    }
+    return out;
+  }
+  return redactParticipantIdentityObject_(copy(value), headers);
 }
 function participantScheduleForRound_(row, round) {
   const extra = parseJson(row && row.extra_json, {});
@@ -4775,7 +4794,7 @@ async function getReviewList(env, competitionCode, actorArg) {
   const raw = calibrationOnly ? kcrPeerRows : (manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
   const headers = mergeHeaders(code, raw);
   let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
-  if (manager && list.length) {
+  if ((manager || (code === 'KCR' && hasAdmin(auth.actor))) && list.length) {
     const pRows = scopedParticipantRowsRaw || await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
     const pIdx = indexParticipantIdentities_(pRows.results || [], code);
     list = list.map(item => enrichReviewItemWithParticipant_(item, lookupParticipantIdentity_(pIdx, item.round || item['라운드'] || (cfg && cfg.current_round), itemNumber_(item) || item.unit), code));
@@ -4823,6 +4842,7 @@ async function getReviewList(env, competitionCode, actorArg) {
   if (code === 'KCAC' && !hasAdmin(auth.actor)) {
     list = list.map(item => redactParticipantIdentityObject_(item, headers));
   }
+  if (code === 'KCR' && !hasAdmin(auth.actor)) list = list.map(item => redactKcrParticipantIdentity_(item, headers));
   return {
     success: true,
     list,

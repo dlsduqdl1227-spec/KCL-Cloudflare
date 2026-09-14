@@ -6956,7 +6956,11 @@ function renderKcrOfficialReviewOverview_(list, code, headers, supersededCount) 
   }
   function renderStation(){
     _kcrOfficialReviewSelection.station=stations.value;units.innerHTML='';
-    Object.keys(groups[stations.value].units).sort(function(a,b){return a.localeCompare(b,'ko',{numeric:true});}).forEach(function(unit){units.add(new Option(unit+'번',unit));});
+    Object.keys(groups[stations.value].units).sort(function(a,b){return a.localeCompare(b,'ko',{numeric:true});}).forEach(function(unit){
+      var row=groups[stations.value].units[unit][0];
+      var identity=isAdminRole() ? [row.participantName || row['선수명'],row.participantAffiliation || row['소속']].filter(Boolean).join(' · ') : '';
+      units.add(new Option(unit+'번'+(identity?' · '+identity:''),unit));
+    });
     if (groups[stations.value].units[_kcrOfficialReviewSelection.unit]) units.value=_kcrOfficialReviewSelection.unit;
     renderUnit();
   }
@@ -11506,6 +11510,13 @@ function kcrStationCompletion_(station, calibration) {
   if (!Array.isArray(done)) return null;
   return kcrStationParticipantNumbers_(station).filter(function(unit){return done.indexOf(String(unit)) >= 0;});
 }
+function kcrAdminParticipantLabel_(unit, calibration) {
+  var state = _kcrCompletionState;
+  if (calibration || !isAdminRole() || !state || state.ownerToken !== (_judge.judgeToken || '') || state.round !== (_selComp && _selComp.currentRound)) return '';
+  var matches = (state.participants || []).filter(function(row){return String(row.number) === String(unit);});
+  if (matches.length !== 1) return '';
+  return [matches[0].name, matches[0].affiliation].filter(Boolean).join(' · ');
+}
 function renderKcrStationChoices_() {
   var wrap = document.getElementById('kcr-station-grid');
   var help = document.getElementById('kcr-station-help');
@@ -11533,13 +11544,13 @@ function renderKcrStationChoices_() {
       '<span>' + (isActiveCalibrationMode_() ? '켈리브레이션 · 프로세스 구분 없음' : escHtml(kcrProcessOptionLabel_(kcrProcessKeyFromValue_(station.process)))) + '</span>' +
       '<span class="kcr-completion-badge">' + (!done ? '제출 여부 확인 필요 · 새로고침' : (complete ? '✓ ' + label : done.length ? '일부 ' + label : '미평가') + ' ' + done.length + '/' + cups.length) + '</span>' +
       (done && !complete ? '<span>미평가 ' + (cups.length - done.length) + '명 평가 시작</span>' : '') +
-      (done ? '<span class="kcr-unit-status">' + cups.map(function(unit){var checked=done.indexOf(String(unit))>=0;return '<span' + (checked ? ' class="is-complete"' : '') + '>' + escHtml(unit) + '번' + (checked ? ' ✓' : '') + '</span>';}).join('') + '</span>' : '') +
+      (done ? '<span class="kcr-unit-status">' + cups.map(function(unit){var checked=done.indexOf(String(unit))>=0;var identity=kcrAdminParticipantLabel_(unit,isActiveCalibrationMode_());return '<span' + (checked ? ' class="is-complete"' : '') + '>' + escHtml(unit) + '번' + (identity ? ' · '+escHtml(identity) : '') + (checked ? ' ✓' : '') + '</span>';}).join('') + '</span>' : '') +
     '</button>';
   }).join('');
   if (!stations.length) wrap.innerHTML = '<div class="review-edit-help" style="grid-column:1/-1">선택한 조건에 오픈된 스테이션이 없습니다. 예선 일차 또는 운영 설정을 확인해주세요.</div>';
   if (help) help.textContent = isActiveCalibrationMode_()
     ? '켈리브레이션용 스테이션의 참가자번호만 표시됩니다. 제출 결과는 점수·코멘트·표준편차 확인용이며 공식 순위에는 반영되지 않습니다.'
-    : '본인이 제출한 참가자는 평가완료로 표시됩니다. 제출한 점수·코멘트는 내평가 검수에서 수정할 수 있습니다.';
+    : '평가완료 후에도 내평가 검수에서 점수·스마트태그·코멘트를 언제든 수정할 수 있습니다. 새 평가로 중복 제출만 차단됩니다.';
   if (help && !isActiveCalibrationMode_() && _kcrCompletionState && _kcrCompletionState.ownerToken === (_judge.judgeToken || '') && _kcrCompletionState.officialUnits.length) {
     var review = document.createElement('button'); review.type='button'; review.className='btn'; review.textContent='내평가 검수'; review.onclick=function(){goReview();}; help.appendChild(review);
   }
@@ -11711,7 +11722,9 @@ function renderCuppingCupNav() {
     var btn = document.createElement('button');
     btn.className = 'cup-btn' + (i === _cupping.currentIdx ? ' active' : '') +
                     (c.noteOverall && c.noteOverall.length >= 10 ? ' done' : '');
-    btn.innerHTML = '<span class="cup-btn-num">Cup ' + c.cupNumber + '</span>' +
+    var identity = kcrAdminParticipantLabel_(c.cupNumber, _cupping.isCalibrationMode);
+    btn.innerHTML = '<span class="cup-btn-num">Cup ' + escHtml(c.cupNumber) + '</span>' +
+                    (identity ? '<span style="display:block;white-space:normal;overflow-wrap:anywhere;font-size:12px">' + escHtml(identity) + '</span>' : '') +
                     '<span class="cup-btn-score">' + fmtScore(total,2) + '</span>';
     btn.onclick = (function(n) { return function(){ switchCuppingCup(n); }; })(i);
     nav.appendChild(btn);
