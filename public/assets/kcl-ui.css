@@ -1,5 +1,35 @@
 /* Shared, presentation-only defaults. Competition scoring and storage stay in their own modules. */
 :root { --kcl-focus: #7dd3fc; }
+@media screen {
+  body .global-nav-buttons {
+    position:fixed; top:max(8px,env(safe-area-inset-top,0px)) !important;
+    left:max(8px,env(safe-area-inset-left,0px)) !important; right:auto !important;
+    display:flex; flex-wrap:nowrap !important; gap:8px !important;
+    width:auto; max-width:calc(100vw - 16px) !important; z-index:1500 !important;
+  }
+  body .global-nav-buttons .global-nav-btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    width:auto !important; min-height:40px !important; margin:0 !important;
+    padding:0 13px !important; font-family:inherit; font-weight:700; line-height:1.2; font-size:13px !important;
+    color:#fff; background:#111; border:1px solid #444; border-radius:24px;
+    text-decoration:none; white-space:nowrap; cursor:pointer;
+  }
+  .global-nav-btn .home-dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+  body.kcl-added-navigation { padding-top:max(64px,calc(env(safe-area-inset-top,0px) + 56px)) !important; }
+  body.kcl-added-navigation > .wrap { margin-top:12px; }
+  .kcl-replaced-home { display:none !important; }
+  .tabs[role="tablist"] .tab-btn,.admin-tabs button { min-height:44px; line-height:1.35; }
+  .kcr-station-purpose-field { display:grid !important; grid-template-columns:minmax(0,1fr); gap:5px; align-content:start; }
+  .kcr-station-purpose-field select { width:100%; min-width:0; margin:0; }
+  .participant-table[data-competition="KCR"] .cell-schedule { display:none; }
+}
+@media screen and (max-width:1100px) {
+  .ikrc-station-config-row.kcr-station-config-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .kcr-station-config-row .ikrc-station-row-title,
+  .kcr-station-config-row .kcr-station-process-field,
+  .kcr-station-config-row .kcr-station-purpose-field { grid-column:1/-1; }
+  .kcr-station-config-row .ikrc-station-remove { grid-column:1/-1; width:100% !important; }
+}
 :where(button,a,input,select,textarea,summary,[role="button"],[tabindex]):focus-visible {
   outline: 3px solid var(--kcl-focus) !important;
   outline-offset: 3px !important;
@@ -54,4 +84,4 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter:none; }
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
 }
-@media print { .kcl-skip-link, .ranking-round-controls { display:none !important; } }
+@media print { .kcl-skip-link, .ranking-round-controls, .global-nav-buttons { display:none !important; } }

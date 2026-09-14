@@ -644,6 +644,7 @@ async function dispatch(action, args, env, request) {
     verifyOTP: () => verifyOTP(env, args[0], args[1], args[2], args[3], request),
     sendTestSMS: () => sendTestSMS(env, args[0], args[1], request),
     refreshAdminActor: () => refreshAdminActor(env, args[0]),
+    logoutSession: () => logoutSession(env, args[0]),
     getRegistryLiveState: () => getRegistryLiveState(env, args[0], args[1], args[2]),
     getSystemStatus: () => getSystemStatus(env, args[0]),
     generateCuppingComment: () => generateCuppingComment(args[0]),
@@ -3708,7 +3709,7 @@ function kcrCalibrationReviewComparison_(targetItem, calibrationItems) {
     if (!item || !isCalibrationMode_(item.mode || item['모드'])) return false;
     const itemRound = safeStr(item.round || item['라운드']).replace(/\s+/g, '').toLowerCase();
     const itemUnit = safeStr(item.unit || item['컵번호'] || item['참가자번호']).replace(/\s+/g, '').toUpperCase();
-    return itemRound === targetRound && itemUnit === targetUnit && ikrcReviewStationMatches_(targetItem, item);
+    return itemRound === targetRound && itemUnit === targetUnit && kcrReviewStationMatches_(targetItem, item);
   }));
   if (!peers.length) return null;
   const specs = [
@@ -4152,6 +4153,14 @@ function ikrcReviewStationLabel_(item) {
   return safeStr(item['스테이션'] || item.stationLabel || payload.stationLabel || item.team || item['팀']);
 }
 
+function kcrReviewStationMatches_(target, candidate) {
+  const targetId = safeStr(target && (target.stationId || (target.payload && target.payload.stationId)));
+  const candidateId = safeStr(candidate && (candidate.stationId || (candidate.payload && candidate.payload.stationId)));
+  // Labels may be reused after removing/reordering stations; stable IDs take precedence.
+  if (targetId && candidateId) return targetId === candidateId;
+  return ikrcReviewStationMatches_(target, candidate);
+}
+
 function kcrStationProcessServer_(value, index=0) {
   const text = safeStr(value).replace(/\s+/g, '').toLowerCase();
   if (/washed|wash|워시|워쉬/.test(text)) return 'Washed';
@@ -4408,6 +4417,10 @@ async function submitScores(env, payload, signature, request = null) {
     basePayload.stationLabel = stationValidation.station.label;
     basePayload.stationPrefix = stationValidation.station.prefix;
     basePayload.stationProcess = stationValidation.station.process;
+    if (isCalibrationMode_(basePayload.mode || basePayload.evalMode)) {
+      basePayload.mode = 'KCR 스테이션 켈리브레이션';
+      basePayload.evalMode = basePayload.mode;
+    }
     basePayload.stationSampleCount = stationValidation.expectedUnits.length;
     rows.forEach(row => {
       if (!row || typeof row !== 'object') return;
@@ -4536,6 +4549,7 @@ async function submitScores(env, payload, signature, request = null) {
         const existingPayload = parseJson(existing.payload_json, {});
         return scoreOwnedByActor_(existing, auth.actor)
           && scoreEvaluationCategoryKey_(existing.mode) === submittedCategory
+          && (!isCalibrationMode_(x.mode) || kcrReviewStationMatches_({payload:onePayload}, {payload:existingPayload}))
           && kcrProcessKeyFromPayload_(existingPayload) === processKey;
       });
       if (existingSameCategory) {
@@ -6672,6 +6686,12 @@ async function sendTestSMS(env, phone, actorArg, request = null) {
   const res = await sendSms_(env, phone, text, { competition_code: 'ALL', recipient_name: actor.name || actor.judgeName || '관리자', purpose: 'test' });
   if (!res.success) return { success: false, message: res.devMode ? 'SMS 환경변수가 없어 개발 모드입니다. Cloudflare 환경변수를 설정해주세요.' : ('SMS 발송 실패: ' + (res.message || 'SMS_ERROR')), detail: res };
   return { success: true, message: '테스트 문자를 발송했습니다.', provider: res.provider, detail: res.safeDetail || null };
+}
+
+async function logoutSession(env, actorArg) {
+  const token = safeStr(actorArg && actorArg.judgeToken);
+  if (token) await env.DB.prepare("DELETE FROM sessions WHERE token=? AND kind='judge'").bind(token).run();
+  return {success:true};
 }
 
 async function refreshAdminActor(env, actorArg) {

@@ -27,7 +27,7 @@ for (const code of ['KCR', 'IKRC']) {
   );
 }
 assert.match(assessment, /function setStationEvaluationRefreshState_\(code, loading\)/);
-assert.match(assessment, /function refreshStationEvaluationList_\(code\)[\s\S]*?\.getConfig\(\)/);
+assert.match(assessment, /function refreshStationEvaluationList_\(code, silent\)[\s\S]*?\.getConfig\(\)/);
 
 const reviewStart = assessment.indexOf('function goReviewByCode(code, name, backPanel)');
 const reviewEnd = assessment.indexOf('function isKcacFinalReviewItem_', reviewStart);

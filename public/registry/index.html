@@ -53,8 +53,8 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
 @media(max-width:560px){.schedule-form-grid{grid-template-columns:1fr}.schedule-row{display:block}.schedule-row>*+*{margin-top:7px}.schedule-row-actions{margin-top:10px}.schedule-row-actions .btn{width:auto}.schedule-assignment-tools .btn{width:100%}.participant-list-controls{width:100%;justify-content:flex-start}.participant-sort-select{flex:1 1 170px}.participant-list-controls .btn{flex:0 0 auto}}
 
 </style>
-<link rel="stylesheet" href="/assets/kcl-ui.css?v=203">
-<script defer src="/assets/kcl-ui.js?v=203"></script>
+<link rel="stylesheet" href="/assets/kcl-ui.css?v=210">
+<script defer src="/assets/kcl-ui.js?v=210"></script>
 </head>
 <body>
 <div class="wrap">
@@ -146,14 +146,14 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
       <div class="card player-workspace-card">
         <div class="section-title">
           <div>
-            <div class="label">선수·일정 관리</div>
-            <div class="hint">선수 기본정보와 예선 일정을 한 화면에서 바로 저장합니다.</div>
+            <div class="label" id="participantWorkspaceTitle">선수·일정 관리</div>
+            <div class="hint" id="participantWorkspaceHint">선수 기본정보와 예선 일정을 한 화면에서 바로 저장합니다.</div>
           </div>
         </div>
         <div class="section-title">
           <div>
             <div class="label" id="participantFormLabel">선수 추가</div>
-            <div class="hint">선수명·소속·참가번호·연락처·예선 일정만 입력하면 됩니다.</div>
+            <div class="hint" id="participantFieldsHint">선수명·소속·참가번호·연락처·예선 일정만 입력하면 됩니다.</div>
           </div>
         </div>
         <div class="participant-core-grid">
@@ -201,9 +201,9 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
         <div class="schedule-assignment-tools">
           <label class="form-field date-field"><span class="field-label">선택 선수 예선 일정</span><input id="bulkParticipantDate" type="date" title="선택 선수 예선 일정" onclick="openDatePicker_(this)"></label>
           <button class="btn secondary small" onclick="loadParticipants()">새로고침</button>
-          <button class="btn small" onclick="bulkUpdateParticipantPrelimDate_()">선택 선수 일정 일괄 변경</button>
+          <button class="btn small" id="bulkParticipantDateButton" onclick="bulkUpdateParticipantPrelimDate_()">선택 선수 일정 일괄 변경</button>
         </div>
-        <div class="mode-note compact">선수를 여러 명 체크하고 날짜를 선택하면 예선 일정만 한 번에 변경됩니다. 선수정보와 평가점수는 그대로 유지됩니다.</div>
+        <div class="mode-note compact" id="bulkParticipantDateHelp">선수를 여러 명 체크하고 날짜를 선택하면 예선 일정만 한 번에 변경됩니다. 선수정보와 평가점수는 그대로 유지됩니다.</div>
         <div class="participant-table-wrap"><table class="table participant-table" id="partTable"></table></div>
       </div>
     </section>
@@ -729,6 +729,15 @@ function importParticipants(){msg('partMsg','등록 중...');rpc('importParticip
 function importOperators(){msg('opMsg','등록 중...');rpc('importOperators',[{competitionCode:document.getElementById('comp').value,csv:document.getElementById('operatorsCsv').value},actor],function(res){msg('opMsg',(res.message||'완료')+(res.errors&&res.errors.length?'\n'+res.errors.join('\n'):''),!res.success,res.success);loadOperators();})}
 function setFieldVisible_(id, visible, placeholder, labelText){var el=document.getElementById(id);if(!el)return;var field=el.closest&&el.closest('.form-field');(field||el).classList.toggle('field-hidden',!visible);el.classList.remove('field-hidden');if(placeholder)el.placeholder=placeholder;var label=field&&field.querySelector('.field-label');if(label&&labelText)label.textContent=labelText;}
 function updateManualParticipantFields(){var code=((document.getElementById('comp')||{}).value||'KBC').toUpperCase();
+  var isKcr=code==='KCR';
+  document.getElementById('participantWorkspaceTitle').textContent=isKcr?'선수 관리':'선수·일정 관리';
+  document.getElementById('participantWorkspaceHint').textContent=isKcr?'선수 기본정보를 등록하고 운영관리에서 평가 스테이션을 설정합니다.':'선수 기본정보와 예선 일정을 한 화면에서 바로 저장합니다.';
+  document.getElementById('participantFieldsHint').textContent=isKcr?'선수명·소속·참가번호·연락처를 입력하세요.':'선수명·소속·참가번호·연락처·예선 일정만 입력하면 됩니다.';
+  document.getElementById('tabbtn-players').textContent=isKcr?'선수':'선수·일정';
+  setFieldVisible_('bulkParticipantDate',!isKcr);
+  setHidden_('bulkParticipantDateButton',isKcr);setHidden_('bulkParticipantDateHelp',isKcr);
+  var sort=document.getElementById('participantSortMode');sort.querySelector('[value="schedule"]').hidden=isKcr;
+  if(isKcr&&sort.value==='schedule'){sort.value='number-asc';participantSortMode='number-asc';}
   var help=document.getElementById('manualFieldHelp'); if(help)help.textContent='본·결선 진출자는 아래 배정을 펼쳐 해당 라운드 번호와 일정을 입력하세요. 기존 평가 기록은 변경되지 않습니다.';
   setFieldVisible_('mMainNo',code==='KBC'||code==='MOC');setFieldVisible_('mMainDate',code==='KBC'||code==='MOC');
   var opTeam=document.getElementById('opTeam'); var opHelp=document.getElementById('operatorTeamHelp');
@@ -737,7 +746,9 @@ function updateManualParticipantFields(){var code=((document.getElementById('com
   setFieldVisible_('mNo',true,code==='KTCC'?'팀번호':'참가번호',code==='KTCC'?'팀번호':'참가번호');
   setFieldVisible_('mName',true,code==='KTCC'?'팀명':'선수명',code==='KTCC'?'팀명':'선수명');
   setFieldVisible_('mPhone',true,'숫자만 입력','연락처'); setFieldVisible_('mAff',true,code==='KTCC'?'예: 신예림, 심소현':'소속',code==='KTCC'?'팀원 이름':'소속');
-  setFieldVisible_('mDate',true,'','예선 일정');setFieldVisible_('mCup',false);setFieldVisible_('mSample',false);
+  setFieldVisible_('mDate',!isKcr,'','예선 일정');setFieldVisible_('mCup',false);setFieldVisible_('mSample',false);
+  setFieldVisible_('opTeam',!isKcr);
+  if(isKcr&&opHelp)opHelp.textContent='평가할 스테이션을 선택하면 헤드·심사위원 점수가 해당 스테이션에 저장됩니다.';
   syncOperatorRoleOptions();
 }
 function participantFormSnapshot_(){return JSON.stringify([editingParticipantId||'',selectedCompetitionCode_()].concat(['mNo','mName','mPhone','mAff','mDate','mMainNo','mMainDate','mFinalNo','mFinalDate'].map(function(id){return document.getElementById(id).value;})));}
@@ -751,7 +762,8 @@ function saveOneParticipant(){var code=document.getElementById('comp').value;var
   payload.extra.roundSchedules=JSON.parse(JSON.stringify(payload.extra.roundSchedules||{}));
   [['본선','mMainDate'],['결선','mFinalDate']].forEach(function(pair){var previous=payload.extra.roundSchedules[pair[0]]||{};payload.extra.roundSchedules[pair[0]]=Object.assign({},previous,{date:document.getElementById(pair[1]).value||''});});
   // 예선 기본정보 수정이 별도로 저장한 본·결선 일정/번호를 덮어쓰지 않도록 합니다.
-  if(competitionDate){payload.extra['대회일']=competitionDate;payload.extra['예선일']=competitionDate;payload.extra.competitionDate=competitionDate;}else{delete payload.extra['대회일'];delete payload.extra['예선일'];delete payload.extra.competitionDate;}
+  if(code==='KCR'){delete payload.competitionDate;}
+  else if(competitionDate){payload.extra['대회일']=competitionDate;payload.extra['예선일']=competitionDate;payload.extra.competitionDate=competitionDate;}else{delete payload.extra['대회일'];delete payload.extra['예선일'];delete payload.extra.competitionDate;}
   if(!code||!String(payload.name||'').trim()){msg('manualMsg','대회와 선수명·팀명을 입력해주세요.',true);return;}
   var snapshot=participantFormSnapshot_();
   var action=kclUi.beginAction(document.getElementById('participantSaveBtn'),'저장 중...',function(){msg('manualMsg','저장 확인이 지연되고 있습니다. 입력 내용은 유지했습니다. 목록을 새로고침해 반영 여부를 확인해주세요.',true);});

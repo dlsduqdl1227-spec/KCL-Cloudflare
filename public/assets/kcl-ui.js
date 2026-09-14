@@ -20,6 +20,30 @@
       return action;
     }
   };
+  function installCommonNavigation() {
+    if (location.pathname === '/' || location.pathname === '/index.html') return;
+    var nav = document.querySelector('.global-nav-buttons');
+    if (!nav) {
+      nav = document.createElement('nav');
+      nav.className = 'global-nav-buttons';
+      nav.innerHTML = '<button type="button" class="global-nav-btn">← 뒤로가기</button><button type="button" class="global-nav-btn"><span class="home-dot"></span>홈</button>';
+      nav.children[0].onclick = function () {
+        if (typeof window.goBackContext_ === 'function') return window.goBackContext_();
+        var sameOrigin = false;
+        try { sameOrigin = new URL(document.referrer).origin === location.origin; } catch(e) {}
+        if (sameOrigin && history.length > 1) history.back();
+        else location.href = location.pathname.startsWith('/registry') ? '/admin/' : '/';
+      };
+      nav.children[1].onclick = function () { location.href = '/'; };
+      document.body.prepend(nav);
+      document.body.classList.add('kcl-added-navigation');
+    }
+    nav.setAttribute('aria-label','페이지 이동');
+    var back = nav.querySelector('.global-nav-btn');
+    if (back) back.textContent = '← 뒤로가기';
+    document.querySelectorAll('.nav a[href="/"],a.home[href="/"],.kcl-camera-home').forEach(function(el){el.hidden=true;el.classList.add('kcl-replaced-home');});
+  }
+  installCommonNavigation();
   // Enhance only semantics and keyboard input; never read/write evaluation values or storage.
   function nameControl(el) {
     if (el.hasAttribute('aria-label') || el.hasAttribute('aria-labelledby') || (el.labels && el.labels.length)) return;
@@ -52,7 +76,8 @@
     if (el.matches('[role="tab"]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
       var tablist = el.closest('[role="tablist"]');
       if (!tablist) return;
-      var tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+      var tabs = Array.from(tablist.querySelectorAll('[role="tab"]')).filter(function(tab){return !tab.disabled && tab.getClientRects().length && !tab.hidden;});
+      if (!tabs.length) return;
       var index = tabs.indexOf(el);
       var next = event.key === 'Home' ? 0 : (event.key === 'End' ? tabs.length-1 : (index + (event.key==='ArrowRight'?1:-1) + tabs.length) % tabs.length);
       event.preventDefault(); tabs[next].focus(); tabs[next].click(); return;

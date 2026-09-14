@@ -34,7 +34,7 @@ assert.match(functionSource(assessment, "renderKcrStationChoices_"), /startKcrSt
 assert.match(functionSource(assessment, "startKcrStation_"), /initCuppingEval\(cups/);
 assert.match(functionSource(assessment, "startKcrStation_"), /station\.process/);
 assert.match(functionSource(assessment, "startKcrStation_"), /registeredTargetsForRange_\('KCR'/);
-assert.match(functionSource(assessment, "showCuppingSetup"), /renderKcrStationChoices_/);
+assert.match(functionSource(assessment, "showCuppingSetup"), /refreshStationEvaluationList_\('KCR', true\)/);
 assert.doesNotMatch(functionSource(assessment, "showCuppingSetup"), /switchCuppingFinalsTab/);
 
 const configHtml = functionSource(assessment, "configSelectableOptionsHtml_");
@@ -51,7 +51,7 @@ assert.match(functionSource(assessment, "ikrcRenderStationConfigForRound_"), /co
 
 assert.match(assessment, /data-kcr-mode="cal-station"/);
 assert.match(assessment, /스테이션 켈리브레이션/);
-assert.match(functionSource(assessment, "goCalibration"), /code === 'KCR' && scope === 'station'/);
+assert.match(functionSource(assessment, "goCalibration"), /code === 'KCR'\) scope = 'station'/);
 assert.match(functionSource(assessment, "setEvaluationPurpose_"), /스테이션 켈리브레이션/);
 assert.match(functionSource(assessment, "evaluationPurposeExtraFields_"), /'스테이션'/);
 

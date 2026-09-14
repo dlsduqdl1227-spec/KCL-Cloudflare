@@ -98,9 +98,9 @@ assert.match(kcrSubmitSource, /종합코멘트 사용여부/);
 assert.match(rpc, /'종합코멘트 사용여부'/);
 assert.match(assessment, /data-kcr-select-actions/);
 assert.match(assessment, /data-kcr-mode="cal-station"/);
-assert.match(assessment, /data-kcr-mode="cal-all"/);
+assert.doesNotMatch(assessment, /data-kcr-mode="cal-all"/);
 assert.match(extractFunction(assessment, "adminRenderRunCards_"), /kcr-cal-station/);
-assert.match(extractFunction(assessment, "adminRenderRunCards_"), /kcr-cal-all/);
+assert.doesNotMatch(extractFunction(assessment, "adminRenderRunCards_"), /kcr-cal-all/);
 assert.match(extractFunction(assessment, "loadTeamPanel"), /kcrCalibrationButtons/);
 
 assert.doesNotMatch(assessment, /onclick="generateMobComment\(\)"/);

@@ -41,6 +41,7 @@ vm.runInContext([
   functionSource(assessment, "kcrDefaultStationProcess_"),
   functionSource(assessment, "kcrStationProcess_"),
   functionSource(assessment, "kcrStationSettings_"),
+  functionSource(assessment, "kcrStationPurposeFlag_"),
   functionSource(assessment, "kcrStationParticipantNumbers_"),
 ].join("\n"), context);
 

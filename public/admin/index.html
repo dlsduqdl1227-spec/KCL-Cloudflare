@@ -33,8 +33,8 @@ html,body{width:100%;overflow-x:hidden}.wrap,.panel{max-width:100%}.top{flex-wra
 html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavior-y:auto!important;-webkit-overflow-scrolling:touch!important;}
 @media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}}
 </style>
-<link rel="stylesheet" href="/assets/kcl-ui.css?v=203">
-<script defer src="/assets/kcl-ui.js?v=203"></script>
+<link rel="stylesheet" href="/assets/kcl-ui.css?v=210">
+<script defer src="/assets/kcl-ui.js?v=210"></script>
 </head>
 <body>
 <main class="wrap">
@@ -83,13 +83,13 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
 <script src="/assets/kcl-api-shim.js?v=stage154"></script>
 <script>
 function msg(text, type){var el=document.getElementById('msg');el.textContent=text||'';el.className='msg'+(type==='err'?' err':(type==='ok'?' ok':''));}
-function saveActor(actor){try{localStorage.setItem('kclAdminActor', JSON.stringify(actor));}catch(e){}}
+function saveActor(actor){try{localStorage.setItem('kclAdminActor', JSON.stringify(actor));if(actor.judgeToken)localStorage.setItem('kclAssessmentSession',JSON.stringify({judgeToken:actor.judgeToken}));}catch(e){}}
 function isLegacyDefaultActor(actor){
   var n=String((actor&&(actor.name||actor.judgeName))||'').trim();
   var p=String((actor&&actor.phone)||'').replace(/[^0-9]/g,'');
   return n==='관리자' && p==='01000000000';
 }
-function clearSavedActor(){try{localStorage.removeItem('kclAdminActor');}catch(e){}}
+function clearSavedActor(){try{localStorage.removeItem('kclAdminActor');localStorage.removeItem('kclAssessmentSession');}catch(e){}}
 function readActor(){
   try{
     var actor=JSON.parse(localStorage.getItem('kclAdminActor')||'null');

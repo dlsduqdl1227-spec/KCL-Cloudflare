@@ -138,7 +138,7 @@ assert.match(teamPanelSource, /전체 켈리브레이션/);
 assert.match(teamPanelSource, /대회평가시작/);
 assert.match(teamPanelSource, /내평가검수/);
 assert.match(teamPanelSource, /심사 켈리브레이션/);
-assert.match(teamPanelSource, /스테이션 켈리브레이션/);
+assert.match(teamPanelSource, /data-act="kcr-cal-station">켈리브레이션/);
 assert.match(teamPanelSource, /MOB 심사 켈리브레이션/);
 
 process.stdout.write("Stage160 IKRC workflow naming, station identity, and blind assignment tests passed.\n");

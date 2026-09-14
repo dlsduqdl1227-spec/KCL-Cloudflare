@@ -773,7 +773,7 @@ for (const [mode, team] of [
   const calibrationPayload = kcrStationPayload(judge, kcrStation1, [64, 65], mode);
   calibrationPayload.team = team;
   const submitted = await rpc("submitScores", calibrationPayload);
-  assert.equal(submitted.success, true, `${mode}: ${submitted.message}`);
+  assert.equal(submitted.success, mode !== 'KCR 전체 켈리브레이션', `${mode}: ${submitted.message}`);
 }
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%스테이션 켈리브레이션%' AND team='스테이션 1'").get().n,
@@ -781,8 +781,8 @@ assert.equal(
 );
 assert.equal(
   testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores WHERE competition_code='KCR' AND mode LIKE '%전체 켈리브레이션%' AND team='전체 켈리브레이션팀'").get().n,
-  2,
-  "KCR overall calibration must use the shared overall-calibration team",
+  0,
+  "KCR old overall entry is normalized to station calibration and cannot duplicate it",
 );
 const independentKcrRows = testDb.raw
   .prepare("SELECT judge_name, unit, total_score FROM scores WHERE competition_code='KCR' AND mode NOT LIKE '%켈리브레이션%' ORDER BY judge_name, unit")
