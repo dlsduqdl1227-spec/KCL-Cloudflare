@@ -4458,7 +4458,25 @@ function ikrcAddStationConfigRow_(prefix, code) {
   var prefixIndex = 0;
   while (usedPrefixes[ikrcDefaultStationPrefix_(prefixIndex)] && prefixIndex < 100) prefixIndex++;
   var nextStationId = ikrcNextStationId_(container);
-  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({id:nextStationId,label:'스테이션 ' + (count + 1),prefix:ikrcDefaultStationPrefix_(prefixIndex),start:1,end:10,process:kcrDefaultStationProcess_(count),prelimDay:newDay,useForCalibration:code !== 'KCR',useForCompetition:true}, count, code));
+  var nextStart = 1, nextEnd = 10, nextProcess = kcrDefaultStationProcess_(count);
+  if (code === 'KCR') {
+    // Only suggest the next nine numbers when adding a row. Never rewrite
+    // saved ranges: a manager's later manual edits remain authoritative.
+    Array.prototype.forEach.call(container.querySelectorAll('[data-ikrc-station-row]'), function(row){
+      var purpose = row.querySelector('[data-field="purpose"]');
+      if (purpose && purpose.value === 'calibration') return;
+      var endInput = row.querySelector('[data-field="end"]');
+      var processInput = row.querySelector('[data-field="process"]');
+      var endNumber = Number(endInput && endInput.value);
+      if (Number.isInteger(endNumber) && endNumber >= nextStart) {
+        nextStart = endNumber + 1;
+        if (processInput) nextProcess = processInput.value;
+      }
+    });
+    nextEnd = nextStart + 8;
+    if (nextEnd > 999) { toast('다음 9명 범위가 참가자번호 999를 초과합니다. 기존 범위를 확인해주세요.', true); return; }
+  }
+  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({id:nextStationId,label:'스테이션 ' + (count + 1),prefix:ikrcDefaultStationPrefix_(prefixIndex),start:nextStart,end:nextEnd,process:nextProcess,prelimDay:newDay,useForCalibration:code !== 'KCR',useForCompetition:true}, count, code));
   ikrcRenumberStationConfigRows_(container);
   if (panel) kcrFilterStationConfigRows_(panel);
 }
@@ -19626,9 +19644,38 @@ function kclScheduleEvalDraftSave_() {
 function kclRestoreDraftForCode_(code, draft) {
   if (!draft || !draft.state) return;
   _kclDraftApplying = true;
+  var restored = false;
   try {
     if (code === 'KCR' && draft.state.cupping) {
-      _cupping = draft.state.cupping;
+      var savedCupping = draft.state.cupping;
+      var currentCupping = _cupping;
+      if (currentCupping.station && savedCupping.station) {
+        if (String(currentCupping.station.id) !== String(savedCupping.station.id)) throw new Error('다른 스테이션의 임시저장입니다.');
+        var currentNumbers = currentCupping.cups.map(function(c){ return String(c.cupNumber); });
+        var savedNumbers = (savedCupping.cups || []).map(function(c){ return String(c.cupNumber); });
+        var changedRange = JSON.stringify(currentNumbers) !== JSON.stringify(savedNumbers);
+        if (changedRange) {
+          // Keep the complete old draft, including cups outside the new range.
+          localStorage.setItem(kclDraftKey_('KCR') + '::station-range-backup::' + Date.now(), JSON.stringify(draft));
+        }
+        var savedByNumber = {};
+        (savedCupping.cups || []).forEach(function(c){ savedByNumber[String(c.cupNumber)] = c; });
+        var selectedNumber = savedNumbers[Number(savedCupping.currentIdx) || 0];
+        _cupping = Object.assign({}, savedCupping, {
+          station:currentCupping.station, compCode:'KCR', mode:currentCupping.mode,
+          process:currentCupping.process, isFinalsMode:currentCupping.isFinalsMode,
+          isCalibrationMode:currentCupping.isCalibrationMode,
+          cups:currentCupping.cups.map(function(c){ return savedByNumber[String(c.cupNumber)] || c; }),
+          currentIdx:Math.max(0, currentNumbers.indexOf(selectedNumber))
+        });
+        if (changedRange) {
+          _cupping.clientSubmissionId = '';
+          _cupping.submitted = false;
+          toast('변경된 스테이션 범위를 반영했습니다. 기존 입력은 같은 컵 번호에 복원했으며 이전 임시저장 원본도 보관했습니다.');
+        }
+      } else {
+        _cupping = savedCupping;
+      }
       normalizeCuppingCupUiState_();
       _cupping.currentIdx = Math.max(0, Math.min(Number(_cupping.currentIdx) || 0, Math.max(0, _cupping.cups.length - 1)));
       _cupping.currentAttr = (_cupping.cups[_cupping.currentIdx] && _cupping.cups[_cupping.currentIdx].activeAttr) || _cupping.currentAttr || 'flavor';
@@ -19711,12 +19758,15 @@ function kclRestoreDraftForCode_(code, draft) {
       kclApplyFormValues_(draft.form);
       if (typeof updateKtccScore === 'function') updateKtccScore();
     }
-    kclApplyFormValues_(draft.form);
+    // KCR inputs were rendered from cup identity above; a stale DOM snapshot
+    // must never copy the formerly selected cup into a different current cup.
+    if (code !== 'KCR') kclApplyFormValues_(draft.form);
+    restored = true;
     kclDraftStatus_('이전 작성 내용 복원 완료');
   } catch(e) {
     toast('임시저장 복원 중 오류가 발생했습니다: ' + (e && e.message ? e.message : e), true);
   } finally {
-    setTimeout(function(){ _kclDraftApplying = false; kclSaveActiveEvalDraftNow_(true); }, 250);
+    setTimeout(function(){ _kclDraftApplying = false; if (restored) kclSaveActiveEvalDraftNow_(true); }, 250);
   }
 }
 function kclMaybeRestoreDraftForActiveEval_() {
