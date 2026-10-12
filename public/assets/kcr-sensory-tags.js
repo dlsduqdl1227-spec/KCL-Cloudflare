@@ -62,7 +62,8 @@
         level: 2,
         isFamily: false,
         parentId: isSelectableFamily(category, family) ? familyTagId(category, family) : "",
-        isActive: true
+        isActive: true,
+        competitionCodes: value[3] || []
       });
     });
   }
@@ -206,7 +207,8 @@
   add("acidity", "improvement", "improvement", [
     ["acidity_vinegar_like", "식초 같은", "Vinegar-like"],
     ["acidity_unripe_fruit_like", "덜 익은 과일 같은", "Unripe-fruit-like"],
-    ["acidity_sour_candy_like", "신 사탕 같은", "Sour-candy-like"]
+    ["acidity_sour_candy_like", "신 사탕 같은", "Sour-candy-like"],
+    ["acidity_dry", "드라이한", "Dry", ["KCR"]]
   ]);
 
   add("sweetness", "primary", "primary", [

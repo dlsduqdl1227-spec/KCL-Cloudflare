@@ -1995,13 +1995,15 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 .panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap{overflow-y:visible;}
 @media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}.eval-wrap,.panel{min-height:100dvh!important;overflow-y:visible!important}.tabs,.review-tabs{overflow-x:auto!important;}}
 </style>
-<script src="/assets/kcr-sensory-tags.js?v=stage111"></script>
-<script src="/assets/kcr-sensory-comments.js?v=stage111"></script>
-<script src="/assets/shared-sensory-tags.js?v=stage116"></script>
+<script src="/assets/kcr-sensory-tags.js?v=228"></script>
+<script src="/assets/kcr-sensory-comments.js?v=228"></script>
+<script src="/assets/shared-sensory-tags.js?v=228"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js?v=stage202"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
+<link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
+<script defer src="/assets/kcr-viewport.js?v=228"></script>
 </head>
 <body>
 
@@ -11732,6 +11734,7 @@ function backToCuppingSetup() {
 
 function renderCuppingCupNav() {
   var nav = document.getElementById('cupping-cup-nav');
+  var previousScrollLeft = nav.scrollLeft;
   Array.from(nav.querySelectorAll('.cup-btn')).forEach(function(b){ b.remove(); });
   var submitBtn = null;
 
@@ -11747,6 +11750,14 @@ function renderCuppingCupNav() {
     btn.onclick = (function(n) { return function(){ switchCuppingCup(n); }; })(i);
     nav.appendChild(btn);
   });
+  // Rebuilding score labels must not send the selected ninth cup off-screen.
+  nav.scrollLeft = previousScrollLeft;
+  var active = nav.querySelector('.cup-btn.active');
+  if (active) {
+    var activeBox = active.getBoundingClientRect(), navBox = nav.getBoundingClientRect();
+    if (activeBox.right > navBox.right) nav.scrollLeft += activeBox.right - navBox.right + 12;
+    else if (activeBox.left < navBox.left) nav.scrollLeft -= navBox.left - activeBox.left + 12;
+  }
 }
 
 function switchCuppingCup(idx) {
@@ -14643,6 +14654,7 @@ function isEvaluationActionTarget_(target) {
   return !!(control && control.closest('.eval-wrap.active,#pReviewEdit.active'));
 }
 function dismissMobileKeyboardBeforeAction_(e) {
+  if (document.body.classList.contains('kcr-viewport-active')) return;
   if (!isEvaluationActionTarget_(e && e.target)) return;
   var active = document.activeElement;
   if (!isMobileKeyboardField_(active)) return;
@@ -14658,6 +14670,7 @@ if (!window.PointerEvent) {
 document.addEventListener('focusin', function(e) {
   var t = e.target;
   cancelMobileFocusScroll_();
+  if (document.body.classList.contains('kcr-viewport-active')) return;
   if (!isIosTouchBrowser_() || !isMobileKeyboardField_(t)) return;
   _mobileFocusScrollTimer = setTimeout(function() {
     _mobileFocusScrollTimer = null;
@@ -14674,6 +14687,8 @@ document.addEventListener('focusout', cancelMobileFocusScroll_);
 // iOS Safari 더블탭 줌 방지 (단, 폼 컨트롤은 제외)
 var _lastTap = 0;
 document.addEventListener('touchend', function(e) {
+  // KCR uses CSS touch-action; cancelling touchend also cancels a rapid second button tap.
+  if (document.body.classList.contains('kcr-viewport-active') || (e.target.closest && e.target.closest('#pCuppingSetup'))) return;
   var now = Date.now();
   if (now - _lastTap <= 350) {
     var t = e.target;

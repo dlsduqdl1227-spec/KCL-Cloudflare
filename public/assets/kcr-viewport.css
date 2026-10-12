@@ -1,0 +1,37 @@
+/* KCR only. Keep browser pinch zoom; prevent incidental double-tap/input zoom. */
+@media screen {
+  :is(#evalCupping,#pReview[data-competition="KCR"],#pReviewEdit[data-competition="KCR"]) {
+    min-height:0 !important;
+    height:var(--kcr-viewport-height,100dvh) !important;
+    top:var(--kcr-viewport-top,0px) !important;
+    bottom:auto !important;
+    overflow:hidden !important;
+  }
+  :is(#pReview,#pReviewEdit)[data-competition="KCR"] {
+    top:calc(var(--kcr-viewport-top,0px) + max(56px,var(--safe-top))) !important;
+    height:calc(var(--kcr-viewport-height,100dvh) - max(56px,var(--safe-top))) !important;
+  }
+  :is(#evalCupping,#pReview[data-competition="KCR"],#pReviewEdit[data-competition="KCR"]) .eval-content {
+    min-height:0; min-width:0; flex:1 1 0;
+    overflow-y:auto !important; scroll-padding-block:16px;
+  }
+  :is(#evalCupping,#pReview[data-competition="KCR"],#pReviewEdit[data-competition="KCR"]) :is(textarea,select,input:not([type="range"]):not([type="checkbox"]):not([type="radio"])) {
+    font-size:16px !important; max-width:100%; min-width:0;
+  }
+  :is(#evalCupping,#pCuppingSetup,#pReview[data-competition="KCR"],#pReviewEdit[data-competition="KCR"]) :is(button,[role="button"],.attr-tab,label) {
+    touch-action:manipulation;
+  }
+  #evalCupping .eval-header { gap:12px; }
+  #evalCupping .eval-header > div:first-child { min-width:0; }
+  #evalCupping .eval-header > div:last-child { flex-shrink:0; }
+  #cupping-cup-nav .cup-btn.active :is(.cup-btn-num,.cup-btn-score) { color:#111; opacity:1; }
+  #evalCupping .attr-tabs { grid-template-columns:repeat(auto-fit,minmax(min(138px,100%),1fr)); }
+  #evalCupping .kcr-comment-reference { grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); }
+  body.kcr-viewport-active .global-nav-buttons { top:calc(var(--kcr-viewport-top,0px) + max(8px,var(--safe-top))) !important; }
+  body.kcr-viewport-active .global-nav-btn { touch-action:manipulation; }
+  body.kcr-keyboard-open :is(#evalCupping,#pReviewEdit[data-competition="KCR"]) .eval-sub { display:none; }
+  body.kcr-keyboard-open :is(#evalCupping,#pReviewEdit[data-competition="KCR"]) .cup-nav { padding-block:6px; }
+  body.kcr-keyboard-open :is(#evalCupping,#pReviewEdit[data-competition="KCR"]) .cup-btn { height:44px; }
+  #pReviewEdit[data-competition="KCR"] .review-attr-tabs { top:0; }
+  body.kcr-keyboard-open #pReviewEdit[data-competition="KCR"] .review-eval-like-tabs { position:static; }
+}

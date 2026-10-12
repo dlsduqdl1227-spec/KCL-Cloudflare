@@ -68,8 +68,11 @@
   }
 
   function generateAcidityComment(selectedIds) {
-    var labels = labelList(selectedIds, "acidity").map(baseLikeLabel);
-    return labels.length ? objectSentence(joinNatural(labels), "연상시키는 산미입니다.") : "";
+    var ids = selectedIds || [];
+    var labels = labelList(ids.filter(function(id) { return id !== "acidity_dry"; }), "acidity").map(baseLikeLabel);
+    var sentence = labels.length ? objectSentence(joinNatural(labels), "연상시키는 산미입니다.") : "";
+    if (ids.indexOf("acidity_dry") > -1) sentence += (sentence ? " " : "") + "산미에서 드라이한 감각이 느껴집니다.";
+    return sentence;
   }
 
   function generateSweetnessComment(selectedIds) {

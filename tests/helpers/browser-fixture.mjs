@@ -36,8 +36,8 @@ export async function createBrowserFixture(options = {}) {
   const browser = await chromium.launch({channel:process.env.KCL_BROWSER_CHANNEL || 'chrome', headless:true});
   return {
     origin, browser,
-    async page(width = 390, height = 900) {
-      const page = await browser.newPage({viewport:{width,height}});
+    async page(width = 390, height = 900, contextOptions = {}) {
+      const page = await browser.newPage({...contextOptions,viewport:{width,height}});
       page.setDefaultTimeout(15000);
       page.qaErrors = [];
       page.qaMissing = [];

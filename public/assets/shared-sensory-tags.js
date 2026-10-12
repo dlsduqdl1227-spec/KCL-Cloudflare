@@ -12,7 +12,7 @@
 
   function kcrRows(category) {
     return (global.KCR_SENSORY_TAGS || []).filter(function(tag) {
-      return tag && tag.isActive && !tag.isFamily && tag.category === category;
+      return tag && tag.isActive && !tag.isFamily && tag.category === category && !(tag.competitionCodes || []).length;
     });
   }
 

@@ -91,7 +91,7 @@ assert.match(assessment, /sharedSensory:a\.tagGroup === 'espresso' \|\| a\.tagGr
 assert.match(assessment, /meta\.group === 'brewing' && meta\.category !== 'Professionalism'/);
 assert.match(assessment, /j\.type === 'final-sensory' && key !== '프레젠'/);
 assert.match(assessment, /smart-tags-section shared-sensory-smart-tags/);
-assert.match(assessment, /shared-sensory-tags\.js\?v=stage116/);
+assert.match(assessment, /shared-sensory-tags\.js\?v=228/);
 assert.match(assessment, /meta\.competition === 'KCR' && !meta\.isFlavorReference/);
 assert.match(assessment, /1차 계열도 선택할 수 있으며/);
 

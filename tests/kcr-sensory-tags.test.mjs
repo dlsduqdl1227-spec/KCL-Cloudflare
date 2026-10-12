@@ -42,12 +42,14 @@ vm.runInContext(commentsSource, context, { filename: "kcr-sensory-comments.js" }
 const tags = Array.from(context.KCR_SENSORY_TAGS);
 const api = context.KcrSensoryTags;
 const comments = context.KcrSensoryComments;
+assert.equal(comments.generateAcidityComment(['acidity_dry']), '산미에서 드라이한 감각이 느껴집니다.');
+assert.match(comments.generateAcidityComment(['acidity_lemon_like','acidity_dry']), /레몬.*산미.*드라이한/);
 assert.deepEqual(Array.from(context.KCR_SENSORY_CONFIG.categoryOrder), ["flavor", "aftertaste", "acidity", "sweetness", "mouthfeel"]);
 assert.equal(new Set(tags.map((tag) => tag.id)).size, tags.length, "KCR tag IDs must be unique");
-assert.equal(tags.length, 151, "The KCR tag catalog must include 13 selectable Flavor family tags");
+assert.equal(tags.length, 152, "The KCR tag catalog includes Dry acidity and 13 selectable Flavor family tags");
 assert.deepEqual(
   Object.fromEntries(["flavor", "mouthfeel", "acidity", "sweetness", "aftertaste"].map((category) => [category, tags.filter((tag) => tag.category === category).length])),
-  { flavor:83, mouthfeel:18, acidity:15, sweetness:14, aftertaste:21 },
+  { flavor:83, mouthfeel:18, acidity:16, sweetness:14, aftertaste:21 },
 );
 assert.equal(tags.some((tag) => tag.id === "flavor_improvement_raw" || tag.labelKo === "생두"), false);
 for (const tag of tags) {
