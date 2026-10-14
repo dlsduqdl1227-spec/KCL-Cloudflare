@@ -43,7 +43,7 @@ const RUNTIME_SCHEMA_OBJECTS = [
   'competitions', 'operators', 'sessions', 'participants', 'scores', 'otps', 'sms_logs', 'rate_limits', 'security_events', 'system_settings',
   'idx_scores_comp', 'idx_scores_comp_id', 'idx_scores_submitter_unit', 'idx_participants_comp', 'idx_operators_phone', 'idx_operators_phone_id',
   'idx_participants_lookup', 'idx_participants_unit', 'idx_participants_comp_phone_id', 'idx_scores_unit', 'idx_otps_lookup', 'idx_sessions_kind', 'idx_sessions_expires_at',
-  'idx_sms_logs_comp', 'idx_security_events_action', 'idx_scores_client_submission_unit', 'idx_scores_kcr_evaluation_key', 'idx_operators_effective_date',
+  'idx_sms_logs_comp', 'idx_security_events_action', 'idx_scores_client_submission_unit', 'idx_scores_kcr_evaluation_key', 'idx_scores_final_evaluation_key', 'idx_operators_effective_date',
   'trg_participants_registry_revision_insert', 'trg_participants_registry_revision_update', 'trg_participants_registry_revision_delete',
   'trg_operators_registry_revision_insert', 'trg_operators_registry_revision_update', 'trg_operators_registry_revision_delete'
 ];
@@ -526,6 +526,9 @@ async function ensureSchema(db) {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_kcr_evaluation_key
       ON scores(json_extract(payload_json, '$.kcrEvaluationKey'))
       WHERE competition_code='KCR' AND COALESCE(json_extract(payload_json, '$.kcrEvaluationKey'), '') <> ''`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_scores_final_evaluation_key
+      ON scores(json_extract(payload_json, '$.finalEvaluationKey'))
+      WHERE COALESCE(json_extract(payload_json, '$.finalEvaluationKey'), '') <> ''`,
     ...['INSERT','UPDATE','DELETE'].flatMap(operation => ['participants','operators'].map(table => `
       CREATE TRIGGER IF NOT EXISTS trg_${table}_registry_revision_${operation.toLowerCase()}
       AFTER ${operation} ON ${table}
@@ -636,6 +639,8 @@ async function dispatch(action, args, env, request) {
     saveIkrcStationSettings: () => saveIkrcStationSettings(env, args[0], args[1]),
     saveIkrcBlindAssignments: () => saveIkrcBlindAssignments(env, args[0], args[1]),
     submitScores: () => submitScores(env, args[0], null, request),
+    returnFinalEvaluations: () => returnFinalEvaluations(env, args[0], args[1]),
+    resubmitFinalEvaluations: () => resubmitFinalEvaluations(env, args[0], args[1]),
     submitWithSignature: () => submitScores(env, args[0], args[1] || (args[0] && (args[0].signatureBase64 || args[0].signatureData || args[0].signature)), request),
     getReviewList: () => getReviewList(env, args[0], args[1]),
     updateReviewRow: () => updateReviewRow(env, args[0], args[1], args[2], args[3], args[4], args[5]),
@@ -2926,6 +2931,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   if (code === 'KCAC') sourceRows = dedupeKcacParticipantRows_(sourceRows, currentRound);
   if (code === 'KCAC' && currentRound !== '예선') sourceRows = sortRoundParticipants_(sourceRows,code,currentRound);
   const completedOfficialUnits = new Map();
+  const completedEvaluationScopes = new Map();
   if (code === 'KCAC' || code === 'KBC') {
     const scoreRows = await env.DB.prepare('SELECT submitted_at, unit, mode, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? ORDER BY id DESC')
       .bind(code, currentRound).all();
@@ -2933,6 +2939,11 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       if (scoreEvaluationCategoryKey_(scoreRow.mode) !== 'competition' || !scoreOwnedByActor_(scoreRow, actor)) return;
       const unitKey = participantEvaluationCompletionUnitKey_(code, scoreRow.unit);
       if (unitKey && !completedOfficialUnits.has(unitKey)) completedOfficialUnits.set(unitKey, safeStr(scoreRow.submitted_at));
+      if(code==='KCAC' && currentRound==='결선' && unitKey){
+        const scopes=completedEvaluationScopes.get(unitKey)||new Set();
+        scopes.add(finalSubmissionScope_(code,parseJson(scoreRow.payload_json,{}),''));
+        completedEvaluationScopes.set(unitKey,scopes);
+      }
     });
   }
   const mobManager = code === 'MOB' && hasManageAccess(actor, code);
@@ -2991,6 +3002,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       scheduleTeam,
       performanceOrder: currentRound === '예선' ? '' : participantRoundOrder_(r,code,currentRound),
       evaluationCompleted,
+      completedEvaluationScopes:Array.from(completedEvaluationScopes.get(completedUnitKey)||[]),
       evaluationCompletedAt: evaluationCompleted ? completedOfficialUnits.get(completedUnitKey) : '',
       display: (currentRound !== '예선' && !hideIdentity && participantRoundOrder_(r,code,currentRound)<Number.MAX_SAFE_INTEGER ? ('경연 '+participantRoundOrder_(r,code,currentRound)+' · ') : '') + (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? (' · ' + (code === 'KTCC' ? '팀원 ' : '') + displayAff) : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
     };
@@ -3352,10 +3364,34 @@ function isDisqualificationHeader_(h) {
 function normalizedReviewStatus_(v) {
   return safeStr(v).replace(/\s/g, '');
 }
+function finalOfficialEvaluation_(item) {
+  if (!item) return false;
+  const round=roundName_(item.round || item['라운드'],'');
+  return ['본선','결선'].includes(round) && !isCalibrationMode_(item.mode || item['모드']) && !isCalibrationMode_(item.review_status || item.status || item['검수상태']);
+}
+function returnedEvaluation_(item) {
+  return normalizedReviewStatus_(item && (item.review_status || item.status || item['검수상태']))==='반려';
+}
+async function finalEvaluationRevision_(row) {
+  return sha256Hex_(JSON.stringify([row.id,row.review_status,row.payload_json,row.total_score]));
+}
+function finalSubmissionScope_(code,payload,role) {
+  const rows=Array.isArray(payload?.rows)?payload.rows:[];
+  if(code==='KCAC'){
+    const items=rows.map((row,i)=>extractExtraSingleRow_(payload,code,i));
+    const areas=[items.some(kcacIsPatternItem_)?'pattern':'',items.some(kcacIsSensoryItem_)?'sensory':''].filter(Boolean);
+    if(areas.length)return areas.join('+');
+  }
+  if(code==='KTCC'){
+    const extra=extractExtraSingleRow_(payload,code,0);
+    return JSON.stringify([safeStr(extra['토너먼트 단계']),safeStr(extra['매치번호'])]);
+  }
+  return reviewRoleCategoryServer_(role);
+}
 function rankingExcludedByReviewStatus_(v) {
   const s = normalizedReviewStatus_(v);
   if (!s) return false;
-  return s === '미검수' || isCalibrationMode_(s);
+  return s === '미검수' || s === '반려' || isCalibrationMode_(s);
 }
 function reviewCompletedStatus_(v) {
   const s = normalizedReviewStatus_(v);
@@ -3368,6 +3404,8 @@ function ikrcOfficialHeadItem_(code, item) {
     && isHeadRole_(item['역할'] || item.role || item.judgeRole);
 }
 function officialReviewCompleted_(code, item) {
+  if (returnedEvaluation_(item)) return false;
+  if (finalOfficialEvaluation_(item)) return true;
   const normalizedCode = safeStr(code).toUpperCase();
   if (normalizedCode === 'KCR') return !!item && shouldCountItemInRanking_(normalizedCode, item);
   if (normalizedCode === 'IKRC' && item && !isCalibrationMode_(item['모드'] || item.mode)) return true;
@@ -4716,6 +4754,16 @@ async function submitScores(env, payload, signature, request = null) {
     onePayload.computedTotalScore = x.total;
     onePayload.currentRound = x.round;
     if (!x.unit) return { success: false, message: '참가자번호/컵번호/샘플번호/팀번호를 찾지 못했습니다. 번호 입력을 확인해주세요.' };
+    delete onePayload.finalReview;
+    delete onePayload.finalEvaluationKey;
+    if (finalOfficialEvaluation_(x)) {
+      const existing=(await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? AND unit=?').bind(x.code,x.round,x.unit).all()).results || [];
+      const finalScope=finalSubmissionScope_(x.code,onePayload,x.role);
+      if (existing.some(row=>scoreOwnedByActor_(row,auth.actor) && scoreEvaluationCategoryKey_(row.mode)===scoreEvaluationCategoryKey_(x.mode) && finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope)) {
+        return {success:false,duplicate:true,message:'이미 평가완료된 기록입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청한 뒤 반려된 평가 수정에서 재제출해주세요.'};
+      }
+      onePayload.finalEvaluationKey=await sha256Hex_(JSON.stringify([x.code,x.round,x.unit,actorIdentityKey,scoreEvaluationCategoryKey_(x.mode),finalScope]));
+    }
     if (x.code === 'KCR') {
       // A judge has one official evaluation per entrant/round. Role, day, process
       // and display label changes cannot create a second vote. Calibration is station-scoped.
@@ -4802,6 +4850,7 @@ async function submitScores(env, payload, signature, request = null) {
       const existingKcac = (existingKcacRows.results || []).find(row =>
         normalizeKcacParticipantUnit_(row.unit) === x.unit &&
         scoreOwnedByActor_(row, auth.actor) &&
+        (!finalOfficialEvaluation_(x) || finalSubmissionScope_('KCAC',parseJson(row.payload_json,{}),row.role)===finalSubmissionScope_('KCAC',onePayload,x.role)) &&
         scoreEvaluationCategoryKey_(row.mode) === submittedCategory
       );
       if (existingKcac && existingKcac.id) {
@@ -4820,12 +4869,12 @@ async function submitScores(env, payload, signature, request = null) {
     // IKRC 헤드 공식점수는 제출 즉시 반영 대상이며 센서리 심사위원은 '내평가검수'에서 수정할 수 있습니다.
     // 제출 인원은 현장 구성에 따라 달라질 수 있으므로 스테이션 확정과 집계에서 고정 인원수를 강제하지 않습니다.
     const ikrcOfficialHead = x.code === 'IKRC' && !isCalibrationMode_(x.mode) && isHeadRole_(x.role);
-    const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (ikrcOfficialHead ? '검수완료' : '미검수');
-    const insertVerb = x.code !== 'KCR' && safeStr(onePayload.clientSubmissionId) ? 'INSERT OR IGNORE' : 'INSERT';
+    const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (finalOfficialEvaluation_(x) || ikrcOfficialHead ? '검수완료' : '미검수');
+    const insertVerb = !finalOfficialEvaluation_(x) && x.code !== 'KCR' && safeStr(onePayload.clientSubmissionId) ? 'INSERT OR IGNORE' : 'INSERT';
     const insertStatement = env.DB.prepare(`${insertVerb} INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(nowIso(), x.code, x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
-    if (x.code === 'IKRC' || x.code === 'KCR' || receiptInfo.token) atomicInsertStatements.push(insertStatement);
+    if (finalOfficialEvaluation_(x) || x.code === 'IKRC' || x.code === 'KCR' || receiptInfo.token) atomicInsertStatements.push(insertStatement);
     else {
       await insertStatement.run();
       inserted++;
@@ -4848,6 +4897,9 @@ async function submitScores(env, payload, signature, request = null) {
     try {
       await env.DB.batch(batchStatements);
     } catch (error) {
+      if (finalOfficialEvaluation_({round:submitRound,mode:initial.mode}) && /UNIQUE constraint|idx_scores_final_evaluation_key/i.test(String(error && error.message || error))) {
+        return {success:false,duplicate:true,message:'이미 저장된 본·결선 평가입니다. 중복 저장하지 않았습니다. 수정이 필요하면 반려를 요청해주세요.'};
+      }
       if (initial.code !== 'KCR' || !/UNIQUE constraint|idx_scores_kcr_evaluation_key|idx_scores_client_submission_unit/i.test(String(error && error.message || error))) throw error;
       // Another tab/device may win between the read check and this atomic batch.
       // The unique index rolls back this entire batch, including its receipt.
@@ -4924,7 +4976,7 @@ async function getReviewList(env, competitionCode, actorArg) {
   if (code === 'IKRC') {
     const latest = latestIkrcReviewItems_(list);
     list = latest.list.map(item => {
-      if (ikrcOfficialHeadItem_(code, item)) {
+      if (ikrcOfficialHeadItem_(code, item) && !returnedEvaluation_(item)) {
         item.status = '검수완료';
         item['검수상태'] = '검수완료';
       }
@@ -4947,6 +4999,17 @@ async function getReviewList(env, competitionCode, actorArg) {
     list = list.map(item => redactParticipantIdentityObject_(item, headers));
   }
   if (code === 'KCR' && !hasAdmin(auth.actor)) list = list.map(item => redactKcrParticipantIdentity_(item, headers));
+  const finalMeta=new Map();
+  for(const row of raw.filter(finalOfficialEvaluation_)) finalMeta.set(Number(row.id),{finalWorkflow:true,finalRevision:await finalEvaluationRevision_(row),returnReason:safeStr(parseJson(row.payload_json,{}).finalReview?.reason)});
+  list=list.map(item=>{
+    const meta=finalMeta.get(parseReviewRowRef_(item.rowIndex).id);
+    return meta?{...item,...meta,status:returnedEvaluation_(item)?'반려':'평가완료','검수상태':returnedEvaluation_(item)?'반려':'평가완료'}:item;
+  });
+  const requestedRound=safeStr(actorArg && actorArg.round);
+  if(['본선','결선'].includes(requestedRound) && !calibrationOnly){
+    list=list.filter(item=>item.round===requestedRound && !isCalibrationMode_(item.mode || item['모드']));
+    if(actorArg.returnedOnly && !manager)list=list.filter(returnedEvaluation_);
+  }
   return {
     success: true,
     list,
@@ -4956,13 +5019,87 @@ async function getReviewList(env, competitionCode, actorArg) {
     calibrationOnly,
     supersededCount,
     mobReviewDate,
-    mobReviewDates:code === 'MOB' ? mobParticipantDatesFromRows_(scopedParticipantRows) : [],
+    mobReviewDates:code === 'MOB' && !['본선','결선'].includes(requestedRound) ? mobParticipantDatesFromRows_(scopedParticipantRows) : [],
     stationScope:managerStation ? {id:managerStation.id, label:managerStation.label, prefix:managerStation.prefix} : null,
     stationScopes:(managerStation ? [managerStation] : []).map(station => ({id:station.id, label:station.label, prefix:station.prefix}))
   };
 }
 
-async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatus, roleText, actorArg) {
+async function finalCorrectionContext_(env, request, actorArg, returning) {
+  const code=safeStr(request?.competitionCode).toUpperCase();
+  const auth=await requireActorForCode_(env,actorArg,code,'해당 대회 평가 권한이 없습니다.');
+  if(!auth.ok)return auth.res;
+  const manager=hasManageAccess(auth.actor,code);
+  if(returning && !manager)return {success:false,message:'반려는 해당 대회팀장 또는 관리자만 가능합니다.'};
+  const entries=request?.entries;
+  if(!Array.isArray(entries)||!entries.length||entries.length>40)return {success:false,message:'변경할 평가를 선택해주세요.'};
+  const originals=new Map();
+  const cfg=code==='IKRC'?await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first():null;
+  const station=manager && cfg?ikrcActorAssignedStationServer_(auth.actor,cfg):null;
+  for(const entry of entries){
+    const ref=parseReviewRowRef_(entry.rowIndex),id=ref.id;
+    if(!Number.isInteger(id)||id<=0)return {success:false,message:'평가 식별번호를 확인해주세요.'};
+    const row=originals.get(id)||await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id,code).first();
+    if(!row||!finalOfficialEvaluation_(row)||row.round!==request.round)return {success:false,message:'같은 대회·경기 회차의 본·결선 평가만 처리할 수 있습니다.'};
+    const payloadRows=parseJson(row.payload_json,{}).rows;
+    if(ref.payloadRowIndex >= Math.max(1,Array.isArray(payloadRows)?payloadRows.length:0))return {success:false,message:'해당 컵 평가를 찾지 못했습니다. 목록을 새로고침해주세요.'};
+    if(!manager && !canReviewScoreRow_(row,auth.actor,code,false))return {success:false,message:'본인이 제출한 평가만 수정할 수 있습니다.'};
+    if(station&&!ikrcScoreBelongsToStationServer_(row,station))return {success:false,message:'담당 스테이션 평가만 처리할 수 있습니다.'};
+    if(entry.revision!==await finalEvaluationRevision_(row))return {success:false,message:'평가가 변경되었습니다. 목록을 새로고침한 뒤 다시 확인해주세요.'};
+    if(returning?returnedEvaluation_(row):!returnedEvaluation_(row))return {success:false,message:returning?'이미 반려된 평가입니다.':'반려된 평가만 재제출할 수 있습니다.'};
+    originals.set(id,row);
+  }
+  return {success:true,code,actor:auth.actor,originals,entries};
+}
+async function commitFinalCorrection_(env,code,originals,changed,status){
+  const plan=[...changed.values()].map(row=>({id:row.id,oldPayload:originals.get(row.id).payload_json,oldStatus:originals.get(row.id).review_status,
+    payload:row.payload_json,total:row.total_score,dq:row.disqualified,reason:row.disqualification_reason}));
+  // One guarded statement: a concurrent return/resubmit cannot partially save a group.
+  const result=await env.DB.prepare(`WITH plan AS (SELECT json_extract(value,'$.id') id,json_extract(value,'$.oldPayload') old_payload,
+    json_extract(value,'$.oldStatus') old_status,json_extract(value,'$.payload') payload,json_extract(value,'$.total') total,
+    json_extract(value,'$.dq') dq,json_extract(value,'$.reason') reason FROM json_each(?)),
+    safe AS MATERIALIZED (SELECT 1 WHERE (SELECT COUNT(*) FROM plan p JOIN scores s ON s.id=p.id AND s.competition_code=?
+      AND s.payload_json IS p.old_payload AND s.review_status IS p.old_status)=?)
+    UPDATE scores SET payload_json=(SELECT payload FROM plan WHERE id=scores.id),total_score=(SELECT total FROM plan WHERE id=scores.id),
+      disqualified=(SELECT dq FROM plan WHERE id=scores.id),disqualification_reason=(SELECT reason FROM plan WHERE id=scores.id),review_status=?
+    WHERE competition_code=? AND id IN(SELECT id FROM plan) AND EXISTS(SELECT 1 FROM safe)`)
+    .bind(JSON.stringify(plan),code,plan.length,status,code).run();
+  return Number(result.meta?.changes)===plan.length;
+}
+async function returnFinalEvaluations(env,request,actorArg){
+  const context=await finalCorrectionContext_(env,request,actorArg,true);if(!context.success)return context;
+  const reason=safeStr(request.reason).slice(0,1000);if(!reason)return {success:false,message:'수정할 내용을 반려 사유에 적어주세요.'};
+  const changed=new Map(),at=nowIso();
+  for(const row of context.originals.values()){
+    const payload=parseJson(row.payload_json,{}),previous=payload.finalReview||{};
+    payload.finalReview={...previous,reason,returnedAt:at,returnedBy:context.actor.name,
+      history:[...(previous.history||[]),{action:'return',at,by:context.actor.name,reason,total:row.total_score}]};
+    changed.set(row.id,{...row,payload_json:JSON.stringify(payload)});
+  }
+  if(!await commitFinalCorrection_(env,context.code,context.originals,changed,'반려'))return {success:false,message:'동시에 변경된 평가가 있어 반려하지 않았습니다. 새로고침해주세요.'};
+  return {success:true,message:'반려되었습니다. 수정 후 재제출하면 즉시 순위에 반영됩니다.',count:changed.size};
+}
+async function resubmitFinalEvaluations(env,request,actorArg){
+  const context=await finalCorrectionContext_(env,request,actorArg,false);if(!context.success)return context;
+  const changed=new Map(context.originals),seen=new Set();
+  for(const entry of context.entries){
+    const ref=parseReviewRowRef_(entry.rowIndex),key=ref.id+':'+(ref.payloadRowIndex||0);
+    if(seen.has(key))return {success:false,message:'같은 평가 내용이 중복되었습니다.'};seen.add(key);
+    if(!entry.updates||typeof entry.updates!=='object'||Array.isArray(entry.updates))return {success:false,message:'수정할 평가 내용을 확인해주세요.'};
+    const prepared=await updateReviewRow(env,context.code,entry.rowIndex,entry.updates,'검수완료','',actorArg,{current:changed.get(ref.id)});
+    if(!prepared.success)return prepared;changed.set(ref.id,prepared.row);
+  }
+  const at=nowIso();
+  for(const [id,row] of changed){
+    const payload=parseJson(row.payload_json,{}),previous=payload.finalReview||{};
+    payload.finalReview={...previous,resubmittedAt:at,resubmittedBy:context.actor.name,
+      history:[...(previous.history||[]),{action:'resubmit',at,by:context.actor.name,previousTotal:context.originals.get(id).total_score,total:row.total_score}]};
+    changed.set(id,{...row,payload_json:JSON.stringify(payload)});
+  }
+  if(!await commitFinalCorrection_(env,context.code,context.originals,changed,'검수완료'))return {success:false,message:'동시에 변경된 평가가 있어 저장하지 않았습니다. 입력 내용은 유지하고 최신 평가를 확인해주세요.'};
+  return {success:true,message:'재제출 완료 · 순위에 반영되었습니다.',status:'평가완료',count:changed.size};
+}
+async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatus, roleText, actorArg, finalPreparation = null) {
   const code = safeStr(competitionCode).toUpperCase();
   const auth = await requireActorForCode_(env, actorArg, code, '검수 수정 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return auth.res;
@@ -4971,8 +5108,9 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   const ref = parseReviewRowRef_(rowIndex);
   const id = ref.id; if (!id) return { success: false, message: '수정할 행 번호가 없습니다.' };
   const payloadRowIndex = Math.max(0, Number(ref.payloadRowIndex) || 0);
-  const current = await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id, code).first();
+  const current = finalPreparation?.current || await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id, code).first();
   if (!current) return { success: false, message: '수정할 데이터를 찾지 못했습니다.' };
+  if (finalOfficialEvaluation_(current) && !finalPreparation) return {success:false,message:'본·결선 평가 수정은 팀장·관리자의 반려 후 반려된 평가 수정에서 재제출해주세요.'};
   const cfg = code === 'IKRC' ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(actor, cfg) : null;
   if (managerStation && !ikrcScoreBelongsToStationServer_(current, managerStation)) {
@@ -5075,6 +5213,11 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   const dq = explicitDq !== null ? explicitDq : (isDisqualifiedValue_(item['실격여부']) || inferred.disqualified || !!current.disqualified);
   const dqReason = dq ? firstNonEmpty([item['실격사유'], inferred.dqReason, current.disqualification_reason]) : '';
   const status = statusRequested;
+  if (finalPreparation) {
+    if(unit!==current.unit) return {success:false,message:'반려 수정에서는 참가자번호를 바꿀 수 없습니다.'};
+    if(finalSubmissionScope_(code,payload,current.role)!==finalSubmissionScope_(code,parseJson(current.payload_json,{}),current.role))return {success:false,message:'반려 수정에서는 평가 영역이나 경기 매치를 바꿀 수 없습니다. 운영자에게 확인해주세요.'};
+    return {success:true,row:{...current,total_score:total,disqualified:boolInt(dq),disqualification_reason:dqReason,payload_json:JSON.stringify(payload)}};
+  }
   await env.DB.prepare(`UPDATE scores SET unit=?, participant_name=?, total_score=?, disqualified=?, disqualification_reason=?, review_status=?, payload_json=? WHERE id=? AND competition_code=?`)
     .bind(unit, participantName, total === null || total === undefined || Number.isNaN(Number(total)) ? null : Number(total), boolInt(dq), dqReason, status, JSON.stringify(payload), id, code).run();
   if (code === 'IKRC') await invalidateIkrcStationFinalizationForScore_(env, current, cfg);
@@ -5100,6 +5243,10 @@ async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus, r
     seenIds.add(id);
     const cur = await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id, code).first();
     if (!cur) continue;
+    if (finalOfficialEvaluation_(cur)) {
+      if (returnedEvaluation_(cur) || !reviewCompletedStatus_(status)) return {success:false,message:'본·결선은 제출 즉시 반영됩니다. 상태 변경 대신 반려 기능을 사용해주세요.'};
+      continue;
+    }
     if (code === 'IKRC' && !isCalibrationMode_(ikrcScoreMode_(cur)) && isHeadRole_(cur.role)) {
       if (status !== '검수완료') return { success:false, message:'IKRC 헤드 대회평가는 제출 즉시 확정되므로 검수 상태를 변경하지 않습니다.' };
       if (!reviewCompletedStatus_(cur.review_status)) {
@@ -5902,7 +6049,9 @@ function applyMocTimeDisqualificationToPayload_(payload, round) {
 function roundName_(v, fallback='예선') { const s=safeStr(v); if (/final|결선/i.test(s)) return '결선'; if (/main|본선/i.test(s)) return '본선'; if (/qual|prelim|예선/i.test(s)) return '예선'; return s || fallback; }
 function shouldCountItemInRanking_(code, item) {
   if (!item) return false;
+  if (returnedEvaluation_(item)) return false;
   if (isCalibrationMode_(item['모드'] || item.mode)) return false;
+  if (finalOfficialEvaluation_(item)) return true;
   if (safeStr(code).toUpperCase() === 'KCR') return !isCalibrationMode_(item['검수상태'] || item.status);
   if (safeStr(code).toUpperCase() === 'IKRC') return true;
   // 기존 OT 데이터의 헤드 점수가 '미검수'로 저장되어 있어도 새 운영규칙상 별도 검수 없이 공식점수로 인정한다.

@@ -45,6 +45,7 @@ const menuContext = {
   isAdminRole: () => false,
   isIkrcFinalConfig_: () => false,
   isStaffRoleForCode_: () => false,
+  finalRoundForCode_: () => '',
 };
 vm.createContext(menuContext);
 vm.runInContext(functionSource(assessment, "updateSelectReviewButton_"), menuContext);

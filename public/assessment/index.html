@@ -2000,7 +2000,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/shared-sensory-tags.js?v=228"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js?v=stage202"></script>
-<link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
+<script src="/assets/final-evaluation-workflow.js?v=235"></script>
+<link rel="stylesheet" href="/assets/kcl-ui.css?v=235">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
 <script defer src="/assets/kcr-viewport.js?v=228"></script>
@@ -3677,7 +3678,7 @@ function participantAssignmentByNumber_(code, number) {
     if (participantNumberMatches_(list[i].number, number) ||
         participantNumberMatches_(list[i].roundCupNo, number) ||
         participantNumberMatches_(list[i].teamNo, number) ||
-        participantNumberMatches_(list[i].uniqueNo, number)) return list[i];
+        participantNumberMatches_(list[i].uniqueNo, number)) return participantCompletionForActiveArea_(code,list[i]);
   }
   return null;
 }
@@ -3814,6 +3815,7 @@ function renderParticipantControl_(code, cfg) {
   sel.disabled = false;
   sel.innerHTML = '<option value="">' + escHtml(cfg.placeholder || '선수등록에서 선택') + '</option>' +
     list.map(function(a, i){
+      a=participantCompletionForActiveArea_(code,a);
       var label = a.display || ((a.number || '-') + ' · ' + participantNameForAssignment_(a));
       if (a.evaluationCompleted && !/평가완료/.test(label)) label += ' · ✓ 평가완료';
       return '<option value="' + i + '">' + escHtml(label) + '</option>';
@@ -5254,6 +5256,7 @@ function canReviewCode_(code) {
   return access.indexOf('ALL') > -1 || access.indexOf('*') > -1 || access.indexOf(c) > -1;
 }
 function canReviewEditDetails() {
+  if (_reviewState.current && _reviewState.current.finalWorkflow) return _reviewState.current.status === '반려' && canReviewCode_(_reviewState.code);
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
   if (_reviewState && _reviewState.readOnlyHeadMonitor) return false;
   if (isAdminRole()) return true;
@@ -5273,8 +5276,9 @@ function canReviewEditAny_() {
 function isIkrcHeadMonitor_() {
   return ['IKRC','KCR'].indexOf(String((_reviewState && _reviewState.code) || '').toUpperCase()) > -1 && !!(_reviewState && _reviewState.readOnlyHeadMonitor);
 }
-function canOpenReviewDetails_() { return canReviewEditAny_() || isIkrcHeadMonitor_(); }
+function canOpenReviewDetails_() { return !!_reviewState.finalRound || canReviewEditAny_() || isIkrcHeadMonitor_(); }
 function canReviewEditDisqualification_() {
+  if (_reviewState.current && _reviewState.current.finalWorkflow && _reviewState.current.status !== '반려') return false;
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
   if (_reviewState && _reviewState.readOnlyHeadMonitor) return false;
   return reviewManageScopeForCode_(c);
@@ -5348,6 +5352,7 @@ function updateSelectReviewButton_() {
   if (reviewBtn) {
     reviewBtn.style.display = (_selComp && canReviewCode_(code) && !isKcrMenu && !isMobHeadEntry) ? 'block' : 'none';
     reviewBtn.textContent = isKcrMenu ? '내평가검수' : ((isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내평가검수');
+    if (finalRoundForCode_(code)) { reviewBtn.textContent='반려된 평가 수정';reviewBtn.style.display=isKcrMenu?'none':'block'; }
   }
   document.querySelectorAll('[data-kcr-select-actions]').forEach(function(wrap){
     var active = isKcrMenu && !!wrap.closest('.comp-card.active');
@@ -5357,6 +5362,7 @@ function updateSelectReviewButton_() {
     var reviewButton = wrap.querySelector('[data-kcr-mode="review"]');
     if (stationButton) { stationButton.disabled = false; stationButton.textContent = '켈리브레이션'; }
     if (reviewButton) reviewButton.disabled = !canReviewCode_(code);
+    if (reviewButton) reviewButton.textContent=finalRoundForCode_(code)?'반려된 평가 수정':'내평가검수';
   });
   if (seedVoteBtn) {
     var isIkrcFinal = isIkrcFinalConfig_(_selComp);
@@ -6156,7 +6162,7 @@ function adminRenderRunCards_() {
       '<div class="admin-comp-actions">' +
         workflowBefore +
         '<button class="primary" data-act="eval">대회평가시작</button>' +
-        '<button data-act="review">평가 검수/수정</button>' +
+        '<button data-act="review">' + (c.currentRound !== '예선' ? '평가 관리 · 반려' : '평가 검수/수정') + '</button>' +
         workflowAfter +
         '<button data-act="rank">실시간 순위 / 디브리핑</button>' +
         '<button data-act="debrief-preview">선수 디브리핑 미리보기</button>' +
@@ -6352,7 +6358,7 @@ function loadTeamPanel() {
                 (cardCode === 'KCR' ? '<button data-act="judge-cal-input">켈리브레이션</button>' + (cardHead ? '<button data-act="judge-cal-result">켈리브레이션 확인</button>' : '') : '') +
                 (cardCode === 'IKRC' ? '<button data-act="judge-cal-input">전체 켈리브레이션</button>' : '') +
                 '<button class="primary" data-act="judge-eval">' + (cardCode === 'KCR' ? '대회평가' : (mobHeadCard ? 'MOB 헤드 켈리브레이션 입력' : '대회평가시작')) + '</button>' +
-                (mobHeadCard ? '' : '<button data-act="judge-review">내평가검수</button>') +
+                (mobHeadCard && c.currentRound === '예선' ? '' : '<button data-act="judge-review">' + (c.currentRound !== '예선' ? '반려된 평가 수정' : '내평가검수') + '</button>') +
                 (cardHead && (cardCode === 'MOB' || cardCode === 'IKRC') ? '<button data-act="judge-cal-result">' + (cardCode === 'MOB' ? 'MOB 심사 켈리브레이션' : '심사 켈리브레이션') + '</button>' : '') +
               '</div>';
             judgeCard.querySelector('[data-act="judge-eval"]').onclick = (function(cfg){ return function(){ _selComp = cfg; goEval(); }; })(c);
@@ -6371,7 +6377,7 @@ function loadTeamPanel() {
             ? '<button data-act="mob-sens-cal">센서리 심사 켈리브레이션</button><button data-act="mob-tech-cal">테크니컬 심사 켈리브레이션</button>'
             : '';
           var ikrcWorkflowButtons = cardCode === 'IKRC'
-            ? '<button data-act="ikrc-cal-input">전체 켈리브레이션</button><button class="primary" data-act="eval">대회평가시작</button><button data-act="review">평가 검수/수정</button><button data-act="ikrc-cal-result">심사 켈리브레이션</button>'
+            ? '<button data-act="ikrc-cal-input">전체 켈리브레이션</button><button class="primary" data-act="eval">대회평가시작</button><button data-act="review">' + (c.currentRound !== '예선' ? '평가 관리 · 반려' : '평가 검수/수정') + '</button><button data-act="ikrc-cal-result">심사 켈리브레이션</button>'
             : '';
           var kcrCalibrationButtons = String(c.code || '').toUpperCase() === 'KCR'
             ? '<button data-act="kcr-cal-station">켈리브레이션</button><button data-act="kcr-cal-result">켈리브레이션 확인</button>'
@@ -6402,7 +6408,7 @@ function loadTeamPanel() {
               ikrcWorkflowButtons +
               ((String(c.code).toUpperCase()==='MOC') ? '<button class="primary" data-act="eval">대회평가시작</button>' : '') +
               '<button' + ((String(c.code).toUpperCase()==='MOC') ? '' : ' class="primary"') + ' data-act="rank">실시간 순위</button>' +
-              (cardCode === 'IKRC' ? '' : '<button data-act="review">평가 검수/수정</button>') +
+              (cardCode === 'IKRC' ? '' : '<button data-act="review">' + (c.currentRound !== '예선' ? '평가 관리 · 반려' : '평가 검수/수정') + '</button>') +
               '<button data-act="score-backup">점수·검수 백업</button>' +
               '<button data-act="judge-qr">심사 웹 QR</button>' + kcrCalibrationButtons + teamLeadHeadButtons + blindButton + seedButton +
             '</div>';
@@ -6509,7 +6515,7 @@ function renderCompList() {
             '<button type="button" data-kcr-mode="cal-station">켈리브레이션</button>' +
             ((isHeadRoleForCode_('KCR') || isAdminRole() || isTeamLeaderForCode_('KCR')) ? '<button type="button" data-kcr-mode="cal-result">켈리브레이션 확인</button>' : '') +
             '<button type="button" class="primary" data-kcr-mode="eval">대회평가</button>' +
-            '<button type="button" data-kcr-mode="review">내평가검수</button>' +
+            '<button type="button" data-kcr-mode="review">' + (c.currentRound === '예선' ? '내평가검수' : '반려된 평가 수정') + '</button>' +
           '</div>'
         : '');
     div.onclick = function() {
@@ -6661,6 +6667,8 @@ function reviewActorPayload_(code) {
     access: (_judge && _judge.access) || '',
     teamGroup: judgeTeamText(c),
     reviewScope: manageReview ? 'manage' : 'own',
+    round:_reviewState.finalRound || '',
+    returnedOnly:!!_reviewState.finalRound && !manageReview,
     manageReview: manageReview,
     calibrationOnly: c === 'KCR' && !!_reviewCalibrationOnly,
     teamMap: (_judge && _judge.teamMap) || {},
@@ -6686,6 +6694,7 @@ function reviewCategoryBadgeHtml_(item, code) {
   var isCal = reviewIsCalibration_(item, code);
   var text = isCal ? '켈리브레이션' : '실제평가';
   var note = isCal ? '순위·공식 점수 미반영' : (String(code || '').toUpperCase() === 'KCR' ? '제출 즉시 순위 반영' : '검수완료 후 순위 반영');
+  if(item && item.finalWorkflow) note=item.status==='반려'?'반려 · 재제출 전 순위 미반영':'평가완료 · 순위 반영';
   return '<div class="review-category-line"><span class="review-category-badge ' + (isCal ? 'calibration' : 'actual') + '">' + text + '</span><span class="review-category-note">' + note + '</span></div>';
 }
 
@@ -6732,11 +6741,16 @@ function setReviewEditMetric_(item) {
 
 function goReviewByCode(code, name, backPanel) {
   var normalizedCode = String(code || '').toUpperCase();
+  _reviewState.finalRound=_reviewCalibrationOnly?'':finalRoundForCode_(normalizedCode);
+  document.querySelector('#pReview .cup-btn-num').textContent=_reviewState.finalRound?'평가 목록':'검수 목록';
+  var refreshLabel=(_reviewState.finalRound?'평가':'검수')+' 목록 새로고침';
+  document.getElementById('review-list-refresh').setAttribute('aria-label',refreshLabel);
+  document.getElementById('review-list-refresh').title=refreshLabel;
   document.getElementById('pReview').dataset.competition = normalizedCode;
   document.getElementById('pReviewEdit').dataset.competition = normalizedCode;
   var requestGeneration = ++_reviewRequestGeneration;
   var requestToken = _judge.judgeToken || '';
-  var requestKey = [normalizedCode, requestToken, backPanel || '', !!_reviewCalibrationOnly, roleTextForCode_(normalizedCode)].join('|');
+  var requestKey = [normalizedCode, requestToken, backPanel || '', !!_reviewCalibrationOnly, roleTextForCode_(normalizedCode),_reviewState.finalRound].join('|');
   var cachedReview = _reviewState.fetchKey === requestKey && normalizedCode === String(_reviewState.code || '').toUpperCase() && Array.isArray(_reviewState.list) && _reviewState.list.length
     ? { list:_reviewState.list.slice(), headers:(_reviewState.headers || []).slice(), supersededCount:Number(_reviewState.supersededCount || 0) }
     : null;
@@ -7298,7 +7312,7 @@ function buildGroupedReviewItems_(list, code) {
       base._kcacGroupKey = ref.key;
       base._kcacGroupCount = items.length;
     }
-    base.status = items.every(function(x){ return x.status === '검수완료'; }) ? '검수완료' : '미검수';
+    base.status = base.finalWorkflow ? (items.some(function(x){return x.status==='반려';})?'반려':'평가완료') : (items.every(function(x){ return x.status === '검수완료'; }) ? '검수완료' : '미검수');
     var total = 0, hasTotal = false;
     items.forEach(function(x){
       var n = parseFloat(x['최종점수'] || x['총점'] || '');
@@ -7368,6 +7382,7 @@ function renderReview(list, code, headers, supersededCount) {
   _reviewState.code = code;
   _reviewState.headers = (headers || []).map(function(h){ return String(h || ''); });
   _reviewState.list = list || [];
+  if(_reviewState.finalRound && !_reviewState.calibrationOnly){renderFinalEvaluationList_(list || [],code);return;}
   if (String(code || '').toUpperCase() === 'KCR' && _reviewState.calibrationOnly) { renderKcrCalibrationOverview_(list || []); return; }
   if (String(code || '').toUpperCase() === 'KCR') { renderKcrOfficialReviewOverview_(list || [], code, headers, supersededCount); return; }
   renderReviewRowsInto_(list, code, headers, supersededCount);
@@ -10304,6 +10319,11 @@ function openReviewEdit(item) {
   }
   var readOnlyHeadMonitor = isIkrcHeadMonitor_();
   _reviewState.current = item;
+  document.getElementById('pReviewEdit').dataset.finalCorrection=item.finalWorkflow && item.status==='반려'?'true':'false';
+  document.querySelector('#pReviewEdit .cup-btn-num').textContent=item.finalWorkflow?'평가 내용':'검수 상세';
+  document.getElementById('review-edit-save-only').textContent='수정완료';
+  document.querySelector('#review-edit-sticky-actions .save-primary').textContent='수정완료';
+  document.getElementById('review-edit-sticky-actions').style.gridTemplateColumns='';
   _reviewOpenSmartTagBranches = {};
   _reviewKcrOpenFamilies = {};
   var reviewPanel = document.getElementById('pReviewEdit');
@@ -10496,6 +10516,7 @@ function openReviewEdit(item) {
   setReviewAutoSaveState(readOnlyHeadMonitor ? '읽기 전용 · 평가값과 검수 상태는 변경되지 않습니다.' : '수정하면 자동으로 수정완료 처리됩니다.', 'review-autosaved');
   syncReviewDerivedTotals_();
   showPanel('pReviewEdit');
+  if(item.finalWorkflow) configureFinalCorrectionEditor_(item);
 }
 function enableReviewEdit() {
   if (!canReviewEditDetails()) { toast('점수·코멘트 수정 권한이 없습니다.', true); return; }
@@ -10529,6 +10550,7 @@ function setReviewAutoSaveState(msg, cls) {
 }
 
 function scheduleReviewAutoSave(immediate) {
+  if(_reviewState.current && _reviewState.current.finalWorkflow){saveFinalCorrectionDraft_();return;}
   if (!canReviewEditAny_()) return;
   if (!_reviewState.current) return;
   captureReviewDraftValues_();
@@ -10602,6 +10624,7 @@ function captureReviewDraftValues_() {
 }
 
 function autoSaveReviewEdit(cb) {
+  if(_reviewState.current && _reviewState.current.finalWorkflow){var ok=saveFinalCorrectionDraft_();if(cb)cb(ok);return;}
   if (cb) _reviewAutoSaveWaiters.push(cb);
   if (!canReviewEditAny_()) { finishReviewAutoSaveWaiters_(false); return; }
   var item = _reviewState.current;
@@ -10675,6 +10698,7 @@ function collectReviewUpdates() {
   return updates;
 }
 function saveReviewEdit(complete, options) {
+  if(_reviewState.current && _reviewState.current.finalWorkflow){submitFinalCorrection_();return;}
   options = options || {};
   if (!canReviewEditAny_()) { toast('검수 수정 권한이 없습니다.', true); return; }
   // 자동 저장과 수동 저장이 동시에 실행되면 이전 값으로 다시 덮어쓰는 경합이 생길 수 있으므로,
@@ -11612,9 +11636,9 @@ function renderKcrStationChoices_() {
   if (!stations.length) wrap.innerHTML = '<div class="review-edit-help" style="grid-column:1/-1">선택한 조건에 오픈된 스테이션이 없습니다. 예선 일차 또는 운영 설정을 확인해주세요.</div>';
   if (help) help.textContent = isActiveCalibrationMode_()
     ? '켈리브레이션용 스테이션의 참가자번호만 표시됩니다. 제출 결과는 점수·코멘트·표준편차 확인용이며 공식 순위에는 반영되지 않습니다.'
-    : '평가완료 후에도 내평가 검수에서 점수·스마트태그·코멘트를 언제든 수정할 수 있습니다. 새 평가로 중복 제출만 차단됩니다.';
+    : (finalRoundForCode_('KCR') ? '제출 즉시 순위에 반영됩니다. 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.' : '평가완료 후에도 내평가 검수에서 점수·스마트태그·코멘트를 언제든 수정할 수 있습니다. 새 평가로 중복 제출만 차단됩니다.');
   if (help && !isActiveCalibrationMode_() && _kcrCompletionState && _kcrCompletionState.ownerToken === (_judge.judgeToken || '') && _kcrCompletionState.officialUnits.length) {
-    var review = document.createElement('button'); review.type='button'; review.className='btn'; review.textContent='내평가 검수'; review.onclick=function(){goReview();}; help.appendChild(review);
+    var review = document.createElement('button'); review.type='button'; review.className='btn'; review.textContent=finalRoundForCode_('KCR')?'반려된 평가 수정':'내평가 검수'; review.onclick=function(){goReview();}; help.appendChild(review);
   }
 }
 
@@ -11628,7 +11652,7 @@ function startKcrStation_(stationId) {
   var done = kcrStationCompletion_(station, isActiveCalibrationMode_());
   if (!done) { toast('제출 여부를 먼저 확인해주세요. 새로고침을 눌러 다시 확인할 수 있습니다.', true); return; }
   cups = cups.filter(function(unit){return done.indexOf(String(unit)) < 0;});
-  if (!cups.length) { toast('이미 평가완료된 스테이션입니다. 내평가 검수에서 확인·수정해주세요.', true); return; }
+  if (!cups.length) { toast(finalRoundForCode_('KCR')?'이미 평가완료된 스테이션입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.':'이미 평가완료된 스테이션입니다. 내평가 검수에서 확인·수정해주세요.', true); return; }
   var registered = registeredTargetsForRange_('KCR', cups);
   if (!registered.success) { toast(registered.message, true); return; }
   if (registered.validated && registered.missing.length) {
@@ -12265,7 +12289,7 @@ function useCuppingComment(comment) {
 }
 
 function cuppingSubmitAll() {
-  if (_cupping.submitted) { toast('이미 평가완료되었습니다. 내평가 검수에서 수정해주세요.'); return; }
+  if (_cupping.submitted) { toast(finalRoundForCode_('KCR')?'이미 평가완료되었습니다. 반려된 평가 수정에서 재제출할 수 있습니다.':'이미 평가완료되었습니다. 내평가 검수에서 수정해주세요.'); return; }
   if (_kcrSubmitting) { toast('제출 처리 중입니다. 잠시 기다려주세요.'); return; }
   saveCuppingCurrentFromDOM();
   if (!_cupping.cups.length) return;
@@ -14550,7 +14574,7 @@ function kcacSubmitAll() {
   if (!num) { toast('참가자 번호를 입력해주세요', true); return; }
   var selectedAssignment = participantAssignmentByNumber_('KCAC', num);
   if (selectedAssignment && selectedAssignment.evaluationCompleted) {
-    toast('이미 평가완료된 참가자입니다. 중복 제출하지 말고 검수 화면에서 확인·수정해주세요.', true);
+    toast(isQualSubmission?'이미 평가완료된 참가자입니다. 중복 제출하지 말고 검수 화면에서 확인·수정해주세요.':'이미 평가완료된 평가 영역입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.', true);
     return;
   }
   if (!validateKcacBeforeSubmit_()) return;
@@ -15498,7 +15522,7 @@ function kbcSubmit() {
   if (!num) { toast('참가자 번호를 입력해주세요', true); return; }
   var selectedAssignment = participantAssignmentByNumber_('KBC', num);
   if (selectedAssignment && selectedAssignment.evaluationCompleted) {
-    toast('이미 제출한 참가자입니다. 수정이 필요하면 내 평가 검수에서 진행해주세요.', true);
+    toast(finalRoundForCode_('KBC')?'이미 평가완료된 참가자입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.':'이미 제출한 참가자입니다. 수정이 필요하면 내 평가 검수에서 진행해주세요.', true);
     return;
   }
   if (!timeRaw) { toast('KBC 경기시간을 입력해주세요', true); document.getElementById('kbc-end-time').focus(); return; }
@@ -19084,7 +19108,7 @@ function setKtccFormLocked_(locked){
   ['ktcc-s1-theme','ktcc-s2-theme','ktcc-s3-theme'].forEach(function(id){ var el=document.getElementById(id); if(el) { el.disabled=!!locked; el.readOnly=true; } });
   ['ktccDisqY','ktccDisqN'].forEach(function(id){ var el=document.getElementById(id); if(el) el.disabled=!!locked; });
   var btn=document.getElementById('ktcc-submit-btn');
-  if(btn){ btn.disabled=!!locked; btn.textContent=locked?'제출 완료 · 수정은 팀장 검수에서 진행':'운영진 확인 서명 후 제출'; }
+  if(btn){ btn.disabled=!!locked; btn.textContent=locked?(finalRoundForCode_('KTCC')?'평가완료 · 수정은 반려 후 가능':'제출 완료 · 수정은 팀장 검수에서 진행'):'운영진 확인 서명 후 제출'; }
 }
 function nextPendingKtccTargetIndex_(){
   var targets=_ktcc.targets||[];

@@ -30,6 +30,9 @@
 /assets/kcl-api-shim.js
   Cache-Control: no-store
 
+/assets/final-evaluation-workflow.js
+  Cache-Control: no-store
+
 /assets/kcr-sensory-tags.js
   Cache-Control: no-store
 

@@ -34,7 +34,7 @@
   #pReview[data-competition="KCR"] .eval-header,#pReviewEdit[data-competition="KCR"] .eval-header { gap:16px; padding-top:14px !important; }
   #pReview[data-competition="KCR"] .eval-header > div:first-child,#pReviewEdit[data-competition="KCR"] .eval-header > div:first-child { min-width:0; overflow-wrap:anywhere; }
   /* The fixed top navigation already contains Save; avoid covering the comparison table twice. */
-  #pReviewEdit[data-competition="KCR"] .review-edit-sticky-actions { display:none !important; }
+  #pReviewEdit[data-competition="KCR"]:not([data-final-correction="true"]) .review-edit-sticky-actions { display:none !important; }
 }
 .review-compare-btn { padding:9px 12px; border:1px solid #555; border-radius:7px; background:#222; color:#fff; font-size:12px; cursor:pointer; }
 @media(max-width:520px) { .kcr-comparison-filters { grid-template-columns:minmax(0,1fr); } .kcr-station-comparison { padding:10px; } .kcr-comparison-summary strong { font-size:17px; } }

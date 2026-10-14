@@ -9,7 +9,7 @@ const assessment = fs.readFileSync(path.join(root, 'public', 'assessment', 'inde
 
 assert.match(rpc, /function mobParticipantDatesFromRows_/);
 assert.match(rpc, /normalizeEffectiveDate_\(actorArg && actorArg\.mobReviewDate\)/);
-assert.match(rpc, /mobReviewDates:code === 'MOB' \? mobParticipantDatesFromRows_/);
+assert.match(rpc, /mobReviewDates:code === 'MOB' && !\['본선','결선'\].includes\(requestedRound\) \? mobParticipantDatesFromRows_/);
 assert.match(assessment, /function mergeMobReviewResponses_/);
 assert.match(assessment, /datedActor\.mobReviewDate = reviewDate/);
 assert.match(assessment, /이전 날짜 기록 불러오는 중/);

@@ -127,7 +127,7 @@ assert.match(adminCardsSource, /workflowAfter = '<button data-act="ikrc-cal">심
 const adminWorkflowAssembly = [
   "workflowBefore +",
   "data-act=\"eval\">대회평가시작",
-  "data-act=\"review\">평가 검수/수정",
+  "data-act=\"review\">",
   "workflowAfter +",
 ];
 for (let i = 1; i < adminWorkflowAssembly.length; i += 1) {

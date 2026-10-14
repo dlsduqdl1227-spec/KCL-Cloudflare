@@ -1,0 +1,71 @@
+import assert from 'node:assert/strict';
+import {createRpcFixture} from './helpers/rpc-fixture.mjs';
+import {seedRoundRankings,competitionCodes,roundsFor} from './helpers/round-ranking-fixture.mjs';
+const api=await createRpcFixture();
+const manage={...api.actor,reviewScope:'manage',manageReview:true};
+const request=async(action,...args)=>(await api.handle({action,args})).json();
+try{
+ await seedRoundRankings(api);
+ const configs=JSON.stringify(api.db.prepare('SELECT * FROM competitions ORDER BY code').all());
+ const participants=JSON.stringify(api.db.prepare('SELECT * FROM participants ORDER BY id').all());
+ for(const code of competitionCodes)for(const round of roundsFor(code).filter(r=>r!=='예선')){
+  let list=await api.rpc('getReviewList',code,{...manage,round});
+  assert.ok(list.list.length);assert.ok(list.list.every(r=>r.round===round&&r.status==='평가완료'&&r.finalWorkflow));
+  const first=list.list[0],id=Number(String(first.rowIndex).split(':')[0]);
+  assert.equal(api.db.prepare('SELECT review_status FROM scores WHERE id=?').get(id).review_status,'검수완료');
+  const before=api.db.prepare('SELECT * FROM scores WHERE id=?').get(id);
+  const unrelated=JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id<>? ORDER BY id').all(id));
+  assert.ok((await api.rpc('getRanking',code,api.actor,round)).ranking.length);
+  const unit=code==='IKRC'?'A-1':'1';
+  assert.ok((await api.rpc('getAdminDebriefPreview',code,unit,round,api.actor)).scores.length,'final preview includes submitted score: '+code);
+  const locked=await request('updateReviewRow',code,first.rowIndex,{},'수정완료','관리자',manage);assert.equal(locked.success,false);
+  const badStatus=await request('updateReviewStatus',code,first.rowIndex,'미검수','관리자',manage);assert.equal(badStatus.success,false);
+  const entries=list.list.map(r=>({rowIndex:r.rowIndex,revision:r.finalRevision}));
+  const wrongRound=await request('returnFinalEvaluations',{competitionCode:code,round:'예선',reason:'입력 오류',entries},manage);assert.equal(wrongRound.success,false);
+  await api.rpc('returnFinalEvaluations',{competitionCode:code,round,reason:'종이 평가표 코멘트 확인',entries},manage);
+  assert.equal((await api.rpc('getRanking',code,api.actor,round)).ranking.length,0,'returned excluded: '+code);
+  assert.equal((await api.rpc('getAdminDebriefPreview',code,unit,round,api.actor)).scores.length,0,'returned excluded from preview: '+code);
+  const returned=api.db.prepare('SELECT * FROM scores WHERE id=?').get(id);
+  assert.equal(returned.total_score,before.total_score);assert.deepEqual(JSON.parse(returned.payload_json).rows,JSON.parse(before.payload_json).rows);
+  const stale=await request('resubmitFinalEvaluations',{competitionCode:code,round,entries:entries.map(r=>({...r,updates:{}}))},manage);assert.equal(stale.success,false);
+  list=await api.rpc('getReviewList',code,{...manage,round});assert.ok(list.list.every(r=>r.status==='반려'));
+  const commentIndex=list.headers.indexOf('종합코멘트');
+  const revised=list.list.map(r=>({rowIndex:r.rowIndex,revision:r.finalRevision,updates:commentIndex>=0?{[commentIndex]:'종이 평가표 대조 완료'}:{}}));
+  await api.rpc('resubmitFinalEvaluations',{competitionCode:code,round,entries:revised},manage);
+  assert.ok((await api.rpc('getRanking',code,api.actor,round)).ranking.length,'resubmit immediate: '+code);
+  assert.ok((await api.rpc('getAdminDebriefPreview',code,unit,round,api.actor)).scores.length,'resubmit restores preview: '+code);
+  assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id<>? ORDER BY id').all(id)),unrelated);
+  const saved=api.db.prepare('SELECT * FROM scores WHERE id=?').get(id);
+  assert.equal(saved.total_score,before.total_score);assert.equal(saved.review_status,'검수완료');
+  assert.equal(JSON.parse(saved.payload_json).finalReview.history.length,2);
+  const twice=await request('resubmitFinalEvaluations',{competitionCode:code,round,entries:revised},manage);assert.equal(twice.success,false);
+  // Historic final submissions become countable without rewriting stored scores or status.
+  api.db.prepare("UPDATE scores SET review_status='미검수' WHERE id=?").run(id);
+  const legacy=JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id=?').get(id));
+  assert.ok((await api.rpc('getRanking',code,api.actor,round)).ranking.length);
+  assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id=?').get(id)),legacy);
+ }
+ assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM competitions ORDER BY code').all()),configs);
+ assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM participants ORDER BY id').all()),participants);
+ api.db.prepare("UPDATE scores SET review_status='미검수' WHERE round='예선'").run();
+ for(const code of competitionCodes)assert.equal((await api.rpc('getRanking',code,api.actor,'예선')).ranking.length,['KCR','IKRC'].includes(code)?1:0);
+ await api.rpc('upsertOperatorAccount',{accountType:'JUDGE',name:'결선 QA',phone:'01077773333',access:'KCAC',role:'헤드 심사위원'},api.actor);
+ const judge=await api.rpc('judgeLogin','결선 QA','01077773333');
+ const list=await api.rpc('getReviewList','KCAC',{...manage,round:'결선'});
+ const entries=list.list.map(r=>({rowIndex:r.rowIndex,revision:r.finalRevision}));
+ assert.equal((await request('returnFinalEvaluations',{competitionCode:'KCAC',round:'결선',reason:'권한 위조',entries},judge)).success,false);
+ // Two independent requests cannot create duplicate final evaluations.
+ const payload={competitionCode:'KCAC',round:'결선',judgeToken:judge.judgeToken,mode:'judge',rows:[{data:['1'],extraFields:{종합코멘트:'동시 제출',총점:30}}]};
+ const submits=await Promise.all([request('submitScores',{...payload,clientSubmissionId:'final-a'}),request('submitScores',{...payload,clientSubmissionId:'final-b'})]);
+ assert.equal(submits.filter(r=>r.success).length,1);
+ assert.equal(api.db.prepare("SELECT COUNT(*) n FROM scores WHERE competition_code='KCAC' AND judge_name='결선 QA'").get().n,1);
+ const own=await api.rpc('getReviewList','KCAC',{...judge,round:'결선',returnedOnly:true});assert.equal(own.list.length,0);
+ const managerList=await api.rpc('getReviewList','KCAC',{...manage,round:'결선'}),target=managerList.list.find(r=>r['심사위원명']==='결선 QA');
+ const returnRequest={competitionCode:'KCAC',round:'결선',reason:'사진 확인',entries:[{rowIndex:target.rowIndex,revision:target.finalRevision}]};
+ const competing=await Promise.all([request('returnFinalEvaluations',returnRequest,manage),request('returnFinalEvaluations',returnRequest,manage)]);
+ assert.equal(competing.filter(r=>r.success).length,1);
+ const myReturned=await api.rpc('getReviewList','KCAC',{...judge,round:'결선',returnedOnly:true});assert.equal(myReturned.list.length,1);
+ const resubmit={competitionCode:'KCAC',round:'결선',entries:myReturned.list.map(r=>({rowIndex:r.rowIndex,revision:r.finalRevision,updates:{}}))};
+ await api.rpc('resubmitFinalEvaluations',resubmit,judge);
+ console.log('Stage233 all final rounds: immediate ranking, locked submissions, authorized return, atomic resubmit, duplicate/stale guards and preliminary/data isolation passed.');
+}finally{api.close();}
