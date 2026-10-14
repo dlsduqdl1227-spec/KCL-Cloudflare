@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:station-phase-ux": "node tests/stage229-simple-stations-phases.test.mjs",
     "test:kcr-mobile": "node tests/stage228-kcr-mobile-viewport.test.mjs",
     "test:kcr-nine-cups": "node tests/stage227-kcr-nine-cup-sections.test.mjs",
     "test:kcr-edit-blind": "node tests/stage226-kcr-edit-blind.test.mjs",

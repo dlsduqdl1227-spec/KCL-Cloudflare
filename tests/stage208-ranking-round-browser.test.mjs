@@ -26,8 +26,13 @@ try {
       await page.locator('#admin-comp-list .admin-comp-card').nth(index).locator('[data-act=rank]').click();
       await waitRanking(page,code,'결선');
       assert.equal(await page.locator('#ranking-round-select').inputValue(),'결선');
+      assert.deepEqual(await page.locator('#ranking-round-select option').allTextContents(),['예선','결선']);
       for(const round of roundsFor(code)){
-        await page.locator('#ranking-round-select').selectOption(round);
+        await page.locator('#ranking-round-select').selectOption(round==='본선'?'결선':round);
+        if(['KBC','MOC'].includes(code)&&round!=='예선'){
+          if(!await page.locator('#ranking-stage-wrap').evaluate(el=>el.open))await page.locator('#ranking-stage-wrap summary').click();
+          await page.locator('#ranking-stage-select').selectOption(round);
+        }
         await waitRanking(page,code,round);
         assert.equal(await page.locator('.rank-round-section').count(),1);
         assert.match(await page.locator('.rank-round-title').innerText(),new RegExp('^'+round));

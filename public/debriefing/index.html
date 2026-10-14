@@ -660,6 +660,8 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   <select id="sel-comp">
     <option value="">-- 대회를 선택하세요 --</option>
   </select>
+  <label class="section-label" for="sel-phase">평가 구분</label>
+  <select id="sel-phase" onchange="onDebriefPhaseChange_()"><option value="예선">예선</option><option value="결선">결선</option></select>
   <div id="public-identity-fields">
     <div class="section-label" id="identity-label">본인 확인</div>
     <input type="text" id="inp-name" placeholder="이름" autocomplete="name" autocapitalize="off">
@@ -753,9 +755,34 @@ function logoImg_(code, className) {
 }
 function updateDebriefLogo() {
   var code = document.getElementById('sel-comp').value;
+  var cfg = (_configs || []).find(function(c){return c.code === code;});
+  document.getElementById('sel-phase').value = debriefPhase_(cfg && cfg.currentRound);
   document.getElementById('debrief-logo').innerHTML = logoImg_(code, 'hero-logo');
   updateIdentityLabels_();
   if (_adminPreviewActor) loadAdminDebriefPreviewOptions_();
+}
+function debriefPhase_(round) { return /본선|결선|main|final/i.test(String(round || '')) ? '결선' : '예선'; }
+function onDebriefPhaseChange_() {
+  ++_adminPreviewResultRequest;
+  hideOverlay();
+  if (_adminPreviewActor) renderAdminDebriefPreviewOptions_();
+}
+function renderAdminDebriefPreviewOptions_() {
+  var phase = document.getElementById('sel-phase').value;
+  var select = document.getElementById('admin-preview-unit');
+  select.innerHTML = '<option value="">-- 미리볼 선수·팀을 선택하세요 --</option>';
+  var count = 0;
+  _adminPreviewOptions.forEach(function(item, index){
+    if (debriefPhase_(item.round) !== phase) return;
+    var option = document.createElement('option');
+    option.value = String(index);
+    var label = item.round === '본선' ? '결선 · 본선 경기' : item.round;
+    option.textContent = [label, adminPreviewRankLabel_(item.rank), item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
+    select.appendChild(option);count++;
+  });
+  select.disabled = !count;
+  document.getElementById('admin-preview-open').disabled = !count;
+  document.getElementById('admin-preview-status').textContent = count ? phase + ' 공개 대상 ' + count + '명·팀' : phase + '에 표시할 평가 기록이 없습니다.';
 }
 
 function updateIdentityLabels_() {
@@ -929,18 +956,7 @@ function loadAdminDebriefPreviewOptions_() {
     }
     _adminPreviewOptions = res.options || [];
     _adminPreviewOptionsCode = code;
-    select.innerHTML = '<option value="">-- 미리볼 선수·팀을 선택하세요 --</option>';
-    _adminPreviewOptions.forEach(function(item, index){
-      var option = document.createElement('option');
-      option.value = String(index);
-      option.textContent = [item.round, adminPreviewRankLabel_(item.rank), item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
-      select.appendChild(option);
-    });
-    select.disabled = !_adminPreviewOptions.length;
-    button.disabled = !_adminPreviewOptions.length;
-    status.textContent = _adminPreviewOptions.length
-      ? (code === 'IKRC' ? '공식 제출 평가가 있는 선수 ' : '검수 완료 평가가 있는 대상 ') + _adminPreviewOptions.length + (code === 'IKRC' ? '명' : '명·팀')
-      : (code === 'IKRC' ? '현재 선수 화면에 표시할 공식 제출 평가가 없습니다.' : '현재 선수 화면에 표시할 검수 완료 평가가 없습니다.');
+    renderAdminDebriefPreviewOptions_();
   }, function(){
     if(!current())return;
     select.innerHTML = '<option value="">목록을 불러오지 못했습니다</option>';
@@ -953,7 +969,7 @@ function openAdminDebriefPreview_() {
   var rawIndex = String((document.getElementById('admin-preview-unit') || {}).value || '');
   var index = rawIndex === '' ? -1 : Number(rawIndex);
   var item = _adminPreviewOptions[index];
-  if (!code || !item || _adminPreviewOptionsCode!==code) { toast('현재 대회에서 미리볼 선수·팀을 선택해주세요.', true); return; }
+  if (!code || !item || _adminPreviewOptionsCode!==code || debriefPhase_(item.round)!==document.getElementById('sel-phase').value) { toast('현재 대회에서 미리볼 선수·팀을 선택해주세요.', true); return; }
   var request = ++_adminPreviewResultRequest;
   function current(){return request===_adminPreviewResultRequest && String((document.getElementById('sel-comp')||{}).value||'').toUpperCase()===code;}
   showOverlay();
@@ -961,6 +977,7 @@ function openAdminDebriefPreview_() {
     if(!current())return;
     hideOverlay();
     if (!res || !res.success) { toast((res && res.message) || '디브리핑 미리보기를 불러오지 못했습니다.', true); return; }
+    res.requestedPhase = debriefPhase_(item.round);
     renderResult(res);
     showPanel('pResult');
   }, function(){
@@ -996,6 +1013,7 @@ function doSendOTP() {
   if (phone.length < 10 || phone.length > 11) { toast(isKtcc ? '팀원 연락처를 숫자만 정확히 입력해주세요' : '연락처를 숫자만 정확히 입력해주세요', true); return; }
 
   _name = name; _phone = phone; _compCode = comp;
+  _requestedDebriefPhase = document.getElementById('sel-phase').value;
 
   var btn = document.getElementById('btn-send-otp');
   btn.disabled = true;
@@ -1050,11 +1068,12 @@ function startTimer(seconds) {
   _timerInterval = setInterval(tick, 1000);
 }
 
+var _requestedDebriefPhase = '예선';
 function doVerifyOTP() {
   var otp = document.getElementById('inp-otp').value.trim();
   if (!otp || otp.length < 6) { toast('인증번호 6자리를 입력해주세요', true); return; }
   showOverlay();
-  gasRun_('verifyOTP', [_name, _phone, _compCode, otp], function(res) {
+  gasRun_('verifyOTP', [_name, _phone, _compCode, otp, _requestedDebriefPhase], function(res) {
     hideOverlay();
     clearInterval(_timerInterval);
     if (!res.success) { toast(res.message, true); return; }
@@ -1254,6 +1273,13 @@ function kcacDebriefJudgeKey_(score, fallbackIndex) {
   return 'card:' + String(fallbackIndex == null ? '' : fallbackIndex);
 }
 function renderResult(res) {
+  // Defense in depth for stale responses: never render a different phase score,
+  // rank or mean, and never mutate the source response while filtering it.
+  if (res.requestedPhase) {
+    var matchesPhase = function(item){return debriefPhase_(item.round || item['라운드']) === res.requestedPhase;};
+    var scopedRanks = (res.rankInfos || (res.rankInfo ? [res.rankInfo] : [])).filter(matchesPhase);
+    res = Object.assign({},res,{scores:(res.scores || []).filter(matchesPhase),rankInfos:scopedRanks,rankInfo:scopedRanks[0] || null});
+  }
   _lastResult = res;
   var previewNotice = document.getElementById('admin-preview-notice');
   if (previewNotice) previewNotice.classList.toggle('active', !!res.isAdminPreview);
@@ -1292,7 +1318,7 @@ function renderResult(res) {
   document.documentElement.classList.toggle('ikrc-debrief-print-mode', isIkrcDebrief);
   var screenOnlyNote = document.getElementById('screen-only-note'); if (screenOnlyNote) screenOnlyNote.style.display = scores.length ? 'block' : 'none';
   if (scores.length === 0) {
-    body.innerHTML = isIkrcDebrief
+    body.innerHTML = res.requestedPhase ? '<div class="no-score">' + escHtml(res.requestedPhase) + '에 공개된 평가 기록이 없습니다.</div>' : isIkrcDebrief
       ? '<div class="no-score">이 선수와 연결된 IKRC 공식 평가가 없습니다.<br>운영팀에 라운드별 블라인드코드 배정을 확인해주세요.</div>'
       : '<div class="no-score">아직 공개된 검수 완료 평가가 없습니다.<br>운영팀 검수 상태와 선수 등록 정보를 확인해주세요.</div>';
     return;

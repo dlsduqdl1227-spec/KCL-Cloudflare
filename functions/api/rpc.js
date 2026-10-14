@@ -646,7 +646,7 @@ async function dispatch(action, args, env, request) {
     getFinalReport: () => getFinalReport(env, args[0], args[1], args[2]),
     getScoreBackupReport: () => getScoreBackupReport(env, args[0], args[1]),
     sendOTP: () => sendOTP(env, args[0], args[1], args[2], request),
-    verifyOTP: () => verifyOTP(env, args[0], args[1], args[2], args[3], request),
+    verifyOTP: () => verifyOTP(env, args[0], args[1], args[2], args[3], request, args[4]),
     sendTestSMS: () => sendTestSMS(env, args[0], args[1], request),
     refreshAdminActor: () => refreshAdminActor(env, args[0]),
     logoutSession: () => logoutSession(env, args[0]),
@@ -7058,8 +7058,10 @@ async function buildIkrcPublicDebriefBundle_(env, blindTargets, rankingData=null
     targetKeys:Array.from(targetKeys)
   };
 }
-async function verifyOTP(env, name, phone, competitionCode, otp, request = null) {
+async function verifyOTP(env, name, phone, competitionCode, otp, request = null, requestedPhase = '') {
   name = safeStr(name); phone = normalizePhone(phone); const code = safeStr(competitionCode).toUpperCase();
+  requestedPhase = safeStr(requestedPhase);
+  if (requestedPhase && !['예선','결선'].includes(requestedPhase)) return {success:false, message:'예선 또는 결선을 선택해주세요.'};
   const verifyLimit = await rateLimit_(env, 'otp-verify:' + code + ':' + await sha256Hex_(phone), 10, 10 * 60);
   if (!verifyLimit.ok) return { success: false, message: '인증번호 확인 시도가 많습니다. 10분 후 다시 시도해주세요.' };
   const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
@@ -7074,7 +7076,11 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
   await env.DB.prepare('UPDATE otps SET used_at=? WHERE id=?').bind(nowIso(), row.id).run();
   const participants = await findDebriefParticipants_(env, code, name, phone);
   if (!participants.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다.' };
-  const targets = participants.flatMap(p => participantDebriefTargets_(p, code));
+  // A phase is a presentation group, never a storage-round rewrite. Exact
+  // (round, participant number) targets are retained inside the final phase.
+  const targets = participants.flatMap(p => participantDebriefTargets_(p, code)).filter(target =>
+    !requestedPhase || (requestedPhase === '예선' ? target.round === '예선' : ['본선','결선'].includes(target.round))
+  );
   const ids = [...new Set(targets.map(target => target.unit))];
   const publicBundle = await buildPublicDebriefBundle_(env, code, targets);
   if (publicBundle.assignmentConflict) return debriefAssignmentConflict_();
@@ -7089,7 +7095,7 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null)
     identifiers: ids
   };
   const token = await issueSession(env, 'debrief', { competition: code, name, phone, identifiers: ids }, 3600);
-  return { success: true, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : (code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가') };
+  return { success: true, requestedPhase, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : (code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가') };
 }
 
 function _num(v) {

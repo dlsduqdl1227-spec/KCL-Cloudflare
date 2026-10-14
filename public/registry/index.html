@@ -167,7 +167,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
         </div>
         <div class="mode-note compact" id="manualFieldHelp"></div>
         <details class="schedule-editor" id="participantFinalsFields">
-          <summary>본·결선 배정 (선택)</summary>
+          <summary>결선 배정 (선택)</summary>
           <div class="schedule-grid">
             <label class="form-field"><span class="field-label">본선 번호</span><input id="mMainNo" placeholder="진출 선수만 입력"></label>
             <label class="form-field date-field"><span class="field-label">본선 일정</span><input id="mMainDate" type="date" onclick="openDatePicker_(this)"></label>
@@ -738,7 +738,7 @@ function updateManualParticipantFields(){var code=((document.getElementById('com
   setHidden_('bulkParticipantDateButton',isKcr);setHidden_('bulkParticipantDateHelp',isKcr);
   var sort=document.getElementById('participantSortMode');sort.querySelector('[value="schedule"]').hidden=isKcr;
   if(isKcr&&sort.value==='schedule'){sort.value='number-asc';participantSortMode='number-asc';}
-  var help=document.getElementById('manualFieldHelp'); if(help)help.textContent='본·결선 진출자는 아래 배정을 펼쳐 해당 라운드 번호와 일정을 입력하세요. 기존 평가 기록은 변경되지 않습니다.';
+  var help=document.getElementById('manualFieldHelp'); if(help)help.textContent='결선 진출자는 아래 배정을 펼쳐 번호와 일정을 입력하세요. 본선 경기가 별도인 대회는 경기별로 배정하며 기존 평가 기록은 유지됩니다.';
   setFieldVisible_('mMainNo',code==='KBC'||code==='MOC');setFieldVisible_('mMainDate',code==='KBC'||code==='MOC');
   var opTeam=document.getElementById('opTeam'); var opHelp=document.getElementById('operatorTeamHelp');
   if(opTeam)opTeam.placeholder=code==='IKRC'?'IKRC 스테이션 예: 스테이션 1 / 1팀 / X':'평가팀 예: A / 1팀 / Head A';

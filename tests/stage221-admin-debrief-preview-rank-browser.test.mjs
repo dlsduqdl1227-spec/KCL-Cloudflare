@@ -22,8 +22,11 @@ try {
       await page.addInitScript(actor => localStorage.setItem('kclAdminActor', JSON.stringify(actor)), api.actor);
       await page.goto(qa.origin + '/debriefing/?from=admin&preview=1&comp=' + c.code);
       await page.waitForFunction(code => _adminPreviewOptionsCode === code && _adminPreviewOptions.length > 0, c.code);
-      const labels = await page.locator('#admin-preview-unit option').allTextContents();
-      assert.deepEqual(labels.slice(1), options.map(item => [item.round, item.rank + '위', item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ')), c.code + ' rank in every option');
+      for(const phase of ['예선','결선']){
+        await page.locator('#sel-phase').selectOption(phase);
+        const labels = await page.locator('#admin-preview-unit option').allTextContents();
+        assert.deepEqual(labels.slice(1), options.filter(item=>(item.round==='예선'?'예선':'결선')===phase).map(item => [item.round==='본선'?'결선 · 본선 경기':item.round, item.rank + '위', item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ')), c.code + ' rank in every phase-scoped option');
+      }
       const edgeLabels = await page.evaluate(() => [1, '12', '실격', null, 0, '', '공동 2위'].map(adminPreviewRankLabel_));
       assert.deepEqual(edgeLabels, ['1위', '12위', '실격', '순위 미집계', '순위 미집계', '순위 미집계', '공동 2위']);
       // Same entrant has different numbers/ranks across rounds. Selection must

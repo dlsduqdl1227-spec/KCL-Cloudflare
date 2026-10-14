@@ -117,6 +117,7 @@ assert.equal(
 );
 assert.doesNotMatch(assessment, /mobile-context-back/);
 assert.match(extractFunction(assessment, "installBrowserBackGuard_"), /goBackContext_\(\)/);
-assert.match(assessment, /등록 참여인원 수 자체에는 별도 제한이 없으며/);
+assert.match(extractFunction(assessment, "configSelectableOptionsHtml_"), /스테이션을 눌러 번호 범위와 용도를 설정하세요/);
+assert.match(extractFunction(assessment, "configSelectableOptionsHtml_"), /켈리브레이션은 공식 점수에 포함되지 않습니다/);
 
 process.stdout.write("Stage112 IKRC operations tests passed.\n");

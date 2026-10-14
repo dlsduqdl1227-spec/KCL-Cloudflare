@@ -14,21 +14,22 @@ try{
     await page.evaluate(()=>adminSwitchSection('config'));
     for(const code of ['KBC','MOC']){
       const id='#admin-cfg-round-'+code;
-      assert.deepEqual(await page.locator(id+'-group option').allTextContents(),['예선','본·결선']);
-      await page.locator(id+'-group').selectOption('본·결선');
+      assert.deepEqual(await page.locator(id+'-group option').allTextContents(),['예선','결선']);
+      await page.locator(id+'-group').selectOption('결선');
+      await page.locator(id+'-stage-wrap summary').click();
       await page.locator(id+'-stage').selectOption('결선');
       assert.equal(await page.locator(id).inputValue(),'결선');
       await page.locator(id+'-group').selectOption('예선');
       assert.equal(await page.locator(id+'-stage').isVisible(),false);
       assert.equal(await page.locator(id).inputValue(),'예선');
-      await page.locator(id+'-group').selectOption('본·결선');
+      await page.locator(id+'-group').selectOption('결선');
       assert.equal(await page.locator(id+'-stage').inputValue(),'결선','reselecting a shared sheet preserves the chosen stage');
       const response=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='updateCompetitionAdminSettings');
       const refreshed=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='getAdminConsoleData');
       await page.locator('#admin-config-card-'+code+' [data-save]').click();
       assert.equal((await (await response).json()).success,true);
       await (await refreshed).finished();
-      await page.waitForFunction(({code})=>document.getElementById('admin-cfg-round-'+code+'-group')?.value==='본·결선'&&document.getElementById('admin-cfg-round-'+code)?.value==='결선',{code});
+      await page.waitForFunction(({code})=>document.getElementById('admin-cfg-round-'+code+'-group')?.value==='결선'&&document.getElementById('admin-cfg-round-'+code)?.value==='결선',{code});
       assert.equal(api.db.prepare('SELECT current_round FROM competitions WHERE code=?').get(code).current_round,'결선');
     }
     for(const code of ['MOB','KCAC','IKRC','KCR','KTCC']){
@@ -41,7 +42,8 @@ try{
     // Reuse the real API with a team-lead-shaped UI actor; auth remains local-only.
     await page.evaluate(actor=>{_judge={judgeToken:actor.judgeToken,name:'QA 팀장',phone:actor.phone,type:'TEAMLEAD',accountType:'TEAMLEAD',role:'대회팀장',access:'KBC,MOC',accountTypeMap:{KBC:'TEAMLEAD',MOC:'TEAMLEAD'},roleMap:{KBC:'대회팀장',MOC:'대회팀장'}};loadTeamPanel();},api.actor);
     await page.waitForSelector('#team-cfg-round-KBC-group');
-    assert.equal(await page.locator('#team-cfg-round-KBC-group').inputValue(),'본·결선');
+    assert.equal(await page.locator('#team-cfg-round-KBC-group').inputValue(),'결선');
+    await page.locator('#team-cfg-round-KBC-stage-wrap summary').click();
     await page.locator('#team-cfg-round-KBC-stage').selectOption('본선');
     const saved=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='updateCompetitionAdminSettings');
     await page.locator('.admin-comp-card').filter({has:page.locator('#team-cfg-round-KBC')}).locator('[data-act=save-cfg]').click();

@@ -46,6 +46,7 @@ try {
     const panel=page.locator('#admin-config-card-KCR [data-kcr-station-manager]');await panel.waitFor();
     const row=panel.locator('[data-station-id="station4"]');
     assert.equal(await row.locator('[data-field=end]').inputValue(),'9');
+    await row.locator('summary').click();
     await row.locator('[data-field=end]').fill('8');
     const saving=page.waitForResponse(r=>r.request().postDataJSON()?.action==='updateCompetitionAdminSettings');
     await page.locator('#admin-config-card-KCR [data-save=KCR]').click();assert.equal((await (await saving).json()).success,true);
@@ -54,6 +55,7 @@ try {
     assert.equal(saved.kcrStations.byRound.예선[0].end,8,'manual override survives save/reload');
     assert.deepEqual(saved.kcrStations.byRound.결선.map(s=>[s.start,s.end]),final.map(s=>[s.start,s.end]));
     // A calibration range cannot dictate the next official participant number.
+    await panel.locator('[data-station-id="station3"] summary').click();
     await panel.locator('[data-station-id="station3"] [data-field=end]').fill('900');
     await panel.locator('.ikrc-station-add').click();
     const added=panel.locator('[data-ikrc-station-row]').last();

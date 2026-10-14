@@ -1,0 +1,27 @@
+/* Compact station editor. Hidden editors stay in the DOM and in save payloads. */
+#admin-config-card-KCR,#admin-config-card-IKRC,.kcr-station-manager-panel,.station-editor{scroll-margin-top:150px}
+details.station-editor.ikrc-station-config-row{display:block;padding:0;min-width:0;overflow:hidden}
+.station-editor>summary{display:flex;gap:12px;align-items:center;justify-content:space-between;min-height:66px;padding:14px;cursor:pointer;list-style:none;touch-action:manipulation}
+.station-editor>summary::-webkit-details-marker{display:none}
+.station-editor>summary::after{content:'설정 +';flex:none;color:var(--text-2);font-size:12px}
+.station-editor[open]>summary::after{content:'접기 −'}
+.station-editor>summary:focus-visible{outline:2px solid #fff;outline-offset:-3px;border-radius:10px}
+.station-summary-text{display:grid;gap:5px;min-width:0}
+.station-summary-text [data-field=label]{font-size:14px;font-weight:800;color:var(--text);min-height:0}
+.station-summary-meta{font-size:12px;line-height:1.5;color:var(--text-2);overflow-wrap:anywhere;word-break:keep-all}
+.station-editor-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:14px;border-top:1px solid var(--border)}
+.station-editor .station-editor-fields label{grid-column:auto;min-width:0;font-size:12px;line-height:1.4}
+.station-editor .station-editor-fields .ikrc-station-purpose{grid-column:1/-1}
+.station-editor .station-editor-fields :is(input:not([type=checkbox]),select){width:100%;font-size:16px!important;min-height:48px}
+.station-editor .station-editor-fields .ikrc-station-remove{grid-column:1/-1;justify-self:end;width:auto;min-width:88px;min-height:44px;margin:0}
+.station-config-help{margin:10px 0;color:var(--text-2);font-size:12px;line-height:1.6}
+.station-config-help summary{cursor:pointer;padding:10px 0;min-height:44px;box-sizing:border-box}
+.station-config-help p{margin:4px 0 10px}
+.station-edit-status{min-height:20px;margin:8px 0;color:#f4ca7a;font-size:12px;line-height:1.5}
+.station-tools{margin-top:12px;border:1px solid var(--border);border-radius:12px;padding:0 12px}
+.station-tools>summary{cursor:pointer;min-height:48px;display:flex;align-items:center;font-size:13px;font-weight:700}
+.station-tools .admin-comp-actions{padding-bottom:12px}
+.station-workflow-actions{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+.station-workflow-actions>button{min-width:0;min-height:48px;white-space:normal;word-break:keep-all}
+.station-tools summary:focus-visible{outline:2px solid #fff;outline-offset:3px}
+@media(min-width:1000px){.station-editor-fields{grid-template-columns:repeat(4,minmax(0,1fr))}.station-editor .station-editor-fields .ikrc-station-purpose{grid-column:span 2}}
