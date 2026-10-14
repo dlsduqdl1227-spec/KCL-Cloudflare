@@ -1,5 +1,43 @@
 (function(){
   'use strict';
+  window.stationCupIdentityHtml_=function(code,prefix,round){
+    if(!isAdminRole())return '';
+    return '<details class="station-cup-identities" data-cup-code="'+code+'" data-cup-prefix="'+prefix+'" data-cup-round="'+escHtml(round)+'"><summary>컵번호 · 선수 확인</summary>'+
+      '<p class="station-config-help">저장된 스테이션 기준입니다. 미연결·중복 항목을 확인해 주세요.</p>'+
+      '<button type="button" class="btn-outline" data-cup-load>선수 연결 불러오기</button><div data-cup-result role="status"></div></details>';
+  };
+  window.resetStationCupIdentity_=function(prefix,code,round){
+    document.querySelectorAll('[data-cup-code]').forEach(function(box){
+      if(box.dataset.cupCode!==code||box.dataset.cupPrefix!==prefix)return;
+      box.dataset.cupRound=round;box._request=(box._request||0)+1;box._data=null;
+      box.querySelector('[data-cup-result]').textContent='';box.querySelector('[data-cup-load]').disabled=false;
+    });
+  };
+  function renderCupStation(box){
+    var select=box.querySelector('[data-cup-station]'),station=box._data.stations.find(function(s){return s.id===select.value;});
+    var rows=box.querySelector('[data-cup-rows]');
+    if(!station){rows.textContent='대회평가용 스테이션이 없습니다.';return;}
+    rows.innerHTML=station.cups.map(function(cup){
+      var label=cup.status==='duplicate'?'중복 연결 · 확인 필요':cup.status==='unassigned'?'선수 미연결':'';
+      return '<div class="station-cup-person"><b>'+escHtml(cup.unit)+'번 컵</b><div>'+cup.participants.map(function(p){return '<strong>'+escHtml(p.name)+'</strong><span>'+escHtml(p.affiliation)+'</span>';}).join('')+
+        (label?'<span class="station-cup-warning">'+label+'</span>':'')+'</div></div>';
+    }).join('');
+  }
+  document.addEventListener('change',function(event){if(event.target.matches('[data-cup-station]'))renderCupStation(event.target.closest('[data-cup-code]'));});
+  document.addEventListener('click',function(event){
+    var button=event.target.closest('[data-cup-load]');if(!button)return;
+    var box=button.closest('[data-cup-code]'),result=box.querySelector('[data-cup-result]');
+    var token=box._request=(box._request||0)+1;
+    button.disabled=true;result.textContent='선수 연결을 불러오는 중입니다.';
+    function failed(message){if(token!==box._request||!box.isConnected)return;button.disabled=false;result.textContent=message||'불러오지 못했습니다. 다시 시도해주세요.';}
+    google.script.run.withSuccessHandler(function(data){
+      if(token!==box._request||!box.isConnected)return;
+      if(!data||!data.success){failed(data&&data.message);return;}
+      button.disabled=false;button.textContent='새로고침';box._data=data;
+      result.innerHTML='<label class="station-cup-select">'+escHtml(data.currentRound)+' · 스테이션<select data-cup-station>'+data.stations.map(function(s){return '<option value="'+escHtml(s.id)+'">'+escHtml(s.label)+(s.prelimDay?' · '+escHtml(s.prelimDay)+'일차':'')+'</option>';}).join('')+'</select></label><div data-cup-rows></div>';
+      renderCupStation(box);
+    }).withFailureHandler(function(){failed('연결을 불러오지 못했습니다. 다시 시도해주세요.');}).getStationCupParticipants(box.dataset.cupCode,box.dataset.cupRound,adminActorPayload_());
+  });
   function value(row,key){var input=row.querySelector('[data-field="'+key+'"]');return input?input.value:'';}
   function summary(row){
     var code=row.dataset.competitionCode;

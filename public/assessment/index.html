@@ -2004,8 +2004,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
 <script defer src="/assets/kcr-viewport.js?v=228"></script>
-<link rel="stylesheet" href="/assets/station-manager.css?v=229">
-<script defer src="/assets/station-manager.js?v=229"></script>
+<link rel="stylesheet" href="/assets/station-manager.css?v=230">
+<script defer src="/assets/station-manager.js?v=230"></script>
 </head>
 <body>
 
@@ -4540,6 +4540,7 @@ function ikrcRenderStationConfigForRound_(prefix, cfg, round) {
   container.innerHTML = stations.map(function(station, index){ return ikrcStationConfigRowHtml_(station, index, code); }).join('');
   container.dataset.stationRound = round;
   container.dataset.stationDirty = 'false';
+  if (typeof resetStationCupIdentity_ === 'function') resetStationCupIdentity_(prefix, code, round);
   var editStatus = container.parentElement.querySelector('[data-station-edit-status]');
   if (editStatus) editStatus.textContent = '';
   ikrcRenumberStationConfigRows_(container);
@@ -4561,7 +4562,7 @@ function configSelectableOptionsHtml_(cfg, prefix) {
   }
   if (code === 'IKRC') {
     var stations = ikrcStationSettings_(cfg);
-    return '<p class="station-config-help">스테이션을 눌러 번호 범위와 용도를 설정하세요.</p><details class="station-config-help"><summary>운영 안내</summary><p>켈리브레이션은 공식 점수에 포함되지 않습니다. 선수 연결은 <b>블라인드코드 · 선수 연결</b>에서 관리합니다. 스테이션을 삭제해도 제출 기록은 유지됩니다.</p></details>' +
+    return (typeof stationCupIdentityHtml_ === 'function' ? stationCupIdentityHtml_(code, prefix, cfg.currentRound || '예선') : '') + '<p class="station-config-help">스테이션을 눌러 번호 범위와 용도를 설정하세요.</p><details class="station-config-help"><summary>운영 안내</summary><p>켈리브레이션은 공식 점수에 포함되지 않습니다. 선수 연결은 <b>블라인드코드 · 선수 연결</b>에서 관리합니다. 스테이션을 삭제해도 제출 기록은 유지됩니다.</p></details>' +
       '<div class="ikrc-station-config-list" id="' + prefix + '-ikrc-stations-' + code + '">' +
         stations.map(function(station, index){ return ikrcStationConfigRowHtml_(station, index); }).join('') +
       '</div>' +
@@ -4571,6 +4572,7 @@ function configSelectableOptionsHtml_(cfg, prefix) {
     var settings = kcrProcessSettings_(cfg);
     var kcrStations = kcrStationSettings_(cfg);
     var html = '<section class="kcr-station-manager-panel" data-kcr-station-manager data-kcr-round="' + ikrcStationRoundKey_(cfg.currentRound) + '"><div class="kcr-station-manager-head"><div class="kcr-station-manager-title">스테이션 관리</div></div>' +
+      (typeof stationCupIdentityHtml_ === 'function' ? stationCupIdentityHtml_(code, prefix, cfg.currentRound || '예선') : '') +
       '<p class="station-config-help">스테이션을 눌러 참가자번호와 용도를 설정하세요. 새 스테이션은 다음 9명으로 제안됩니다.</p>' +
       '<details class="station-config-help"><summary>프로세스 · 운영 안내</summary><p>사용할 프로세스만 켜두세요.</p>';
     html += '<div class="admin-check-row wide">';

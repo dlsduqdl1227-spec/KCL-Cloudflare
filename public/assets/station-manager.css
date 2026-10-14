@@ -1,4 +1,16 @@
 /* Compact station editor. Hidden editors stay in the DOM and in save payloads. */
+.station-cup-identities{margin:12px 0;border:1px solid var(--border);border-radius:12px;padding:0 14px 14px}
+.station-cup-identities>summary{min-height:48px;display:flex;align-items:center;cursor:pointer;font-size:14px;font-weight:700}
+.station-cup-identities:not([open]){padding-bottom:0}
+.station-cup-identities [data-cup-result]{font-size:13px;line-height:1.5;margin-top:12px;overflow-wrap:anywhere}
+.station-cup-identities>button{width:auto;min-height:44px;margin:0}
+.station-cup-select{display:grid;gap:6px;font-size:13px}
+.station-cup-select select{font-size:16px!important;min-height:48px;width:100%;min-width:0}
+.station-cup-person{display:grid;grid-template-columns:90px minmax(0,1fr);gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.station-cup-person span,.station-cup-person strong{display:block}
+.station-cup-person span{color:var(--text-2)}
+.station-cup-person .station-cup-warning{color:#f4ca7a}
+.station-cup-identities summary:focus-visible{outline:2px solid #fff;outline-offset:3px}
 #admin-config-card-KCR,#admin-config-card-IKRC,.kcr-station-manager-panel,.station-editor{scroll-margin-top:150px}
 details.station-editor.ikrc-station-config-row{display:block;padding:0;min-width:0;overflow:hidden}
 .station-editor>summary{display:flex;gap:12px;align-items:center;justify-content:space-between;min-height:66px;padding:14px;cursor:pointer;list-style:none;touch-action:manipulation}

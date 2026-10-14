@@ -629,6 +629,7 @@ async function dispatch(action, args, env, request) {
     bulkUpdateParticipantPrelimDate: () => bulkUpdateParticipantPrelimDate(env, args[0], args[1]),
     getRegistrationTemplates: () => getRegistrationTemplates(),
     getParticipantAssignments: () => getParticipantAssignments(env, args[0], args[1]),
+    getStationCupParticipants: () => getStationCupParticipants(env, args[0], args[1], args[2]),
     getIkrcBlindAssignments: () => getIkrcBlindAssignments(env, args[0]),
     saveIkrcStationSettings: () => saveIkrcStationSettings(env, args[0], args[1]),
     saveIkrcBlindAssignments: () => saveIkrcBlindAssignments(env, args[0], args[1]),
@@ -2954,10 +2955,44 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
 function ikrcAssignmentFieldForRound_(round) {
   return ikrcStationRoundKeyServer_(round) === '결선' ? 'final_cup_no' : 'prelim_cup_no';
 }
+// Saved station/cup identity is an administrator-only view. Exact-round lookup
+// intentionally has no preliminary fallback and never changes stored scores.
+async function getStationCupParticipants(env, codeArg, roundArg, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!hasAdmin(actor)) return {success:false, message:'컵번호별 선수 확인은 관리자만 사용할 수 있습니다.'};
+  const code = safeStr(codeArg).toUpperCase();
+  const round = safeStr(roundArg);
+  if (!['KCR','IKRC'].includes(code) || !['예선','결선'].includes(round)) return {success:false, message:'대회와 라운드를 확인해주세요.'};
+  const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
+  if (!cfg) return {success:false, message:'대회 설정을 찾을 수 없습니다.'};
+  const rows = (await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind(code).all()).results || [];
+  const stations = code === 'KCR' ? kcrStationsForPurposeServer_(cfg, round, 'competition') : ikrcStationsForPurposeServer_(cfg, round, 'competition');
+  const normalize = value => safeStr(value).toUpperCase().replace(/\s+/g,'').replace(/^0+(?=\d+$)/,'');
+  const byUnit = new Map();
+  rows.forEach(row => {
+    const unit = normalize(code === 'IKRC' ? ikrcBlindUnitFromRow_(row, round) : participantRoundNumber_(row, code, round));
+    if (!unit) return;
+    if (!byUnit.has(unit)) byUnit.set(unit, []);
+    byUnit.get(unit).push({participantId:Number(row.id),name:row.name || '',affiliation:row.affiliation || ''});
+  });
+  return {success:true, competitionCode:code, currentRound:round, stations:stations.map(station => {
+    const cups = [];
+    for (let n=Number(station.start);n<=Number(station.end);n++) {
+      const unit = code === 'IKRC' ? `${station.prefix}-${n}` : String(n);
+      const participants = byUnit.get(normalize(unit)) || [];
+      cups.push({unit,participants,status:participants.length>1?'duplicate':participants.length?'linked':'unassigned'});
+    }
+    return {id:station.id,label:station.label,prelimDay:station.prelimDay || '',cups};
+  })};
+}
 function ikrcBlindAssignmentsFromRow_(row) {
   const extra = parseJson(row && row.extra_json, {});
   const stored = extra && extra.ikrcBlindAssignments;
   return stored && typeof stored === 'object' && !Array.isArray(stored) ? Object.assign({}, stored) : {};
+}
+function ikrcParticipantsForRound_(rows, round) {
+  if (round === '예선') return rows;
+  return rows.filter(row => safeStr(participantRoundNumber_(row, 'IKRC', round)) || safeStr(ikrcBlindAssignmentsFromRow_(row)[round]));
 }
 function ikrcBlindUnitFromRow_(row, round, allowed) {
   const normalizedRound = normalizeRoundForCompetition_('IKRC', round || '예선');
@@ -2988,11 +3023,12 @@ async function getIkrcBlindAssignments(env, actorArg) {
   const units = ikrcUnitsForStationsServer_(stations);
   const allowed = new Set(units.map(item => item.unit));
   const rows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY name, id').bind('IKRC').all();
-  const participants = (rows.results || []).map(row => {
+  const participants = ikrcParticipantsForRound_(rows.results || [], round).map(row => {
     const storedMap = ikrcBlindAssignmentsFromRow_(row);
     const storedUnit = safeStr(storedMap[round]).toUpperCase().replace(/\s+/g, '');
     const legacyUnit = safeStr(row[field]).toUpperCase().replace(/\s+/g, '');
-    const unit = Object.prototype.hasOwnProperty.call(storedMap, round) ? storedUnit : legacyUnit;
+    // A numeric final roster number marks eligibility, not a sensory station code.
+    const unit = Object.prototype.hasOwnProperty.call(storedMap, round) ? storedUnit : (round !== '예선' && /^\d+$/.test(legacyUnit) ? '' : legacyUnit);
     return {
       participantId:Number(row.id),
       name:row.name || '',
@@ -3079,7 +3115,7 @@ async function saveIkrcBlindAssignments(env, payload, actorArg) {
   const stations = ikrcStationsForPurposeServer_(cfg, round, 'competition');
   const allowed = new Set(ikrcUnitsForStationsServer_(stations).map(item => item.unit));
   const participantRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('IKRC').all();
-  const existing = participantRows.results || [];
+  const existing = ikrcParticipantsForRound_(participantRows.results || [], round);
   if (!existing.length) return { success:false, message:'등록된 IKRC 선수가 없습니다. 선수 등록 후 블라인드 코드를 배정해주세요.' };
   const incoming = Array.isArray(payload && payload.assignments) ? payload.assignments : [];
   const byId = new Map();

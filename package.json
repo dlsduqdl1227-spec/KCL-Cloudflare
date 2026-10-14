@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:station-participants": "node tests/stage230-station-participant-links.test.mjs",
+    "test:finalist-plan": "node tests/stage231-finalist-plan.test.mjs",
     "test:station-phase-ux": "node tests/stage229-simple-stations-phases.test.mjs",
     "test:kcr-mobile": "node tests/stage228-kcr-mobile-viewport.test.mjs",
     "test:kcr-nine-cups": "node tests/stage227-kcr-nine-cup-sections.test.mjs",
