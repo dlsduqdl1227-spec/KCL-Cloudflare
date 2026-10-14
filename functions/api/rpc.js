@@ -629,6 +629,8 @@ async function dispatch(action, args, env, request) {
     bulkUpdateParticipantPrelimDate: () => bulkUpdateParticipantPrelimDate(env, args[0], args[1]),
     getRegistrationTemplates: () => getRegistrationTemplates(),
     getParticipantAssignments: () => getParticipantAssignments(env, args[0], args[1]),
+    getParticipantRoundOrder: () => getParticipantRoundOrder(env, args[0], args[1]),
+    saveParticipantRoundOrder: () => saveParticipantRoundOrder(env, args[0], args[1]),
     getStationCupParticipants: () => getStationCupParticipants(env, args[0], args[1], args[2]),
     getIkrcBlindAssignments: () => getIkrcBlindAssignments(env, args[0]),
     saveIkrcStationSettings: () => saveIkrcStationSettings(env, args[0], args[1]),
@@ -2269,12 +2271,18 @@ async function upsertParticipant(env, payload, actorArg) {
   // 다른 대회 참가자를 현재 대회로 이동시키지 않습니다. 참가자 행은
   // 생성된 대회 안에서만 수정할 수 있고 대회 변경은 새 행 등록으로 처리합니다.
   if (id) {
-    const current = await env.DB.prepare('SELECT competition_code FROM participants WHERE id=?').bind(id).first();
+    const current = await env.DB.prepare('SELECT competition_code, extra_json FROM participants WHERE id=?').bind(id).first();
     if (!current) return { success:false, message:'수정할 선수를 찾을 수 없습니다. 목록을 새로고침해주세요.' };
     const currentCode = safeStr(current.competition_code).toUpperCase();
     if (currentCode !== code) {
       return { success:false, message:`${currentCode} 선수는 ${code} 선수로 변경할 수 없습니다. 각 대회에서 별도로 등록해주세요.` };
     }
+    // A name/date form opened before a reorder must not restore the old order.
+    const schedules=parseJson(current.extra_json,{}).roundSchedules || {};
+    for(const round of ['본선','결선'])if(Number(schedules[round] && schedules[round].order)>0){
+      data.extra.roundSchedules={...data.extra.roundSchedules,[round]:{...(data.extra.roundSchedules && data.extra.roundSchedules[round] || {}),order:schedules[round].order}};
+    }
+    bind[12]=JSON.stringify(data.extra || {});
   }
 
   // 같은 엑셀을 다시 업로드해도 중복 선수가 쌓이지 않도록 대회+연락처+이름 또는 대회+번호 기준으로 갱신합니다.
@@ -2843,6 +2851,64 @@ function participantScheduleForRound_(row, round) {
     team:safeStr(extra['심사조'] || extra.judgeTeam || extra.teamGroup || extra['평가조'])
   };
 }
+function participantRoundOrder_(row, code, round) {
+  const extra=parseJson(row && row.extra_json, {});
+  const order=Number(extra.roundSchedules && extra.roundSchedules[round] && extra.roundSchedules[round].order);
+  if(Number.isInteger(order) && order>0)return order;
+  const number=Number(participantRoundNumber_(row,code,round));
+  return Number.isFinite(number) && number>0 ? number : Number.MAX_SAFE_INTEGER;
+}
+function sortRoundParticipants_(rows,code,round) {
+  return rows.slice().sort((a,b)=>participantRoundOrder_(a,code,round)-participantRoundOrder_(b,code,round)
+    || safeStr(participantRoundNumber_(a,code,round)).localeCompare(safeStr(participantRoundNumber_(b,code,round)),'ko',{numeric:true}) || Number(a.id)-Number(b.id));
+}
+async function participantRoundOrderContext_(env,payload,actorArg) {
+  const actor=await getActor(env,actorArg);
+  if(!hasAdmin(actor))return {success:false,message:'경연순서 변경은 관리자만 가능합니다.'};
+  const code=safeStr(payload && payload.competitionCode).toUpperCase(),round=safeStr(payload && payload.round);
+  if(!Object.prototype.hasOwnProperty.call(COMPETITION_NAMES,code) || !(round==='결선'||round==='본선'&&['MOC','KBC'].includes(code)))return {success:false,message:'대회와 결선 경기 회차를 확인해주세요.'};
+  const rows=((await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind(code).all()).results||[])
+    .filter(row=>safeStr(participantRoundNumber_(row,code,round)));
+  const revision=await sha256Hex_(JSON.stringify(rows.map(r=>[r.id,r.updated_at,r.extra_json,participantRoundNumber_(r,code,round),r.name,r.team_name,r.affiliation])));
+  return {success:true,code,round,rows,revision};
+}
+async function getParticipantRoundOrder(env,payload,actorArg) {
+  const context=await participantRoundOrderContext_(env,payload,actorArg);
+  if(!context.success)return context;
+  const {code,round,rows,revision}=context;
+  return {success:true,competitionCode:code,round,revision,participants:sortRoundParticipants_(rows,code,round).map((r,i)=>({
+    participantId:Number(r.id),order:i+1,number:participantRoundNumber_(r,code,round),
+    name:code==='KTCC'?(r.team_name||r.name):r.name,affiliation:code==='KTCC'?ktccMemberSummaryFromRow_(r,parseJson(r.extra_json,{})):r.affiliation,
+    date:participantScheduleForRound_(r,round).date
+  }))};
+}
+async function saveParticipantRoundOrder(env,payload,actorArg) {
+  const context=await participantRoundOrderContext_(env,payload,actorArg);
+  if(!context.success)return context;
+  const {code,round,rows,revision}=context;
+  if(!payload.revision || payload.revision!==revision)return {success:false,message:'선수 정보가 변경되었습니다. 새로고침 후 순서를 다시 확인해주세요.'};
+  const ids=Array.isArray(payload.participantIds)?payload.participantIds.map(Number):[];
+  const byId=new Map(rows.map(r=>[Number(r.id),r]));
+  if(!ids.length||ids.length!==rows.length||new Set(ids).size!==ids.length||ids.some(id=>!byId.has(id)))return {success:false,message:'현재 회차의 진출자 전체를 중복 없이 지정해주세요.'};
+  const changes=ids.map((id,index)=>{
+    const row=byId.get(id),extra=parseJson(row.extra_json,{});
+    extra.roundSchedules={...extra.roundSchedules,[round]:{...(extra.roundSchedules && extra.roundSchedules[round] || {}),order:index+1}};
+    return {id,oldExtra:row.extra_json,oldUpdated:row.updated_at,number:participantRoundNumber_(row,code,round),extra:JSON.stringify(extra)};
+  });
+  const column=round==='본선'?'main_cup_no':'final_cup_no';
+  // Atomic compare-and-swap: concurrent edits never receive a stale extra_json.
+  // Cup numbers, scores, comments and dates are deliberately not renumbered.
+  const result=await env.DB.prepare(`WITH plan AS (SELECT json_extract(value,'$.id') id,json_extract(value,'$.oldExtra') old_extra,
+    json_extract(value,'$.oldUpdated') old_updated,json_extract(value,'$.number') number,json_extract(value,'$.extra') extra FROM json_each(?)),
+    safe AS (SELECT 1 WHERE (SELECT COUNT(*) FROM plan p JOIN participants r ON r.id=p.id AND r.competition_code=?
+      AND r.extra_json IS p.old_extra AND r.updated_at IS p.old_updated AND r.${column}=p.number)=?
+      AND (SELECT COUNT(*) FROM participants WHERE competition_code=? AND COALESCE(${column},'')<>'')=?)
+    UPDATE participants SET extra_json=(SELECT extra FROM plan WHERE id=participants.id),updated_at=?
+    WHERE id IN(SELECT id FROM plan) AND competition_code=? AND EXISTS(SELECT 1 FROM safe)`)
+    .bind(JSON.stringify(changes),code,changes.length,code,changes.length,nowIso(),code).run();
+  if(Number(result.meta && result.meta.changes)!==changes.length)return {success:false,message:'동시에 변경된 선수 정보가 있습니다. 새로고침 후 다시 저장해주세요.'};
+  return {success:true,message:`${code} ${round==='본선'?'본선 경기':'결선'} 경연순서 ${changes.length}명·팀 저장 완료`};
+}
 async function getParticipantAssignments(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
   const actor = await getActor(env, actorArg);
@@ -2855,10 +2921,10 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const hideIdentity = !!(policy.identityHidden && !canSeeIdentity);
   let sourceRows = sortParticipantRowsForCompetition_(rows.results || [], code);
   if (currentRound !== '예선') {
-    sourceRows = sourceRows.filter(row => safeStr(participantRoundNumber_(row, code, currentRound)))
-      .sort((a, b) => safeStr(participantRoundNumber_(a, code, currentRound)).localeCompare(safeStr(participantRoundNumber_(b, code, currentRound)), 'ko', {numeric:true}));
+    sourceRows = sortRoundParticipants_(sourceRows.filter(row => safeStr(participantRoundNumber_(row, code, currentRound))),code,currentRound);
   }
   if (code === 'KCAC') sourceRows = dedupeKcacParticipantRows_(sourceRows, currentRound);
+  if (code === 'KCAC' && currentRound !== '예선') sourceRows = sortRoundParticipants_(sourceRows,code,currentRound);
   const completedOfficialUnits = new Map();
   if (code === 'KCAC' || code === 'KBC') {
     const scoreRows = await env.DB.prepare('SELECT submitted_at, unit, mode, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? ORDER BY id DESC')
@@ -2923,9 +2989,10 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       competitionDate,
       operatingDay,
       scheduleTeam,
+      performanceOrder: currentRound === '예선' ? '' : participantRoundOrder_(r,code,currentRound),
       evaluationCompleted,
       evaluationCompletedAt: evaluationCompleted ? completedOfficialUnits.get(completedUnitKey) : '',
-      display: (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? (' · ' + (code === 'KTCC' ? '팀원 ' : '') + displayAff) : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
+      display: (currentRound !== '예선' && !hideIdentity && participantRoundOrder_(r,code,currentRound)<Number.MAX_SAFE_INTEGER ? ('경연 '+participantRoundOrder_(r,code,currentRound)+' · ') : '') + (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? (' · ' + (code === 'KTCC' ? '팀원 ' : '') + displayAff) : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
     };
     if (code === 'IKRC' && hideIdentity) {
       return {
