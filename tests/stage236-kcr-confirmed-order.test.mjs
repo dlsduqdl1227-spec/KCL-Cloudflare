@@ -53,10 +53,12 @@ try {
  for(const width of [360,1440]){
   const page=await qa.page(width);await page.goto(qa.origin+'/registry/');
   await page.evaluate(a=>{actor=a;document.getElementById('loginCard').classList.add('hidden');document.getElementById('main').classList.remove('hidden');loadRegistry();},api.actor);
-  await page.locator('#comp option[value=KCR]').waitFor({state:'attached'});await page.locator('#comp').selectOption('KCR');
+  await page.locator('#comp option[value=KCR]').waitFor({state:'attached'});
+  await page.locator('#participantSortMode').selectOption('name');await page.locator('#comp').selectOption('KCR');
   await page.waitForFunction(()=>document.getElementById('partTable').textContent.includes('예선 배정 대기'));
   const numbers=await page.locator('#partTable td.cell-number').allTextContents();
   assert.deepEqual(numbers,['1','2','3','예선 배정 대기']);
+  assert.equal(await page.locator('#participantSortMode').inputValue(),'number-asc');
   assert.match(await page.locator('#partCount').innerText(),/예선 배정 3명 · 대기 1명/);
   await page.locator(`[data-edit-part="${pending.rowIndex}"]`).click();assert.equal(await page.locator('#mNo').inputValue(),'');
   assert.equal((await inspectPage(page)).pageOverflow,false);
