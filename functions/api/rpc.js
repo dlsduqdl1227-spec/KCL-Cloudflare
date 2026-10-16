@@ -2000,6 +2000,13 @@ function participantPayloadFromRow_(raw, defaultCode='') {
     ['소속','affiliation','company','업체명'].forEach(alias => { source[alias] = raw.affiliation; });
   }
   const code = safeStr(pickByAliases_(source, ['대회코드','competition_code','competitionCode','code'], defaultCode === 'ALL' ? '' : defaultCode)).toUpperCase();
+  // Explicit KCR form edits override stale number aliases retained from Excel.
+  if (code === 'KCR') {
+    for (const [field, aliases] of [
+      ['uniqueNo',['고유번호','unique_no','uniqueNo','참가자번호','선수번호','번호']],
+      ['prelimCupNo',['예선컵번호','prelim_cup_no','prelimCupNo','예선번호','예선출품번호','예선샘플번호','예선팀번호','예선블라인드번호']]
+    ]) if (Object.prototype.hasOwnProperty.call(raw, field)) aliases.forEach(key => { source[key] = raw[field]; });
+  }
   const name = safeStr(pickByAliases_(source, ['선수명','참가자명','이름','name','playerName','participantName']));
   const affiliation = safeStr(pickByAliases_(source, ['소속','affiliation','company','업체명']));
   const phone = normalizePhone(pickByAliases_(source, ['연락처','전화번호','휴대폰','phone','mobile']));
@@ -2237,6 +2244,12 @@ function sortParticipantRowsForCompetition_(rows, competitionCode) {
       const bNo = safeStr(b && (b.unique_no || b.prelim_cup_no || b.sample_no));
       if (aNo !== bNo) return aNo.localeCompare(bNo, 'ko', { numeric:true, sensitivity:'base' });
     }
+    if (aCode === 'KCR') {
+      const aNo = safeStr(participantRoundNumber_(a, 'KCR', '예선'));
+      const bNo = safeStr(participantRoundNumber_(b, 'KCR', '예선'));
+      if (!!aNo !== !!bNo) return aNo ? -1 : 1;
+      if (aNo !== bNo) return aNo.localeCompare(bNo, 'ko', {numeric:true});
+    }
     return Number(a && a.id || 0) - Number(b && b.id || 0);
   });
 }
@@ -2256,7 +2269,7 @@ function participantRowOut_(r) {
     waitingTime: normalizeParticipantScheduleRange_(ex['대기시간'] || ex.waitingTime || ex.waiting_time),
     stationNo: safeStr(r.competition_code === 'IKRC' ? (ex['로스팅위치'] || ex['로스팅스테이션'] || ex['스테이션번호'] || ex.stationNo || ex.station_no) : (ex['스테이션번호'] || ex.stationNo || ex.station_no)),
     performanceOrder: safeStr(ex['경연순서'] || ex.performanceOrder || ex.performance_order),
-    displayNo: r.team_no || r.final_cup_no || r.main_cup_no || r.prelim_cup_no || r.cup_no || r.sample_no || r.unique_no || String(r.id)
+    displayNo: kcrPrelimPending_(r) ? '' : (r.team_no || r.final_cup_no || r.main_cup_no || r.prelim_cup_no || r.cup_no || r.sample_no || r.unique_no || String(r.id))
   };
 }
 async function upsertParticipant(env, payload, actorArg) {
@@ -2281,6 +2294,11 @@ async function upsertParticipant(env, payload, actorArg) {
     const currentCode = safeStr(current.competition_code).toUpperCase();
     if (currentCode !== code) {
       return { success:false, message:`${currentCode} 선수는 ${code} 선수로 변경할 수 없습니다. 각 대회에서 별도로 등록해주세요.` };
+    }
+    if (code === 'KCR' && kcrPrelimPending_(current)) {
+      // Contact-only edits keep the entrant pending. An explicit new number
+      // reactivates the same participant ID, rather than creating another row.
+      data.extra.kcrPrelimPending = !safeStr(data.prelimCupNo);
     }
     // A name/date form opened before a reorder must not restore the old order.
     const schedules=parseJson(current.extra_json,{}).roundSchedules || {};
@@ -2312,7 +2330,9 @@ async function upsertParticipant(env, payload, actorArg) {
     }
   }
 
-  for (const [column, number, label] of [['main_cup_no',data.mainCupNo,'본선'],['final_cup_no',data.finalCupNo,'결선']]) {
+  const numberChecks = [['main_cup_no',data.mainCupNo,'본선'],['final_cup_no',data.finalCupNo,'결선']];
+  if (code === 'KCR') numberChecks.unshift(['prelim_cup_no',data.prelimCupNo,'예선']);
+  for (const [column, number, label] of numberChecks) {
     if (!safeStr(number)) continue;
     const duplicate = await env.DB.prepare(`SELECT id FROM participants WHERE competition_code=? AND ${column}=? AND id<>? LIMIT 1`).bind(code,safeStr(number),id || 0).first();
     if (duplicate) return {success:false, message:`${label} 번호 ${number}은(는) 이미 다른 선수에게 배정되어 있습니다. 번호를 확인해주세요.`};
@@ -2655,8 +2675,13 @@ function getRegistrationTemplates() {
 }
 
 
+function kcrPrelimPending_(row) {
+  return safeStr(row && row.competition_code).toUpperCase() === 'KCR'
+    && parseJson(row && row.extra_json, {}).kcrPrelimPending === true;
+}
 function participantRoundNumber_(r, code, round) {
   const normalized = normalizeRoundForCompetition_(code, round || '예선');
+  if (normalized === '예선' && kcrPrelimPending_(r)) return '';
   if (normalized === '예선') return r.prelim_cup_no || r.cup_no || r.sample_no || r.team_no || r.unique_no || String(r.id);
   // 진출 라운드 번호를 명시한 선수만 연결합니다. 예선 번호를 대체값으로 쓰면
   // 탈락 선수와 진출 선수의 번호가 겹쳐 평가/디브리핑 대상이 달라질 수 있습니다.
@@ -2925,6 +2950,8 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const canSeeIdentity = actorCanSeeParticipantIdentity_(actor, code);
   const hideIdentity = !!(policy.identityHidden && !canSeeIdentity);
   let sourceRows = sortParticipantRowsForCompetition_(rows.results || [], code);
+  const pendingPrelimAssignments = code === 'KCR' && currentRound === '예선' && sourceRows.some(kcrPrelimPending_);
+  if (pendingPrelimAssignments) sourceRows = sourceRows.filter(row => !kcrPrelimPending_(row));
   if (currentRound !== '예선') {
     sourceRows = sortRoundParticipants_(sourceRows.filter(row => safeStr(participantRoundNumber_(row, code, currentRound))),code,currentRound);
   }
@@ -3024,7 +3051,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     success: true,
     competitionCode: code,
     currentRound,
-    policy:Object.assign({}, policy, {identityHidden:hideIdentity}),
+    policy:Object.assign({}, policy, {identityHidden:hideIdentity, pendingPrelimAssignments}),
     assignments,
     evaluationCompletionScope: (code === 'KCAC' || code === 'KBC') ? 'currentJudge' : '',
     scheduleScope: code === 'MOB' && !mobManager ? { competitionDate:mobParticipantScopeDate, team:mobActorTeam } : null
@@ -4462,14 +4489,17 @@ function kcrStationsForPurposeServer_(cfg, roundOverride, purpose) {
   return kcrStationSettingsServer_(cfg, roundOverride).filter(station => calibration ? station.useForCalibration !== false : station.useForCompetition !== false);
 }
 
-function validateKcrStationSubmission_(payload, cfg, completedUnits = new Set()) {
+function validateKcrStationSubmission_(payload, cfg, completedUnits = new Set(), assignedUnits = null) {
   const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
   const purpose = isCalibrationMode_(payload && payload.mode) ? 'calibration' : 'competition';
   const settings = kcrStationsForPurposeServer_(cfg, payload && payload.round, purpose);
   const stationId = safeStr(payload && payload.stationId).toLowerCase();
   const station = settings.find(item => safeStr(item.id).toLowerCase() === stationId);
   if (!station) return { ok:false, message:`현재 ${purpose === 'calibration' ? '켈리브레이션' : '대회평가'}용으로 열린 KCR 스테이션을 다시 선택해주세요.` };
-  const expectedUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => String(station.start + idx)).filter(unit => !completedUnits.has(unit));
+  const stationUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => String(station.start + idx))
+    .filter(unit => !assignedUnits || assignedUnits.has(unit));
+  if (!stationUnits.length) return {ok:false, message:'아직 예선 선수가 배정되지 않은 스테이션입니다.'};
+  const expectedUnits = stationUnits.filter(unit => !completedUnits.has(unit));
   if (!expectedUnits.length) return {ok:false, duplicate:true, message:'이미 평가완료된 스테이션입니다. 내평가 검수에서 확인·수정해주세요.'};
   if (rows.length !== expectedUnits.length) {
     return { ok:false, duplicate:completedUnits.size > 0, message:`${station.label}의 미제출 참가자 ${expectedUnits.join(', ')} (${expectedUnits.length}명)을 함께 제출해주세요. 이미 제출한 평가는 내평가 검수에서 수정할 수 있습니다.` };
@@ -4642,12 +4672,13 @@ async function submitScores(env, payload, signature, request = null) {
   if (initial.code === 'KCR') {
     const own = await kcrOwnCompletionRows_(env, auth.actor, submitRound);
     const completedUnits = kcrCompletedUnits_(own, isCalibrationMode_(basePayload.mode || basePayload.evalMode), basePayload);
-    const stationValidation = validateKcrStationSubmission_(basePayload, cfg, completedUnits);
-    if (!stationValidation.ok) return {success:false, duplicate:!!stationValidation.duplicate, message:stationValidation.message};
     const participantRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('KCR').all();
     const registeredNumbers = new Set((participantRows.results || [])
       .map(row => safeStr(participantRoundNumber_(row, 'KCR', submitRound)))
       .filter(Boolean));
+    const pendingPrelimAssignments = submitRound === '예선' && (participantRows.results || []).some(kcrPrelimPending_);
+    const stationValidation = validateKcrStationSubmission_(basePayload, cfg, completedUnits, pendingPrelimAssignments ? registeredNumbers : null);
+    if (!stationValidation.ok) return {success:false, duplicate:!!stationValidation.duplicate, message:stationValidation.message};
     const missingParticipantNumbers = stationValidation.expectedUnits.filter(unit => !registeredNumbers.has(safeStr(unit)));
     if (missingParticipantNumbers.length) {
       return {

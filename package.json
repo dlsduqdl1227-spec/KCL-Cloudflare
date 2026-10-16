@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kcr-confirmed-order": "node tests/stage236-kcr-confirmed-order.test.mjs",
     "test:final-return": "node tests/stage233-final-return-workflow.test.mjs && node tests/stage234-final-return-browser.test.mjs && node tests/stage235-final-cup-preservation.test.mjs",
     "test:station-participants": "node tests/stage230-station-participant-links.test.mjs",
     "test:finalist-plan": "node tests/stage231-finalist-plan.test.mjs",

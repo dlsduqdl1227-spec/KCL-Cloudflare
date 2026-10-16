@@ -3885,6 +3885,7 @@ function loadParticipantAssignmentsForCode_(code) {
       if (code === 'KBC') onKbcParticipantSelected_();
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
+      if (code === 'KCR' && _selComp && _selComp.code === 'KCR') renderKcrStationChoices_();
     })
     .withFailureHandler(function(){
       var cur = participantStateForCode_(code);
@@ -3978,6 +3979,7 @@ function applyLiveParticipantAssignments_(code, res) {
   });
   if (code === 'MOC') renderMocSetupList();
   if (code === 'KTCC') renderKtccSetupList();
+  if (code === 'KCR' && _selComp && _selComp.code === 'KCR') renderKcrStationChoices_();
   return before !== participantLiveListSignature_(st.list || []);
 }
 function routeAfterLiveAuthorityChange_(oldActor, newActor, code) {
@@ -4259,6 +4261,10 @@ function kcrStationParticipantNumbers_(station) {
   var numbers = [];
   if (!station) return numbers;
   for (var i=Number(station.start)||1;i<=(Number(station.end)||0);i++) numbers.push(String(i));
+  var state = participantStateForCode_('KCR');
+  if (state.loaded && state.policy && state.policy.pendingPrelimAssignments && _selComp && _selComp.currentRound === '예선') {
+    numbers = numbers.filter(function(number){return (state.list || []).some(function(row){return participantNumberMatches_(row.number, number);});});
+  }
   return numbers;
 }
 function kcrProcessSettings_(cfg) {
@@ -11621,6 +11627,7 @@ function renderKcrStationChoices_() {
   wrap.innerHTML = stations.map(function(station){
     var cups = kcrStationParticipantNumbers_(station);
     var done = kcrStationCompletion_(station, isActiveCalibrationMode_());
+    if (!cups.length) return '<button type="button" data-station-id="' + escHtml(station.id) + '" class="ikrc-station-btn" disabled><strong>' + escHtml(station.label) + '</strong><span>예선 배정 대기</span></button>';
     var complete = !!done && done.length === cups.length;
     var label = isActiveCalibrationMode_() ? '제출완료' : '평가완료';
     return '<button type="button" data-station-id="' + escHtml(station.id) + '" class="ikrc-station-btn' + (complete ? ' kcr-completed' : '') + '"' + (!done || complete ? ' disabled' : '') + ' onclick="startKcrStation_(\'' + escapeJsString_(station.id) + '\')">' +
@@ -11649,6 +11656,7 @@ function startKcrStation_(stationId) {
   if (!isActiveCalibrationMode_() && station.useForCompetition === false) { toast('이 스테이션은 대회평가용으로 열려 있지 않습니다.', true); return; }
   if (!isActiveCalibrationMode_() && !assertKcrProcessOpenForEval_(station.process)) return;
   var cups = kcrStationParticipantNumbers_(station);
+  if (!cups.length) { toast('아직 예선 선수가 배정되지 않은 스테이션입니다.', true); return; }
   var done = kcrStationCompletion_(station, isActiveCalibrationMode_());
   if (!done) { toast('제출 여부를 먼저 확인해주세요. 새로고침을 눌러 다시 확인할 수 있습니다.', true); return; }
   cups = cups.filter(function(unit){return done.indexOf(String(unit)) < 0;});
