@@ -18,7 +18,7 @@ try {
   await api.rpc('updateReviewStatusBatch','KCR',review.list.map(r=>r.rowIndex),'검수완료','관리자',{...api.actor,reviewScope:'manage',manageReview:true});
   const rank=await api.rpc('getRanking','KCR',api.actor,'예선');
   assert.equal(rank.ranking.length,4);
-  for(const r of rank.ranking){assert.equal(r.totalCount,2);assert.equal(r.score,Number(r.unit)<=2?24.5:31.5);}
+  for(const r of rank.ranking){assert.equal(r.totalCount,2);assert.equal(r.score,Number(r.unit)<=2?49:63);}
   const cal=await api.rpc('getReviewList','KCR',{...judges[0],calibrationOnly:true});
   assert.equal(cal.list.length,4);
   assert.ok(cal.list.every(r=>r._stddev?.judgeCount===2),JSON.stringify(cal.list.map(r=>({keys:Object.keys(r).filter(k=>k.includes('td')||k.includes('cal')),stats:r._stddev}))));
@@ -54,5 +54,5 @@ try {
   assert.equal(expired.success,false);
   assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all()),scoreBefore);
   assert.equal(JSON.stringify(api.db.prepare("SELECT * FROM competitions WHERE code!='KCR' ORDER BY code").all()),unrelated);
-  console.log('Stage209 KCR station-only calibration, independent head/sensory scores, official average, login revocation and expiry passed.');
+  console.log('Stage209 KCR station-only calibration, independent head/sensory scores, official sum, login revocation and expiry passed.');
 }finally{api.close();}

@@ -6168,7 +6168,7 @@ function tieRuleLabel_(code, round) {
 function officialRankingBasisLabel_(code, basis) {
   code = safeStr(code).toUpperCase();
   const text = safeStr(basis);
-  if (code === 'KCR') return /정규화|Normalized|공식/i.test(text) ? '정규화 총점' : '항목 총점';
+  if (code === 'KCR') return /정규화|Normalized|공식/i.test(text) ? '정규화 총점 합산' : '심사위원 총점 합산';
   if (code === 'IKRC') {
     if (/실시간|확인|대기|현재 제출/.test(text)) return text;
     return /Seed to Cup/i.test(text) ? '최종 총점 + Seed to Cup' : '최종 총점';
@@ -6583,12 +6583,13 @@ function aggregateRankingGroup_(code, g, round) {
 
   if (code === 'KCR') {
     const officialRows = latestOfficialJudgeRows_(activeRows);
-    const score = avgRowsBy_(officialRows, kcrOfficialScoreFromItem_) || 0;
+    // KCR uses the sum of the latest official score from each judge, including heads.
+    const score = roundScoreValue_(sumList_(officialRows.map(kcrOfficialScoreFromItem_)));
     return {
       score, total: score, basis: officialRows.some(item => firstNumberFromKeys_(item, ['정규화점수','Normalized Score','공식점수','순위반영점수']) !== null) ? '정규화 총점' : '항목 총점',
       tie: {
-        sweetness: avgRowsBy_(officialRows, item => firstNumberFromKeys_(item, ['Sweetness(스윗니스) ×2','Sweetness(단맛) ×2','Sweetness(스윗니스)','Sweetness','스위트니스','스윗니스'])) || 0,
-        overall: avgRowsBy_(officialRows, item => firstNumberFromKeys_(item, ['Overall(오버롤)','Overall(주관적 종합평가)','Overall','오버롤'])) || 0
+        sweetness: roundScoreValue_(sumList_(officialRows.map(item => firstNumberFromKeys_(item, ['Sweetness(스윗니스) ×2','Sweetness(단맛) ×2','Sweetness(스윗니스)','Sweetness','스위트니스','스윗니스'])))),
+        overall: roundScoreValue_(sumList_(officialRows.map(item => firstNumberFromKeys_(item, ['Overall(오버롤)','Overall(주관적 종합평가)','Overall','오버롤']))))
       }
     };
   }

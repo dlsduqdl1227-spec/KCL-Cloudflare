@@ -10,15 +10,15 @@ try{
   const rank=await api.rpc('getRanking','KCR',api.actor,'예선');
   assert.equal(rank.ranking.length,4,'unreviewed official submissions enter ranking immediately');
   const target=rank.ranking.find(r=>r.unit==='1');
-  assert.equal(target.score,28);assert.equal(target.totalCount,3);assert.equal(target.reviewedCount,3);
+  assert.equal(target.score,84);assert.equal(target.totalCount,3);assert.equal(target.reviewedCount,3);
   assert.deepEqual((await api.rpc('getRanking','KCR',api.actor,'결선')).ranking,[]);
   const detail=await api.rpc('getRankingDetail','KCR','1','예선',api.actor);
-  assert.equal(detail.rows.length,3);assert.equal(detail.avgScore,28);assert.equal(detail.reviewedCount,3);
+  assert.equal(detail.rows.length,3);assert.equal(detail.totalScore,84);assert.equal(detail.reviewedCount,3);
   const report=await api.rpc('getFinalReport','KCR',api.actor,'예선');
   assert.equal(report.approvedRows.length,8);
   assert.ok(report.rawRows.every(row=>!row.mode?.includes('켈리브레이션')));
   const preview=await api.rpc('getAdminDebriefPreview','KCR','1','예선',api.actor);
-  assert.equal(preview.scores.length,3);assert.equal(preview.rankInfo.score,28);
+  assert.equal(preview.scores.length,3);assert.equal(preview.rankInfo.score,84);
   assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all()),before,'ranking and preview do not rewrite old review statuses');
   assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM competitions ORDER BY code').all()),configs,'ranking never opens debriefing');
   // Test public/preview parity only in a disposable fixture; no SMS is sent.
@@ -29,7 +29,7 @@ try{
   api.db.prepare("UPDATE competitions SET debriefing=1 WHERE code='KCR'").run();
   const publicView=await api.rpc('verifyOTP',participant.name,phone,'KCR','215215');
   assert.deepEqual(publicView.scores.map(r=>r.rowIndex).sort(),preview.scores.map(r=>r.rowIndex).sort());
-  assert.equal(publicView.rankInfo.score,28);
+  assert.equal(publicView.rankInfo.score,84);
   const own=await api.rpc('getReviewList','KCR',judges[0]),row=own.list.find(r=>r.unit==='1');
   const others=JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id<>? ORDER BY id').all(Number(row.rowIndex)));
   // Even an old client with a completed row may edit again without an unlock operation.
@@ -37,8 +37,8 @@ try{
   const updates={[own.headers.indexOf('Flavor(플레이버)')]:3.4,[own.headers.indexOf('종합코멘트')]:'본인 재수정'};
   const saved=await api.rpc('updateReviewRow','KCR',row.rowIndex,updates,'미검수',judges[0].role,judges[0]);assert.equal(saved.status,'수정완료');
   const latest=await api.rpc('getRanking','KCR',api.actor,'예선');
-  assert.equal(latest.ranking.find(r=>r.unit==='1').score,28.133);
-  assert.equal(latest.ranking.find(r=>r.unit==='2').score,28);
+  assert.equal(latest.ranking.find(r=>r.unit==='1').score,84.4);
+  assert.equal(latest.ranking.find(r=>r.unit==='2').score,84);
   assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id<>? ORDER BY id').all(Number(row.rowIndex))),others);
   // Reset only the disposable in-memory fixture for cross-competition isolation.
   api.db.exec('DELETE FROM scores; DELETE FROM participants;');
