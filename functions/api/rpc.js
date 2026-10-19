@@ -3819,6 +3819,8 @@ function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0) {
 }
 
 function rowToReviewItems_(r, code, headers, fallbackRound) {
+  // KCR stores one cup per score row; do not parse its full payload twice.
+  if (safeStr(code).toUpperCase() === 'KCR') return [rowToReviewItem(r, code, headers, fallbackRound, 0)];
   const payload = parseJson(r.payload_json, {});
   const payloadRows = Array.isArray(payload.rows) ? payload.rows : [];
   if ((safeStr(code).toUpperCase() === 'KCAC' || safeStr(code).toUpperCase() === 'IKRC') && payloadRows.length > 1) {
@@ -3932,6 +3934,24 @@ function ikrcOfficialReviewComparison_(targetItem, officialItems) {
 function kcrCalibrationReviewComparison_(targetItem, calibrationItems) {
   return kcrStationReviewComparison_(targetItem, calibrationItems, true);
 }
+function kcrComparisonBucketKey_(item) {
+  return JSON.stringify([
+    safeStr(item.round || item['라운드']).replace(/\s+/g, '').toLowerCase(),
+    safeStr(item.unit || item['컵번호'] || item['참가자번호']).replace(/\s+/g, '').toUpperCase()
+  ]);
+}
+function indexKcrComparisonItems_(items) {
+  // Request-local only: never cache scores across edits, actors or competitions.
+  // Keep station/process/role checks in the existing comparison function.
+  const index = new Map();
+  for (const item of items || []) {
+    if (!item) continue;
+    const key = kcrComparisonBucketKey_(item);
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(item);
+  }
+  return index;
+}
 function kcrStationReviewComparison_(targetItem, items, calibration) {
   if (!targetItem) return null;
   const targetRound = safeStr(targetItem.round || targetItem['라운드']).replace(/\s+/g, '').toLowerCase();
@@ -3998,10 +4018,11 @@ function kcrStationReviewComparison_(targetItem, items, calibration) {
 }
 
 function kcrHeadParticipatedRows_(rawRows, actor, calibration) {
-  const purposeRows = rawRows.filter(row => isCalibrationMode_(row.mode) === calibration);
-  const ownRows = purposeRows.filter(row => scoreOwnedByActor_(row, actor));
-  return purposeRows.filter(row => ownRows.some(own => own.round === row.round &&
-    kcrReviewStationMatches_({payload:parseJson(own.payload_json,{})}, {payload:parseJson(row.payload_json,{})})));
+  const purposeRows = rawRows.filter(row => isCalibrationMode_(row.mode) === calibration)
+    .map(row => ({row, item:{payload:parseJson(row.payload_json,{})}}));
+  const ownRows = purposeRows.filter(({row}) => scoreOwnedByActor_(row, actor));
+  return purposeRows.filter(candidate => ownRows.some(own => own.row.round === candidate.row.round &&
+    kcrReviewStationMatches_(own.item, candidate.item))).map(({row}) => row);
 }
 
 function mediaSummaryForPayload_(payload) {
@@ -4994,15 +5015,17 @@ async function getReviewList(env, competitionCode, actorArg) {
     const latest = latestIkrcReviewItems_(list);
     list = latest.list;
     supersededCount = latest.supersededCount;
+    const comparisonIndex = indexKcrComparisonItems_(list);
     list = list.map(item => {
-      item._stddev = kcrCalibrationReviewComparison_(item, list);
+      item._stddev = kcrCalibrationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || []);
       return item;
     });
   }
   if (code === 'KCR' && !calibrationOnly && kcrCanCompare) {
     const peerHeaders = mergeHeaders(code, kcrPeerRows);
     const peers = kcrPeerRows.flatMap(row => rowToReviewItems_(row, code, peerHeaders, cfg && cfg.current_round));
-    list = list.map(item => ({...item, _stddev:kcrStationReviewComparison_(item, peers, false)}));
+    const comparisonIndex = indexKcrComparisonItems_(peers);
+    list = list.map(item => ({...item, _stddev:kcrStationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || [], false)}));
   }
   if (code === 'IKRC') {
     const latest = latestIkrcReviewItems_(list);
@@ -6765,7 +6788,13 @@ async function buildRankingData_(env, competitionCode, selectedRound='') {
       (Array.isArray(payload.units) ? payload.units : []).forEach(unit => ikrcFinalizedUnits.add(round + '::' + safeStr(unit)));
     });
   }
-  const converted = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round).map(item => {
+  // A populated score-row round takes precedence over every payload fallback.
+  // Skip other KCR rounds before expensive conversion; retain legacy blank-round
+  // fallback and the original full header list for report/edit compatibility.
+  const rankingRows = code === 'KCR' && selectedRound
+    ? raw.filter(row => !safeStr(row.round) || roundName_(row.round, '') === selectedRound)
+    : raw;
+  const converted = rankingRows.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round).map(item => {
     const round = roundName_(item.round || item['라운드'] || (cfg && cfg.current_round));
     const identity = lookupParticipantIdentity_(participantIdx, round, itemNumber_(item) || item.unit);
     item = enrichReviewItemWithParticipant_(item, identity, code);

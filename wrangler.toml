@@ -2,6 +2,10 @@ name = "kcl-cloudflare"
 compatibility_date = "2025-08-01"
 pages_build_output_dir = "public"
 
+# Keep ranking/review reads within a bounded CPU budget on the existing paid plan.
+[limits]
+cpu_ms = 1000
+
 [[d1_databases]]
 binding = "DB"
 database_name = "kcl-cloudflare"

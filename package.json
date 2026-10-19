@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kcr-query-cpu": "node tests/stage239-kcr-query-cpu.test.mjs",
     "test:kcr-total": "node tests/stage237-kcr-total-ranking.test.mjs && node tests/stage238-kcr-total-ranking-browser.test.mjs",
     "test:kcr-full-ranking": "node tests/stage237-kcr-full-ranking-browser.test.mjs",
     "test:kcr-confirmed-order": "node tests/stage236-kcr-confirmed-order.test.mjs",
