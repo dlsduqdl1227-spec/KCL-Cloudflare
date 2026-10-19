@@ -28,7 +28,7 @@ function functionSource(source, name) {
   throw new Error(`${name} function incomplete`);
 }
 
-const context = {};
+const context = {participantStateForCode_:()=>({loaded:false})};
 vm.createContext(context);
 vm.runInContext([
   functionSource(assessment, "competitionOptionSettings_"),
@@ -71,7 +71,8 @@ assert.match(rankingActions, /순위 PDF 저장/);
 assert.match(rankingActions, /최종디브리핑 엑셀/);
 assert.doesNotMatch(rankingActions, /점수·검수 백업/);
 assert.match(functionSource(assessment, "renderRanking"), /rankingCode === 'KCR'/);
-assert.match(functionSource(assessment, "renderRanking"), /slice\(0, 40\)/, "September rulebook qualifies the Top40");
+assert.doesNotMatch(functionSource(assessment, "renderRanking"), /slice\(0, 40\)/, "qualification cutoff must not truncate the live ranking");
+assert.match(functionSource(assessment, "printRanking"), /index >= 40/, "preserve the separate Top40 PDF");
 assert.match(functionSource(assessment, "finalReportFileBase_"), /_최종디브리핑_/);
 
 const serverNormalize = functionSource(rpc, "normalizeKcrStationListServer_");

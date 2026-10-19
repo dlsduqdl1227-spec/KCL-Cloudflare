@@ -1311,6 +1311,7 @@ button,input,select,textarea{font-family:'Pretendard', -apple-system, BlinkMacSy
   .rank-row{background:#fff !important;color:#000 !important;border:1px solid #ccc !important;
     page-break-inside:avoid;margin-bottom:4px;padding:8px}
   #pRanking.mob-top12-print .rank-row.mob-print-hidden{display:none!important}
+  #pRanking.kcr-top40-print .rank-row.kcr-print-hidden{display:none!important}
   .rank-unit{color:#000 !important}
   .rank-meta{color:#666 !important}
   .rank-score{color:#000 !important}
@@ -10982,7 +10983,7 @@ function goRankingByCode(code, name, round) {
   rankingStageWrap.hidden = !sharedFinal || selectedRound === '예선';
   if (sharedFinal && selectedRound !== '예선') rankingStage.value = selectedRound;
   document.getElementById('ranking-stage-label').textContent = '진행 경기: ' + (rankingStage.value === '본선' ? '본선 경기' : '최종 결승');
-  var rankingLabel = rankingCode === 'KCR' ? 'Top 40' : '순위';
+  var rankingLabel = rankingCode === 'KCR' ? '전체 순위' : '순위';
   var cachedRanking = rankingScopedResponse_(_rankingCacheByCode[rankingCacheKey], rankingCode, selectedRound);
   _ranking = cachedRanking;
   var reportActions = document.getElementById('ranking-report-actions');
@@ -10992,14 +10993,14 @@ function goRankingByCode(code, name, round) {
   document.getElementById('ranking-title').textContent = (name || code) + ' ' + rankingLabel;
   document.getElementById('ranking-sub').textContent = '조회 라운드: ' + competitionRoundLabel_(rankingCode, selectedRound);
   if (!cachedRanking) document.getElementById('ranking-list').innerHTML = '';
-  document.getElementById('rank-summary-title').textContent = rankingCode === 'KCR' ? 'Top 40' : '순위표';
+  document.getElementById('rank-summary-title').textContent = rankingCode === 'KCR' ? '전체 순위표' : '순위표';
   if (cachedRanking) {
     renderRanking(cachedRanking);
     document.getElementById('rank-summary-sub').textContent = '기존 순위 표시 중 · 최신 정보 확인 중...';
   } else {
     document.getElementById('rank-summary-sub').textContent = '불러오는 중...';
   }
-  document.getElementById('rank-print-title').textContent = (name || code) + ' · ' + selectedRound + (rankingCode === 'KCR' ? ' Top 40' : ' 순위표');
+  document.getElementById('rank-print-title').textContent = (name || code) + ' · ' + selectedRound + ' 순위표';
   var now = new Date();
   document.getElementById('rank-print-date').textContent =
     now.toLocaleDateString('ko-KR') + ' ' + now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
@@ -11049,7 +11050,7 @@ function renderRanking(res) {
   var list = (res.ranking || []).filter(function(item){ return !res.selectedRound || item.round === res.selectedRound; });
   var rankingCode = String(res.compCode || '').toUpperCase();
   document.getElementById('rank-summary-sub').textContent =
-    (res.selectedRound ? res.selectedRound + ' · ' : '') + '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 상위 40위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
+    (res.selectedRound ? res.selectedRound + ' · ' : '') + '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 전체 순위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
 
   var wrap = document.getElementById('ranking-list');
   wrap.innerHTML = '';
@@ -11064,9 +11065,6 @@ function renderRanking(res) {
     if (!byRound[item.round]) byRound[item.round] = [];
     byRound[item.round].push(item);
   });
-  if (rankingCode === 'KCR') {
-    Object.keys(byRound).forEach(function(round){ byRound[round] = byRound[round].slice(0, 40); });
-  }
 
   var roundOrder = ['결선', '본선', '예선'];
   var allRounds = Object.keys(byRound);
@@ -11452,6 +11450,7 @@ function printRanking() {
   });
   var panel = document.getElementById('pRanking');
   var isMobTop12 = String((_ranking && _ranking.compCode) || '').toUpperCase() === 'MOB';
+  var isKcrTop40 = String((_ranking && _ranking.compCode) || '').toUpperCase() === 'KCR';
   var summaryTitle = document.getElementById('rank-summary-title');
   var summarySub = document.getElementById('rank-summary-sub');
   var printTitle = document.getElementById('rank-print-title');
@@ -11475,14 +11474,31 @@ function printRanking() {
     if (summarySub) summarySub.textContent = 'Master of Brewing 상위 12위 공식 순위';
     if (printTitle) printTitle.textContent = originalPrintTitle.replace(/\s*순위표\s*$/, '') + ' TOP 12 순위표';
   }
+  // Only the existing Top 40 PDF is limited; the live ranking retains every row.
+  if (isKcrTop40) {
+    panel.classList.add('kcr-top40-print');
+    Array.prototype.forEach.call(panel.querySelectorAll('.rank-round-section'), function(section){
+      var rows = Array.prototype.slice.call(section.querySelectorAll('.rank-row'));
+      rows.forEach(function(row, index){ row.classList.toggle('kcr-print-hidden', index >= 40); });
+      var title = section.querySelector('.rank-round-title');
+      if (title) {
+        roundTitleOriginals.push({element:title,text:title.textContent});
+        title.textContent = title.textContent.replace(/\s*\(\d+개\)\s*$/, '') + ' (TOP ' + Math.min(40, rows.length) + ')';
+      }
+    });
+    if (summaryTitle) summaryTitle.textContent = 'KCR TOP 40 순위표';
+    if (summarySub) summarySub.textContent = _ranking.selectedRound + ' · 상위 ' + Math.min(40, panel.querySelectorAll('.rank-row').length) + '개 항목';
+    if (printTitle) printTitle.textContent = originalPrintTitle.replace(/\s*순위표\s*$/, '') + ' TOP 40 순위표';
+  }
 
   panel.classList.add('print-active');
   var cleaned = false;
   function cleanupRankingPrint_(){
     if (cleaned) return;
     cleaned = true;
-    panel.classList.remove('print-active','mob-top12-print');
+    panel.classList.remove('print-active','mob-top12-print','kcr-top40-print');
     Array.prototype.forEach.call(panel.querySelectorAll('.rank-row.mob-print-hidden'), function(row){ row.classList.remove('mob-print-hidden'); });
+    Array.prototype.forEach.call(panel.querySelectorAll('.rank-row.kcr-print-hidden'), function(row){ row.classList.remove('kcr-print-hidden'); });
     roundTitleOriginals.forEach(function(entry){ entry.element.textContent = entry.text; });
     if (summaryTitle) summaryTitle.textContent = originalSummaryTitle;
     if (summarySub) summarySub.textContent = originalSummarySub;
