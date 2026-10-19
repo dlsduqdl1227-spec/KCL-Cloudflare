@@ -716,8 +716,9 @@ async function getKcrStationEvaluationState(env, actorArg) {
   const cfg = config.configs.find(item => item.code === 'KCR');
   if (!cfg) return {success:false, message:'KCR 대회 설정을 찾지 못했습니다.'};
   const round = normalizeRoundForCompetition_('KCR', cfg.currentRound);
-  const own = await kcrOwnCompletionRows_(env, auth.actor, round);
-  const stations = kcrStationSettingsServer_(cfg).map(station => ({
+  const closed = kcrClosedPrelimStations_(cfg);
+  const own = (await kcrOwnCompletionRows_(env, auth.actor, round)).filter(row => hasManageAccess(auth.actor,'KCR') || !kcrClosedScore_(row,closed));
+  const stations = kcrStationSettingsServer_(cfg).filter(station => hasManageAccess(auth.actor,'KCR') || round !== '예선' || !closed.some(item=>item.id===station.id)).map(station => ({
     stationId:station.id,
     calibrationUnits:[...kcrCompletedUnits_(own, true, {stationId:station.id, stationLabel:station.label, stationPrefix:station.prefix})]
   }));
@@ -1538,8 +1539,18 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
     nextOptions.ikrcStations = checked.settings;
   }
   if (code === 'KCR') {
+    // Older clients omit closure settings: omission must never reopen a day.
+    nextOptions.kcrStations = Object.assign({}, currentOptions.kcrStations || {}, nextOptions.kcrStations || {});
     const checked = validateKcrStationOptionSettings_(nextOptions.kcrStations, nextRound);
     if (!checked.ok) return { success:false, message:checked.message };
+    const nextClosedDays = checked.settings.closedPrelimDays || [];
+    for (const station of kcrClosedPrelimStations_(current)) {
+      if (!nextClosedDays.includes(station.prelimDay)) continue;
+      const replacement = checked.settings.byRound['예선'].find(item => item.id === station.id);
+      if (!replacement || kcrStationFingerprintServer_([replacement]) !== kcrStationFingerprintServer_([station])) {
+        return {success:false, message:'마감된 스테이션의 번호·배정·용도는 변경하거나 삭제할 수 없습니다. 먼저 해당 일차 마감을 해제하고 저장해주세요.'};
+      }
+    }
     const currentStations = kcrStationSettingsServer_(current, nextRound);
     const nextStations = checked.list;
     if (kcrStationFingerprintServer_(currentStations) !== kcrStationFingerprintServer_(nextStations)) {
@@ -2454,6 +2465,11 @@ async function deleteSelectedScoreData(env, payload, actorArg) {
   const result = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? AND unit=? ORDER BY id').bind(code, round, unit).all();
   const rows = (result.results || []).filter(row => selectiveResetScoreCategory_(row) === category);
   if (!rows.length) return { success:false, message:'선택한 점수 데이터가 이미 삭제되었거나 존재하지 않습니다.' };
+  if (code === 'KCR') {
+    const config = await env.DB.prepare('SELECT option_settings FROM competitions WHERE code=?').bind(code).first();
+    const closed = kcrClosedPrelimStations_(config);
+    if (rows.some(row=>kcrClosedScore_(row,closed))) return kcrClosedResponse_();
+  }
   const receiptTokens = new Set();
   const cfg = code === 'IKRC' ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
   for (const row of rows) {
@@ -2511,6 +2527,10 @@ async function clearScores(env, competitionCode, actorArg) {
   if (checked.error) return checked.error;
   const code = checked.code;
   if (!hasManageAccess(actor, code)) return { success: false, message: code + ' 점수 초기화 권한이 없습니다.' };
+  if (code === 'KCR') {
+    const config = await env.DB.prepare('SELECT option_settings FROM competitions WHERE code=?').bind(code).first();
+    if (kcrClosedPrelimStations_(config).length) return kcrClosedResponse_();
+  }
   const before = await env.DB.prepare('SELECT COUNT(*) AS n FROM scores WHERE competition_code=?').bind(code).first();
   await env.DB.prepare('DELETE FROM scores WHERE competition_code=?').bind(code).run();
   const sessionDeleted = await deleteAuxSessionsForCompetition_(env, code);
@@ -4481,7 +4501,27 @@ function validateKcrStationOptionSettings_(rawSettings, currentRound) {
   }
   const roundKey = ikrcStationRoundKeyServer_(currentRound);
   const active = byRound[roundKey];
-  return { ok:true, list:active, settings:Object.assign({}, raw, {byRound, stations:active}) };
+  const closedPrelimDays = [1,2].filter(day => Array.isArray(raw.closedPrelimDays) && raw.closedPrelimDays.map(Number).includes(day));
+  return { ok:true, list:active, settings:Object.assign({}, raw, {byRound, stations:active, closedPrelimDays}) };
+}
+function kcrClosedPrelimStations_(cfg) {
+  const options = typeof cfg?.option_settings === 'string' ? parseJson(cfg.option_settings,{}) : (cfg?.optionSettings || cfg || {});
+  const days = options.kcrStations?.closedPrelimDays;
+  if (!Array.isArray(days) || !days.length) return [];
+  return kcrStationSettingsServer_(cfg, '예선').filter(station => days.map(Number).includes(station.prelimDay));
+}
+function kcrClosedScore_(row, stations) {
+  if (!row || !stations.length) return false;
+  const payload = row.payload || parseJson(row.payload_json,{});
+  if (roundName_(row.round || payload.round || payload.currentRound, '예선') !== '예선') return false;
+  const stationId = safeStr(payload.stationId).toLowerCase();
+  const unit = Number(row.unit);
+  return stations.some(station => stationId === safeStr(station.id).toLowerCase() ||
+    (!isCalibrationMode_(row.mode || payload.mode) && Number.isInteger(unit) && unit >= station.start && unit <= station.end) ||
+    (!stationId && kcrReviewStationMatches_({payload}, {payload:{stationId:station.id, stationLabel:station.label, stationPrefix:station.prefix}})));
+}
+function kcrClosedResponse_() {
+  return {success:false, message:'마감된 KCR 예선 일차입니다. 기록은 보존되며 추가 제출·수정·삭제할 수 없습니다. 운영 관리자에게 확인해주세요.'};
 }
 function kcrStationSettingsServer_(cfg, roundOverride) {
   let optionSettings = {};
@@ -4517,6 +4557,11 @@ function validateKcrStationSubmission_(payload, cfg, completedUnits = new Set(),
   const stationId = safeStr(payload && payload.stationId).toLowerCase();
   const station = settings.find(item => safeStr(item.id).toLowerCase() === stationId);
   if (!station) return { ok:false, message:`현재 ${purpose === 'calibration' ? '켈리브레이션' : '대회평가'}용으로 열린 KCR 스테이션을 다시 선택해주세요.` };
+  const closed = kcrClosedPrelimStations_(cfg);
+  if (kcrClosedScore_({round:payload.round, payload}, closed) || rows.some(row =>
+    kcrClosedScore_({round:payload.round, mode:payload.mode, payload, unit:inferScorePayload({...payload,rows:[row]}).unit}, closed))) {
+    return {ok:false, message:kcrClosedResponse_().message};
+  }
   const stationUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => String(station.start + idx))
     .filter(unit => !assignedUnits || assignedUnits.has(unit));
   if (!stationUnits.length) return {ok:false, message:'아직 예선 선수가 배정되지 않은 스테이션입니다.'};
@@ -4988,6 +5033,8 @@ async function getReviewList(env, competitionCode, actorArg) {
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC').bind(code).all();
   const rawAll = scopeMobScoreRowsToActiveDate_(code, cfg, scopedParticipantRows, rowsRaw.results || [], mobReviewDate);
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
+  const closedStations = code === 'KCR' ? kcrClosedPrelimStations_(cfg) : [];
+  const closedIds = new Set(closedStations.length ? rawAll.filter(row => kcrClosedScore_(row, closedStations)).map(row => Number(row.id)) : []);
   const calibrationOnly = code === 'KCR' && !!(actorArg && actorArg.calibrationOnly);
   const actorRoleForCode = safeStr(auth.actor && auth.actor.roleMap && auth.actor.roleMap[code] || auth.actor && (auth.actor.role || auth.actor.judgeRole));
   const kcrCanCompare = code === 'KCR' && (hasManageAccess(auth.actor, code) || isHeadRole_(actorRoleForCode));
@@ -4998,10 +5045,12 @@ async function getReviewList(env, competitionCode, actorArg) {
   const managerRows = managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll;
   const kcrPeerRows = kcrCanCompare ? (hasManageAccess(auth.actor, code)
     ? rawAll.filter(row => isCalibrationMode_(row.mode) === calibrationOnly)
-    : kcrHeadParticipatedRows_(rawAll, auth.actor, calibrationOnly)) : [];
+    : kcrHeadParticipatedRows_(rawAll.filter(row => !closedIds.has(Number(row.id))), auth.actor, calibrationOnly)) : [];
   const raw = calibrationOnly ? kcrPeerRows : (manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
   const headers = mergeHeaders(code, raw);
   let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
+  if (closedIds.size) list = list.filter(item => hasManageAccess(auth.actor, code) || !closedIds.has(Number(item.scoreRowId)))
+    .map(item => closedIds.has(Number(item.scoreRowId)) ? {...item,stationClosed:true} : item);
   if ((manager || (code === 'KCR' && hasAdmin(auth.actor))) && list.length) {
     const pRows = scopedParticipantRowsRaw || await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
     const pIdx = indexParticipantIdentities_(pRows.results || [], code);
@@ -5165,7 +5214,8 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   const current = finalPreparation?.current || await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id, code).first();
   if (!current) return { success: false, message: '수정할 데이터를 찾지 못했습니다.' };
   if (finalOfficialEvaluation_(current) && !finalPreparation) return {success:false,message:'본·결선 평가 수정은 팀장·관리자의 반려 후 반려된 평가 수정에서 재제출해주세요.'};
-  const cfg = code === 'IKRC' ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
+  const cfg = ['IKRC','KCR'].includes(code) ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
+  if (code === 'KCR' && kcrClosedScore_(current, kcrClosedPrelimStations_(cfg))) return kcrClosedResponse_();
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(actor, cfg) : null;
   if (managerStation && !ikrcScoreBelongsToStationServer_(current, managerStation)) {
     return { success:false, message:`${managerStation.label}에 배정된 팀장은 다른 스테이션 평가를 검수할 수 없습니다.` };
@@ -5288,6 +5338,15 @@ async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus, r
   const cfg = code === 'IKRC' ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(auth.actor, cfg) : null;
   const ids = Array.isArray(rowIndexes) ? rowIndexes : [rowIndexes];
+  if (code === 'KCR') {
+    const config = await env.DB.prepare('SELECT option_settings FROM competitions WHERE code=?').bind(code).first();
+    const closed = kcrClosedPrelimStations_(config);
+    // Check the entire batch before any status write, including old open clients.
+    if (closed.length) for (const rawId of ids) {
+      const row = await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(parseReviewRowRef_(rawId).id,code).first();
+      if (kcrClosedScore_(row,closed)) return kcrClosedResponse_();
+    }
+  }
   const status = safeStr(newStatus) || '미검수';
   const seenIds = new Set();
   for (const rawId of ids) {
@@ -5327,8 +5386,9 @@ async function deleteReviewRow(env, competitionCode, rowIndex, actorArg) {
   const actor = await getActor(env, actorArg);
   if (!hasAdmin(actor)) return { success: false, message: '삭제는 전체 관리자만 가능합니다.' };
   const ref = parseReviewRowRef_(rowIndex);
-  const current = code === 'IKRC' ? await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(ref.id, code).first() : null;
-  const cfg = code === 'IKRC' ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
+  const current = ['IKRC','KCR'].includes(code) ? await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(ref.id, code).first() : null;
+  const cfg = ['IKRC','KCR'].includes(code) ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
+  if (code === 'KCR' && kcrClosedScore_(current,kcrClosedPrelimStations_(cfg))) return kcrClosedResponse_();
   await env.DB.prepare('DELETE FROM scores WHERE id=? AND competition_code=?').bind(ref.id, code).run();
   if (code === 'IKRC' && current) await invalidateIkrcStationFinalizationForScore_(env, current, cfg);
   return { success: true, message: '삭제 완료' };
