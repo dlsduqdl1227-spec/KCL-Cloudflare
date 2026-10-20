@@ -36,7 +36,9 @@ try{
   await enter(api.actor);assert.match(await page.locator('#kcr-station-grid').innerText(),/블라인드실명검증/);
   await page.waitForFunction(()=>registeredTargetsForRange_('KCR',['1','2']).validated);
   await page.locator('#kcr-station-grid [data-station-id="stable-b"]').click();
-  assert.match(await page.locator('#cupping-cup-nav').innerText(),/블라인드실명검증/);
+  // Circles intentionally show only cup numbers; selected admin identity is below them.
+  assert.match(await page.locator('#cupping-current-identity').innerText(),/블라인드실명검증/);
+  assert.equal(await page.locator('#cupping-current-identity').isVisible(),true);
   assert.equal((await inspectPage(page)).pageOverflow,false);
   await page.locator('#cupping-cup-nav').screenshot({path:`tmp/stage226-qa/admin-cups-${width}.png`});
   await page.evaluate(()=>{hideEval();goReviewByCode('KCR','KCR','pAdmin');});

@@ -22,6 +22,17 @@ function functionSource(source, name) {
       else if (ch === quote) quote = "";
       continue;
     }
+    // Ignore comment text: quotes/braces in explanations are not JavaScript tokens.
+    if (ch === "/" && source[i + 1] === "/") {
+      const end = source.indexOf("\n", i + 2);
+      if (end < 0) break;
+      i = end; continue;
+    }
+    if (ch === "/" && source[i + 1] === "*") {
+      const end = source.indexOf("*/", i + 2);
+      if (end < 0) break;
+      i = end + 1; continue;
+    }
     if (ch === "'" || ch === '"' || ch === "`") { quote = ch; continue; }
     if (ch === "{") depth += 1;
     if (ch === "}" && --depth === 0) return source.slice(start, i + 1);

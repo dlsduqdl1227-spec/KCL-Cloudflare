@@ -35,7 +35,8 @@ assert.doesNotMatch(selectorSource, /milkProduct|milkType|멸균|오트|대체�
 
 assert.match(functionSource(assessment, 'applyParticipantSelect_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
 assert.match(functionSource(assessment, 'applyParticipantNumberInput_'), /KCAC'[\s\S]*onKcacParticipantSelected_\(\)/);
-assert.match(functionSource(assessment, 'onKcacParticipantSelected_'), /hasParticipant[\s\S]*showMilkSetup[\s\S]*setup\.style\.display = showMilkSetup/);
+assert.match(functionSource(assessment, 'onKcacParticipantSelected_'), /syncKcacEvaluationVisibility_\(\)/);
+assert.match(functionSource(assessment, 'syncKcacEvaluationVisibility_'), /hasParticipant[\s\S]*showMilkSetup[\s\S]*setup\.style\.display = showMilkSetup/);
 
 const context = {
   _kcac: {
@@ -58,6 +59,7 @@ const context = {
   renderKcacLeafRuleBox:()=>{},
   refreshKcacCommentReference_:()=>{},
   syncKcacMilkPatternSelectors_:()=>{},
+  syncKcacEvaluationVisibility_:()=>{},
   updateKcacFinal:()=>{},
   renderKcacCupNav:()=>{},
   loadKcacJar:(idx)=>{ context._kcac.currentIdx = idx; },

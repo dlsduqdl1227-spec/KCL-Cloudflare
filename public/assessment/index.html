@@ -2000,7 +2000,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/kcr-sensory-comments.js?v=228"></script>
 <script src="/assets/shared-sensory-tags.js?v=228"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
-<script src="/assets/kcl-api-shim.js?v=stage202"></script>
+<script src="/assets/kcl-api-shim.js?v=stage255"></script>
 <script src="/assets/final-evaluation-workflow.js?v=235"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=235">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
@@ -2010,7 +2010,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script defer src="/assets/station-manager.js?v=246"></script>
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
 <link rel="stylesheet" href="/assets/smart-tag-picker.css?v=253">
-<script defer src="/assets/smart-tag-picker.js?v=253"></script>
+<script defer src="/assets/smart-tag-picker.js?v=255"></script>
 <link rel="stylesheet" href="/assets/multi-cup-navigation.css?v=253">
 <script src="/assets/operational-health.js?v=250"></script>
 </head>
@@ -8832,7 +8832,7 @@ function reviewKcacSmartTagMeta_(header) {
   if (/^예선/i.test(h)) {
     group = 'qual';
     if (/Pattern\s*Completion|패턴.*완성/i.test(h)) key = '완성도';
-    else if (/Pattern\s*Balance|패턴.*균형/i.test(h)) key = '균형';
+    else if (/Pattern\s*(?:Symmetry\s*&?\s*)?Balance|패턴.*균형|대칭.*균형/i.test(h)) key = '균형';
     else if (/Surface\s*Quality|표면/i.test(h)) key = '표면';
     else if (/Position\s*&?\s*Proportion|위치.*비율/i.test(h)) key = '위치';
     else if (/Pattern\s*Definition|Line\s*Clarity|선명/i.test(h)) key = '선명도';

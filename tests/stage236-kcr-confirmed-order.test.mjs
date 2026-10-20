@@ -68,7 +68,7 @@ try {
   await evalPage.waitForFunction(()=>participantStateForCode_('KCR').policy?.pendingPrelimAssignments);
   assert.match(await evalPage.locator('[data-station-id="stable-c"]').innerText(),/0\/1/);
   assert.equal(await evalPage.locator('[data-station-id="pending-section"]').isDisabled(),true);
-  assert.match(await evalPage.locator('[data-station-id="pending-section"]').innerText(),/예선 배정 대기/);
+  assert.match(await evalPage.locator('[data-station-id="pending-section"]').innerText(),/컵 배정 대기/);
   await evalPage.locator('[data-station-id="stable-c"]').click();
   assert.deepEqual(await evalPage.evaluate(()=>_cupping.cups.map(c=>String(c.cupNumber))),['3']);
   assert.deepEqual(evalPage.qaErrors,[]);await evalPage.close();

@@ -29,6 +29,16 @@ function extractFunction(source, name) {
       else if (char === quote) quote = "";
       continue;
     }
+    if (char === "/" && source[index + 1] === "/") {
+      const end = source.indexOf("\n", index + 2);
+      if (end < 0) break;
+      index = end; continue;
+    }
+    if (char === "/" && source[index + 1] === "*") {
+      const end = source.indexOf("*/", index + 2);
+      if (end < 0) break;
+      index = end + 1; continue;
+    }
     if (char === "'" || char === '"' || char === "`") {
       quote = char;
       continue;
@@ -161,7 +171,8 @@ assert.match(extractFunction(assessment, "initIkrcSamples"), /스테이션을 �
 assert.match(extractFunction(assessment, "renderReviewTopActionsV4_"), /textContent/);
 assert.doesNotMatch(extractFunction(assessment, "renderReviewTopActionsV4_"), /innerHTML/);
 assert.match(extractFunction(assessment, "canShowStddevButton_"), /IKRC.*isHeadRoleForCode_/s);
-assert.match(extractFunction(assessment, "openReviewEdit"), /IKRC.*item\._stddev/s);
+assert.match(extractFunction(assessment, "openReviewEdit"), /openReviewEditLoaded_\(item\)/);
+assert.match(extractFunction(assessment, "openReviewEditLoaded_"), /IKRC.*item\._stddev/s);
 assert.match(extractFunction(assessment, "buildStddevHtml_"), /내 점수/);
 assert.match(extractFunction(rpc, "getReviewList"), /ikrcOfficialReviewComparison_/);
 

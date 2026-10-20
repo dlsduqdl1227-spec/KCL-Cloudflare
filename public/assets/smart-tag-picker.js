@@ -4,6 +4,7 @@
   var sectionSelector = '.smart-tags-section,.mob-attr-tools';
   var optionSelector = '.cat-btn-p,.cat-btn-s,.cat-btn-t';
   var active = null, dialog, search, categories, choices, selected, status, custom, frame = 0;
+  var expandedSections = new Map();
   function text(el) {
     if (!el) return '';
     var ko = el.querySelector('.kcr-tag-ko'), en = el.querySelector('.kcr-tag-en');
@@ -83,6 +84,16 @@
     var title = card && card.querySelector('h3,.score-row-name,.score-row-title,.kcac-attr-name,.section-label');
     return text(title) || text(root.querySelector('.mob-attr-tag-head span,.smart-tags-title')) || 'Smart Tags';
   }
+  function setExpanded(root, anchor, expanded) {
+    var current = context(root);
+    expandedSections.set(anchor.id, {key:current.key, owner:current.owner, expanded:expanded});
+    root.classList.toggle('kcl-tags-expanded', expanded);
+    var fallback = root.querySelector('.kcl-tag-fallback');
+    if (fallback) {
+      fallback.textContent = expanded ? '목록 접기' : '목록 펼치기';
+      fallback.setAttribute('aria-expanded', String(expanded));
+    }
+  }
   function enhance(root) {
     var anchor = root.querySelector('.selected-tags[id]');
     if (!anchor || !root.querySelector(optionSelector)) return;
@@ -91,14 +102,17 @@
       var bar = document.createElement('div'); bar.className = 'kcl-tag-toolbar';
       launch = button('', function () { open(anchor.id); }, 'kcl-tag-launch');
       var fallback = button('목록 펼치기', function () {
-        var expanded = root.classList.toggle('kcl-tags-expanded');
-        fallback.textContent = expanded ? '목록 접기' : '목록 펼치기';
-        fallback.setAttribute('aria-expanded', String(expanded));
+        setExpanded(root, anchor, !root.classList.contains('kcl-tags-expanded'));
       }, 'kcl-tag-fallback');
       fallback.setAttribute('aria-expanded', 'false');
       bar.append(launch, fallback);
       root.insertBefore(bar, anchor);
       root.classList.add('kcl-quick-tags');
+      // Original category/tag handlers rebuild the section. Keep its expanded
+      // state only for the same evaluation owner, never for a different cup.
+      var previous = expandedSections.get(anchor.id), current = context(root);
+      setExpanded(root, anchor, !!(previous && previous.key === current.key &&
+        previous.owner === current.owner && previous.expanded));
     }
     var label = '태그 선택 · ' + selectionCount(root) + '개';
     if (launch.textContent !== label) launch.textContent = label;
@@ -141,7 +155,7 @@
   function open(id) {
     if (!window.HTMLDialogElement || !HTMLDialogElement.prototype.showModal) {
       var anchor = document.getElementById(id), root = anchor && anchor.closest(sectionSelector);
-      if (root) { root.classList.add('kcl-tags-expanded'); root.querySelector('.kcl-tag-fallback').setAttribute('aria-expanded','true'); }
+      if (root) setExpanded(root, anchor, true);
       return;
     }
     if (!dialog) createDialog();

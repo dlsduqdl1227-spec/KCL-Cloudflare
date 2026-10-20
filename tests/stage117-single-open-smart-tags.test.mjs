@@ -83,6 +83,7 @@ assert.match(functionSource("toggleReviewSmartTagSecondary"), /smartTagSetOpenBr
 assert.match(functionSource("startKbc"), /_kbcOpenSmartTagBranches = \{\}/);
 assert.match(functionSource("startMob"), /_mobOpenSmartTagBranches = \{\}/);
 assert.match(functionSource("startKcac"), /_kcacOpenSmartTagBranches = \{\}/);
-assert.match(functionSource("openReviewEdit"), /_reviewOpenSmartTagBranches = \{\}/);
+assert.match(functionSource("openReviewEdit"), /openReviewEditLoaded_\(item\)/);
+assert.match(functionSource("openReviewEditLoaded_"), /_reviewOpenSmartTagBranches = \{\}/);
 
 process.stdout.write("Stage117 single-open smart-tag tests passed.\n");

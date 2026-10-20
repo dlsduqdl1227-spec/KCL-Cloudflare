@@ -19,9 +19,13 @@ try {
   await page.waitForFunction(()=>document.body.classList.contains('kcr-viewport-active'));
   assert.equal(await page.locator('#cupping-cup-nav .cup-btn').count(),9);
   await page.locator('#cupping-attr-tabs [data-attr=acidity]').click();
+  // The compact tag picker keeps the original list behind an explicit expand control.
+  await page.locator('#cupping-attr-card .kcl-tag-fallback').click();
   await page.locator('#cupping-attr-card .kcr-tag-family-btn').filter({hasText:'보완 표현'}).click();
   const dry=page.locator('#cupping-attr-card button').filter({hasText:/^드라이한Dry$/});
+  assert.equal(await page.locator('#cupping-attr-card .kcl-tag-fallback').getAttribute('aria-expanded'),'true','changing categories must not collapse the original tag list');
   await dry.click();
+  await page.waitForFunction(()=>document.querySelector('#cupping-attr-card .kcl-tag-fallback')?.getAttribute('aria-expanded')==='true');
   const field=page.locator('#kcr-sensory-comment-acidity');
   assert.match(await field.inputValue(),/산미에서 드라이한 감각/);
   assert.equal(await field.evaluate(el=>parseFloat(getComputedStyle(el).fontSize)),16);
@@ -62,6 +66,7 @@ try {
   assert.equal(await page.locator('#cupping-cup-nav').evaluate(nav=>{const n=nav.getBoundingClientRect(),b=nav.querySelector('.active').getBoundingClientRect();return b.left>=n.left&&b.right<=n.right+1;}),true,'selected ninth cup stays visible');
   await page.locator('#cupping-attr-tabs [data-attr=acidity]').click();
   assert.equal(await page.evaluate(()=>_cupping.cups[8].acidityTagIds.includes('acidity_dry')),false);
+  assert.equal(await page.locator('#cupping-attr-card .kcl-tag-fallback').getAttribute('aria-expanded'),'false','another cup does not inherit the previous cup expanded state');
   await page.locator('#cupping-cup-nav .cup-btn').first().click();
   assert.equal(await field.inputValue(),'산미에서 느낀 드라이한 인상을 직접 기록합니다.');
   assert.equal(await page.locator('#cupping-score-slider').inputValue(),'3.8');

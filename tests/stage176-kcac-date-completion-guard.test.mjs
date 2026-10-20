@@ -35,6 +35,7 @@ const dedupeContext = {
 };
 vm.createContext(dedupeContext);
 vm.runInContext([
+  functionSource(rpc, 'kcrPrelimPending_'),
   functionSource(rpc, 'participantRoundNumber_'),
   functionSource(rpc, 'normalizeKcacParticipantUnit_'),
   functionSource(rpc, 'kcacParticipantSourcePriority_'),

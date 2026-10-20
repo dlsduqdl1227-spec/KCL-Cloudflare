@@ -53,10 +53,12 @@
       credentials: 'same-origin',
       cache: 'no-store'
     }).then(function (res) {
-      if (timer) clearTimeout(timer);
       return res.text().then(function (txt) {
+        // Headers arriving does not mean the body finished. Keep the deadline
+        // active until the complete response is available.
+        if (timer) clearTimeout(timer);
         var data;
-        try { data = txt ? JSON.parse(txt) : {}; }
+        try { data = JSON.parse(txt); }
         catch (e) {
           var parseError = new Error('서버 연결이 일시적으로 불안정합니다. 입력 내용은 보존되어 있으며 자동으로 다시 연결합니다. (HTTP ' + res.status + ')');
           parseError.retryable = true;
@@ -71,6 +73,9 @@
           httpError.retryable = [408, 425, 429, 500, 502, 503, 504].indexOf(res.status) >= 0;
           httpError.retryAfterMs = retryAfterMs_(res);
           throw httpError;
+        }
+        if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.success !== 'boolean') {
+          throw retryableError_('서버 응답이 완전하지 않습니다. 입력 내용은 유지되며 다시 연결합니다.');
         }
         return data;
       });
@@ -90,6 +95,15 @@
   }
 
   function callRpc(action, args) {
+    // A retry must send the first request exactly, even if the active form or
+    // nested tag arrays change while the network is recovering.
+    var serializedArgs;
+    try {
+      serializedArgs = JSON.stringify(Array.prototype.slice.call(args || []));
+      args = JSON.parse(serializedArgs);
+    } catch (error) {
+      return Promise.reject(new Error('전송할 내용을 확인하지 못했습니다. 입력 내용을 확인한 뒤 다시 시도해주세요.'));
+    }
     var sharedRead = ['getReviewList', 'getRanking', 'getRankingDetail'].indexOf(action) >= 0;
     var mutation = !/^(ping|get|list|load|fetch|search|validate|check|generate)/i.test(String(action || ''));
     if (mutation) readGeneration_++;
@@ -97,8 +111,6 @@
     if (sharedRead) {
       // In-flight only, never a stale-result cache. Include the full actor,
       // competition, round and detail scope; snapshot inputs before retries.
-      var serializedArgs = JSON.stringify(Array.prototype.slice.call(args || []));
-      args = JSON.parse(serializedArgs);
       key = readGeneration_ + ':' + action + ':' + serializedArgs;
       if (pendingListReads_.has(key)) return pendingListReads_.get(key).then(copyReadResult_);
     }

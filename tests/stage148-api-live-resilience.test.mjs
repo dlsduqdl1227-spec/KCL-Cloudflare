@@ -14,9 +14,14 @@ assert.match(shim, /updateReviewRow/);
 assert.match(shim, /updateReviewStatusBatch/);
 assert.doesNotMatch(shim, /API 응답을 해석하지 못했습니다/);
 
+const versions = new Set();
 for (const page of ['assessment', 'registry', 'debriefing', 'admin']) {
   const html = fs.readFileSync(path.join(root, 'public', page, 'index.html'), 'utf8');
-  assert.match(html, /kcl-api-shim\.js\?v=stage(?:154|202)/);
+  const matches = [...html.matchAll(/kcl-api-shim\.js\?v=stage(\d+)/g)];
+  assert.equal(matches.length, 1, page + ' uses one versioned API client');
+  assert.ok(Number(matches[0][1]) >= 154);
+  versions.add(matches[0][1]);
 }
+assert.equal(versions.size, 1, 'every page must use the same API recovery implementation');
 
 process.stdout.write('Stage148 live API resilience tests passed.\n');

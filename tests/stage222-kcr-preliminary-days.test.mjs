@@ -21,12 +21,14 @@ try{
   const scores=JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all());
   const rank=await api.rpc('getRanking','KCR',api.actor,'예선');
   assert.equal(rank.ranking.length,4);
-  for(const row of rank.ranking){assert.equal(row.totalCount,2);assert.equal(row.score,Number(row.unit)<=2?24.5:31.5);}
+  // KCR official ranking uses the sum of all judges (stage237), across both days.
+  for(const row of rank.ranking){assert.equal(row.totalCount,2);assert.equal(row.score,Number(row.unit)<=2?49:63);}
   assert.equal((await api.rpc('getRanking','KCR',api.actor,'결선')).ranking.length,0);
   const extended=[...preliminary,...Array.from({length:37},(_,i)=>({id:'extra-'+i,prefix:'X'+i,start:10+i,end:10+i,process:'Blending',prelimDay:i<16?1:2,useForCalibration:false,useForCompetition:true}))];
   await save(extended);assert.equal(options().byRound.예선.length,40);
   assert.deepEqual(options().byRound.예선.slice(0,3).map(s=>s.id),stations.map(s=>s.id));
-  const over=await(await api.handle({action:'updateCompetitionAdminSettings',args:[{code:'KCR',optionSettings:{kcrStations:{stations:[...extended,{...extended[0],id:'too-many'}]}}},api.actor]})).json();
+  const tooMany=[...extended,{...extended[0],id:'too-many'}];
+  const over=await(await api.handle({action:'updateCompetitionAdminSettings',args:[{code:'KCR',optionSettings:{kcrStations:{stations:tooMany,byRound:{예선:tooMany,결선:finalists}}}},api.actor]})).json();
   assert.equal(over.success,false);
   // Reclassifying management metadata cannot rewrite a saved evaluation or ranking.
   extended[1].prelimDay=2;await save(extended);

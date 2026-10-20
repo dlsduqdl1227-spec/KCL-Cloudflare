@@ -21,6 +21,17 @@ function functionSource(source, name) {
       else if (ch === quote) quote = "";
       continue;
     }
+    // Ignore comment text: quotes/braces in explanations are not JavaScript tokens.
+    if (ch === "/" && source[i + 1] === "/") {
+      const end = source.indexOf("\n", i + 2);
+      if (end < 0) break;
+      i = end; continue;
+    }
+    if (ch === "/" && source[i + 1] === "*") {
+      const end = source.indexOf("*/", i + 2);
+      if (end < 0) break;
+      i = end + 1; continue;
+    }
     if (ch === "'" || ch === '"' || ch === "`") { quote = ch; continue; }
     if (ch === "{") depth += 1;
     if (ch === "}" && --depth === 0) return source.slice(start, i + 1);
@@ -81,7 +92,7 @@ assert.match(serverNormalize, /useForCalibration/);
 assert.match(serverNormalize, /useForCompetition/);
 assert.match(serverNormalize, /numberMode:'participant'/);
 assert.match(serverValidate, /kcrStationsForPurposeServer_/);
-assert.match(serverValidate, /String\(station\.start \+ idx\)/);
+assert.match(serverValidate, /kcrStationUnitsServer_\(station\)/, "submission must honor explicit final cup numbers as well as ranges");
 assert.doesNotMatch(serverValidate, /`\$\{station\.prefix\}-\$\{station\.start \+ idx\}`/);
 assert.match(functionSource(rpc, "submitScores"), /participants WHERE competition_code=\?/);
 assert.match(functionSource(rpc, "getReviewList"), /calibrationOnly/);
