@@ -25,32 +25,40 @@ label:has(input[type=checkbox]),label:has(input[type=radio]),.score-lock {
   input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea {font-size:16px!important}
   .admin-check-row label {padding:6px 4px;gap:10px}
 }
-/* KCR cups keep the physical left-to-right order, never wrap or shuffle. */
-#cupping-cup-nav {gap:10px!important;flex-wrap:nowrap!important;align-items:stretch!important;padding:10px 14px!important;scroll-padding:14px}
+/* A fixed one-row overview plus large previous/next controls: no cup carousel. */
+#cupping-cup-nav {
+  display:grid!important;grid-template-columns:repeat(var(--kcr-cup-columns,1),minmax(0,1fr));
+  gap:3px!important;align-items:stretch!important;padding:4px 10px!important;
+  overflow:visible!important;scroll-snap-type:none!important;
+}
 #cupping-cup-nav .cup-btn {
-  width:86px!important;min-width:86px!important;height:104px!important;padding:6px!important;
-  flex:0 0 86px!important;gap:4px;color:#ddd;position:relative;transition:none;
+  width:100%!important;min-width:0!important;height:44px!important;padding:0!important;
+  color:#ddd;position:relative;transition:none;background:transparent;border:0;
 }
-#cupping-cup-nav .cup-btn.active {color:#111;border:2px solid #fff;box-shadow:inset 0 -4px #569778}
-#cupping-cup-nav .cup-btn:has(.kcr-cup-identity) {height:122px!important}
+#cupping-cup-nav .cup-btn.active {color:#fff;background:transparent;border-color:transparent;box-shadow:none}
 #cupping-cup-nav .cup-btn .cup-btn-num {
-  width:60px;height:45px;border:2px solid currentColor;border-radius:8px 8px 23px 23px;
-  display:flex;align-items:center;justify-content:center;font-size:22px!important;line-height:1!important;
-  position:relative;font-variant-numeric:tabular-nums;
+  width:min(32px,100%);height:auto;aspect-ratio:1;box-sizing:border-box;border:1px solid #999;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:13px!important;line-height:1!important;
+  font-variant-numeric:tabular-nums;white-space:nowrap!important;
 }
-#cupping-cup-nav .cup-btn .cup-btn-num::after {
-  content:'';position:absolute;right:-8px;top:7px;width:7px;height:16px;border:2px solid currentColor;
-  border-left:0;border-radius:0 7px 7px 0;
-}
-#cupping-cup-nav .cup-btn .cup-btn-score {font-size:12px!important;color:inherit;opacity:1}
-.kcr-cup-position {font-size:11px;line-height:1.2}
-.kcr-cup-identity {display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+#cupping-cup-nav .cup-btn.active .cup-btn-num {background:#fff;color:#111;border-color:#fff}
+.kcr-current-cup {display:grid;grid-template-columns:52px minmax(0,1fr) 52px;align-items:center;gap:8px;padding:6px 12px 10px;background:var(--panel);flex-shrink:0}
+.kcr-current-cup button {width:52px!important;height:48px!important;min-height:48px!important;margin:0;padding:0;font-size:28px;line-height:1}
+.kcr-current-cup button:disabled {opacity:.25;cursor:default}
+.kcr-current-cup-center {min-width:0;text-align:center}
+#cupping-current-number {display:block;font-size:24px;line-height:1.2}
+#cupping-current-position {display:block;font-size:12px;color:#bbb;margin-top:3px}
+#cupping-current-identity {font-size:12px;margin-top:4px;overflow-wrap:anywhere}
 .kcr-cup-direction {font-size:12px;color:#bbb;padding:5px 14px;background:var(--panel);flex-shrink:0}
 #evalCupping .eval-hero-logo {margin:8px auto!important;min-height:0!important}
 #evalCupping .eval-hero-logo img {height:52px!important;width:auto!important;max-width:100%}
+#cupping-attr-tabs .attr-tab {white-space:normal!important;overflow:visible;overflow-wrap:anywhere;min-height:48px!important;height:auto!important;padding:8px 6px!important}
+@media(max-width:560px) {
+  #cupping-cup-nav .cup-btn .cup-btn-num {font-size:clamp(6px,calc(120px / var(--kcr-cup-columns,1)),13px)!important}
+}
+body.kcr-keyboard-open .kcr-current-cup {padding-block:2px}
+body.kcr-keyboard-open #cupping-current-position,
+body.kcr-keyboard-open .kcr-cup-direction {display:none}
 @media(max-height:550px) {
-  #cupping-cup-nav .cup-btn {height:82px!important}
-  #cupping-cup-nav .cup-btn:has(.kcr-cup-identity) {height:106px!important}
-  #cupping-cup-nav .cup-btn .cup-btn-num {height:34px;font-size:20px!important}
   .kcr-cup-direction {display:none}
 }

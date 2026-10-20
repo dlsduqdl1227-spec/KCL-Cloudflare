@@ -2008,7 +2008,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script defer src="/assets/kcr-viewport.js?v=228"></script>
 <link rel="stylesheet" href="/assets/station-manager.css?v=246">
 <script defer src="/assets/station-manager.js?v=246"></script>
-<link rel="stylesheet" href="/assets/touch-controls.css?v=250">
+<link rel="stylesheet" href="/assets/touch-controls.css?v=252">
 <script src="/assets/operational-health.js?v=250"></script>
 </head>
 <body>
@@ -2359,18 +2359,27 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="eval-total-val" id="cupping-total">0.00</div>
     </div>
   </div>
-  <div class="kcr-cup-direction">컵 배치 순서 → 번호를 눌러 평가 · 좌우로 넘겨 선택</div>
+  <div class="kcr-cup-direction">전체 컵 · 현재 평가 중인 컵이 밝게 표시됩니다</div>
   <div class="cup-nav" id="cupping-cup-nav" role="group" aria-label="스테이션 컵 배치 순서"></div>
+  <div class="kcr-current-cup">
+    <button type="button" class="btn-outline" id="cupping-previous-cup" aria-label="이전 컵" title="이전 컵" onclick="switchCuppingCup(_cupping.currentIdx - 1)">‹</button>
+    <div class="kcr-current-cup-center" aria-live="polite">
+      <strong id="cupping-current-number"></strong>
+      <span id="cupping-current-position"></span>
+      <div id="cupping-current-identity" style="display:none"></div>
+    </div>
+    <button type="button" class="btn-outline" id="cupping-next-cup" aria-label="다음 컵" title="다음 컵" onclick="switchCuppingCup(_cupping.currentIdx + 1)">›</button>
+  </div>
   <div class="eval-content">
     <div class="eval-hero-logo" data-comp-logo="KCR"></div>
     <div class="attr-tabs" id="cupping-attr-tabs">
-      <button type="button" class="attr-tab active" data-attr="flavor" onclick="switchCuppingAttr('flavor')">플레이버</button>
-      <button type="button" class="attr-tab" data-attr="aftertaste" onclick="switchCuppingAttr('aftertaste')">여운</button>
-      <button type="button" class="attr-tab" data-attr="acidity" onclick="switchCuppingAttr('acidity')">산미</button>
-      <button type="button" class="attr-tab" data-attr="sweetness" onclick="switchCuppingAttr('sweetness')">단맛 ×2</button>
-      <button type="button" class="attr-tab" data-attr="mouthfeel" onclick="switchCuppingAttr('mouthfeel')">마우스필</button>
-      <button type="button" class="attr-tab" data-attr="overall" onclick="switchCuppingAttr('overall')">종합 평가</button>
-      <button type="button" class="attr-tab" data-attr="comment" onclick="switchCuppingAttr('comment')">종합 코멘트</button>
+      <button type="button" class="attr-tab active" data-attr="flavor" onclick="switchCuppingAttr('flavor')">Flavor(플레이버)</button>
+      <button type="button" class="attr-tab" data-attr="aftertaste" onclick="switchCuppingAttr('aftertaste')">Aftertaste(에프터테이스트)</button>
+      <button type="button" class="attr-tab" data-attr="acidity" onclick="switchCuppingAttr('acidity')">Acidity(산미)</button>
+      <button type="button" class="attr-tab" data-attr="sweetness" onclick="switchCuppingAttr('sweetness')">Sweetness(단맛) ×2</button>
+      <button type="button" class="attr-tab" data-attr="mouthfeel" onclick="switchCuppingAttr('mouthfeel')">Mouthfeel(마우스필)</button>
+      <button type="button" class="attr-tab" data-attr="overall" onclick="switchCuppingAttr('overall')">Overall(오버롤)</button>
+      <button type="button" class="attr-tab" data-attr="comment" onclick="switchCuppingAttr('comment')">전체 코멘트</button>
     </div>
     <div class="review-edit-help">KCR 커핑 기준: 원두 11g · 물 200ml · 800~850µm · 93~95℃ · 4분 브레이킹. 물 붓기 10분 경과 후 Flavor → Aftertaste → Acidity → Sweetness → Mouthfeel → Overall 순으로 평가하며, 30분 내 모든 평가를 종료합니다.</div>
     <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
@@ -11854,9 +11863,9 @@ function backToCuppingSetup() {
 
 function renderCuppingCupNav() {
   var nav = document.getElementById('cupping-cup-nav');
-  var previousScrollLeft = nav.scrollLeft;
+  var count = Math.max(1,_cupping.cups.length);
+  nav.style.setProperty('--kcr-cup-columns',count);
   Array.from(nav.querySelectorAll('.cup-btn')).forEach(function(b){ b.remove(); });
-  var submitBtn = null;
 
   _cupping.cups.forEach(function(c, i) {
     var total = roundTotal(c.flavor + c.aftertaste + c.acidity + (c.sweetness * 2) + c.mouthfeel + c.overall);
@@ -11867,23 +11876,26 @@ function renderCuppingCupNav() {
     btn.type = 'button';
     btn.setAttribute('aria-pressed',i === _cupping.currentIdx ? 'true' : 'false');
     btn.setAttribute('aria-label',(i+1)+'번째 컵 · '+c.cupNumber+'번'+(identity?' · '+identity:'')+' · '+fmtScore(total,2)+'점');
-    btn.innerHTML = '<span class="kcr-cup-position">' + (i+1) + '번째</span><span class="cup-btn-num">' + escHtml(c.cupNumber) + '</span>' +
-                    (identity ? '<span class="kcr-cup-identity" title="' + escHtml(identity) + '">' + escHtml(identity) + '</span>' : '') +
-                    '<span class="cup-btn-score">' + fmtScore(total,2) + '점</span>';
+    btn.title = c.cupNumber+'번'+(identity?' · '+identity:'');
+    btn.innerHTML = '<span class="cup-btn-num">' + escHtml(c.cupNumber) + '</span>';
     btn.onclick = (function(n) { return function(){ switchCuppingCup(n); }; })(i);
     nav.appendChild(btn);
   });
-  // Rebuilding score labels must not send the selected ninth cup off-screen.
-  nav.scrollLeft = previousScrollLeft;
-  var active = nav.querySelector('.cup-btn.active');
-  if (active) {
-    var activeBox = active.getBoundingClientRect(), navBox = nav.getBoundingClientRect();
-    if (activeBox.right > navBox.right) nav.scrollLeft += activeBox.right - navBox.right + 12;
-    else if (activeBox.left < navBox.left) nav.scrollLeft -= navBox.left - activeBox.left + 12;
-  }
+  // Every cup stays in the overview; score updates never scroll the cup selector.
+  nav.scrollLeft = 0;
+  var current = _cupping.cups[_cupping.currentIdx];
+  document.getElementById('cupping-current-number').textContent = current ? current.cupNumber+'번 컵' : '';
+  document.getElementById('cupping-current-position').textContent = current ? '현재 '+(_cupping.currentIdx+1)+' / 전체 '+_cupping.cups.length+'컵' : '';
+  var currentIdentity = current ? kcrAdminParticipantLabel_(current.cupNumber,_cupping.isCalibrationMode) : '';
+  var identityEl = document.getElementById('cupping-current-identity');
+  identityEl.textContent = currentIdentity;
+  identityEl.style.display = currentIdentity ? 'block' : 'none';
+  document.getElementById('cupping-previous-cup').disabled = !current || _cupping.currentIdx<=0;
+  document.getElementById('cupping-next-cup').disabled = !current || _cupping.currentIdx>=_cupping.cups.length-1;
 }
 
 function switchCuppingCup(idx) {
+  if (!Number.isInteger(idx) || idx<0 || idx>=_cupping.cups.length) return;
   saveCuppingCurrentFromDOM();
   if (!validateCuppingCommentEdited(_cupping.cups[_cupping.currentIdx])) return;
   _cupping.currentIdx = idx;
