@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:debrief-judge-labels": "node tests/stage242-debrief-sensory-judge-labels.test.mjs",
     "test:kcr-day-closure": "node tests/stage240-kcr-day-closure.test.mjs && node tests/stage241-kcr-day-closure-browser.test.mjs",
     "test:kcr-query-cpu": "node tests/stage239-kcr-query-cpu.test.mjs",
     "test:kcr-total": "node tests/stage237-kcr-total-ranking.test.mjs && node tests/stage238-kcr-total-ranking-browser.test.mjs",

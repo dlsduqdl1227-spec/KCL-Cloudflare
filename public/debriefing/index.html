@@ -325,7 +325,7 @@ h2,.subtitle,.section-label,.result-name,.result-affil,.result-comp,.round-title
 .round-section{max-width:760px;margin-left:auto;margin-right:auto}
 .score-card{position:relative;overflow:hidden}
 .score-card:before{content:"";position:absolute;left:0;top:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.26),transparent);pointer-events:none}
-.score-card-header{align-items:flex-start;gap:14px}.judge-name{line-height:1.35}.total-score{text-align:right;min-width:86px;font-variant-numeric:tabular-nums}
+.score-card-header{align-items:flex-start;gap:14px}.judge-name{line-height:1.35;min-width:0}.total-score{text-align:right;min-width:86px;font-variant-numeric:tabular-nums;flex-shrink:0;white-space:nowrap}
 .score-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(178px,1fr))!important;gap:10px!important}
 .score-item{min-height:86px;display:flex;flex-direction:column;justify-content:space-between;gap:7px}
 .score-item-label{min-height:30px;display:flex;align-items:flex-start;line-height:1.35;letter-spacing:-.02em}
@@ -1272,6 +1272,19 @@ function kcacDebriefJudgeKey_(score, fallbackIndex) {
   if (judgeKey && judgeKey !== '-') return 'judge:' + judgeKey + ':' + roleKey;
   return 'card:' + String(fallbackIndex == null ? '' : fallbackIndex);
 }
+function isSensoryDebriefCard_(score, competition) {
+  if (['KCAC','KTCC'].indexOf(String(competition || '').toUpperCase()) >= 0) return false;
+  var role = String(score['역할'] || score.Role || score.JudgeRole || '').toLowerCase();
+  return !/technical|테크|기술/.test(role) && /sensory|센서|감각|심사/.test(role);
+}
+function sensoryDebriefJudgeKey_(score, fallbackIndex) {
+  // One anonymous number per judge within this player's round, including
+  // multiple menu evaluations. Never add private names to the rendered title.
+  var judge = score['심사위원명'] || score['심사위원'] || score.judgeName || score.Judge || '';
+  var key = String(judge).replace(/\s+/g, '').toLowerCase();
+  if (key && key !== '-') return 'judge:' + key;
+  return kcacDebriefJudgeKey_(score, fallbackIndex);
+}
 function renderResult(res) {
   // Defense in depth for stale responses: never render a different phase score,
   // rank or mean, and never mutate the source response while filtering it.
@@ -1377,6 +1390,8 @@ function renderResult(res) {
 
     var kcacJudgeNumbers = {};
     var nextKcacJudgeNumber = 1;
+    var sensoryJudgeNumbers = {};
+    var nextSensoryJudgeNumber = 1;
     list.forEach(function(s, scoreIndex) {
       var kcacJudgeNumber = 0;
       if (isKcacDebrief) {
@@ -1385,6 +1400,12 @@ function renderResult(res) {
           kcacJudgeNumbers[judgeKey] = nextKcacJudgeNumber++;
         }
         kcacJudgeNumber = kcacJudgeNumbers[judgeKey];
+      } else if (isSensoryDebriefCard_(s, res.competition)) {
+        var sensoryKey = sensoryDebriefJudgeKey_(s, scoreIndex);
+        if (!Object.prototype.hasOwnProperty.call(sensoryJudgeNumbers, sensoryKey)) {
+          sensoryJudgeNumbers[sensoryKey] = nextSensoryJudgeNumber++;
+        }
+        kcacJudgeNumber = sensoryJudgeNumbers[sensoryKey];
       }
       var card = buildScoreCard(s, res.competition, kcacJudgeNumber);
       section.appendChild(card);
@@ -1997,7 +2018,7 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
   var publicTitle = '공식 평가 결과';
   if (isKcac) publicTitle = (Number(anonymousJudgeNo) > 0 ? (Number(anonymousJudgeNo) + '번 심사위원 ') : '') + '라떼아트 평가';
   else if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
-  else if (/sensory|센서|감각|심사/.test(roleRaw)) publicTitle = '센서리 평가 결과';
+  else if (isSensoryDebriefCard_(s, compCode)) publicTitle = (Number(anonymousJudgeNo) > 0 ? Number(anonymousJudgeNo) : 1) + '번 센서리심사위원 평가';
   if (isKtcc) publicTitle = teamTitle || '팀 평가 결과';
   var statusRaw = String(s['검수상태'] || s.status || '').replace(/\s/g, '');
   var statusBadge = (statusRaw === '검수완료' || statusRaw === '수정완료') ? '<span class="reviewed-pill">' + escHtml(statusRaw) + '</span>' : '';
