@@ -1,5 +1,49 @@
 (function(){
   'use strict';
+  window.parseKcrStationCupNumbers_=function(text){
+    var values=String(text||'').trim().split(/[\s,，]+/).filter(Boolean);
+    if(!values.length||values.length>20||values.some(function(n){return !/^\d+$/.test(n)||Number(n)<1||Number(n)>999;}))
+      return {ok:false,message:'1~999 사이 컵번호를 1~20개 입력해주세요.'};
+    var numbers=values.map(function(n){return String(Number(n));});
+    if(new Set(numbers).size!==numbers.length)return {ok:false,message:'중복된 컵번호를 제거해주세요.'};
+    return {ok:true,numbers:numbers};
+  };
+  function config(){return (_configs||[]).filter(function(c){return c.code==='KCR';})[0];}
+  document.addEventListener('change',function(event){
+    if(!event.target.matches('[data-kcr-edit-round]'))return;
+    var panel=event.target.closest('[data-kcr-station-manager]'),cfg=config();
+    if(cfg)ikrcRenderStationConfigForRound_(panel.dataset.kcrPrefix,cfg,event.target.value,true);
+  });
+  document.addEventListener('click',function(event){
+    var button=event.target.closest('[data-kcr-save-stations]');if(!button)return;
+    var panel=button.closest('[data-kcr-station-manager]'),cfg=config(),round=panel.dataset.kcrRound;
+    if(!cfg||panel.dataset.saving==='true')return;
+    var parsed=configSelectableOptionsPayload_('KCR',panel.dataset.kcrPrefix,cfg);if(!parsed)return;
+    var stations=parsed.kcrStations.byRound[round],list=panel.querySelector('.ikrc-station-config-list');
+    var previous=JSON.parse(panel.dataset.loadedStations||'[]'),owner=_judge.judgeToken;
+    var revision=list.dataset.editRevision||'0',status=panel.querySelector('[data-station-edit-status]');
+    panel.dataset.saving='true';button.disabled=true;status.textContent='스테이션 저장 중…';
+    function finish(message,failed){
+      panel.dataset.saving='false';button.disabled=false;
+      if(panel.isConnected&&_judge&&_judge.judgeToken===owner){status.textContent=message;toast(message,!!failed);}
+    }
+    google.script.run.withSuccessHandler(function(res){
+      if(!res||!res.success){finish(res&&res.message||'저장하지 못했습니다. 입력 내용은 유지됩니다.',true);return;}
+      if(!_judge||_judge.judgeToken!==owner)return finish('저장 완료');
+      // Update configuration references, never an active evaluation or its draft.
+      [(_configs||[]),(_adminConsole&&_adminConsole.configs||[])].forEach(function(configs){
+        configs.forEach(function(c){if(c.code==='KCR')c.optionSettings=res.optionSettings;});
+      });
+      if(panel.isConnected&&panel.dataset.kcrRound===round){
+        var saved=kcrStationSettings_({code:'KCR',currentRound:round,optionSettings:res.optionSettings});
+        panel.dataset.loadedStations=JSON.stringify(saved);
+        if((list.dataset.editRevision||'0')===revision)list.dataset.stationDirty='false';
+        if(typeof resetStationCupIdentity_==='function')resetStationCupIdentity_(panel.dataset.kcrPrefix,'KCR',round);
+      }
+      finish(res.message+((list.dataset.editRevision||'0')!==revision?' · 저장 중 바꾼 내용은 다시 저장해주세요.':''));
+    }).withFailureHandler(function(){finish('연결을 확인한 뒤 다시 저장해주세요. 입력 내용은 유지됩니다.',true);})
+      .saveKcrStationSettings({round:round,stations:stations,previousStations:previous},adminActorPayload_());
+  });
   window.stationCupIdentityHtml_=function(code,prefix,round){
     if(!isAdminRole())return '';
     return '<details class="station-cup-identities" data-cup-code="'+code+'" data-cup-prefix="'+prefix+'" data-cup-round="'+escHtml(round)+'"><summary>컵번호 · 선수 확인</summary>'+
@@ -47,9 +91,16 @@
       var cal=row.querySelector('[data-field=useForCalibration]'),official=row.querySelector('[data-field=useForCompetition]');
       purpose=cal&&cal.checked?(official&&official.checked?'both':'calibration'):'competition';
     }
-    var parts=[prefix+first+' ~ '+prefix+last];
+    var individual=code==='KCR'&&value(row,'cupSelection')==='individual';
+    row.querySelectorAll('.kcr-station-range-field').forEach(function(el){el.hidden=individual;});
+    var field=row.querySelector('.kcr-cup-numbers');if(field)field.hidden=!individual;
+    var selected=individual?parseKcrStationCupNumbers_(value(row,'cupNumbers')):null;
+    var parts=[individual?(selected.ok?selected.numbers.join(', '):'컵번호 입력 필요'):prefix+first+' ~ '+prefix+last];
     var count=Number(last)-Number(first)+1;
-    if(first&&last&&count>0)parts.push(count+'명');
+    if(individual)count=selected.ok?selected.numbers.length:0;
+    if(count>0)parts.push(count+'명');
+    var status=row.querySelector('[data-cup-selection-status]');
+    if(status)status.textContent=individual?(selected.ok?count+'컵 선택됨':selected.message):'';
     parts.push({both:'대회평가 · 켈리브레이션',calibration:'켈리브레이션',competition:'대회평가'}[purpose]||'용도 미선택');
     var panel=row.closest('[data-kcr-station-manager]');
     if(code==='KCR'&&(!panel||panel.dataset.kcrRound==='예선')&&value(row,'prelimDay'))parts.push(value(row,'prelimDay')+'일차');
@@ -62,12 +113,21 @@
   window.markStationEditorDirty_=function(list){
     if(!list)return;
     list.dataset.stationDirty='true';
+    list.dataset.editRevision=String(Number(list.dataset.editRevision||0)+1);
     var status=list.parentElement.querySelector('[data-station-edit-status]');
     if(status)status.textContent='변경사항이 있습니다. 설정 저장을 눌러 반영하세요.';
   };
   function changed(event){
     var row=event.target.closest('[data-ikrc-station-row]');
-    if(!row)return;summary(row);
+    if(!row)return;
+    if(event.target.matches('[data-field="cupSelection"]')&&event.target.value==='individual'){
+      var input=row.querySelector('[data-field="cupNumbers"]');
+      if(!input.value.trim()){
+        var first=Number(value(row,'start')),last=Number(value(row,'end'));
+        if(first>0&&last>=first&&last-first<20)input.value=Array.from({length:last-first+1},function(_,i){return first+i;}).join(', ');
+      }
+    }
+    summary(row);
     window.markStationEditorDirty_(row.parentElement);
   }
   document.addEventListener('input',changed);

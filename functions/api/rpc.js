@@ -617,6 +617,7 @@ async function dispatch(action, args, env, request) {
     getAdminConsoleData: () => getAdminConsoleData(env, args[0]),
     getD1DailyUsage: () => getD1DailyUsage(env, args[0], args[1]),
     updateCompetitionAdminSettings: () => updateCompetitionAdminSettings(env, args[0], args[1]),
+    saveKcrStationSettings: () => saveKcrStationSettings(env, args[0], args[1]),
     upsertOperatorAccount: () => upsertOperatorAccount(env, args[0], args[1]),
     deleteOperatorAccount: () => deleteOperatorAccount(env, args[0], args[1]),
     listOperators: () => listOperators(env, args[0], args[1]),
@@ -658,7 +659,9 @@ async function dispatch(action, args, env, request) {
     getRanking: () => getRanking(env, args[0], args[1], args[2]),
     getRankingDetail: () => getRankingDetail(env, args[0], args[1], args[2], args[3]),
     getAdminDebriefPreviewOptions: () => getAdminDebriefPreviewOptions(env, args[0], args[1]),
-    getAdminDebriefPreview: () => getAdminDebriefPreview(env, args[0], args[1], args[2], args[3]),
+    getAdminDebriefPreview: () => getAdminDebriefPreview(env, args[0], args[1], args[2], args[3], args[4]),
+    getAdminDebriefPhase: () => getAdminDebriefPhase(env, args[0], args[1], args[2], args[3], args[4]),
+    getDebriefPhase: () => getDebriefPhase(env, args[0], args[1]),
     getFinalReport: () => getFinalReport(env, args[0], args[1], args[2]),
     getScoreBackupReport: () => getScoreBackupReport(env, args[0], args[1]),
     sendOTP: () => sendOTP(env, args[0], args[1], args[2], request),
@@ -3111,7 +3114,8 @@ async function getStationCupParticipants(env, codeArg, roundArg, actorArg) {
   });
   return {success:true, competitionCode:code, currentRound:round, stations:stations.map(station => {
     const cups = [];
-    for (let n=Number(station.start);n<=Number(station.end);n++) {
+    const numbers = code === 'KCR' ? kcrStationUnitsServer_(station) : Array.from({length:station.end-station.start+1},(_,i)=>station.start+i);
+    for (const n of numbers) {
       const unit = code === 'IKRC' ? `${station.prefix}-${n}` : String(n);
       const participants = byUnit.get(normalize(unit)) || [];
       cups.push({unit,participants,status:participants.length>1?'duplicate':participants.length?'linked':'unassigned'});
@@ -4480,7 +4484,21 @@ function kcrStationProcessServer_(value, index=0) {
   return ['Washed','Natural','Blending'][Math.max(0, Number(index) || 0) % 3];
 }
 function normalizeKcrStationListServer_(source, strict=false) {
-  const checked = normalizeIkrcStationListServer_(source, strict, 'KCR');
+  const explicit = new Map();
+  if (Array.isArray(source)) for (const [index,item] of source.entries()) {
+    if (!item || !Object.prototype.hasOwnProperty.call(item,'cupNumbers')) continue;
+    const values = Array.isArray(item.cupNumbers) ? item.cupNumbers.map(safeStr) : [];
+    const valid = values.length > 0 && values.length <= 20 && values.every(n=>/^\d+$/.test(n) && Number(n)>=1 && Number(n)<=999);
+    const numbers = values.map(n=>String(Number(n)));
+    if (!valid || new Set(numbers).size !== numbers.length) {
+      return {ok:false,message:`스테이션 ${index+1}의 컵번호는 1~999 사이에서 중복 없이 1~20개를 지정해주세요.`,list:[]};
+    }
+    explicit.set(index,numbers);
+  }
+  // The range validator still handles legacy clients; sparse cups are never
+  // expanded into an interval or truncated to the first twenty numbers.
+  const checked = normalizeIkrcStationListServer_(Array.isArray(source) ? source.map((item,index)=>
+    explicit.has(index) ? {...item,start:1,end:explicit.get(index).length} : item) : source, strict, 'KCR');
   if (!checked.ok) return checked;
   checked.list = checked.list.map((station, index) => Object.assign({}, station, {
     label:`스테이션 ${index + 1}`,
@@ -4491,7 +4509,55 @@ function normalizeKcrStationListServer_(source, strict=false) {
     useForCompetition:station.useForCompetition !== false,
     numberMode:'participant'
   }));
+  for (const [index,numbers] of explicit) Object.assign(checked.list[index],{
+    cupNumbers:numbers,start:Math.min(...numbers.map(Number)),end:Math.max(...numbers.map(Number))
+  });
+  if (strict && explicit.size) {
+    const seen = new Map();
+    for (const station of checked.list.filter(s=>s.useForCompetition)) for (const unit of kcrStationUnitsServer_(station)) {
+      const key = station.process+':'+unit;
+      if (seen.has(key)) return {ok:false,message:`${unit}번 컵이 ${seen.get(key)}과 ${station.label}의 같은 프로세스에 중복 배정되었습니다.`,list:[]};
+      seen.set(key,station.label);
+    }
+  }
   return checked;
+}
+function kcrStationUnitsServer_(station) {
+  if (Array.isArray(station?.cupNumbers)) return station.cupNumbers.map(String);
+  return Array.from({length:station.end-station.start+1},(_,index)=>String(station.start+index));
+}
+// Editing a final station must not open finals or rewrite preliminary settings.
+async function saveKcrStationSettings(env, payload, actorArg) {
+  const auth = await requireActorForCode_(env,actorArg,'KCR','KCR 스테이션 설정 로그인이 필요합니다.');
+  if (!auth.ok) return auth.res;
+  if (!hasManageAccess(auth.actor,'KCR')) return {success:false,message:'스테이션 설정 권한이 없습니다.'};
+  const round = safeStr(payload?.round);
+  if (!['예선','결선'].includes(round)) return {success:false,message:'설정할 라운드를 선택해주세요.'};
+  const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind('KCR').first();
+  const options = parseJson(cfg.option_settings,{});
+  const previous = kcrStationSettingsServer_(cfg,round);
+  const checked = normalizeKcrStationListServer_(payload.stations,true);
+  if (!checked.ok) return {success:false,message:checked.message};
+  if (kcrStationFingerprintServer_(previous) === kcrStationFingerprintServer_(checked.list))
+    return {success:true,message:`${round} 스테이션 저장 완료 · 운영 라운드는 변경하지 않았습니다.`,optionSettings:options,currentRound:cfg.current_round};
+  if (!Array.isArray(payload.previousStations) || kcrStationFingerprintServer_(previous) !== kcrStationFingerprintServer_(payload.previousStations)) {
+    return {success:false,message:'다른 운영자가 스테이션을 변경했습니다. 최신 설정을 다시 불러온 뒤 저장해주세요.'};
+  }
+  if (round === '예선') for (const closed of kcrClosedPrelimStations_(cfg)) {
+    const replacement=checked.list.find(s=>s.id===closed.id);
+    if (!replacement || kcrStationFingerprintServer_([replacement]) !== kcrStationFingerprintServer_([closed]))
+      return {success:false,message:'마감된 예선 스테이션은 변경할 수 없습니다.'};
+  }
+  const raw = options.kcrStations || {};
+  const byRound = {...raw.byRound,[round]:checked.list};
+  const other = round === '예선' ? '결선' : '예선';
+  if (!Array.isArray(byRound[other])) byRound[other] = kcrStationSettingsServer_(cfg,other);
+  options.kcrStations = {...raw,byRound};
+  if (ikrcStationRoundKeyServer_(cfg.current_round) === round) options.kcrStations.stations = checked.list;
+  const saved = await env.DB.prepare('UPDATE competitions SET option_settings=?,updated_at=? WHERE code=? AND option_settings=? AND current_round=?')
+    .bind(JSON.stringify(options),nowIso(),'KCR',cfg.option_settings,cfg.current_round).run();
+  if (Number(saved.meta?.changes)!==1) return {success:false,message:'운영 설정이 변경되었습니다. 최신 설정을 다시 불러온 뒤 저장해주세요.'};
+  return {success:true,message:`${round} 스테이션 저장 완료 · 운영 라운드는 변경하지 않았습니다.`,optionSettings:options,currentRound:cfg.current_round};
 }
 function validateKcrStationOptionSettings_(rawSettings, currentRound) {
   const raw = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
@@ -4526,7 +4592,8 @@ function kcrClosedScore_(row, stations) {
   const stationId = safeStr(payload.stationId).toLowerCase();
   const unit = Number(row.unit);
   return stations.some(station => stationId === safeStr(station.id).toLowerCase() ||
-    (!isCalibrationMode_(row.mode || payload.mode) && Number.isInteger(unit) && unit >= station.start && unit <= station.end) ||
+    (!isCalibrationMode_(row.mode || payload.mode) && Number.isInteger(unit) &&
+      (Array.isArray(station.cupNumbers) ? station.cupNumbers.includes(String(unit)) : unit >= station.start && unit <= station.end)) ||
     (!stationId && kcrReviewStationMatches_({payload}, {payload:{stationId:station.id, stationLabel:station.label, stationPrefix:station.prefix}})));
 }
 function kcrClosedResponse_() {
@@ -4551,7 +4618,7 @@ function kcrStationSettingsServer_(cfg, roundOverride) {
   return normalized.ok ? normalized.list : normalizeKcrStationListServer_(defaults, false).list;
 }
 function kcrStationFingerprintServer_(stations) {
-  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end, station.process, station.useForCalibration !== false, station.useForCompetition !== false, station.numberMode || 'participant', station.prelimDay || ''].join(':')).join('|');
+  return (stations || []).map(station => [station.id, station.label, station.prefix, station.start, station.end, station.process, station.useForCalibration !== false, station.useForCompetition !== false, station.numberMode || 'participant', station.prelimDay || '', (station.cupNumbers || []).join(',')].join(':')).join('|');
 }
 
 function kcrStationsForPurposeServer_(cfg, roundOverride, purpose) {
@@ -4571,9 +4638,9 @@ function validateKcrStationSubmission_(payload, cfg, completedUnits = new Set(),
     kcrClosedScore_({round:payload.round, mode:payload.mode, payload, unit:inferScorePayload({...payload,rows:[row]}).unit}, closed))) {
     return {ok:false, message:kcrClosedResponse_().message};
   }
-  const stationUnits = Array.from({ length:station.end - station.start + 1 }, (_, idx) => String(station.start + idx))
+  const stationUnits = kcrStationUnitsServer_(station)
     .filter(unit => !assignedUnits || assignedUnits.has(unit));
-  if (!stationUnits.length) return {ok:false, message:'아직 예선 선수가 배정되지 않은 스테이션입니다.'};
+  if (!stationUnits.length) return {ok:false, message:'해당 라운드 선수가 배정되지 않은 스테이션입니다.'};
   const expectedUnits = stationUnits.filter(unit => !completedUnits.has(unit));
   if (!expectedUnits.length) return {ok:false, duplicate:true, message:'이미 평가완료된 스테이션입니다. 내평가 검수에서 확인·수정해주세요.'};
   if (rows.length !== expectedUnits.length) {
@@ -7143,14 +7210,21 @@ async function getAdminDebriefPreviewOptions(env, competitionCode, actorArg) {
     options
   };
 }
-async function getAdminDebriefPreview(env, competitionCode, unit, round, actorArg) {
+async function getAdminDebriefPreview(env, competitionCode, unit, round, actorArg, phase='') {
   const code = safeStr(competitionCode).toUpperCase();
   const auth = await requireAdminPreviewActor_(env, actorArg);
   if (!auth.ok) return auth.res;
   if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
   const selectedRound = rankingRoundScope_(round);
   if (!debriefTargetKey_(code, selectedRound, unit)) return { success:false, message:'참가자번호와 해당 대회의 라운드를 선택해주세요.' };
-  const bundle = await buildPublicDebriefBundle_(env, code, [{round:selectedRound, unit:safeStr(unit)}]);
+  const participants = await findDebriefPreviewOwner_(env, code, selectedRound, unit);
+  // The new phase picker previews the same group as the public view. Existing
+  // exact-round callers remain exact, including diagnostic unassigned records.
+  const targets = phase && participants.length
+    ? debriefPhaseTargets_(participants.flatMap(p => participantDebriefTargets_(p, code)), phase)
+    : [{round:selectedRound, unit:safeStr(unit)}];
+  if (phase && (!['예선','결선'].includes(phase) || !targets.length)) return {success:false, message:'선택한 평가 구분의 선수 배정을 확인해주세요.'};
+  const bundle = await buildPublicDebriefBundle_(env, code, targets);
   if (bundle.assignmentConflict) return debriefAssignmentConflict_();
   const rankInfo = bundle.rankInfo;
   return {
@@ -7158,6 +7232,7 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
     isAdminPreview:true,
     competition:code,
     competitionCode:code,
+    ...(phase ? {requestedPhase:phase} : {}),
     compName:COMPETITION_NAMES[code] || code,
     playerInfo:{
       name:safeStr((rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || unit),
@@ -7172,11 +7247,35 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
     rankInfo,
     previewUnit:safeStr(unit),
     previewRound:selectedRound,
+    availablePhases:debriefAvailablePhases_(participants.flatMap(p => participantDebriefTargets_(p, code))),
+    previewContext:{competition:code, round:selectedRound, unit:safeStr(unit)},
     previewDataBasis:bundle.dataBasis,
     dataBasis:bundle.dataBasis
   };
 }
 
+async function findDebriefPreviewOwner_(env, code, round, unit) {
+  const key = debriefTargetKey_(code, round, unit);
+  if (!key) return [];
+  const rows = (await env.DB.prepare('SELECT * FROM participants WHERE competition_code=?').bind(code).all()).results || [];
+  const owners = rows.filter(p => participantDebriefTargets_(p, code).some(t => debriefTargetKey_(code, t.round, t.unit) === key));
+  const identities = new Set(owners.map(p => safeStr(p.name) + '::' + normalizePhone(p.phone)));
+  // Never join people by their name alone, or infer final numbers from prelims.
+  if (identities.size !== 1) return [];
+  return rows.filter(p => identities.has(safeStr(p.name) + '::' + normalizePhone(p.phone)));
+}
+async function getAdminDebriefPhase(env, competitionCode, unit, round, phase, actorArg) {
+  const auth = await requireAdminPreviewActor_(env, actorArg);
+  if (!auth.ok) return auth.res;
+  const code = safeStr(competitionCode).toUpperCase();
+  if (!COMPETITION_CODES.includes(code)) return {success:false, message:'대회를 선택해주세요.'};
+  const participants = await findDebriefPreviewOwner_(env, code, round, unit);
+  if (!participants.length) return {success:false, message:'선수의 라운드별 번호 배정을 확인해주세요.'};
+  const result = await buildDebriefPhaseResult_(env, code, participants, phase);
+  if (!result.success) return result;
+  result.playerInfo.maskedPhone = '';
+  return {...result, isAdminPreview:true, previewContext:{competition:code, round:rankingRoundScope_(round), unit:safeStr(unit)}};
+}
 
 async function sendOTP(env, name, phone, competitionCode, request = null) {
   name = safeStr(name); phone = normalizePhone(phone); const code = safeStr(competitionCode).toUpperCase();
@@ -7406,6 +7505,50 @@ function participantDebriefTargets_(p, code) {
       : safeStr(round === '본선' ? p.main_cup_no : p.final_cup_no)
   })).filter(target => target.unit);
 }
+function debriefAvailablePhases_(targets) {
+  return ['예선','결선'].filter(phase => debriefPhaseTargets_(targets, phase).length > 0);
+}
+function debriefPhaseTargets_(targets, phase) {
+  return targets.filter(t => phase === '예선' ? t.round === '예선' : phase === '결선' && ['본선','결선'].includes(t.round));
+}
+async function buildDebriefPhaseResult_(env, code, participants, phase) {
+  phase = safeStr(phase);
+  const targets = participants.flatMap(p => participantDebriefTargets_(p, code));
+  const availablePhases = debriefAvailablePhases_(targets);
+  if (!['예선','결선'].includes(phase) || !availablePhases.includes(phase)) {
+    return {success:false, code:'DEBRIEF_PHASE_UNAVAILABLE', message:'이 선수에게 배정된 평가 구분이 아닙니다.'};
+  }
+  const selectedTargets = debriefPhaseTargets_(targets, phase);
+  const bundle = await buildPublicDebriefBundle_(env, code, selectedTargets);
+  if (bundle.assignmentConflict) return debriefAssignmentConflict_();
+  const p = participants[0];
+  return {
+    success:true, competition:code, competitionCode:code, requestedPhase:phase, availablePhases,
+    playerInfo:{name:p.name, affiliation:p.affiliation || '', teamName:p.team_name || '', teamNo:p.team_no || '',
+      maskedPhone:maskPhone_(p.phone), identifiers:[...new Set(selectedTargets.map(t => t.unit))]},
+    ...bundle
+  };
+}
+async function getDebriefPhase(env, token, phase) {
+  token = safeStr(token);
+  if (!token) return {success:false, message:'선수 인증이 필요합니다.'};
+  const session = await env.DB.prepare("SELECT payload_json FROM sessions WHERE token=? AND kind='debrief' AND expires_at > ?")
+    .bind(token, nowIso()).first();
+  if (!session) return {success:false, message:'인증 시간이 만료되었습니다. 다시 인증해주세요.'};
+  const identity = parseJson(session.payload_json, {});
+  const code = safeStr(identity.competition).toUpperCase();
+  if (!COMPETITION_CODES.includes(code) || !safeStr(identity.name) || !normalizePhone(identity.phone)) return {success:false, message:'선수 인증을 다시 진행해주세요.'};
+  const cfg = await env.DB.prepare('SELECT debriefing FROM competitions WHERE code=?').bind(code).first();
+  if (!cfg || (!cfg.debriefing && safeStr(env.KCL_BYPASS_DEBRIEF_LOCK).toLowerCase() !== 'true')) {
+    return {success:false, message:'아직 디브리핑 공개 전입니다. 운영팀의 공개 이후 다시 확인해주세요.'};
+  }
+  // Resolve assignments again on each deliberate switch. A saved token is not
+  // permission to read a number that has since been assigned to another person.
+  const participants = await findDebriefParticipants_(env, code, safeStr(identity.name), normalizePhone(identity.phone));
+  if (!participants.length) return {success:false, message:'등록된 선수 정보를 찾지 못했습니다.'};
+  const result = await buildDebriefPhaseResult_(env, code, participants, phase);
+  return result.success ? {...result, debriefToken:token} : result;
+}
 function debriefTargetKey_(code, round, unit) {
   const selectedRound = rankingRoundScope_(round);
   const number = code === 'IKRC' ? participantKey_(unit) : (['KBC','KCAC'].includes(code) ? normalizeKcacParticipantUnit_(unit) : safeStr(unit));
@@ -7530,7 +7673,9 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null,
   if (!participants.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다.' };
   // A phase is a presentation group, never a storage-round rewrite. Exact
   // (round, participant number) targets are retained inside the final phase.
-  const targets = participants.flatMap(p => participantDebriefTargets_(p, code)).filter(target =>
+  const allTargets = participants.flatMap(p => participantDebriefTargets_(p, code));
+  const availablePhases = debriefAvailablePhases_(allTargets);
+  const targets = allTargets.filter(target =>
     !requestedPhase || (requestedPhase === '예선' ? target.round === '예선' : ['본선','결선'].includes(target.round))
   );
   const ids = [...new Set(targets.map(target => target.unit))];
@@ -7547,7 +7692,7 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null,
     identifiers: ids
   };
   const token = await issueSession(env, 'debrief', { competition: code, name, phone, identifiers: ids }, 3600);
-  return { success: true, requestedPhase, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : (code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가') };
+  return { success: true, requestedPhase, availablePhases, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : (code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가') };
 }
 
 function _num(v) {

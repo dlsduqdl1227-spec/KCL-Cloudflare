@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:debrief-phase-switch": "node tests/stage248-debrief-phase-switch.test.mjs && node tests/stage249-debrief-phase-switch-browser.test.mjs",
+    "test:kcr-free-cups": "node tests/stage246-kcr-free-cups.test.mjs && node tests/stage247-kcr-free-cups-browser.test.mjs",
     "test:kcr-live-reads": "node tests/stage243-kcr-compact-review.test.mjs && node tests/stage244-kcr-compact-review-browser.test.mjs && node tests/stage245-api-inflight-read.test.mjs",
     "test:debrief-judge-labels": "node tests/stage242-debrief-sensory-judge-labels.test.mjs",
     "test:kcr-day-closure": "node tests/stage240-kcr-day-closure.test.mjs && node tests/stage241-kcr-day-closure-browser.test.mjs",

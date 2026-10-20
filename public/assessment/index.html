@@ -2006,8 +2006,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
 <script defer src="/assets/kcr-viewport.js?v=228"></script>
-<link rel="stylesheet" href="/assets/station-manager.css?v=230">
-<script defer src="/assets/station-manager.js?v=230"></script>
+<link rel="stylesheet" href="/assets/station-manager.css?v=246">
+<script defer src="/assets/station-manager.js?v=246"></script>
 </head>
 <body>
 
@@ -4250,6 +4250,7 @@ function kcrStationSettings_(cfg) {
       prefix:stationPrefix,
       start:start,
       end:end,
+      ...(Array.isArray(item.cupNumbers) ? {cupNumbers:item.cupNumbers.map(String)} : {}),
       process:kcrStationProcess_(item.process, index),
       prelimDay:[1,2].indexOf(Number(item.prelimDay)) >= 0 ? Number(item.prelimDay) : null,
       closed:roundKey === '예선' && (raw.closedPrelimDays || []).map(Number).indexOf(Number(item.prelimDay)) >= 0,
@@ -4262,7 +4263,8 @@ function kcrStationSettings_(cfg) {
 function kcrStationParticipantNumbers_(station) {
   var numbers = [];
   if (!station) return numbers;
-  for (var i=Number(station.start)||1;i<=(Number(station.end)||0);i++) numbers.push(String(i));
+  if (Array.isArray(station.cupNumbers)) numbers = station.cupNumbers.map(String);
+  else for (var i=Number(station.start)||1;i<=(Number(station.end)||0);i++) numbers.push(String(i));
   var state = participantStateForCode_('KCR');
   if (state.loaded && state.policy && state.policy.pendingPrelimAssignments && _selComp && _selComp.currentRound === '예선') {
     numbers = numbers.filter(function(number){return (state.list || []).some(function(row){return participantNumberMatches_(row.number, number);});});
@@ -4395,15 +4397,20 @@ function ikrcStationConfigRowHtml_(station, index, competitionCode) {
       }).join('') + '</select></label>';
   }
   var rangeLabel = code === 'KCR' ? start + ' ~ ' + end : stationPrefix + '-' + start + ' ~ ' + stationPrefix + '-' + end;
+  var explicitCups = code === 'KCR' && Array.isArray(station.cupNumbers);
+  if (explicitCups) rangeLabel = station.cupNumbers.join(', ');
+  var count = explicitCups ? station.cupNumbers.length : end-start+1;
   var purposeLabel = station.useForCalibration !== false ? (station.useForCompetition !== false ? '대회평가 · 켈리브레이션' : '켈리브레이션') : '대회평가';
   return '<details class="station-editor ikrc-station-config-row' + (code === 'KCR' ? ' kcr-station-config-row' : '') + '" data-ikrc-station-row data-station-id="' + escHtml(stationId) + '" data-station-label="' + escHtml(stationLabel) + '" data-station-prefix="' + escHtml(stationPrefix) + '" data-competition-code="' + code + '">' +
-    '<summary><span class="station-summary-text"><span class="ikrc-station-row-title" data-field="label">' + escHtml(stationLabel) + (station.closed ? ' · 마감' : '') + '</span><span class="station-summary-meta" data-station-summary>' + escHtml(rangeLabel + ' · ' + (end - start + 1) + '명 · ' + purposeLabel + (code === 'KCR' ? ' · ' + currentProcess : '')) + '</span></span></summary>' +
+    '<summary><span class="station-summary-text"><span class="ikrc-station-row-title" data-field="label">' + escHtml(stationLabel) + (station.closed ? ' · 마감' : '') + '</span><span class="station-summary-meta" data-station-summary>' + escHtml(rangeLabel + ' · ' + count + '명 · ' + purposeLabel + (code === 'KCR' ? ' · ' + currentProcess : '')) + '</span></span></summary>' +
     (code === 'KCR' ? '<fieldset class="station-editor-fields" style="border:0;min-width:0;margin:0"' + (station.closed ? ' disabled' : '') + '>' : '<div class="station-editor-fields">') +
     (code === 'KCR' ? '' : '<label>코드<input type="text" maxlength="8" autocapitalize="characters" data-field="prefix" value="' + escHtml(stationPrefix) + '" placeholder="' + escHtml(ikrcDefaultStationPrefix_(index)) + '"></label>') +
     dayHtml + processHtml +
     purposeHtml +
-    '<label class="' + (code === 'KCR' ? 'kcr-station-range-field' : '') + '">' + (code === 'KCR' ? '참가자 시작번호' : '시작 번호') + '<input type="number" min="1" max="999" inputmode="numeric" data-field="start" value="' + start + '"></label>' +
-    '<label class="' + (code === 'KCR' ? 'kcr-station-range-field' : '') + '">' + (code === 'KCR' ? '참가자 끝번호' : '끝 번호') + '<input type="number" min="1" max="999" inputmode="numeric" data-field="end" value="' + end + '"></label>' +
+    (code === 'KCR' ? '<label class="kcr-cup-mode">컵 지정 방식<select data-field="cupSelection"><option value="range"' + (!explicitCups?' selected':'') + '>연속 번호</option><option value="individual"' + (explicitCups?' selected':'') + '>개별 컵번호</option></select></label>' : '') +
+    '<label class="' + (code === 'KCR' ? 'kcr-station-range-field' : '') + '"' + (explicitCups?' hidden':'') + '>' + (code === 'KCR' ? '참가자 시작번호' : '시작 번호') + '<input type="number" min="1" max="999" inputmode="numeric" data-field="start" value="' + start + '"></label>' +
+    '<label class="' + (code === 'KCR' ? 'kcr-station-range-field' : '') + '"' + (explicitCups?' hidden':'') + '>' + (code === 'KCR' ? '참가자 끝번호' : '끝 번호') + '<input type="number" min="1" max="999" inputmode="numeric" data-field="end" value="' + end + '"></label>' +
+    (code === 'KCR' ? '<label class="kcr-cup-numbers"' + (!explicitCups?' hidden':'') + '>평가할 컵번호<textarea data-field="cupNumbers" rows="3" maxlength="160" placeholder="예: 3, 18, 42, 77, 114">' + escHtml(explicitCups?station.cupNumbers.join(', '):'') + '</textarea><span>쉼표·공백·줄바꿈으로 구분 · 입력한 순서대로 평가 · 최대 20컵</span><span data-cup-selection-status role="status"></span></label>' : '') +
     '<button type="button" class="btn-danger ikrc-station-remove" title="스테이션 삭제" aria-label="' + escHtml(stationLabel) + ' 삭제" onclick="ikrcRemoveStationConfigRow_(this)">삭제</button>' +
   (code === 'KCR' ? '</fieldset>' : '</div>') + '</details>';
 }
@@ -4482,7 +4489,7 @@ function ikrcAddStationConfigRow_(prefix, code) {
   while (usedPrefixes[ikrcDefaultStationPrefix_(prefixIndex)] && prefixIndex < 100) prefixIndex++;
   var nextStationId = ikrcNextStationId_(container);
   var nextStart = 1, nextEnd = 10, nextProcess = kcrDefaultStationProcess_(count);
-  if (code === 'KCR') {
+  if (code === 'KCR' && (!panel || panel.dataset.kcrRound !== '결선')) {
     // Only suggest the next nine numbers when adding a row. Never rewrite
     // saved ranges: a manager's later manual edits remain authoritative.
     Array.prototype.forEach.call(container.querySelectorAll('[data-ikrc-station-row]'), function(row){
@@ -4499,7 +4506,9 @@ function ikrcAddStationConfigRow_(prefix, code) {
     nextEnd = nextStart + 8;
     if (nextEnd > 999) { toast('다음 9명 범위가 참가자번호 999를 초과합니다. 기존 범위를 확인해주세요.', true); return; }
   }
-  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_({id:nextStationId,label:'스테이션 ' + (count + 1),prefix:ikrcDefaultStationPrefix_(prefixIndex),start:nextStart,end:nextEnd,process:nextProcess,prelimDay:newDay,useForCalibration:code !== 'KCR',useForCompetition:true}, count, code));
+  var newStation = {id:nextStationId,label:'스테이션 ' + (count + 1),prefix:ikrcDefaultStationPrefix_(prefixIndex),start:nextStart,end:nextEnd,process:nextProcess,prelimDay:newDay,useForCalibration:code !== 'KCR',useForCompetition:true};
+  if (code === 'KCR' && panel && panel.dataset.kcrRound === '결선') newStation.cupNumbers = [];
+  container.insertAdjacentHTML('beforeend', ikrcStationConfigRowHtml_(newStation, count, code));
   ikrcRenumberStationConfigRows_(container);
   container.lastElementChild.open = true;
   container.dataset.stationDirty = 'true';
@@ -4535,13 +4544,20 @@ function kcrFilterStationConfigRows_(panel) {
   if (status) status.textContent = visible + '개 표시 / 전체 ' + rows.length + '개';
   if (typeof refreshStationEditorSummaries_ === 'function') refreshStationEditorSummaries_(panel);
 }
-function ikrcRenderStationConfigForRound_(prefix, cfg, round) {
+function ikrcRenderStationConfigForRound_(prefix, cfg, round, stationOnly) {
   var code = String(cfg && cfg.code || 'IKRC').toUpperCase();
   var container = document.getElementById(prefix + '-ikrc-stations-' + code);
   if (!container) return;
   var previousRound = container.dataset.stationRound || (cfg && cfg.currentRound) || '예선';
+  var savingPanel = container.closest('[data-kcr-station-manager]');
+  if (savingPanel && savingPanel.dataset.saving === 'true') {
+    var savingControl = stationOnly ? savingPanel.querySelector('[data-kcr-edit-round]') : document.getElementById(prefix + '-round-' + code);
+    if (savingControl) savingControl.value = previousRound;
+    toast('스테이션 저장이 끝난 뒤 라운드를 바꿔주세요.', true);
+    return;
+  }
   if (container.dataset.stationDirty === 'true' && previousRound !== round && !confirm('저장하지 않은 스테이션 변경사항이 있습니다. 변경사항을 취소하고 라운드를 바꿀까요?')) {
-    var roundControl = document.getElementById(prefix + '-round-' + code);
+    var roundControl = stationOnly ? container.closest('[data-kcr-station-manager]').querySelector('[data-kcr-edit-round]') : document.getElementById(prefix + '-round-' + code);
     if (roundControl) roundControl.value = previousRound;
     return;
   }
@@ -4557,6 +4573,9 @@ function ikrcRenderStationConfigForRound_(prefix, cfg, round) {
   var panel = container.closest('[data-kcr-station-manager]');
   if (panel) {
     panel.dataset.kcrRound = ikrcStationRoundKey_(scopedCfg.currentRound);
+    panel.dataset.loadedStations = JSON.stringify(stations);
+    var editRound = panel.querySelector('[data-kcr-edit-round]');
+    if (editRound) editRound.value = panel.dataset.kcrRound;
     var closure = panel.querySelector('.kcr-day-closure');
     if (closure) closure.hidden = panel.dataset.kcrRound !== '예선';
     var filter = panel.querySelector('[data-kcr-day-filter]');
@@ -4583,9 +4602,10 @@ function configSelectableOptionsHtml_(cfg, prefix) {
   if (code === 'KCR') {
     var settings = kcrProcessSettings_(cfg);
     var kcrStations = kcrStationSettings_(cfg);
-    var html = '<section class="kcr-station-manager-panel" data-kcr-station-manager data-kcr-round="' + ikrcStationRoundKey_(cfg.currentRound) + '"><div class="kcr-station-manager-head"><div class="kcr-station-manager-title">스테이션 관리</div></div>' +
+    var html = '<section class="kcr-station-manager-panel" data-kcr-station-manager data-kcr-prefix="' + prefix + '" data-loaded-stations="' + escHtml(JSON.stringify(kcrStations)) + '" data-kcr-round="' + ikrcStationRoundKey_(cfg.currentRound) + '"><div class="kcr-station-manager-head"><div class="kcr-station-manager-title">스테이션 관리</div></div>' +
+      '<div class="kcr-station-round-actions"><label>설정할 라운드<select data-kcr-edit-round><option value="예선"' + (cfg.currentRound==='예선'?' selected':'') + '>예선</option><option value="결선"' + (cfg.currentRound!=='예선'?' selected':'') + '>결선</option></select></label><button type="button" class="btn-outline" data-kcr-save-stations>스테이션만 저장</button></div>' +
       (typeof stationCupIdentityHtml_ === 'function' ? stationCupIdentityHtml_(code, prefix, cfg.currentRound || '예선') : '') +
-      '<p class="station-config-help">스테이션을 눌러 참가자번호와 용도를 설정하세요. 새 스테이션은 다음 9명으로 제안됩니다.</p>' +
+      '<p class="station-config-help">결선은 개별 컵번호로 5컵·8컵 등 자유롭게 지정할 수 있습니다. 스테이션만 저장해도 현재 운영 라운드는 바뀌지 않습니다.</p><p class="station-config-help">컵번호는 선수등록의 해당 라운드 번호와 연결됩니다. 예선 번호를 결선에서도 사용하려면 해당 선수의 결선 번호에 같은 번호를 배정해주세요.</p>' +
       '<details class="station-config-help"><summary>프로세스 · 운영 안내</summary><p>사용할 프로세스만 켜두세요.</p>';
     html += '<div class="admin-check-row wide">';
     KCR_PROCESS_OPTIONS.forEach(function(opt){
@@ -4693,6 +4713,14 @@ function configSelectableOptionsPayload_(code, prefix, cfg) {
       var kcrStationLabel = '스테이션 ' + (k + 1);
       var kcrStart = ikrcStationRangeNumber_(kcrStartEl && kcrStartEl.value, 1, 999);
       var kcrEnd = ikrcStationRangeNumber_(kcrEndEl && kcrEndEl.value, 10, 999);
+      var kcrSelection = kcrRows[k].querySelector('[data-field="cupSelection"]');
+      var kcrCups = null;
+      if (kcrSelection && kcrSelection.value === 'individual') {
+        var parsedCups = parseKcrStationCupNumbers_(kcrRows[k].querySelector('[data-field="cupNumbers"]').value);
+        if (!parsedCups.ok) { toast(kcrStationLabel + ': ' + parsedCups.message,true); return false; }
+        kcrCups = parsedCups.numbers;
+        kcrStart = Math.min.apply(null,kcrCups.map(Number)); kcrEnd = Math.max.apply(null,kcrCups.map(Number));
+      }
       var kcrProcess = kcrStationProcess_(kcrProcessEl && kcrProcessEl.value, k);
       var kcrUseForCalibration = !kcrCalibrationEl || !!kcrCalibrationEl.checked;
       var kcrUseForCompetition = !kcrCompetitionEl || !!kcrCompetitionEl.checked;
@@ -4702,15 +4730,15 @@ function configSelectableOptionsPayload_(code, prefix, cfg) {
       }
       if (kcrUsedIds[kcrStationId]) { toast('KCR 스테이션 식별자가 중복되었습니다. 화면을 새로고침한 뒤 다시 시도해주세요.', true); return false; }
       if (kcrEnd < kcrStart) { toast('KCR 스테이션 ' + (k + 1) + '의 끝 번호는 시작 번호보다 작을 수 없습니다.', true); return false; }
-      if (kcrEnd - kcrStart + 1 > 20) { toast('KCR은 한 스테이션에서 최대 20명의 참가자를 평가할 수 있습니다.', true); return false; }
+      if (!kcrCups && kcrEnd - kcrStart + 1 > 20) { toast('KCR은 한 스테이션에서 최대 20명의 참가자를 평가할 수 있습니다.', true); return false; }
       if (!kcrUseForCalibration && !kcrUseForCompetition) { toast(kcrStationLabel + '은 켈리브레이션용 또는 대회평가용 중 하나 이상을 체크해주세요.', true); return false; }
       kcrUsedIds[kcrStationId] = true;
-      kcrStations.push({id:kcrStationId, label:kcrStationLabel, prefix:kcrPrefix, start:kcrStart, end:kcrEnd, process:kcrProcess, prelimDay:kcrDay, useForCalibration:kcrUseForCalibration, useForCompetition:kcrUseForCompetition, numberMode:'participant'});
+      kcrStations.push({id:kcrStationId, label:kcrStationLabel, prefix:kcrPrefix, start:kcrStart, end:kcrEnd, ...(kcrCups?{cupNumbers:kcrCups}:{}), process:kcrProcess, prelimDay:kcrDay, useForCalibration:kcrUseForCalibration, useForCompetition:kcrUseForCompetition, numberMode:'participant'});
     }
     var kcrExistingRaw = competitionOptionSettings_(cfg).kcrStations || {};
     var kcrByRound = Object.assign({}, kcrExistingRaw.byRound || {});
     var kcrRoundEl = document.getElementById(prefix + '-round-' + code);
-    var kcrRoundKey = ikrcStationRoundKey_((kcrRoundEl && kcrRoundEl.value) || (cfg && cfg.currentRound));
+    var kcrRoundKey = ikrcStationRoundKey_(kcrContainer && kcrContainer.closest('[data-kcr-station-manager]').dataset.kcrRound || (kcrRoundEl && kcrRoundEl.value) || (cfg && cfg.currentRound));
     kcrByRound[kcrRoundKey] = kcrStations;
     var closureControls = kcrContainer && kcrContainer.closest('[data-kcr-station-manager]').querySelectorAll('[data-kcr-close-day]');
     out.kcrStations = Object.assign({}, kcrExistingRaw, {byRound:kcrByRound, stations:kcrStations});
@@ -11750,13 +11778,13 @@ function renderKcrStationChoices_() {
     if (station.closed) return '<button type="button" class="ikrc-station-btn" disabled><strong>' + escHtml(station.label) + ' · 마감</strong><span>' + station.start + ' ~ ' + station.end + '번 · 관리 검수에서 조회</span></button>';
     var cups = kcrStationParticipantNumbers_(station);
     var done = kcrStationCompletion_(station, isActiveCalibrationMode_());
-    if (!cups.length) return '<button type="button" data-station-id="' + escHtml(station.id) + '" class="ikrc-station-btn" disabled><strong>' + escHtml(station.label) + '</strong><span>예선 배정 대기</span></button>';
+    if (!cups.length) return '<button type="button" data-station-id="' + escHtml(station.id) + '" class="ikrc-station-btn" disabled><strong>' + escHtml(station.label) + '</strong><span>컵 배정 대기</span></button>';
     var complete = !!done && done.length === cups.length;
     var label = isActiveCalibrationMode_() ? '제출완료' : '평가완료';
     return '<button type="button" data-station-id="' + escHtml(station.id) + '" class="ikrc-station-btn' + (complete ? ' kcr-completed' : '') + '"' + (!done || complete ? ' disabled' : '') + ' onclick="startKcrStation_(\'' + escapeJsString_(station.id) + '\')">' +
       '<strong>' + escHtml(station.label) + '</strong>' +
       (preliminary && station.prelimDay ? '<span>' + station.prelimDay + '일차 예선</span>' : '') +
-      '<span>참가자번호 ' + escHtml(cups[0] + ' ~ ' + cups[cups.length - 1]) + '</span>' +
+      '<span>참가자번호 ' + escHtml(Array.isArray(station.cupNumbers) ? cups.join(', ') : cups[0] + ' ~ ' + cups[cups.length - 1]) + '</span>' +
       '<span>' + (isActiveCalibrationMode_() ? '켈리브레이션 · 프로세스 구분 없음' : escHtml(kcrProcessOptionLabel_(kcrProcessKeyFromValue_(station.process)))) + '</span>' +
       '<span class="kcr-completion-badge">' + (!done ? '제출 여부 확인 필요 · 새로고침' : (complete ? '✓ ' + label : done.length ? '일부 ' + label : '미평가') + ' ' + done.length + '/' + cups.length) + '</span>' +
       (done && !complete ? '<span>미평가 ' + (cups.length - done.length) + '명 평가 시작</span>' : '') +
@@ -11780,7 +11808,7 @@ function startKcrStation_(stationId) {
   if (!isActiveCalibrationMode_() && station.useForCompetition === false) { toast('이 스테이션은 대회평가용으로 열려 있지 않습니다.', true); return; }
   if (!isActiveCalibrationMode_() && !assertKcrProcessOpenForEval_(station.process)) return;
   var cups = kcrStationParticipantNumbers_(station);
-  if (!cups.length) { toast('아직 예선 선수가 배정되지 않은 스테이션입니다.', true); return; }
+  if (!cups.length) { toast('아직 평가할 컵이 배정되지 않은 스테이션입니다.', true); return; }
   var done = kcrStationCompletion_(station, isActiveCalibrationMode_());
   if (!done) { toast('제출 여부를 먼저 확인해주세요. 새로고침을 눌러 다시 확인할 수 있습니다.', true); return; }
   cups = cups.filter(function(unit){return done.indexOf(String(unit)) < 0;});

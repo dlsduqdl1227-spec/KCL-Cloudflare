@@ -13,7 +13,7 @@
         'submitScores', 'submitWithSignature',
         'updateReviewRow', 'updateReviewStatus', 'updateReviewStatusBatch',
         'markMobCalibrationChecked', 'markIkrcCalibrationChecked',
-        'updateCompetitionAdminSettings', 'saveIkrcStationSettings'
+        'updateCompetitionAdminSettings', 'saveIkrcStationSettings', 'saveKcrStationSettings'
       ].indexOf(String(action || '')) >= 0;
   }
 

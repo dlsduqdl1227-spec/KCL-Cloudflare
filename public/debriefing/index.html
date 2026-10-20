@@ -629,6 +629,14 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   body.ikrc-debrief-print-mode #pResult img{display:block!important;position:static!important;max-width:100%!important;height:auto!important;object-fit:contain!important}
 }
 
+#debrief-phases{display:flex;gap:10px;margin:20px 0 8px;flex-wrap:wrap}
+#debrief-phases[hidden]{display:none}
+#debrief-phases .debrief-phase-button{flex:1 1 120px;min-height:48px;padding:12px 16px;border:1px solid #555;border-radius:12px;background:#171717;color:#eee;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
+#debrief-phases .debrief-phase-button[aria-pressed="true"]{background:#fff;color:#111;border-color:#fff}
+#debrief-phases .debrief-phase-button:focus-visible{outline:3px solid #71c9ff;outline-offset:3px}
+#debrief-phases .debrief-phase-button:disabled{cursor:wait;opacity:.65}
+#debrief-phase-status{font-size:14px;color:#c4d7e8;line-height:1.5;margin-bottom:16px;overflow-wrap:anywhere}
+#debrief-phase-status:empty{display:none}
 /* Stage106: 선수 디브리핑은 화면 열람 전용이며 인쇄/PDF 저장을 제공하지 않는다. */
 @media print {
   body > *{display:none!important;visibility:hidden!important}
@@ -637,7 +645,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
 }
 </style>
 <script src="/assets/kcr-sensory-tags.js?v=228"></script>
-<script src="/assets/kcl-api-shim.js?v=stage154"></script>
+<script src="/assets/kcl-api-shim.js?v=248"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 </head>
@@ -704,6 +712,8 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
     <div class="result-affil" id="res-affil"></div>
     <div class="result-comp" id="res-comp"></div>
   </div>
+  <nav id="debrief-phases" aria-label="디브리핑 평가 구분" hidden></nav>
+  <div id="debrief-phase-status" role="status" aria-live="polite"></div>
   <div id="res-body"></div>
   <div class="pdf-note" id="screen-only-note" style="display:none">디브리핑은 이 화면에서만 열람할 수 있습니다.</div>
   <div class="divider"></div>
@@ -720,11 +730,72 @@ var _adminPreviewOptions = [];
 var _adminPreviewOptionsCode = '';
 var _adminPreviewOptionsRequest = 0;
 var _adminPreviewResultRequest = 0;
+var _debriefPhaseRequest = 0;
+var _debriefPhaseLoading = false;
+
+function renderDebriefPhases_(res) {
+  var nav = document.getElementById('debrief-phases');
+  var phases = (res.availablePhases || []).filter(function(p){return p==='예선' || p==='결선';});
+  nav.replaceChildren();
+  nav.hidden = !phases.length || !(res.debriefToken || (res.isAdminPreview && res.previewContext));
+  document.getElementById('debrief-phase-status').textContent = '';
+  nav.setAttribute('aria-busy', 'false');
+  phases.forEach(function(phase){
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'debrief-phase-button';
+    button.textContent = phase + ' 디브리핑';
+    button.setAttribute('aria-pressed', String(res.requestedPhase === phase));
+    button.onclick = function(){openDebriefPhase_(phase);};
+    nav.appendChild(button);
+  });
+}
+function openDebriefPhase_(phase) {
+  var source = _lastResult;
+  if (!source || _debriefPhaseLoading || !(source.availablePhases || []).includes(phase)) return;
+  if (phase === source.requestedPhase) return;
+  var preview = source.isAdminPreview && source.previewContext;
+  if (!preview && !source.debriefToken) return;
+  var request = ++_debriefPhaseRequest;
+  _debriefPhaseLoading = true;
+  var nav = document.getElementById('debrief-phases');
+  var status = document.getElementById('debrief-phase-status');
+  nav.setAttribute('aria-busy', 'true');
+  nav.querySelectorAll('button').forEach(function(b){b.disabled = true;});
+  status.textContent = phase + ' 디브리핑을 불러오는 중…';
+  function current(){return request===_debriefPhaseRequest && _lastResult===source;}
+  function finish(message) {
+    _debriefPhaseLoading = false;
+    nav.setAttribute('aria-busy', 'false');
+    nav.querySelectorAll('button').forEach(function(b){b.disabled = false;});
+    status.textContent = message || '';
+  }
+  var args = preview
+    ? [preview.competition, preview.unit, preview.round, phase, adminPreviewActorPayload_()]
+    : [source.debriefToken, phase];
+  gasRun_(preview ? 'getAdminDebriefPhase' : 'getDebriefPhase', args, function(res){
+    if (!current()) return;
+    if (!res || !res.success) {finish((res && res.message) || '불러오지 못했습니다. 다시 선택해주세요.');return;}
+    if (res.competition!==source.competition || res.requestedPhase!==phase) {
+      finish('응답을 확인할 수 없습니다. 다시 선택해주세요.');return;
+    }
+    finish();
+    renderResult(res);
+  }, function(){
+    if (!current()) return;
+    // Keep the previous phase's label and content together on a failed switch.
+    finish('연결이 불안정합니다. 기존 화면은 유지됩니다. 다시 선택해주세요.');
+  });
+}
 
 function debriefHomeTarget_() {
   return adminPreviewRequested_() ? '/admin/' : '/';
 }
 function clearDebriefSession_() {
+  ++_debriefPhaseRequest;
+  ++_adminPreviewResultRequest;
+  _debriefPhaseLoading = false;
+  _lastResult = null;
   try {
     if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
     sessionStorage.removeItem('kcl_debrief_auth');
@@ -738,7 +809,7 @@ function goRootHome_() {
 function goBackContext_() {
   var active = document.querySelector('.panel.active');
   var id = active ? active.id : '';
-  if (id === 'pStep2') { showPanel('pStep1'); return false; }
+  if (id === 'pStep2') { backToStep1(); return false; }
   goRootHome_();
   return false;
 }
@@ -973,7 +1044,7 @@ function openAdminDebriefPreview_() {
   var request = ++_adminPreviewResultRequest;
   function current(){return request===_adminPreviewResultRequest && String((document.getElementById('sel-comp')||{}).value||'').toUpperCase()===code;}
   showOverlay();
-  gasRun_('getAdminDebriefPreview', [code, item.unit, item.round, adminPreviewActorPayload_()], function(res){
+  gasRun_('getAdminDebriefPreview', [code, item.unit, item.round, adminPreviewActorPayload_(), debriefPhase_(item.round)], function(res){
     if(!current())return;
     hideOverlay();
     if (!res || !res.success) { toast((res && res.message) || '디브리핑 미리보기를 불러오지 못했습니다.', true); return; }
@@ -1073,13 +1144,19 @@ function doVerifyOTP() {
   var otp = document.getElementById('inp-otp').value.trim();
   if (!otp || otp.length < 6) { toast('인증번호 6자리를 입력해주세요', true); return; }
   showOverlay();
+  var request = ++_debriefPhaseRequest;
   gasRun_('verifyOTP', [_name, _phone, _compCode, otp, _requestedDebriefPhase], function(res) {
+    if (request !== _debriefPhaseRequest) return;
     hideOverlay();
     clearInterval(_timerInterval);
     if (!res.success) { toast(res.message, true); return; }
     renderResult(res);
     showPanel('pResult');
+    if (res.availablePhases && res.availablePhases.length && !res.availablePhases.includes(res.requestedPhase)) {
+      openDebriefPhase_(res.availablePhases[0]);
+    }
   }, function() {
+    if (request !== _debriefPhaseRequest) return;
     hideOverlay();
     toast('인증 중 오류가 발생했습니다', true);
   });
@@ -1294,6 +1371,7 @@ function renderResult(res) {
     res = Object.assign({},res,{scores:(res.scores || []).filter(matchesPhase),rankInfos:scopedRanks,rankInfo:scopedRanks[0] || null});
   }
   _lastResult = res;
+  renderDebriefPhases_(res);
   var previewNotice = document.getElementById('admin-preview-notice');
   if (previewNotice) previewNotice.classList.toggle('active', !!res.isAdminPreview);
   var info = res.playerInfo;
@@ -2227,7 +2305,8 @@ function buildKcacScoreGrid(s, compCode) {
 }
 
 function backToStep1() {
-  clearInterval(_timerInterval);
+  clearDebriefSession_();
+  hideOverlay();
   document.getElementById('inp-otp').value = '';
   showPanel('pStep1');
 }

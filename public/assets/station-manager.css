@@ -36,4 +36,13 @@ details.station-editor.ikrc-station-config-row{display:block;padding:0;min-width
 .station-workflow-actions{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
 .station-workflow-actions>button{min-width:0;min-height:48px;white-space:normal;word-break:keep-all}
 .station-tools summary:focus-visible{outline:2px solid #fff;outline-offset:3px}
+.station-editor .station-editor-fields [hidden]{display:none!important}
+.station-editor .station-editor-fields .kcr-cup-numbers{grid-column:1/-1;display:grid;gap:8px}
+.kcr-cup-numbers textarea{width:100%;min-width:0;box-sizing:border-box;font-size:16px!important;line-height:1.6;resize:vertical}
+.kcr-cup-numbers span{color:var(--text-2);line-height:1.5}
+.kcr-cup-numbers [data-cup-selection-status]{color:#a7e6c1;font-weight:700}
+.kcr-station-round-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:end}
+.kcr-station-round-actions label{display:grid;gap:6px;font-size:13px;min-width:0}
+.kcr-station-round-actions select{font-size:16px!important;width:100%;min-width:0;min-height:48px}
+.kcr-station-round-actions button{min-width:0;min-height:48px;margin:0;white-space:normal}
 @media(min-width:1000px){.station-editor-fields{grid-template-columns:repeat(4,minmax(0,1fr))}.station-editor .station-editor-fields .ikrc-station-purpose{grid-column:span 2}}
