@@ -209,6 +209,8 @@ for (const name of [
   "_briefComments", "_areaKorean_", "_fmt", "_commentVariationKey_",
   "_commentHash_", "_subjectParticle_", "_topicParticle_", "_sensoryOptionSet_", "_tags",
   "_compactQuality_", "_shortObservation_", "_conciseCommentOptions_", "generateCuppingComment",
+  "_coffeeQuality_", "_coffeeIntensity_", "_coffeeEvidence_", "_coffeeNotes_",
+  "_coffeeWithNotes_", "_coffeeAttributeClause_", "_coffeeStructure_", "_coffeeConclusion_",
 ]) vm.runInContext(extractFunction(rpc, name), rpcCommentContext);
 const overallResult = rpcCommentContext.generateCuppingComment({
   cupNumber:"1",

@@ -15,7 +15,10 @@ try{
   const first=page.locator('#kcac-attrs input[data-kcac-score]').first();
   const key=await first.getAttribute('data-kcac-score');
   await first.fill('4.4');
-  await page.getByText('언더필',{exact:true}).click();
+  await page.locator('#kcac-attrs .mob-attr-tools').filter({hasText:'언더필'}).locator('.kcl-tag-launch').click();
+  await page.locator('#kcl-tag-search').fill('언더필');
+  await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-option').filter({hasText:'언더필'}).click();
+  await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-done').click();
   await page.evaluate(key=>toggleKcacScoreLock_(key,0),key);
   await page.locator('#kcac-cup-nav .cup-btn').nth(1).click();
   await page.locator('#kcac-attrs input[data-kcac-score]').first().fill('2.2');
@@ -40,11 +43,22 @@ try{
   assert.equal(await page.locator('#review-edit-fields input[type=range]').first().inputValue(),'4.4');
   assert.equal(await page.locator('#review-edit-fields input[type=range]').first().isDisabled(),true);
   assert.equal(await page.locator('#review-overall-card textarea').inputValue(),comment);
+  // The review picker also delegates to original tag editing / autosave controls.
+  await page.locator('#review-edit-fields .review-smart-tags').first().locator('.kcl-tag-launch').click();
+  await page.locator('#kcl-tag-search').fill('언더필');
+  assert.equal(await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-option').filter({hasText:'언더필'}).getAttribute('aria-pressed'),'true');
+  const tagUpdated=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='updateReviewRow');
+  await page.locator('#kcl-tag-search').fill('패턴 식별 어려움');
+  await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-option').filter({hasText:'패턴 식별 어려움'}).click();
+  await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-done').click();
+  assert.equal((await (await tagUpdated).json()).success,true);
+  assert.equal(api.db.prepare('SELECT total_score FROM scores').get().total_score,originalTotal,'tag-only editing preserves the official total');
   const updated=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='updateReviewRow');
   await page.locator('#review-overall-card textarea').fill(comment+' 검수 기록을 덧붙입니다.');
   assert.equal((await (await updated).json()).success,true);
   assert.equal(api.db.prepare('SELECT total_score FROM scores').get().total_score,originalTotal,'comment-only editing preserves the official total');
   const after=await api.rpc('getReviewList','KCAC',actor);
+  assert.match(JSON.stringify(after.list[0]),/패턴 식별 어려움/);
   assert.deepEqual(after.list.map(x=>Number(x['예선 Pattern Completion(패턴 완성도)'])),[4.4,2.2]);
   await api.rpc('updateReviewStatusBatch','KCAC',after.list.map(x=>x.rowIndex),'검수완료','관리자',actor);
   const ranking=await api.rpc('getRanking','KCAC',actor);

@@ -8003,27 +8003,113 @@ function _compactQuality_(score,max=5) {
   const ratio=_num(score)/max;
   return ratio>=.88?'매우 선명한':ratio>=.76?'선명한':ratio>=.64?'안정적인':ratio>=.52?'기본적인':ratio>=.38?'다소 제한적인':'제한적인';
 }
+// Coffee narratives use only supplied observations. A quality score does not
+// establish an aroma, clarity, balance, finish length or sensory intensity.
+function _coffeeQuality_(score, max) {
+  if (score == null || safeStr(score).trim() === '' || !Number.isFinite(Number(score))) return '';
+  const ratio = Number(score) / max;
+  return ratio >= .88 ? '매우 높은' : ratio >= .76 ? '높은' : ratio >= .64 ? '양호한' :
+    ratio >= .52 ? '기준을 충족하는' : ratio >= .38 ? '다소 제한적인' : '제한적인';
+}
+function _coffeeIntensity_(value) {
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric)) return '';
+  return {
+    1:'매우 약하게', 2:'약하게', 3:'약간 약하게', 4:'중간 강도로',
+    5:'약간 강하게', 6:'강하게', 7:'매우 강하게'
+  }[numeric] || '';
+}
+function _coffeeEvidence_(tags, key) {
+  return Array.from(new Set(_tags(tags && tags[key], 8).map(_cleanTagText_).filter(Boolean))).slice(0, 3).join('·');
+}
+function _coffeeNotes_(value) {
+  const aliases = [
+    ['flavor', /^(?:플레이버|flavor)$/i],
+    ['aftertaste', /^(?:여운|애프터테이스트|에프터테이스트|aftertaste)$/i],
+    ['acidity', /^(?:산미|acidity)$/i],
+    ['sweetness', /^(?:단맛|스윗니스|스위트니스|sweetness)$/i],
+    ['mouthfeel', /^(?:마우스필|질감|mouthfeel)$/i],
+    ['cleanCup', /^(?:클린컵|clean\s*cup)$/i]
+  ];
+  const notes = {};
+  const entries = Array.isArray(value) ? value : safeStr(value).split(/\s+\/\s+|\n+/);
+  entries.map(safeStr).filter(Boolean).forEach(text => {
+    const match = text.match(/^([^:：]+)[:：]\s*(.+)$/);
+    const alias = match && aliases.find(entry => entry[1].test(match[1].trim()));
+    const key = alias ? alias[0] : 'other';
+    const note = _shortObservation_(alias ? match[2] : text, 65);
+    if (note) notes[key] = notes[key] ? notes[key] + ' / ' + note : note;
+  });
+  return notes;
+}
+function _coffeeWithNotes_(line, notes, keys) {
+  const parts = keys.map(key => notes[key]).filter(Boolean);
+  return line + (parts.length ? ' “' + parts.join(' / ') + '”' : '');
+}
+function _coffeeAttributeClause_(key, label, score, max, tags, intensity) {
+  const evidence = _coffeeEvidence_(tags, key);
+  const strength = _coffeeIntensity_(intensity);
+  if (evidence) {
+    const lead = key === 'flavor' ? '플레이버에서는 ' :
+      key === 'mouthfeel' ? '입안의 마우스필에서는 ' :
+      key === 'aftertaste' ? '마신 뒤 여운에서는 ' :
+      key === 'cleanCup' ? '클린컵에서는 ' : label + '에서는 ';
+    const ending = key === 'flavor' ? '드러났습니다.' : key === 'cleanCup' ? '관찰됐습니다.' : '느껴졌습니다.';
+    return lead + evidence + (key === 'mouthfeel' ? ' 촉감이' : ' 특성이') + (strength ? ' ' + strength : '') + ' ' + ending;
+  }
+  if (strength) return label + _topicParticle_(label) + ' ' + strength + ' 느껴졌습니다.';
+  const quality = _coffeeQuality_(score, max);
+  return quality ? label + _topicParticle_(label) + ' 평가 기준에서 ' + quality + ' 수준이었습니다.' : '';
+}
+function _coffeeStructure_(scores, max, tags, intensities) {
+  const acidTags = _coffeeEvidence_(tags, 'acidity'), sweetTags = _coffeeEvidence_(tags, 'sweetness');
+  const acidStrength = _coffeeIntensity_(intensities.acidity), sweetStrength = _coffeeIntensity_(intensities.sweetness);
+  if (acidTags && sweetTags && acidStrength && sweetStrength) {
+    const difference = Number(intensities.acidity) - Number(intensities.sweetness);
+    const strength = difference === 0
+      ? '두 항목 모두 ' + acidStrength + ' 느껴졌습니다.'
+      : (difference > 0 ? '산미가 단맛보다' : '단맛이 산미보다') + ' 더 강하게 느껴졌습니다.';
+    return '산미에서는 ' + acidTags + ' 특성을, 단맛에서는 ' + sweetTags + ' 특성을 보였습니다. ' + strength;
+  }
+  const acid = _coffeeAttributeClause_('acidity', '산미', scores.acidity, max, tags, intensities.acidity);
+  const sweet = _coffeeAttributeClause_('sweetness', '단맛', scores.sweetness, max, tags, intensities.sweetness);
+  // Joining two measured observations is not a claim that they are balanced.
+  return acid && sweet ? acid.replace(/느껴졌습니다\.$/, '느껴졌고,').replace(/수준이었습니다\.$/, '수준이었고,') + ' ' + sweet : acid || sweet;
+}
+function _coffeeConclusion_(scores, max, overall) {
+  const labels = {flavor:'플레이버', cleanCup:'클린컵', acidity:'산미', sweetness:'단맛', mouthfeel:'마우스필', aftertaste:'여운'};
+  const items = Object.keys(labels).filter(key => _coffeeQuality_(scores[key], max)).map(key => ({label:labels[key], score:Number(scores[key])}));
+  const quality = _coffeeQuality_(overall, max);
+  let text = quality ? '전체적인 완성도는 ' + quality + ' 수준으로 평가했습니다.' : '';
+  if (!items.length) return text;
+  const sorted = items.slice().sort((a, b) => b.score - a.score);
+  const high = sorted[0], low = sorted.at(-1);
+  if (high.score - low.score >= max * .1) {
+    text += (text ? ' ' : '') + high.label + _topicParticle_(high.label) + ' 상대적으로 높게, ' + low.label + _topicParticle_(low.label) + ' 상대적으로 낮게 평가됐습니다.';
+  } else if (!text) {
+    text = '항목별 평가는 큰 차이 없이 ' + _coffeeQuality_(items.reduce((sum, item) => sum + item.score, 0) / items.length, max) + ' 수준이었습니다.';
+  }
+  return text;
+}
 function generateCuppingComment(payload) {
   payload = payload || {};
-  const tags=payload.tags||{};
-  const intensity = value=>({1:'매우 은은한',2:'은은한',3:'다소 은은한',4:'중간',5:'다소 강한',6:'강한',7:'매우 강한'}[parseInt(value,10)]||'');
-  const evidence = key=>_tags(tags[key],2).map(_cleanTagText_).filter(Boolean).join('·');
-  function impression(key,label,strength) {
-    const selected=evidence(key);
-    return label+_topicParticle_(label)+' '+(selected?selected+' 특성이 ':'')+
-      (intensity(strength)?intensity(strength)+' 강도로 느껴졌으며, ':(selected?'확인됐으며, ':''))+_compactQuality_(payload[key])+' 인상이었습니다.';
-  }
-  const acid=evidence('acidity'),sweet=evidence('sweetness');
-  const structure='산미는 '+(acid?acid+' 특성과 ':'')+(intensity(payload.acidityIntensity)?intensity(payload.acidityIntensity)+' 강도의 ':'')+_compactQuality_(payload.acidity)+' 인상, '+
-    '단맛은 '+(sweet?sweet+' 특성과 ':'')+(intensity(payload.sweetnessIntensity)?intensity(payload.sweetnessIntensity)+' 강도의 ':'')+
-    _compactQuality_(payload.sweetness)+' 인상을 보였습니다.';
-  const manual=_shortObservation_(payload.attributeComments,70);
+  const tags = payload.tags || {}, notes = _coffeeNotes_(payload.attributeComments);
+  const intensities = {acidity:payload.acidityIntensity, sweetness:payload.sweetnessIntensity};
+  const after = _coffeeEvidence_(tags, 'aftertaste');
+  const persistence = {
+    1:'매우 짧은 편이었습니다', 2:'짧은 편이었습니다', 3:'약간 짧은 편이었습니다', 4:'중간 정도였습니다',
+    5:'약간 긴 편이었습니다', 6:'긴 편이었습니다', 7:'매우 긴 편이었습니다'
+  }[Number(payload.aftertastePersistence)] || '';
+  const finish = after
+    ? '마신 뒤 여운에서는 ' + after + ' 특성이 남았습니다.' + (persistence ? ' 지속감은 ' + persistence + '.' : '')
+    : persistence ? '여운의 지속감은 ' + persistence + '.'
+    : _coffeeAttributeClause_('aftertaste', '여운', payload.aftertaste, 5, tags);
   return _conciseCommentOptions_([
-    impression('flavor','플레이버',payload.flavorIntensity),
-    structure,
-    impression('mouthfeel','마우스필',payload.mouthfeelIntensity),
-    impression('aftertaste','여운',payload.aftertastePersistence),
-    '전체적으로 '+_compactQuality_(payload.overall)+' 완성도로 평가했습니다.'+(manual?' 심사 기록: “'+manual+'”':'')
+    _coffeeWithNotes_(_coffeeAttributeClause_('flavor', '플레이버', payload.flavor, 5, tags, payload.flavorIntensity), notes, ['flavor']),
+    _coffeeWithNotes_(_coffeeStructure_(payload, 5, tags, intensities), notes, ['acidity', 'sweetness']),
+    _coffeeWithNotes_(_coffeeAttributeClause_('mouthfeel', '마우스필', payload.mouthfeel, 5, tags, payload.mouthfeelIntensity), notes, ['mouthfeel']),
+    _coffeeWithNotes_(finish, notes, ['aftertaste']),
+    _coffeeWithNotes_(_coffeeConclusion_(payload, 5, payload.overall), notes, ['other'])
   ]);
 }
 
@@ -8523,40 +8609,12 @@ function generateIkrcComment(payload) {
   const scores = payload.scores || {};
   const intensities = payload.intensities || {};
   const tags = payload.tags || {};
-  const items = [
-    {key:'flavor', label:'플레이버', score:scores.flavor},
-    {key:'cleanCup', label:'클린컵', score:scores.cleanCup},
-    {key:'sweetness', label:'단맛', score:scores.sweetness},
-    {key:'acidity', label:'산미', score:scores.acidity},
-    {key:'mouthfeel', label:'마우스필', score:scores.mouthfeel}
-  ];
-
-  function ratingLevel(item) {
-    const ratio = Math.max(0, Math.min(1, _num(item.score) / 10));
-    if (ratio >= .88) return 7;
-    if (ratio >= .76) return 6;
-    if (ratio >= .64) return 5;
-    if (ratio >= .52) return 4;
-    if (ratio >= .40) return 3;
-    if (ratio >= .28) return 2;
-    return ratio >= .16 ? 1 : 0;
-  }
-  function impressionText(item) {
-    return [
-      '매우 제한적인 인상', '다소 제한적인 인상', '선명도가 낮은 인상', '기본적인 인상',
-      '안정적인 인상', '양호한 인상', '선명한 인상', '매우 선명한 인상'
-    ][ratingLevel(item)];
-  }
-  function intensityAdverb(value) {
-    return {
-      1:'매우 은은하게', 2:'은은하게', 3:'다소 은은하게', 4:'중간 강도로',
-      5:'다소 뚜렷하게', 6:'뚜렷하게', 7:'매우 뚜렷하게'
-    }[parseInt(value, 10)] || '중간 강도로';
-  }
-
-  return _conciseCommentOptions_(items.map(item=>{
-    const selected=_tags(tags[item.key],2).map(_cleanTagText_).filter(Boolean).join('·');
-    return item.label+_topicParticle_(item.label)+' '+(selected?selected+' 특성이 ':'')+
-      (intensities[item.key]?intensityAdverb(intensities[item.key])+' 느껴졌으며, ':(selected?'확인됐으며, ':''))+impressionText(item)+'이었습니다.';
-  }));
+  const notes = _coffeeNotes_(payload.attributeComments);
+  return _conciseCommentOptions_([
+    _coffeeWithNotes_(_coffeeAttributeClause_('flavor', '플레이버', scores.flavor, 10, tags, intensities.flavor), notes, ['flavor']),
+    _coffeeWithNotes_(_coffeeStructure_(scores, 10, tags, intensities), notes, ['acidity', 'sweetness']),
+    _coffeeWithNotes_(_coffeeAttributeClause_('mouthfeel', '마우스필', scores.mouthfeel, 10, tags, intensities.mouthfeel), notes, ['mouthfeel']),
+    _coffeeWithNotes_(_coffeeAttributeClause_('cleanCup', '클린컵', scores.cleanCup, 10, tags, intensities.cleanCup), notes, ['cleanCup']),
+    _coffeeWithNotes_(_coffeeConclusion_(scores, 10), notes, ['other'])
+  ]);
 }

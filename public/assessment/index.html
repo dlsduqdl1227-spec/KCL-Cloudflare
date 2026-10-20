@@ -2009,6 +2009,9 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <link rel="stylesheet" href="/assets/station-manager.css?v=246">
 <script defer src="/assets/station-manager.js?v=246"></script>
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
+<link rel="stylesheet" href="/assets/smart-tag-picker.css?v=253">
+<script defer src="/assets/smart-tag-picker.js?v=253"></script>
+<link rel="stylesheet" href="/assets/multi-cup-navigation.css?v=253">
 <script src="/assets/operational-health.js?v=250"></script>
 </head>
 <body>
@@ -2417,8 +2420,17 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       </div>
     </div>
   </div>
-  <div class="cup-nav" id="kcac-cup-nav" style="display:none">
-    <button class="submit-btn-nav" onclick="kcacSubmitAll()">전체 제출</button>
+  <div class="multi-cup-navigation" id="kcac-cup-nav" style="display:none">
+    <div class="multi-cup-overview" id="kcac-cup-overview" role="group" aria-label="컵 배치 순서"></div>
+    <div class="multi-cup-current">
+      <button type="button" class="btn-outline" id="kcac-previous-cup" onclick="moveKcacCup_(-1)" aria-label="이전 컵">‹</button>
+      <div class="multi-cup-current-center">
+        <strong id="kcac-current-number"></strong>
+        <span id="kcac-current-position"></span>
+      </div>
+      <button type="button" class="btn-outline" id="kcac-next-cup" onclick="moveKcacCup_(1)" aria-label="다음 컵">›</button>
+    </div>
+    <button type="button" class="submit-btn-nav" onclick="kcacSubmitAll()">전체 제출</button>
   </div>
   <div class="kcac-submit-dock" id="kcac-submit-dock" style="display:none">
     <button class="submit-btn-nav" type="button" onclick="kcacSubmitAll()">전체 제출완료</button>
@@ -2799,8 +2811,17 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="eval-total-val" id="ikrc-total">0.0</div>
     </div>
   </div>
-  <div class="cup-nav" id="ikrc-cup-nav">
-    <button class="submit-btn-nav" onclick="ikrcSubmitAll()">전체 제출</button>
+  <div class="multi-cup-navigation" id="ikrc-cup-nav">
+    <div class="multi-cup-overview" id="ikrc-cup-overview" role="group" aria-label="스테이션 컵 배치 순서"></div>
+    <div class="multi-cup-current">
+      <button type="button" class="btn-outline" id="ikrc-previous-cup" onclick="switchIkrcSample_(_ikrcIdx-1)" aria-label="이전 컵">‹</button>
+      <div class="multi-cup-current-center">
+        <strong id="ikrc-current-number"></strong>
+        <span id="ikrc-current-position"></span>
+      </div>
+      <button type="button" class="btn-outline" id="ikrc-next-cup" onclick="switchIkrcSample_(_ikrcIdx+1)" aria-label="다음 컵">›</button>
+    </div>
+    <button type="button" class="submit-btn-nav" onclick="ikrcSubmitAll()">전체 제출</button>
   </div>
   <div class="eval-content">
     <div class="eval-hero-logo" data-comp-logo="IKRC"></div>
@@ -13280,12 +13301,32 @@ function setKcacEvaluationPanelMode_(overall) {
   if (commentInput) commentInput.placeholder = 'FAST와 SLOW 두 잔의 평가 내용을 종합해 의견을 입력하세요';
 }
 
+function kcacNavigationEntries_() {
+  // Order only the display entries, never the FAST/SLOW storage objects.
+  return kcacIsUnifiedQualComment_()
+    ? kcacOrderedQualEntries_().slice().sort(function(a,b){ return kcacQualCupNumber_(a.jar)-kcacQualCupNumber_(b.jar); })
+    : _kcac.jars.map(function(j,i){ return {jar:j,index:i}; });
+}
+function moveKcacCup_(direction) {
+  if (direction !== -1 && direction !== 1) return;
+  var entries = kcacNavigationEntries_();
+  var position = entries.findIndex(function(entry){ return entry.index === _kcac.currentIdx; });
+  // The combined comment is a separate action, not a third cup.
+  if (_kcac.overallMode && kcacIsUnifiedQualComment_()) {
+    if (entries.length && direction === -1) switchKcacJar(entries[entries.length-1].index);
+    return;
+  }
+  var target = position + direction;
+  if (position < 0 || target < 0 || target >= entries.length) return;
+  switchKcacJar(entries[target].index);
+}
 function renderKcacCupNav() {
   var nav = document.getElementById('kcac-cup-nav');
-  Array.from(nav.querySelectorAll('.cup-btn')).forEach(function(b){ b.remove(); });
+  var overview = document.getElementById('kcac-cup-overview');
+  overview.innerHTML = '';
   var sub = nav.querySelector('.submit-btn-nav');
   var isUnifiedQual = kcacIsUnifiedQualComment_();
-  nav.classList.toggle('kcac-qual-nav', isUnifiedQual);
+  var isOverall = isUnifiedQual && _kcac.overallMode;
   if (sub) {
     // 결선의 제출은 고정 제출 버튼 하나로 통일합니다. 예선은 통합 코멘트 탭을 유지합니다.
     sub.style.display = isUnifiedQual ? '' : 'none';
@@ -13293,29 +13334,44 @@ function renderKcacCupNav() {
     sub.classList.toggle('active', !!(isUnifiedQual && _kcac.overallMode));
     sub.onclick = isUnifiedQual ? openKcacOverallComment_ : kcacSubmitAll;
   }
-  var entries = isUnifiedQual
-    ? kcacOrderedQualEntries_()
-    : _kcac.jars.map(function(j, i){ return { jar:j, index:i }; });
-  entries.forEach(function(entry) {
+  var entries = kcacNavigationEntries_();
+  overview.style.setProperty('--cup-columns', Math.max(1,entries.length));
+  entries.forEach(function(entry,position) {
     var j = entry.jar;
     var i = entry.index;
     var sub_score = calcKcacJarSubtotal(j);
     var fin = calcKcacJarFinal(j, false);
     var btn = document.createElement('button');
     var isSaved = isUnifiedQual ? !!j.manualDraftSavedAt : sub_score > 0;
-    btn.className = 'cup-btn' + (!(_kcac.overallMode && isUnifiedQual) && i === _kcac.currentIdx ? ' active' : '') +
+    var active = !isOverall && i === _kcac.currentIdx;
+    btn.className = 'cup-btn' + (active ? ' active' : '') +
                     (isSaved ? ' done' : '');
     var navDetail = isUnifiedQual
       ? [kcacQualCupNumberLabel_(j), kcacCupSubLabel(j), j.manualDraftSavedAt ? '저장됨' : '작성 중'].filter(Boolean).join(' · ')
       : kcacCupSubLabel(j);
-    btn.innerHTML = '<span class="cup-btn-num">' + escHtml(kcacCupMainLabel(j)) + '</span>' +
-                    '<span class="cup-btn-score">' + escHtml(navDetail) + ' · ' + fmtScore(fin,2) + '</span>';
+    var cupNumber = isUnifiedQual ? kcacQualCupNumber_(j) : position+1;
+    btn.type = 'button';
+    btn.setAttribute('aria-pressed',active ? 'true' : 'false');
+    btn.setAttribute('aria-label',cupNumber+'번 컵 · '+kcacCupMainLabel(j)+' · '+navDetail+' · '+fmtScore(fin,2)+'점');
+    btn.title = cupNumber+'번 컵 · '+kcacCupFullLabel(j);
+    btn.innerHTML = '<span class="cup-btn-num">' + escHtml(cupNumber) + '</span>';
     btn.onclick = (function(n){ return function(){ switchKcacJar(n); }; })(i);
-    nav.insertBefore(btn, sub);
+    overview.appendChild(btn);
   });
+  var position = entries.findIndex(function(entry){ return entry.index === _kcac.currentIdx; });
+  var current = position >= 0 ? entries[position].jar : null;
+  var cupNumber = current ? (isUnifiedQual ? kcacQualCupNumber_(current) : position+1) : '';
+  document.getElementById('kcac-current-number').textContent = isOverall ? '종합코멘트' : (current ? cupNumber+'번 컵 · '+kcacCupMainLabel(current) : '');
+  document.getElementById('kcac-current-position').textContent = isOverall
+    ? 'FAST · SLOW 통합 평가'
+    : (current ? '현재 '+(position+1)+' / 전체 '+entries.length+'컵 · '+kcacCupSubLabel(current) : '');
+  document.getElementById('kcac-previous-cup').disabled = isOverall ? !entries.length : position<=0;
+  document.getElementById('kcac-next-cup').disabled = isOverall || position<0 || position>=entries.length-1;
+  nav.scrollLeft = 0;
 }
 
 function switchKcacJar(idx) {
+  if (!Number.isInteger(idx) || idx<0 || idx>=_kcac.jars.length) return;
   saveKcacJarFromDOM();
   if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
   var cur = _kcac.jars[_kcac.currentIdx];
@@ -17299,16 +17355,34 @@ function initIkrcSamples(cupNumbers, station) {
 
 function renderIkrcNav() {
   var nav = document.getElementById('ikrc-cup-nav');
-  Array.from(nav.querySelectorAll('.cup-btn')).forEach(function(b){ b.remove(); });
-  var sub = nav.querySelector('.submit-btn-nav');
+  var overview = document.getElementById('ikrc-cup-overview');
+  overview.innerHTML = '';
+  overview.style.setProperty('--cup-columns', Math.max(1,_ikrcSamples.length));
   _ikrcSamples.forEach(function(s, i) {
     var total = fmtScore(calcIkrcSampleTotal_(s), 1);
     var btn = document.createElement('button');
     btn.className = 'cup-btn' + (i === _ikrcIdx ? ' active' : '') + (s.comment && s.comment.length >= 10 ? ' done' : '');
-    btn.innerHTML = '<span class="cup-btn-num">' + escHtml(s.no) + '</span><span class="cup-btn-score">' + total + '</span>';
-    btn.onclick = (function(n){ return function(){ saveIkrc(); if (!validateIkrcCommentEdited(_ikrcSamples[_ikrcIdx])) return; loadIkrcSample(n); }; })(i);
-    nav.insertBefore(btn, sub);
+    btn.type = 'button';
+    btn.setAttribute('aria-pressed',i === _ikrcIdx ? 'true' : 'false');
+    btn.setAttribute('aria-label',(i+1)+'번째 컵 · '+s.no+' · '+total+'점');
+    btn.title = 'Cup '+s.no+' · '+total+'점';
+    btn.innerHTML = '<span class="cup-btn-num">' + escHtml(s.no) + '</span>';
+    btn.onclick = (function(n){ return function(){ switchIkrcSample_(n); }; })(i);
+    overview.appendChild(btn);
   });
+  var current = _ikrcSamples[_ikrcIdx];
+  document.getElementById('ikrc-current-number').textContent = current ? 'Cup '+current.no : '';
+  document.getElementById('ikrc-current-position').textContent = current ? '현재 '+(_ikrcIdx+1)+' / 전체 '+_ikrcSamples.length+'컵' : '';
+  document.getElementById('ikrc-previous-cup').disabled = !current || _ikrcIdx<=0;
+  document.getElementById('ikrc-next-cup').disabled = !current || _ikrcIdx>=_ikrcSamples.length-1;
+  nav.scrollLeft = 0;
+}
+
+function switchIkrcSample_(idx) {
+  if (!Number.isInteger(idx) || idx<0 || idx>=_ikrcSamples.length) return;
+  saveIkrc();
+  if (!validateIkrcCommentEdited(_ikrcSamples[_ikrcIdx])) return;
+  loadIkrcSample(idx);
 }
 
 function saveIkrc() {
