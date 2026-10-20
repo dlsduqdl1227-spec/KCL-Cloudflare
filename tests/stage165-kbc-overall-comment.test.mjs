@@ -96,16 +96,16 @@ assert.match(functionSource(assessment, "scheduleReviewAutoSave"), /refreshRevie
 const generateServer = functionSource(rpc, "generateKbcComment");
 assert.match(generateServer, /payload\.evaluatedItems/);
 assert.match(generateServer, /sourceItems\.map/);
-assert.match(generateServer, /item\.tags\.length/);
+assert.match(generateServer, /item\.tags\.slice\(0,2\)/);
 assert.match(generateServer, /item\.comment/);
-assert.match(generateServer, /sectionText/);
+assert.match(generateServer, /sectionOrder\.map/);
 assert.match(generateServer, /timePenalty/);
 assert.match(generateServer, /function impressionText/);
 assert.match(generateServer, /안정적인 인상/);
-assert.match(generateServer, /심사에서 느껴진 내용을 간단히/);
+assert.match(generateServer, /_shortObservation_/);
 assert.doesNotMatch(generateServer, /우선적인 개선|연습이 필요|재정비|핵심 보완 지점|높아질 수 있습니다/);
 assert.doesNotMatch(generateServer, /항목 합계.*최종.*점으로 기록/s);
-assert.match(generateServer, /_sensoryOptionSet_/);
+assert.match(generateServer, /_conciseCommentOptions_/);
 
 assert.match(functionSource(assessment, "kbcSubmit"), /'종합코멘트 사용여부':\s*_kbcAutoCommentEnabled/);
 

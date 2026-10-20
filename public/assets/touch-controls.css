@@ -1,0 +1,56 @@
+/* Shared touch/accessibility layer: appearance only, no form or scoring changes. */
+:where(button,a,[role=button],input,select,textarea,summary):focus-visible {
+  outline:3px solid #88cfff!important;outline-offset:3px;
+}
+input[type=checkbox],input[type=radio] {
+  width:22px!important;height:22px!important;min-width:22px;flex:0 0 22px;
+  padding:0;vertical-align:middle;accent-color:#fff;
+}
+label:has(input[type=checkbox]),label:has(input[type=radio]),.score-lock {
+  min-height:44px;cursor:pointer;
+}
+.score-lock label {padding:12px 4px;cursor:pointer}
+.comment-variation {white-space:pre-line;line-height:1.65}
+#server-health-card .d1-usage-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:560px) {#server-health-card .d1-usage-grid {grid-template-columns:1fr}}
+@media(max-width:768px),(pointer:coarse) {
+  button,.global-nav-btn,summary,.attr-tab,.cat-btn-p,.cat-btn-s,.cat-btn-t,.selected-tag {
+    min-height:44px!important;touch-action:manipulation;
+  }
+  .cat-btn-p,.cat-btn-s,.cat-btn-t,.selected-tag {font-size:14px!important;padding:10px!important}
+  .attr-tab {display:flex;align-items:center;justify-content:center;font-size:14px!important;line-height:1.35}
+  .list-refresh-btn {min-width:44px!important;width:44px!important}
+  .participant-refresh-row {grid-template-columns:minmax(0,1fr) 44px}
+  .station-list-refresh-head {grid-template-columns:44px minmax(0,1fr) 44px}
+  input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea {font-size:16px!important}
+  .admin-check-row label {padding:6px 4px;gap:10px}
+}
+/* KCR cups keep the physical left-to-right order, never wrap or shuffle. */
+#cupping-cup-nav {gap:10px!important;flex-wrap:nowrap!important;align-items:stretch!important;padding:10px 14px!important;scroll-padding:14px}
+#cupping-cup-nav .cup-btn {
+  width:86px!important;min-width:86px!important;height:104px!important;padding:6px!important;
+  flex:0 0 86px!important;gap:4px;color:#ddd;position:relative;transition:none;
+}
+#cupping-cup-nav .cup-btn.active {color:#111;border:2px solid #fff;box-shadow:inset 0 -4px #569778}
+#cupping-cup-nav .cup-btn:has(.kcr-cup-identity) {height:122px!important}
+#cupping-cup-nav .cup-btn .cup-btn-num {
+  width:60px;height:45px;border:2px solid currentColor;border-radius:8px 8px 23px 23px;
+  display:flex;align-items:center;justify-content:center;font-size:22px!important;line-height:1!important;
+  position:relative;font-variant-numeric:tabular-nums;
+}
+#cupping-cup-nav .cup-btn .cup-btn-num::after {
+  content:'';position:absolute;right:-8px;top:7px;width:7px;height:16px;border:2px solid currentColor;
+  border-left:0;border-radius:0 7px 7px 0;
+}
+#cupping-cup-nav .cup-btn .cup-btn-score {font-size:12px!important;color:inherit;opacity:1}
+.kcr-cup-position {font-size:11px;line-height:1.2}
+.kcr-cup-identity {display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.kcr-cup-direction {font-size:12px;color:#bbb;padding:5px 14px;background:var(--panel);flex-shrink:0}
+#evalCupping .eval-hero-logo {margin:8px auto!important;min-height:0!important}
+#evalCupping .eval-hero-logo img {height:52px!important;width:auto!important;max-width:100%}
+@media(max-height:550px) {
+  #cupping-cup-nav .cup-btn {height:82px!important}
+  #cupping-cup-nav .cup-btn:has(.kcr-cup-identity) {height:106px!important}
+  #cupping-cup-nav .cup-btn .cup-btn-num {height:34px;font-size:20px!important}
+  .kcr-cup-direction {display:none}
+}

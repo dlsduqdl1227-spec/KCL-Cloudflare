@@ -92,14 +92,11 @@ assert.match(analytics, /databaseSizeBytes/);
 assert.match(analytics, /api\.cloudflare\.com\/client\/v4\/graphql/);
 assert.doesNotMatch(getUsage, /D1_USAGE_ANALYTICS_TOKEN[^\n]*:/, 'analytics token must never be included in response payloads');
 
-assert.match(assessment, /id="d1-usage-card"/);
-assert.match(assessment, /function loadD1UsagePanel_/);
-assert.match(assessment, /function refreshD1Usage_/);
-assert.match(assessment, /getD1DailyUsage\(\{force:!!force\}, adminActorPayload_\(\)\)/);
-assert.match(assessment, /D1 계정 사용량/);
-assert.match(assessment, /읽기·쓰기 한도와 저장공간을 구분하고, KCL·더컵 사용량은 DB별로 표시합니다/);
-assert.match(assessment, /d1UsageMetricHtml_\('저장공간', usage\.storage, 'bytes'\)/);
-assert.match(assessment, /오늘 사용량 \/ 현재 청구 주기 누적/);
+// Stage250 replaces the visible account quota panel; the old read-only API
+// remains compatible with already-open admin tabs.
+assert.doesNotMatch(assessment, /id="d1-usage-card"|D1 계정 사용량|getD1DailyUsage\(/);
+assert.match(assessment, /id="server-health-card"/);
+assert.match(assessment, /KCL 서버 상태/);
 assert.match(wrangler, /D1_USAGE_ACCOUNT_ID\s*=\s*"8a36d483451bf789cbd72a724f6a842a"/);
 assert.match(wrangler, /D1_USAGE_PLAN\s*=\s*"workers_paid"/);
 assert.match(wrangler, /D1_USAGE_READ_LIMIT\s*=\s*"25000000000"/);

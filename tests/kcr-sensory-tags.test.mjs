@@ -207,7 +207,8 @@ for (const name of [
   "safeStr", "_num", "_avg", "_result", "_scoreItems", "_lowHighScore",
   "_joinWithComma", "_cleanTagText_", "_tagList_", "_tagPhrase_",
   "_briefComments", "_areaKorean_", "_fmt", "_commentVariationKey_",
-  "_commentHash_", "_subjectParticle_", "_topicParticle_", "_sensoryOptionSet_", "generateCuppingComment",
+  "_commentHash_", "_subjectParticle_", "_topicParticle_", "_sensoryOptionSet_", "_tags",
+  "_compactQuality_", "_shortObservation_", "_conciseCommentOptions_", "generateCuppingComment",
 ]) vm.runInContext(extractFunction(rpc, name), rpcCommentContext);
 const overallResult = rpcCommentContext.generateCuppingComment({
   cupNumber:"1",
@@ -242,7 +243,8 @@ for (const text of screenshotLikeResult.comments) {
   assert.match(text, /단맛/);
   assert.match(text, /마우스필|질감/);
   assert.match(text, /여운|에프터테이스트/);
-  assert.match(text, /선명도|구분|연결|균형/);
+  assert.match(text, /선명도|구분|연결|균형|완성도/);
+  assert.equal(text.split("\n").length, 5);
   assert.doesNotMatch(text, /확인했습니다|기록되었습니다|구성했습니다|점수와 표현|감각 단서|평균 .*점/);
   assert.doesNotMatch(text, /산미는 산미|단맛은 단맛|마우스필은 마우스필/);
   assert.doesNotMatch(text, /단맛은 [^.]*힘은|마우스필은 [^.]*촉감은|여운은 [^.]*정돈감은/);
@@ -259,7 +261,7 @@ const lowKcrResult = rpcCommentContext.generateCuppingComment({
   tags:{ flavor:["종이 같은"], aftertaste:["드라이"], acidity:["Harsh"], sweetness:["플랫"], mouthfeel:["거친"] },
 });
 assert.equal(lowKcrResult.comments.length, 2);
-assert.match(lowKcrResult.comments.join(" "), /명확하게 구분되지|충분히 형성되지|조화가 약하게|존재감과 지속성이 충분하지/);
+assert.match(lowKcrResult.comments.join(" "), /제한적인/);
 assert.doesNotMatch(lowKcrResult.comments.join(" "), /선명하게 연결되는 컵|매우 선명|완성도 높은 컵/);
 
 const kcrVariationPairs = new Set();
@@ -274,6 +276,8 @@ for (let index = 1; index <= 20; index += 1) {
   assert.equal(varied.comments.length, 2);
   kcrVariationPairs.add(varied.comments.join("\n---\n"));
 }
-assert.ok(kcrVariationPairs.size >= 8, `KCR 센서리 코멘트 구성의 반복이 과도합니다: ${kcrVariationPairs.size}종`);
+// Concise summaries are evidence-based: an identical evaluation should not
+// invent differences solely from a different judge name.
+assert.equal(kcrVariationPairs.size, 1);
 
 process.stdout.write("KCR sensory tag tests passed.\n");

@@ -123,7 +123,7 @@ generated.comments.forEach(comment => {
   assert.match(comment, /중심축 이탈/);
   assert.match(comment, /리프 15개/);
   assert.match(comment, /강점|보완/);
-  assert.match(comment, /형태와 대칭, 표면 상태가 위치와 선명도로 이어지는 흐름/);
+  assert.equal(comment.split('\n').length, 4, '관찰 근거는 유지하면서 반복적인 연결 문구는 줄입니다.');
   assert.ok(comment.length >= 170, `KCAC 종합코멘트가 충분히 상세하지 않습니다: ${comment.length}자`);
   assert.ok(comment.length <= 420, `KCAC 종합코멘트가 너무 깁니다: ${comment.length}자`);
   assert.doesNotMatch(comment, /항목별로 정리하면 다음과 같습니다|점수와 선택된 관찰 기록을 함께 반영/);
@@ -153,6 +153,7 @@ combined.comments.forEach(comment => {
   assert.match(comment, /리프 15개/);
   assert.match(comment, /리프 9개/);
   assert.match(comment, /전체 항목 흐름에서는/);
+  assert.equal(comment.split('\n').length, 4);
   assert.ok(comment.length >= 230, `KCAC 통합 코멘트가 충분히 상세하지 않습니다: ${comment.length}자`);
   assert.ok(comment.length <= 480, `KCAC 통합 코멘트가 너무 깁니다: ${comment.length}자`);
 });

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:operating-ux": "node tests/stage250-operating-health-comments.test.mjs && node tests/stage251-cup-touch-browser.test.mjs",
     "test:debrief-phase-switch": "node tests/stage248-debrief-phase-switch.test.mjs && node tests/stage249-debrief-phase-switch-browser.test.mjs",
     "test:kcr-free-cups": "node tests/stage246-kcr-free-cups.test.mjs && node tests/stage247-kcr-free-cups-browser.test.mjs",
     "test:kcr-live-reads": "node tests/stage243-kcr-compact-review.test.mjs && node tests/stage244-kcr-compact-review-browser.test.mjs && node tests/stage245-api-inflight-read.test.mjs",

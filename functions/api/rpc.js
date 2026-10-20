@@ -616,6 +616,7 @@ async function dispatch(action, args, env, request) {
     deleteLoginSecurityCode: () => deleteLoginSecurityCode(env, args[0]),
     getAdminConsoleData: () => getAdminConsoleData(env, args[0]),
     getD1DailyUsage: () => getD1DailyUsage(env, args[0], args[1]),
+    getOperationalHealth: () => getOperationalHealth(env, args[0]),
     updateCompetitionAdminSettings: () => updateCompetitionAdminSettings(env, args[0], args[1]),
     saveKcrStationSettings: () => saveKcrStationSettings(env, args[0], args[1]),
     upsertOperatorAccount: () => upsertOperatorAccount(env, args[0], args[1]),
@@ -1518,6 +1519,84 @@ async function getD1DailyUsage(env, options, actorArg) {
     }
     return { success:false, message:'Cloudflare D1 사용량 집계를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.' };
   }
+}
+
+// Read-only Pages analytics. No score queries, telemetry inserts or background polling.
+const operationalHealthMemory_ = new Map();
+const operationalHealthPending_ = new Map();
+async function getOperationalHealth(env, actorArg) {
+  const actor = await getActor(env, actorArg);
+  if (!hasAdmin(actor)) return {success:false,message:'서버 상태는 관리자만 확인할 수 있습니다.'};
+  const token = safeStr(env.D1_USAGE_ANALYTICS_TOKEN);
+  const account = safeStr(env.D1_USAGE_ACCOUNT_ID);
+  const script = safeStr(env.KCL_HEALTH_SCRIPT_NAME);
+  if (!token || !account || !script) return {success:true,available:false,state:'unavailable',message:'서버 분석 연결을 확인해주세요.'};
+  const key = account + '/' + script;
+  const cacheUrl = 'https://kcl-runtime-health.invalid/v1/' + encodeURIComponent(key);
+  let cached = operationalHealthMemory_.get(key);
+  try {
+    if (!cached && typeof caches !== 'undefined') {
+      const response = await caches.default.match(cacheUrl);
+      if (response) cached = await response.json();
+    }
+  } catch (_) {}
+  if (cached && Date.now() < cached.nextCheckAt) return cached.result;
+  if (operationalHealthPending_.has(key)) return operationalHealthPending_.get(key);
+  const pending = (async()=>{
+    let result;
+    let interval = 60000;
+    try {
+      const end = new Date(Math.floor(Date.now()/60000)*60000).toISOString();
+      const start = new Date(Date.parse(end)-15*60000).toISOString();
+      const query = `query KclPagesHealth($accountTag:string,$start:string,$end:string,$script:string){
+        viewer{accounts(filter:{accountTag:$accountTag}){
+          totals:pagesFunctionsInvocationsAdaptiveGroups(limit:1,filter:{scriptName:$script,datetime_geq:$start,datetime_lt:$end}){
+            sum{requests errors}quantiles{cpuTimeP50 cpuTimeP99}
+          }
+          statuses:pagesFunctionsInvocationsAdaptiveGroups(limit:20,filter:{scriptName:$script,datetime_geq:$start,datetime_lt:$end}){
+            dimensions{status}sum{requests}
+          }
+        }}}`;
+      const response = await fetch('https://api.cloudflare.com/client/v4/graphql',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({query,variables:{accountTag:account,start,end,script}}),signal:AbortSignal.timeout(8000)
+      });
+      const data = await response.json();
+      const rows = data?.data?.viewer?.accounts?.[0];
+      if (!response.ok || (data.errors && (!Array.isArray(data.errors) || data.errors.length)) || !Array.isArray(rows?.totals) || !Array.isArray(rows?.statuses)) throw new Error('ANALYTICS_UNAVAILABLE');
+      const total = rows.totals[0];
+      const requests = Number(total?.sum?.requests);
+      const errors = Number(total?.sum?.errors);
+      const cpu = value => value == null || !Number.isFinite(Number(value)) ? null : Math.max(0,Number(value))/1000;
+      const statuses = rows.statuses.map(row=>({status:safeStr(row.dimensions?.status),requests:Math.max(0,Number(row.sum?.requests)||0)}));
+      const resourceErrors = statuses.filter(row=>row.status==='exceededResources').reduce((n,row)=>n+row.requests,0);
+      const available = Number.isFinite(requests) && requests>0 && Number.isFinite(errors);
+      result = {success:true,available,state:available?(errors>0||resourceErrors>0?'warning':'ok'):'no_data',
+        updatedAt:nowIso(),windowStart:start,windowEnd:end,
+        requests:available?requests:null,errors:available?errors:null,
+        errorPercent:available?Math.round(errors/requests*10000)/100:null,
+        cpuP50Ms:available?cpu(total.quantiles?.cpuTimeP50):null,cpuP99Ms:available?cpu(total.quantiles?.cpuTimeP99):null,
+        resourceErrors:available?resourceErrors:null,statuses,
+        message:available?'':'최근 집계가 없습니다. 정상 여부를 아직 판단할 수 없습니다.'};
+    } catch (_) {
+      interval = 5*60000; // Analytics rate limits must not cause a retry storm.
+      result = cached?.result?.available
+        ? {...cached.result,state:'stale',stale:true,message:'최신 집계를 조회하지 못했습니다. 마지막 확인 수치입니다.'}
+        : {success:true,available:false,state:'unavailable',message:'서버 분석을 조회하지 못했습니다. 5분 후 다시 확인합니다.'};
+    }
+    result.nextCheckAt = Date.now()+interval;
+    const entry = {nextCheckAt:result.nextCheckAt,result};
+    if (operationalHealthMemory_.size>4) operationalHealthMemory_.clear();
+    operationalHealthMemory_.set(key,entry);
+    try {
+      if (typeof caches!=='undefined') await caches.default.put(cacheUrl,new Response(JSON.stringify(entry),{
+        headers:{'Content-Type':'application/json','Cache-Control':'max-age=900'}
+      }));
+    } catch (_) {}
+    return result;
+  })();
+  operationalHealthPending_.set(key,pending);
+  try { return await pending; } finally { operationalHealthPending_.delete(key); }
 }
 
 async function updateCompetitionAdminSettings(env, payload, actorArg) {
@@ -7910,148 +7989,42 @@ function _sensoryOptionSet_(lines, variationKey='') {
   return _result([uniq[firstIndex], uniq[secondIndex]]);
 }
 
+function _conciseCommentOptions_(lines) {
+  const clean = lines.map(line=>safeStr(line).replace(/[ \t]+/g,' ').trim()).filter(Boolean);
+  // Keep explicit paragraph boundaries. No score, tag or saved comment is changed.
+  const alternate = clean.length>1 ? [clean.at(-1),...clean.slice(0,-1)] : clean;
+  return _result([clean.join('\n'),alternate.join('\n')]);
+}
+function _shortObservation_(text, limit=80) {
+  const value = safeStr(text).replace(/\s+/g,' ').trim();
+  return value.length>limit ? value.slice(0,limit).replace(/\s+\S*$/,'')+'…' : value;
+}
+function _compactQuality_(score,max=5) {
+  const ratio=_num(score)/max;
+  return ratio>=.88?'매우 선명한':ratio>=.76?'선명한':ratio>=.64?'안정적인':ratio>=.52?'기본적인':ratio>=.38?'다소 제한적인':'제한적인';
+}
 function generateCuppingComment(payload) {
   payload = payload || {};
-  const tags = payload.tags || {};
-  const sensoryItems = [
-    {name:'Flavor', score:payload.flavor},
-    {name:'Aftertaste', score:payload.aftertaste},
-    {name:'Acidity', score:payload.acidity},
-    {name:'Sweetness', score:payload.sweetness},
-    {name:'Mouthfeel', score:payload.mouthfeel}
-  ];
-  const flavorTags = _tagList_(tags, 'flavor', 3);
-  const aftertasteTags = _tagList_(tags, 'aftertaste', 3);
-  const acidityTags = _tagList_(tags, 'acidity', 3);
-  const sweetnessTags = _tagList_(tags, 'sweetness', 3);
-  const mouthfeelTags = _tagList_(tags, 'mouthfeel', 3);
-
-  function intensityAdjective(value) {
-    const labels = {1:'매우 약한', 2:'약한', 3:'다소 약한', 4:'중간', 5:'다소 강한', 6:'강한', 7:'매우 강한'};
-    return labels[parseInt(value, 10)] || '';
+  const tags=payload.tags||{};
+  const intensity = value=>({1:'매우 은은한',2:'은은한',3:'다소 은은한',4:'중간',5:'다소 강한',6:'강한',7:'매우 강한'}[parseInt(value,10)]||'');
+  const evidence = key=>_tags(tags[key],2).map(_cleanTagText_).filter(Boolean).join('·');
+  function impression(key,label,strength) {
+    const selected=evidence(key);
+    return label+_topicParticle_(label)+' '+(selected?selected+' 특성이 ':'')+
+      (intensity(strength)?intensity(strength)+' 강도로 느껴졌으며, ':(selected?'확인됐으며, ':''))+_compactQuality_(payload[key])+' 인상이었습니다.';
   }
-  function qualityLevel(score) {
-    const value = _num(score);
-    if (value >= 4.2) return 0;
-    if (value >= 3.6) return 1;
-    if (value >= 3.0) return 2;
-    if (value >= 2.4) return 3;
-    return 4;
-  }
-  function qualityText(kind, score) {
-    const phrases = {
-      flavor:[
-        '향미의 구분과 선명도가 높습니다',
-        '향미가 비교적 명확하게 구분됩니다',
-        '주요 향미는 확인되지만 세부 구분은 다소 흐립니다',
-        '향미의 선명도가 다소 낮게 나타납니다',
-        '향미가 명확하게 구분되지 않습니다'
-      ],
-      aftertaste:[
-        '마무리가 깨끗하고 안정적입니다',
-        '여운과 마무리가 비교적 자연스럽습니다',
-        '마무리의 정돈감이 다소 부족합니다',
-        '연결과 마무리가 다소 거칠게 나타납니다',
-        '지속성과 마무리의 완성도가 충분히 형성되지 않았습니다'
-      ],
-      acidity:[
-        '단맛과 향미 사이에서 조화롭게 연결됩니다',
-        '컵의 구조 안에서 비교적 안정적으로 연결됩니다',
-        '기본 구조는 확인되지만 다른 요소와의 연결은 다소 약합니다',
-        '다른 요소와 충분히 조화를 이루지 못합니다',
-        '산미의 질과 연결성이 충분히 형성되지 않았습니다'
-      ],
-      sweetness:[
-        '향미를 안정적으로 받치고 지속성도 좋습니다',
-        '향미를 비교적 안정적으로 뒷받침합니다',
-        '향미를 받치는 힘이 크지 않습니다',
-        '선명도와 지속성이 다소 낮습니다',
-        '존재감과 지속성이 충분하지 않습니다'
-      ],
-      mouthfeel:[
-        '질감의 밀도와 정돈감이 좋습니다',
-        '질감이 비교적 매끄럽고 안정적입니다',
-        '기본 촉감이 확인되지만 질감의 세부 정돈은 다소 부족합니다',
-        '질감의 균일성과 정돈감이 다소 낮습니다',
-        '질감이 거칠거나 비어 있는 인상으로 남습니다'
-      ]
-    };
-    return phrases[kind][qualityLevel(score)];
-  }
-  function joinSensoryTags(list) {
-    const values = (list || []).filter(Boolean);
-    if (values.length < 2) return values[0] || '';
-    const beforeLast = values.slice(0, -1).join(', ');
-    const code = beforeLast.charCodeAt(beforeLast.length - 1);
-    const hasBatchim = code >= 0xAC00 && code <= 0xD7A3 && ((code - 0xAC00) % 28) !== 0;
-    return beforeLast + (hasBatchim ? '과 ' : '와 ') + values[values.length - 1];
-  }
-  function nounFromTags(list, suffix, fallback, usePossessive) {
-    if (!list.length) return fallback;
-    const labels = joinSensoryTags(list);
-    return usePossessive ? `${labels}의 ${suffix}` : `${labels} ${suffix}`;
-  }
-  function subject(text) { return text + _subjectParticle_(text); }
-  function topic(text) { return text + _topicParticle_(text); }
-  function observationSentences(text) {
-    return _briefComments(text, 3).map(entry => {
-      let sentence = safeStr(entry).replace(/^[^:：]{1,24}[:：]\s*/, '').replace(/[.!?]+$/, '').trim();
-      if (!sentence) return '';
-      sentence = sentence
-        .replace(/남음$/, '남습니다')
-        .replace(/됨$/, '됩니다')
-        .replace(/함$/, '합니다')
-        .replace(/짐$/, '집니다')
-        .replace(/음$/, '습니다');
-      if (!/(?:습니다|됩니다|합니다|집니다|입니다|다)$/.test(sentence)) sentence += '입니다';
-      return sentence + '.';
-    }).filter(Boolean).join(' ');
-  }
-
-  const flavorNoun = nounFromTags(flavorTags, '향미', '주요 향미', true);
-  const acidityNoun = nounFromTags(acidityTags, '인상의 산미', '산미');
-  const sweetnessNoun = nounFromTags(sweetnessTags, '인상의 단맛', '단맛');
-  const mouthfeelNoun = nounFromTags(mouthfeelTags, '질감', '마우스필');
-  const aftertasteNoun = aftertasteTags.length ? `${aftertasteTags.join(', ')} 특성이 남는 여운` : '여운';
-  const flavorIntensity = intensityAdjective(payload.flavorIntensity);
-  const acidityIntensity = intensityAdjective(payload.acidityIntensity);
-  const sweetnessIntensity = intensityAdjective(payload.sweetnessIntensity);
-  const mouthfeelIntensity = intensityAdjective(payload.mouthfeelIntensity);
-  const aftertastePersistence = intensityAdjective(payload.aftertastePersistence);
-
-  const flavorSentence = `${topic(flavorNoun)} ${flavorIntensity ? flavorIntensity + ' 강도로 ' : ''}감지되며, ${qualityText('flavor', payload.flavor)}.`;
-  const balanceSentence = `${topic(acidityNoun)} ${acidityIntensity ? acidityIntensity + ' 강도로 ' : ''}나타나며, ${qualityText('acidity', payload.acidity)}. ${topic(sweetnessNoun)} ${sweetnessIntensity ? sweetnessIntensity + ' 강도로 ' : ''}감지되며, ${qualityText('sweetness', payload.sweetness)}.`;
-  const finishSentence = `${topic(mouthfeelNoun)} ${mouthfeelIntensity ? mouthfeelIntensity + ' 강도로 ' : ''}느껴지며, ${qualityText('mouthfeel', payload.mouthfeel)}. ${topic(aftertasteNoun)} ${aftertastePersistence ? aftertastePersistence + ' 수준으로 ' : ''}이어지고, ${qualityText('aftertaste', payload.aftertaste)}.`;
-
-  const hl = _lowHighScore(sensoryItems);
-  const high = hl.high ? _areaKorean_(hl.high.name) : '';
-  const low = hl.low && hl.low !== hl.high ? _areaKorean_(hl.low.name) : '';
-  const spread = hl.high && hl.low ? _num(hl.high.score) - _num(hl.low.score) : 0;
-  const axis = high && low && spread >= 0.4
-    ? `${high}${_topicParticle_(high)} 상대적으로 가장 안정적이고, ${low}${_topicParticle_(low)} 가장 제한적으로 평가되었습니다.`
-    : '센서리 항목 사이의 완성도 차이는 크지 않게 평가되었습니다.';
-  const overallScore = _num(payload.overall) || _avg(sensoryItems.map(item => item.score));
-  const overallText = overallScore >= 4.2
-    ? '종합하면 향미의 구분, 균형, 질감과 마무리가 선명하게 연결되는 컵입니다.'
-    : overallScore >= 3.6
-      ? '종합하면 주요 향미와 구조가 비교적 안정적으로 이어지는 컵입니다.'
-      : overallScore >= 3.0
-        ? '종합하면 기본 향미는 확인되지만 일부 요소의 선명도와 연결은 다소 약한 컵입니다.'
-        : overallScore >= 2.4
-          ? '종합하면 향미의 구분과 요소 간 균형에 보완이 필요한 컵입니다.'
-          : '종합하면 향미의 선명도와 구조적 연결이 충분히 형성되지 않은 컵입니다.';
-  const manualText = observationSentences(payload.attributeComments);
-  const evidence = manualText ? manualText + ' ' : '';
-  const firstImpression = `첫 인상에서 ${subject(flavorNoun)} ${flavorIntensity ? flavorIntensity + ' 강도로 ' : ''}드러나며, ${qualityText('flavor', payload.flavor)}.`;
-  const middleStructure = `중반부에는 ${subject(acidityNoun)} ${acidityIntensity ? acidityIntensity + ' 강도로 ' : ''}나타나고 ${subject(sweetnessNoun)} ${sweetnessIntensity ? sweetnessIntensity + ' 강도로 ' : ''}함께 감지됩니다. ${topic(acidityNoun)} ${qualityText('acidity', payload.acidity)}. ${topic(sweetnessNoun)} ${qualityText('sweetness', payload.sweetness)}.`;
-  const finishStructure = `후반부에는 ${subject(mouthfeelNoun)} ${mouthfeelIntensity ? mouthfeelIntensity + ' 강도로 ' : ''}느껴지고 ${subject(aftertasteNoun)} ${aftertastePersistence ? aftertastePersistence + ' 수준으로 ' : ''}이어집니다. ${topic(mouthfeelNoun)} ${qualityText('mouthfeel', payload.mouthfeel)}. ${topic(aftertasteNoun)} ${qualityText('aftertaste', payload.aftertaste)}.`;
-
-  return _sensoryOptionSet_([
-    `${flavorSentence} ${balanceSentence} ${finishSentence} ${evidence}${axis} ${overallText}`,
-    `향미 프로파일의 중심에는 ${subject(flavorNoun)} 놓이며${flavorIntensity ? ' ' + flavorIntensity + ' 강도로' : ''} 나타납니다. ${qualityText('flavor', payload.flavor)}. ${balanceSentence} ${finishSentence} ${evidence}${axis} ${overallText}`,
-    `${firstImpression} ${middleStructure} ${finishStructure} ${evidence}${axis} ${overallText}`,
-    `향미 전개는 ${flavorNoun}에서 시작해 산미와 단맛, 질감과 여운으로 이어집니다. ${flavorSentence} ${balanceSentence} ${finishSentence} ${evidence}${axis} ${overallText}`
-  ], _commentVariationKey_(payload, 'KCR'));
+  const acid=evidence('acidity'),sweet=evidence('sweetness');
+  const structure='산미는 '+(acid?acid+' 특성과 ':'')+(intensity(payload.acidityIntensity)?intensity(payload.acidityIntensity)+' 강도의 ':'')+_compactQuality_(payload.acidity)+' 인상, '+
+    '단맛은 '+(sweet?sweet+' 특성과 ':'')+(intensity(payload.sweetnessIntensity)?intensity(payload.sweetnessIntensity)+' 강도의 ':'')+
+    _compactQuality_(payload.sweetness)+' 인상을 보였습니다.';
+  const manual=_shortObservation_(payload.attributeComments,70);
+  return _conciseCommentOptions_([
+    impression('flavor','플레이버',payload.flavorIntensity),
+    structure,
+    impression('mouthfeel','마우스필',payload.mouthfeelIntensity),
+    impression('aftertaste','여운',payload.aftertastePersistence),
+    '전체적으로 '+_compactQuality_(payload.overall)+' 완성도로 평가했습니다.'+(manual?' 심사 기록: “'+manual+'”':'')
+  ]);
 }
 
 function generateKbcCommentLegacy_(payload) {
@@ -8273,31 +8246,6 @@ function generateKbcComment(payload) {
     return label.replace(/\s*전문성$/, '') || safeStr(item.label);
   }
 
-  function sectionSentence(section) {
-    const sectionItems = items.filter(item => item.section === section);
-    if (!sectionItems.length) return '';
-    if (sectionItems.length === 1) {
-      const item = sectionItems[0];
-      const label = displayLabel(item, section) || section;
-      return `${label}${_topicParticle_(label)} ${impressionText(item)}이었습니다.`;
-    }
-    const groups = [];
-    sectionItems.forEach(item => {
-      const level = ratingLevel(item);
-      let group = groups.find(entry => entry.level === level);
-      if (!group) {
-        group = {level, items:[]};
-        groups.push(group);
-      }
-      group.items.push(item);
-    });
-    const clauses = groups.map((group, index) => {
-      const labels = group.items.map(item => displayLabel(item, section)).join('·');
-      const ending = index === groups.length - 1 ? '이었습니다.' : '이었고, ';
-      return `${labels}${_subjectParticle_(labels)} ${impressionText(group.items[0])}${ending}`;
-    });
-    return `${section}${_topicParticle_(section)} ${clauses.join('')}`;
-  }
 
   function tagContext(item) {
     const prefix = item.section === '창작음료' ? '창작음료 ' : item.section === '에스프레소' ? '에스프레소 ' : '';
@@ -8311,23 +8259,21 @@ function generateKbcComment(payload) {
   }
 
   const sectionOrder = ['서비스', '에스프레소', '창작음료', '운영'];
-  const sectionText = sectionOrder.map(sectionSentence).filter(Boolean).join(' ');
-  const tagText = items.filter(item => item.tags.length).map(item => {
-    const tags = item.tags.join('·');
-    const observed = /taste|clean|mouth|flavor/.test(item.id) ? '느껴졌습니다' : '확인됐습니다';
-    return `${tagContext(item)}에서는 ${tags}${_subjectParticle_(tags)} ${observed}.`;
-  }).join(' ');
-  const directText = items.filter(item => item.comment).map(item => {
-    const comment = item.comment.replace(/[.!?]+$/, '');
-    return `${tagContext(item)}에는 “${comment}”라는 심사 기록이 남았습니다.`;
-  }).join(' ');
+  const lines = sectionOrder.map(section=>{
+    const sectionItems=items.filter(item=>item.section===section);
+    if (!sectionItems.length) return '';
+    const observations=sectionItems.map(item=>{
+      const label=displayLabel(item,section)||section;
+      const tags=item.tags.slice(0,2).join('·');
+      return label+_topicParticle_(label)+' '+(tags?tags+' 특성의 ':'')+impressionText(item);
+    });
+    return section+'에서 '+observations.join(', ')+'이었습니다.';
+  }).filter(Boolean);
+  const directText = items.filter(item=>item.comment).map(item=>tagContext(item)+': “'+_shortObservation_(item.comment,50)+'”').join(' / ');
   const timeText = Math.max(0, _num(payload.timePenalty)) ? '시간 감점이 함께 반영되었습니다.' : '';
-  const concise = `${sectionText} ${tagText} ${directText} ${timeText}`.replace(/\s+/g, ' ').trim();
-
-  return _sensoryOptionSet_([
-    concise,
-    `심사에서 느껴진 내용을 간단히 정리하면, ${concise}`
-  ], _commentVariationKey_(payload, 'KBC'));
+  if(directText||timeText) lines.push([directText,timeText].filter(Boolean).join(' '));
+  if(lines.length<4) lines.push('서비스와 음료, 기물 운용에서 기록된 인상을 종합한 평가입니다.');
+  return _conciseCommentOptions_(lines);
 }
 
 function _kcacTagEvidence_(payload) {
@@ -8483,10 +8429,7 @@ function _generateKcacCombinedComment_(payload) {
     : '두 잔의 형태, 대칭, 표면, 위치와 선명도를 같은 기준으로 연결해 확인했습니다.';
   const tone = _kcacTone_(_avg(allScores), { positive:allPositive, refinement:allRefinement });
   const closing = `두 잔의 패턴 연결성과 시각적 균형을 종합한 완성도는 ${tone} 수준입니다.`;
-  return _sensoryOptionSet_([
-    `${observations.join(' ')} ${comparison} ${closing}`,
-    `FAST와 SLOW 로제타를 함께 보면 ${tone} 흐름을 보였습니다. ${observations.join(' ')} ${comparison} ${closing}`
-  ], _commentVariationKey_(payload, 'KCAC-COMBINED'));
+  return _conciseCommentOptions_([...observations,comparison,closing]);
 }
 
 function generateKcacComment(payload) {
@@ -8550,15 +8493,9 @@ function generateKcacComment(payload) {
   const visualConnection = '형태와 대칭, 표면 상태가 위치와 선명도로 이어지는 흐름을 함께 반영했습니다.';
   const sensoryConnection = '맛의 균형과 질감, 프레젠테이션이 하나의 인상으로 이어지는 흐름을 함께 반영했습니다.';
   if (isSensory) {
-    return _sensoryOptionSet_([
-      `${contextText}에서 ${evidenceText} ${scoreFlowText} ${sensoryConnection} ${sensoryClose}`,
-      `${contextText}의 센서리 평가는 ${tone} 흐름을 보였습니다. ${evidenceText} ${scoreFlowText} ${sensoryConnection} ${sensoryClose}`
-    ], _commentVariationKey_(payload, 'KCAC'));
+    return _conciseCommentOptions_([`${contextText}에서 ${evidenceText}`,scoreFlowText,sensoryConnection,sensoryClose]);
   }
-  return _sensoryOptionSet_([
-    `${contextText}에서 ${evidenceText} ${scoreFlowText} ${leafText} ${visualConnection} ${visualClose}`,
-    `${contextText}는 ${tone} 시각 흐름을 보였습니다. ${evidenceText} ${scoreFlowText} ${leafText} ${visualConnection} ${visualClose}`
-  ], _commentVariationKey_(payload, 'KCAC'));
+  return _conciseCommentOptions_([`${contextText}에서 ${evidenceText}`,scoreFlowText,leafText||visualConnection,visualClose]);
 }
 
 function generateMobComment(payload) {
@@ -8616,41 +8553,10 @@ function generateIkrcComment(payload) {
       5:'다소 뚜렷하게', 6:'뚜렷하게', 7:'매우 뚜렷하게'
     }[parseInt(value, 10)] || '중간 강도로';
   }
-  function scoreSummary() {
-    const groups = [];
-    items.forEach(item => {
-      const level = ratingLevel(item);
-      let group = groups.find(entry => entry.level === level);
-      if (!group) { group = {level, items:[]}; groups.push(group); }
-      group.items.push(item);
-    });
-    return groups.map((group, index) => {
-      const labels = group.items.map(item => item.label).join('·');
-      const ending = index === groups.length - 1 ? '이었습니다.' : '이었고, ';
-      return `${labels}${_subjectParticle_(labels)} ${impressionText(group.items[0])}${ending}`;
-    }).join('');
-  }
-  function tagObservation(item) {
-    const selected = _tags(tags[item.key], 8).map(_cleanTagText_).filter(Boolean);
-    if (!selected.length) return '';
-    const phrase = Array.from(new Set(selected)).join('·');
-    const intensity = intensityAdverb(intensities[item.key]);
-    if (item.key === 'flavor') return `플레이버에서는 ${phrase} 향미가 ${intensity} 느껴졌습니다.`;
-    if (item.key === 'sweetness') return `단맛에서는 ${phrase} 특성이 ${intensity} 느껴졌습니다.`;
-    if (item.key === 'acidity') return `산미에서는 ${phrase} 특성이 ${intensity} 느껴졌습니다.`;
-    if (item.key === 'mouthfeel') return `마우스필에서는 ${phrase} 질감이 ${intensity} 느껴졌습니다.`;
-    return `클린컵에서는 ${phrase} 특성이 ${intensity} 확인됐습니다.`;
-  }
 
-  const scoreText = scoreSummary();
-  const sensoryText = items.map(tagObservation).filter(Boolean).join(' ');
-  const concise = `${scoreText} ${sensoryText}`.replace(/\s+/g, ' ').trim();
-  const sensoryFirst = sensoryText
-    ? `${sensoryText} 전체적으로 ${scoreText}`
-    : `컵에서 느껴진 인상을 정리하면, ${scoreText}`;
-  return _sensoryOptionSet_([
-    concise,
-    sensoryFirst,
-    `심사에서 느껴진 컵의 인상을 간단히 정리하면, ${concise}`
-  ], _commentVariationKey_(payload, 'IKRC'));
+  return _conciseCommentOptions_(items.map(item=>{
+    const selected=_tags(tags[item.key],2).map(_cleanTagText_).filter(Boolean).join('·');
+    return item.label+_topicParticle_(item.label)+' '+(selected?selected+' 특성이 ':'')+
+      (intensities[item.key]?intensityAdverb(intensities[item.key])+' 느껴졌으며, ':(selected?'확인됐으며, ':''))+impressionText(item)+'이었습니다.';
+  }));
 }
