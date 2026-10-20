@@ -8,6 +8,10 @@ const source = fs.readFileSync(new URL('../functions/api/rpc.js',import.meta.url
 // access, credentials, timing-sensitive assertions, or historical Git objects.
 const legacy = source
   .replace("  if (safeStr(code).toUpperCase() === 'KCR') return [rowToReviewItem(r, code, headers, fallbackRound, 0)];",'')
+  .replace(/    const convertedPeers = new Map\(list\.map[\s\S]*?\n    const comparisonIndex = indexKcrComparisonItems_\(peers\);/,
+    `    const peerHeaders = mergeHeaders(code, kcrPeerRows);
+    const peers = kcrPeerRows.flatMap(row => rowToReviewItems_(row, code, peerHeaders, cfg && cfg.current_round));
+    const comparisonIndex = indexKcrComparisonItems_(peers);`)
   .replace('kcrCalibrationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || [])','kcrCalibrationReviewComparison_(item, list)')
   .replace('kcrStationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || [], false)','kcrStationReviewComparison_(item, peers, false)')
   .replace('const converted = rankingRows.flatMap(', 'const converted = raw.flatMap(')
@@ -18,6 +22,8 @@ const legacy = source
       kcrReviewStationMatches_({payload:parseJson(own.payload_json,{})}, {payload:parseJson(row.payload_json,{})})));
   }`);
 assert.notEqual(source,legacy);
+assert.ok(!legacy.includes('const convertedPeers ='), 'legacy oracle must retain the full duplicate peer conversion');
+assert.ok(legacy.includes('const peerHeaders = mergeHeaders(code, kcrPeerRows);'));
 const old = await createRpcFixture({source:legacy});
 const current = await createRpcFixture({source});
 try {
@@ -55,6 +61,12 @@ try {
     calls.push(['getReviewList','KCR',actor]);
     if(actor!==judges[1])calls.push(['getReviewList','KCR',{...actor,calibrationOnly:true}]);
   }
+  // The management path contains every score, unlike the default own-only
+  // administrator request. Keep both scopes in the response parity coverage.
+  for(const actor of [old.actor,lead]) {
+    calls.push(['getReviewList','KCR',{...actor,reviewScope:'manage'}]);
+    calls.push(['getReviewList','KCR',{...actor,manageReview:true,calibrationOnly:true}]);
+  }
   for(const round of ['','예선','결선'])calls.push(['getRanking','KCR',old.actor,round]);
   calls.push(['getRankingDetail','KCR','1','예선',old.actor]);
   let legacyMs=0, optimizedMs=0;
@@ -66,6 +78,20 @@ try {
     assert.deepEqual(actual,expected,call[0]+' preserves complete response and authorization');
   }
   assert.deepEqual(snapshot(current),before,'queries never alter stored scores, comments, locks, participants or settings');
+  // Closed day-one scores stay visible to managers, but cannot leak to judges
+  // through reused comparison items. Day two and finals remain independent.
+  const config=old.db.prepare("SELECT option_settings FROM competitions WHERE code='KCR'").get();
+  const closedOptions=JSON.parse(config.option_settings);
+  const closedStations=closedOptions.kcrStations.byRound.예선.map((station,index)=>({...station,prelimDay:index<2?1:2}));
+  closedOptions.kcrStations.byRound.예선=closedStations;
+  closedOptions.kcrStations.stations=closedStations;
+  closedOptions.kcrStations.closedPrelimDays=[1];
+  for(const api of [old,current])api.db.prepare("UPDATE competitions SET option_settings=? WHERE code='KCR'").run(JSON.stringify(closedOptions));
+  const closedBefore=snapshot(current);
+  for(const call of calls)assert.deepEqual(await current.rpc(...call),await old.rpc(...call),call[0]+' preserves closed-day response and authorization');
+  assert.deepEqual(snapshot(current),closedBefore,'closed-day queries never alter stored data');
+  for(const api of [old,current])api.db.prepare("UPDATE competitions SET option_settings=? WHERE code='KCR'").run(config.option_settings);
+  assert.deepEqual(snapshot(current),before,'test closure configuration was restored without changing scores');
   // Every request must see edits, not a cross-request cached comparison.
   const row=current.db.prepare("SELECT * FROM scores WHERE mode='judge' ORDER BY id LIMIT 1").get();
   const p=JSON.parse(row.payload_json);p.rows[0].extraFields.종합코멘트='다음 조회에 즉시 반영';

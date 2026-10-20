@@ -5071,8 +5071,10 @@ async function getReviewList(env, competitionCode, actorArg) {
     });
   }
   if (code === 'KCR' && !calibrationOnly && kcrCanCompare) {
-    const peerHeaders = mergeHeaders(code, kcrPeerRows);
-    const peers = kcrPeerRows.flatMap(row => rowToReviewItems_(row, code, peerHeaders, cfg && cfg.current_round));
+    // Reuse this request's converted cups. Comparison reads named fields only,
+    // so additional peers do not need duplicate report columns or values arrays.
+    const convertedPeers = new Map(list.map(item => [Number(item.scoreRowId),item]));
+    const peers = kcrPeerRows.flatMap(row => convertedPeers.has(Number(row.id)) ? [convertedPeers.get(Number(row.id))] : rowToReviewItems_(row, code, [], cfg && cfg.current_round));
     const comparisonIndex = indexKcrComparisonItems_(peers);
     list = list.map(item => ({...item, _stddev:kcrStationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || [], false)}));
   }
