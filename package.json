@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kcr-live-reads": "node tests/stage243-kcr-compact-review.test.mjs && node tests/stage244-kcr-compact-review-browser.test.mjs && node tests/stage245-api-inflight-read.test.mjs",
     "test:debrief-judge-labels": "node tests/stage242-debrief-sensory-judge-labels.test.mjs",
     "test:kcr-day-closure": "node tests/stage240-kcr-day-closure.test.mjs && node tests/stage241-kcr-day-closure-browser.test.mjs",
     "test:kcr-query-cpu": "node tests/stage239-kcr-query-cpu.test.mjs",

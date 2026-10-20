@@ -6695,6 +6695,31 @@ function reviewActorPayload_(code) {
   };
 }
 
+function reviewListActorPayload_(code) {
+  var actor = reviewActorPayload_(code);
+  // Existing evaluation tabs and final-correction drafts retain their original contract.
+  var cfg = _selComp && _selComp.code === 'KCR' ? _selComp : (_configs || []).find(function(config){ return config.code === 'KCR'; });
+  if (String(code || '').toUpperCase() === 'KCR' && !_reviewState.finalRound && cfg && String(cfg.currentRound || '예선') === '예선') actor.compactReview = true;
+  return actor;
+}
+function loadKcrReviewDetail_(item, success, failure) {
+  var token = _judge.judgeToken || '', key = _reviewState.fetchKey;
+  var generation = _reviewRequestGeneration;
+  var actor = reviewActorPayload_('KCR');
+  actor.compactReview = false;
+  actor.detailRowIndex = item.rowIndex;
+  function current() { return token === (_judge.judgeToken || '') && key === _reviewState.fetchKey && generation === _reviewRequestGeneration && String(_reviewState.code).toUpperCase() === 'KCR'; }
+  google.script.run.withSuccessHandler(function(res){
+    if (!current()) return;
+    var detail = res && res.success && (res.list || []).find(function(row){ return String(row.rowIndex) === String(item.rowIndex); });
+    if (!detail || !Array.isArray(res.headers)) { if (failure) failure((res && res.message) || '평가 내용을 불러오지 못했습니다. 다시 시도해주세요.'); return; }
+    detail.detailRequired = false;
+    success(detail, res.headers);
+  }).withFailureHandler(function(){
+    if (current() && failure) failure('연결이 지연됩니다. 작성 내용은 유지되며 다시 시도할 수 있습니다.');
+  }).getReviewList('KCR', actor);
+}
+
 function reviewIsCalibration_(item, code) {
   item = item || {};
   var category = String(item.evaluationCategory || item['검수구분'] || item['백업구분'] || '').trim();
@@ -6907,7 +6932,7 @@ function goReviewByCode(code, name, backPanel) {
       setReviewRefreshState_(false);
       document.getElementById('review-stat').textContent = (cachedReview ? '기존 검수 목록 표시 중 · ' : '') + '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
-    .getReviewList(code, reviewActorPayload_(code));
+    .getReviewList(code, reviewListActorPayload_(code));
 }
 
 
@@ -7008,6 +7033,24 @@ function buildKcrStationComparisonHtml_(stats) {
 }
 var _kcrComparisonSelection = {station:'',unit:''};
 var _kcrOfficialReviewSelection = {station:'',unit:''};
+var _kcrComparisonLoadGeneration = 0;
+function renderKcrSelectedComparison_(item, container, force) {
+  var generation = ++_kcrComparisonLoadGeneration;
+  if (!item || !container) return;
+  if (item._stddev && !force) { container.innerHTML = buildKcrStationComparisonHtml_(item._stddev); return; }
+  if (!item.comparisonAvailable && !item._stddev) { container.innerHTML = ''; return; }
+  container.innerHTML = '<p class="kcr-comparison-note">선택한 참가자의 점수·코멘트를 불러오는 중입니다.</p>';
+  loadKcrReviewDetail_(item, function(detail){
+    if (generation !== _kcrComparisonLoadGeneration || !container.isConnected || activePanelId_() !== 'pReview') return;
+    item._stddev = detail._stddev || null;
+    container.innerHTML = detail._stddev ? buildKcrStationComparisonHtml_(detail._stddev) : '<p class="kcr-comparison-note">확인할 비교 기록이 없습니다.</p>';
+  }, function(message){
+    if (generation !== _kcrComparisonLoadGeneration || !container.isConnected || activePanelId_() !== 'pReview') return;
+    container.innerHTML = '<p class="kcr-comparison-note"></p><button type="button" class="kcr-comparison-refresh">다시 불러오기</button>';
+    container.querySelector('p').textContent = message;
+    container.querySelector('button').onclick = function(){ renderKcrSelectedComparison_(item, container, true); };
+  });
+}
 function renderKcrOfficialReviewOverview_(list, code, headers, supersededCount) {
   var groups = {};
   (list || []).filter(function(item){ return !reviewIsCalibration_(item, 'KCR'); }).forEach(function(item){
@@ -7036,8 +7079,11 @@ function renderKcrOfficialReviewOverview_(list, code, headers, supersededCount) 
     _kcrOfficialReviewSelection.unit=units.value;
     var rows=groups[stations.value].units[units.value].slice().sort(function(a,b){return Number(/헤드|head/i.test(b.role||b['역할']||''))-Number(/헤드|head/i.test(a.role||a['역할']||''));});
     renderReviewRowsInto_(rows,code,headers,supersededCount,document.getElementById('kcr-review-submissions'));
-    var comparison=rows.find(function(row){return !!row._stddev;});
-    document.getElementById('kcr-review-comparison').innerHTML=comparison ? buildKcrStationComparisonHtml_(comparison._stddev) : '';
+    var comparison=rows.find(function(row){return !!row._stddev || !!row.comparisonAvailable;});
+    var comparisonContainer=document.getElementById('kcr-review-comparison');
+    comparisonContainer.innerHTML='';
+    if(comparison)renderKcrSelectedComparison_(comparison,comparisonContainer);
+    else ++_kcrComparisonLoadGeneration;
     summary();
   }
   function renderStation(){
@@ -7056,10 +7102,16 @@ function renderKcrCalibrationOverview_(list) {
   var wrap = document.getElementById('review-list');
   var groups = {};
   list.forEach(function(item){
-    var stats=item._stddev;if(!stats)return;
-    var key=JSON.stringify([stats.round,stats.stationId||stats.station]);
-    if(!groups[key])groups[key]={label:stats.round+' · '+stats.station,units:{}};
-    groups[key].units[stats.participantNo]=stats;
+    var stats=item._stddev || {}, payload=item.payload || {};
+    if(!item.comparisonAvailable && !item._stddev)return;
+    var round=item.round || item['라운드'] || stats.round || '';
+    var station=item.stationLabel || item['스테이션'] || payload.stationLabel || stats.station || '스테이션 미지정';
+    var stationId=item.stationId || item['스테이션ID'] || payload.stationId || stats.stationId || station;
+    var unit=String(item.unit || item['컵번호'] || item['참가자번호'] || stats.participantNo || '');
+    if(!unit)return;
+    var key=JSON.stringify([round,stationId]);
+    if(!groups[key])groups[key]={label:[round,station].filter(Boolean).join(' · '),station:station,units:{}};
+    groups[key].units[unit]=item;
   });
   var keys=Object.keys(groups);
   document.getElementById('review-stat').textContent='켈리브레이션 ' + list.length + '건 · 읽기 전용';
@@ -7073,9 +7125,9 @@ function renderKcrCalibrationOverview_(list) {
   keys.forEach(function(key){stations.add(new Option(groups[key].label,key));});stations.value=_kcrComparisonSelection.station;
   function renderUnit(){
     _kcrComparisonSelection.unit=units.value;
-    var stats=groups[stations.value].units[units.value];
-    document.getElementById('review-count-val').textContent=stats.station || '—';
-    document.getElementById('kcr-comparison-result').innerHTML=buildKcrStationComparisonHtml_(stats);
+    var item=groups[stations.value].units[units.value];
+    document.getElementById('review-count-val').textContent=groups[stations.value].station || '—';
+    renderKcrSelectedComparison_(item,document.getElementById('kcr-comparison-result'));
   }
   function renderStation(){
     _kcrComparisonSelection.station=stations.value;
@@ -7089,15 +7141,14 @@ function refreshKcrReviewComparison_(item, container) {
   var button=container.querySelector('button'),token=_judge.judgeToken;
   var action=kclUi.beginAction(button,'확인 중...',function(){toast('통계 확인이 지연됩니다. 작성 내용은 유지됩니다.',true);});
   if(!action)return;
-  google.script.run.withSuccessHandler(function(res){
+  loadKcrReviewDetail_(item,function(latest){
     if(!action.finish())return;
     if(!container.isConnected || _judge.judgeToken!==token || _reviewState.code!=='KCR' || _reviewState.current!==item)return;
-    var latest=res&&res.success&&(res.list||[]).find(function(row){return String(row.rowIndex)===String(item.rowIndex);});
     if(!latest || !latest._stddev){toast('현재 통계를 확인할 수 없습니다. 내평가검수 목록에서 다시 확인해주세요.',true);return;}
     item._stddev=latest._stddev;
     container.querySelector('.kcr-review-comparison-body').innerHTML=buildKcrStationComparisonHtml_(latest._stddev);
     toast('스테이션 통계를 갱신했습니다. 작성 내용은 그대로 유지됩니다.');
-  }).withFailureHandler(function(){if(action.finish())toast('통계를 불러오지 못했습니다. 작성 내용은 유지됩니다.',true);}).getReviewList('KCR',reviewActorPayload_('KCR'));
+  },function(){if(action.finish())toast('통계를 불러오지 못했습니다. 작성 내용은 유지됩니다.',true);});
 }
 function buildStddevHtml_(stats, code) {
   if (!stats || !stats.metrics || !stats.metrics.length) return '';
@@ -10330,7 +10381,43 @@ function appendKcacReviewGroupTabs_(wrap, groupItems, activeRowIndex) {
   appendReviewGroupTabs_(wrap, groupItems, activeRowIndex);
 }
 
+var _reviewDetailRequestGeneration = 0;
+var _reviewDetailPendingKey = '';
 function openReviewEdit(item) {
+  if (!item) return;
+  if (String(_reviewState.code || '').toUpperCase() !== 'KCR' || _reviewState.finalRound || !item.detailRequired) {
+    ++_reviewDetailRequestGeneration;
+    _reviewDetailPendingKey = '';
+    openReviewEditLoaded_(item);
+    return;
+  }
+  if (activePanelId_() === 'pReviewEdit' && (_reviewDraftDirty || _reviewAutoSaving || _reviewAutoSaveTimer)) {
+    toast('현재 수정 내용을 저장한 뒤 다른 평가를 열어주세요. 작성 내용은 유지됩니다.', true);
+    return;
+  }
+  var pendingKey = [_reviewRequestGeneration, _reviewState.fetchKey, item.rowIndex].join('|');
+  if (_reviewDetailPendingKey === pendingKey) return;
+  _reviewDetailPendingKey = pendingKey;
+  var generation = ++_reviewDetailRequestGeneration;
+  var panel = activePanelId_();
+  var selection = JSON.stringify(_kcrOfficialReviewSelection);
+  toast('평가 내용을 불러오는 중입니다.');
+  loadKcrReviewDetail_(item, function(detail, headers){
+    if (generation !== _reviewDetailRequestGeneration) return;
+    _reviewDetailPendingKey = '';
+    if (activePanelId_() !== panel || selection !== JSON.stringify(_kcrOfficialReviewSelection)) return;
+    if (panel === 'pReviewEdit' && (_reviewDraftDirty || _reviewAutoSaving || _reviewAutoSaveTimer)) return;
+    // Hydrate only after successful authorization/loading; failures leave the current form untouched.
+    Object.assign(item, detail);
+    _reviewState.headers = headers.map(function(header){ return String(header || ''); });
+    openReviewEditLoaded_(item);
+  }, function(message){
+    if (generation !== _reviewDetailRequestGeneration) return;
+    _reviewDetailPendingKey = '';
+    if (activePanelId_() === panel) toast(message, true);
+  });
+}
+function openReviewEditLoaded_(item) {
   if (!canOpenReviewDetails_() && !(item.stationClosed && reviewManageScopeForCode_('KCR'))) {
     toast('이 대회 검수 수정 권한이 없습니다.', true);
     return;

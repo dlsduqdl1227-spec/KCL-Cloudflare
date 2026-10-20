@@ -7,6 +7,7 @@ const source = fs.readFileSync(new URL('../functions/api/rpc.js',import.meta.url
 // Preserve the pre-hotfix read algorithm as a parity oracle, without production
 // access, credentials, timing-sensitive assertions, or historical Git objects.
 const legacy = source
+  .replace("buildRankingData_(env, code, selectedRound, code === 'KCR')",'buildRankingData_(env, code, selectedRound)')
   .replace("  if (safeStr(code).toUpperCase() === 'KCR') return [rowToReviewItem(r, code, headers, fallbackRound, 0)];",'')
   .replace(/    const convertedPeers = new Map\(list\.map[\s\S]*?\n    const comparisonIndex = indexKcrComparisonItems_\(peers\);/,
     `    const peerHeaders = mergeHeaders(code, kcrPeerRows);
@@ -24,6 +25,7 @@ const legacy = source
 assert.notEqual(source,legacy);
 assert.ok(!legacy.includes('const convertedPeers ='), 'legacy oracle must retain the full duplicate peer conversion');
 assert.ok(legacy.includes('const peerHeaders = mergeHeaders(code, kcrPeerRows);'));
+assert.ok(!legacy.includes("buildRankingData_(env, code, selectedRound, code === 'KCR')"),'legacy ranking oracle must retain full conversion');
 const old = await createRpcFixture({source:legacy});
 const current = await createRpcFixture({source});
 try {

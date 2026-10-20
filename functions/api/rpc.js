@@ -597,6 +597,14 @@ async function ensureDefaultData(env) {
 }
 
 async function dispatch(action, args, env, request) {
+  if (['getReviewList','getRanking','getRankingDetail'].includes(action)) {
+    const code = safeStr(args[0]).toUpperCase();
+    const diagnostics = action === 'getReviewList'
+      ? {compact:!!args[1]?.compactReview,detail:safeStr(args[1]?.detailRowIndex) !== ''}
+      : {};
+    // Route-only diagnostics: never log actors, tokens, identifiers or scores.
+    console.info('KCL_RPC_READ',action,COMPETITION_CODES.includes(code) ? code : '',diagnostics);
+  }
   const handlers = {
     ping: async () => ({ success: true, message: 'KCL Cloudflare API 연결 성공', now: nowIso() }),
     getConfig: () => getConfig(env),
@@ -3576,11 +3584,11 @@ function singleRowExtra_(payload, code, rowIndex=0) {
   const row = rows[rowIndex] || rows[0] || {};
   return extractExtra(Object.assign({}, payload || {}, { rows: [row] }), code, 0);
 }
-function canonicalScoreForPayload_(code, payload, rowIndex=0) {
+function canonicalScoreForPayload_(code, payload, rowIndex=0, preparedExtra=null) {
   code = safeStr(code || (payload && (payload.competitionCode || payload.code || payload.compCode || payload.competition))).toUpperCase();
   payload = payload || {};
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
-  const extra = singleRowExtra_(payload, code, rowIndex);
+  const extra = preparedExtra || singleRowExtra_(payload, code, rowIndex);
   const payloadDq = isDisqualifiedValue_(payload.disqualified) || isDisqualifiedValue_(payload.dq) || isDisqualifiedValue_(payload.disqualifiedYn) || isDisqualifiedValue_(extra['실격여부']) || isDisqualifiedValue_(extra['DQ']) || isDisqualifiedValue_(extra.disqualified);
   if (payloadDq) return 0;
   const fallback = () => {
@@ -3760,19 +3768,20 @@ function kcacRowTotalFromExtra_(extra) {
   return fin === null ? null : roundScoreValue_(fin);
 }
 
-function mergeHeaders(code, rows) {
+function mergeHeaders(code, rows, preparedRows=null) {
   const seen = new Set(); const out = [];
   function add(h){ h = safeStr(h); if (h && !seen.has(h)) { seen.add(h); out.push(h); } }
   expectedHeadersForCompetition(code).forEach(add);
   (rows || []).forEach(r => {
-    const p = parseJson(r.payload_json, {});
+    const prepared = preparedRows && preparedRows.get(r.id);
+    const p = prepared ? prepared.payload : parseJson(r.payload_json, {});
     const payloadRows = Array.isArray(p.rows) ? p.rows : [{}];
-    payloadRows.forEach((_, idx) => Object.keys(extractExtra(p, code, idx)).forEach(add));
+    payloadRows.forEach((_, idx) => Object.keys(prepared && idx === 0 ? prepared.extra : extractExtra(p, code, idx)).forEach(add));
   });
   return out;
 }
-function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0) {
-  const payload = parseJson(r.payload_json, {});
+function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0, prepared=null) {
+  const payload = prepared ? prepared.payload : parseJson(r.payload_json, {});
   const payloadRows = Array.isArray(payload.rows) ? payload.rows : [];
   const targetRow = payloadRows[payloadRowIndex] || payloadRows[0] || {};
   const data = Array.isArray(targetRow.data) ? targetRow.data : [];
@@ -3788,12 +3797,12 @@ function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0) {
   }
   const isVirtualMulti = (normalizedCode === 'KCAC' || normalizedCode === 'IKRC') && payloadRows.length > 1;
   const isKcacMulti = normalizedCode === 'KCAC' && payloadRows.length > 1;
-  const extra = isVirtualMulti ? extractExtraSingleRow_(payload, code, payloadRowIndex) : extractExtra(payload, code, 0);
+  const extra = prepared ? prepared.extra : (isVirtualMulti ? extractExtraSingleRow_(payload, code, payloadRowIndex) : extractExtra(payload, code, 0));
   const payloadUnit = firstNonEmpty([extra['참가자번호'], extra['참가자 번호'], extra['선수번호'], extra['선수 번호'], extra['컵번호'], extra['Cup No'], extra['샘플번호'], extra['팀번호'], extra['팀 번호'], data[0], payload.unit, payload.cupNo, payload.participantNo, payload.teamNo]);
   const unit = normalizedCode === 'IKRC' && isVirtualMulti ? firstNonEmpty([payloadUnit, r.unit]) : firstNonEmpty([r.unit, payloadUnit]);
   const round = firstNonEmpty([r.round, payload.round, payload.currentRound, extra['라운드'], fallbackRound]);
   const participantName = firstNonEmpty([r.participant_name, extra['선수명'], extra['참가자명'], extra['이름'], extra['팀명'], payload.participantName, payload.playerName, payload.teamName]);
-  const computedTotal = isKcacMulti ? kcacRowTotalFromExtra_(extra) : canonicalScoreForPayload_(code, payload, isVirtualMulti ? payloadRowIndex : 0);
+  const computedTotal = isKcacMulti ? kcacRowTotalFromExtra_(extra) : canonicalScoreForPayload_(code, payload, isVirtualMulti ? payloadRowIndex : 0, prepared ? extra : null);
   let totalScore = computedTotal !== null && computedTotal !== undefined ? computedTotal : (r.total_score === null || r.total_score === undefined ? firstNonEmpty([extra['총점'], extra['최종점수'], extra['Total'], extra['Total Score']]) : Number(r.total_score));
   if (r.disqualified || isDisqualifiedValue_(extra['실격여부']) || isDisqualifiedValue_(extra['DQ']) || isDisqualifiedValue_(extra.disqualified)) totalScore = 0;
   const item = Object.assign({}, extra);
@@ -5018,6 +5027,32 @@ async function submitScores(env, payload, signature, request = null) {
   return { success: true, message: inserted > 1 ? `${inserted}건 저장 완료` : '저장 완료', inserted, skipped };
 }
 
+function kcrReviewSummaryItem_(item, comparisonAvailable) {
+  const out = {};
+  const keys = ['rowIndex','scoreRowId','payloadRowIndex','_scoreId','_payloadRowIndex',
+    'status','submittedAt','timestamp','competitionCode','round','judgeName','team','role','mode','unit',
+    'participantName','participantAffiliation','participantTeamName','totalScore','disqualified','disqualificationReason',
+    'evaluationCategory','evaluationCategoryReason','stationClosed','finalWorkflow','finalRevision','returnReason',
+    '제출시간','대회코드','라운드','심사위원명','팀','역할','모드','스테이션ID','스테이션','스테이션코드','프로세스',
+    '참가자번호','참가자 번호','컵번호','샘플번호','팀번호','선수명','참가자명','소속','팀명',
+    '총점','최종점수','실격여부','실격사유','검수상태','검수구분'];
+  keys.forEach(key => { if (Object.prototype.hasOwnProperty.call(item,key)) out[key]=item[key]; });
+  const payload = item.payload || {};
+  out.payload = {stationId:payload.stationId || '',stationLabel:payload.stationLabel || '',stationPrefix:payload.stationPrefix || '',stationProcess:payload.stationProcess || ''};
+  out.stationId = item.stationId || item['스테이션ID'] || out.payload.stationId;
+  out.stationLabel = item.stationLabel || item['스테이션'] || out.payload.stationLabel;
+  out.detailRequired = true;
+  out.comparisonAvailable = !!comparisonAvailable;
+  return out;
+}
+function kcrReviewPeerRowsForItem_(rows, item) {
+  if (!item) return [];
+  const targetRound = safeStr(item.round || item['라운드']).replace(/\s+/g,'').toLowerCase();
+  const targetUnit = safeStr(item.unit || item['컵번호'] || item['참가자번호']).replace(/\s+/g,'').toUpperCase();
+  // Blank legacy columns still need the original payload fallback conversion.
+  return rows.filter(row => (!safeStr(row.round) || safeStr(row.round).replace(/\s+/g,'').toLowerCase() === targetRound)
+    && (!safeStr(row.unit) || safeStr(row.unit).replace(/\s+/g,'').toUpperCase() === targetUnit));
+}
 async function getReviewList(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
   const auth = await requireActorForCode_(env, actorArg, code, '검수 조회 권한이 없습니다. 다시 로그인해주세요.');
@@ -5047,8 +5082,30 @@ async function getReviewList(env, competitionCode, actorArg) {
     ? rawAll.filter(row => isCalibrationMode_(row.mode) === calibrationOnly)
     : kcrHeadParticipatedRows_(rawAll.filter(row => !closedIds.has(Number(row.id))), auth.actor, calibrationOnly)) : [];
   const raw = calibrationOnly ? kcrPeerRows : (manager ? managerRows : rawAll.filter(r => reviewScoreVisibleToActor_(r, auth.actor, code, false)));
-  const headers = mergeHeaders(code, raw);
-  let list = raw.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
+  const detailRequested = code === 'KCR' && safeStr(actorArg && actorArg.detailRowIndex) !== '';
+  const compactReview = code === 'KCR' && !!(actorArg && actorArg.compactReview) && !detailRequested;
+  const preparedRows = code === 'KCR' && (compactReview || detailRequested) ? new Map(raw.map(row => {
+    const payload = parseJson(row.payload_json, {});
+    return [row.id,{payload,extra:extractExtra(payload,code,0)}];
+  })) : null;
+  // Numeric edit columns must always use the complete authorized scope, not
+  // just a selected row. Old clients retain the original full response path.
+  const headers = mergeHeaders(code, raw, preparedRows);
+  let conversionRows = raw;
+  if (detailRequested) {
+    const ref = parseReviewRowRef_(actorArg.detailRowIndex);
+    const target = Number.isInteger(ref.id) && ref.id > 0 && !ref.payloadRowIndex ? raw.find(row => Number(row.id) === ref.id) : null;
+    const requestedRound = safeStr(actorArg && actorArg.round);
+    if (!target || (!hasManageAccess(auth.actor,code) && closedIds.has(Number(target.id)))
+      || isCalibrationMode_(target.mode) !== calibrationOnly
+      || (['본선','결선'].includes(requestedRound) && safeStr(target.round) !== requestedRound)) {
+      return {success:false,message:'이 평가 내용을 조회할 수 없습니다. 목록을 새로고침해주세요.'};
+    }
+    conversionRows = [target];
+  }
+  let list = conversionRows.flatMap(r => preparedRows
+    ? [rowToReviewItem(r,code,compactReview && !finalOfficialEvaluation_(r) ? [] : headers,cfg && cfg.current_round,0,preparedRows.get(r.id))]
+    : rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
   if (closedIds.size) list = list.filter(item => hasManageAccess(auth.actor, code) || !closedIds.has(Number(item.scoreRowId)))
     .map(item => closedIds.has(Number(item.scoreRowId)) ? {...item,stationClosed:true} : item);
   if ((manager || (code === 'KCR' && hasAdmin(auth.actor))) && list.length) {
@@ -5064,19 +5121,27 @@ async function getReviewList(env, competitionCode, actorArg) {
     const latest = latestIkrcReviewItems_(list);
     list = latest.list;
     supersededCount = latest.supersededCount;
-    const comparisonIndex = indexKcrComparisonItems_(list);
-    list = list.map(item => {
-      item._stddev = kcrCalibrationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || []);
-      return item;
-    });
+    if (!compactReview) {
+      const comparisons = detailRequested ? latestIkrcReviewItems_(kcrReviewPeerRowsForItem_(kcrPeerRows,list[0])
+        .flatMap(row => rowToReviewItems_(row,code,[],cfg && cfg.current_round))).list : list;
+      const comparisonIndex = indexKcrComparisonItems_(comparisons);
+      list = list.map(item => {
+        item._stddev = kcrCalibrationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || []);
+        return item;
+      });
+    }
   }
-  if (code === 'KCR' && !calibrationOnly && kcrCanCompare) {
+  if (code === 'KCR' && !calibrationOnly && kcrCanCompare && (!compactReview || list.some(finalOfficialEvaluation_))) {
     // Reuse this request's converted cups. Comparison reads named fields only,
     // so additional peers do not need duplicate report columns or values arrays.
     const convertedPeers = new Map(list.map(item => [Number(item.scoreRowId),item]));
-    const peers = kcrPeerRows.flatMap(row => convertedPeers.has(Number(row.id)) ? [convertedPeers.get(Number(row.id))] : rowToReviewItems_(row, code, [], cfg && cfg.current_round));
+    const comparisonTargets = compactReview ? list.filter(finalOfficialEvaluation_) : list;
+    const peerRows = detailRequested || compactReview
+      ? [...new Map(comparisonTargets.flatMap(item=>kcrReviewPeerRowsForItem_(kcrPeerRows,item)).map(row=>[row.id,row])).values()]
+      : kcrPeerRows;
+    const peers = peerRows.flatMap(row => convertedPeers.has(Number(row.id)) ? [convertedPeers.get(Number(row.id))] : rowToReviewItems_(row, code, [], cfg && cfg.current_round));
     const comparisonIndex = indexKcrComparisonItems_(peers);
-    list = list.map(item => ({...item, _stddev:kcrStationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || [], false)}));
+    list = list.map(item => compactReview && !finalOfficialEvaluation_(item) ? item : ({...item, _stddev:kcrStationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || [], false)}));
   }
   if (code === 'IKRC') {
     const latest = latestIkrcReviewItems_(list);
@@ -5100,6 +5165,9 @@ async function getReviewList(env, competitionCode, actorArg) {
       });
     }
   }
+  // Historical finals retain their full correction payload/draft contract even
+  // when a preliminary list opts into compact summaries.
+  if (compactReview) list = list.map(item => finalOfficialEvaluation_(item) ? item : kcrReviewSummaryItem_(item,kcrCanCompare));
   if (code === 'KCAC' && !hasAdmin(auth.actor)) {
     list = list.map(item => redactParticipantIdentityObject_(item, headers));
   }
@@ -6826,7 +6894,7 @@ function rankingRoundScope_(value) {
   const round = roundName_(value, '');
   return ['예선','본선','결선'].includes(round) ? round : null;
 }
-async function buildRankingData_(env, competitionCode, selectedRound='') {
+async function buildRankingData_(env, competitionCode, selectedRound='', summaryOnly=false) {
   const code = safeStr(competitionCode).toUpperCase();
   const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
   const participantRowsRaw = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
@@ -6837,7 +6905,14 @@ async function buildRankingData_(env, competitionCode, selectedRound='') {
   const raw = code === 'MOB'
     ? (rowsRaw.results || []).filter(row => !isCalibrationMode_(row && row.mode))
     : (rowsRaw.results || []);
-  const headers = mergeHeaders(code, raw);
+  // Ranking summaries do not use report-column arrays. Keep the full header
+  // union for identity redaction, but parse each KCR payload/extra only once.
+  // This map exists only during this request; edits are never cached across calls.
+  const preparedKcrRows = code === 'KCR' && summaryOnly ? new Map(raw.map(row => {
+    const payload = parseJson(row.payload_json, {});
+    return [row.id, {payload, extra:extractExtra(payload, code, 0)}];
+  })) : null;
+  const headers = mergeHeaders(code, raw, preparedKcrRows);
   const participantIdx = indexParticipantIdentities_(participantRows, code);
   const ikrcSeedMap = code === 'IKRC' ? await loadIkrcSeedResultMap_(env) : null;
   const officialRankingOverrides = await loadOfficialRankingOverrideMap_(env, code);
@@ -6856,7 +6931,9 @@ async function buildRankingData_(env, competitionCode, selectedRound='') {
   const rankingRows = code === 'KCR' && selectedRound
     ? raw.filter(row => !safeStr(row.round) || roundName_(row.round, '') === selectedRound)
     : raw;
-  const converted = rankingRows.flatMap(r => rowToReviewItems_(r, code, headers, cfg && cfg.current_round).map(item => {
+  const converted = rankingRows.flatMap(r => (preparedKcrRows
+    ? [rowToReviewItem(r, code, [], cfg && cfg.current_round, 0, preparedKcrRows.get(r.id))]
+    : rowToReviewItems_(r, code, headers, cfg && cfg.current_round)).map(item => {
     const round = roundName_(item.round || item['라운드'] || (cfg && cfg.current_round));
     const identity = lookupParticipantIdentity_(participantIdx, round, itemNumber_(item) || item.unit);
     item = enrichReviewItemWithParticipant_(item, identity, code);
@@ -6999,7 +7076,7 @@ async function getRanking(env, competitionCode, actorArg, requestedRound) {
   if (!auth.ok) return auth.res;
   const selectedRound = rankingRoundScope_(requestedRound);
   if (selectedRound === null) return { success:false, message:'예선, 본선 또는 결선을 선택해주세요.' };
-  const data = await buildRankingData_(env, code, selectedRound);
+  const data = await buildRankingData_(env, code, selectedRound, code === 'KCR');
   const ranking = data.ranking.map(item => redactKcacIdentityForActor_(auth.actor, code, item, data.headers));
   return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : code, currentRound: data.cfg ? data.cfg.current_round : '', selectedRound, unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking, tieBreakRule: tieRuleLabel_(code, selectedRound || (data.cfg ? data.cfg.current_round : '')) };
 }

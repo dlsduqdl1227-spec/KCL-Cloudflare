@@ -2,9 +2,10 @@ name = "kcl-cloudflare"
 compatibility_date = "2025-08-01"
 pages_build_output_dir = "public"
 
-# Keep ranking/review reads within a bounded CPU budget on the existing paid plan.
+# Keep a bounded CPU safety margin while large live lists are being read.
+# This does not change the account plan; verify the effective Pages runtime separately.
 [limits]
-cpu_ms = 1000
+cpu_ms = 5000
 
 [[d1_databases]]
 binding = "DB"

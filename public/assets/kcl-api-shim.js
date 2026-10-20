@@ -4,6 +4,8 @@
   if (typeof window === 'undefined') return;
   var API_TIMEOUT_MS = 60000;
   var API_MAX_ATTEMPTS = 6;
+  var pendingListReads_ = new Map();
+  var readGeneration_ = 0;
 
   function isRetrySafeAction_(action) {
     return /^(ping|get|list|load|fetch|search|validate|check|generate)/i.test(String(action || '')) ||
@@ -19,6 +21,8 @@
     var delays = [0, 350, 900, 1800, 3000, 5000];
     var delay = delays[Math.min(Math.max(0, Number(attempt) || 0), delays.length - 1)];
     if (Number(serverDelayMs) > delay) delay = Math.min(8000, Number(serverDelayMs));
+    // Spread reconnection attempts across devices after a transient outage.
+    if (delay > 0) delay += Math.floor(Math.random() * 250);
     return new Promise(function(resolve){ setTimeout(resolve, delay); });
   }
 
@@ -86,13 +90,43 @@
   }
 
   function callRpc(action, args) {
+    var sharedRead = ['getReviewList', 'getRanking', 'getRankingDetail'].indexOf(action) >= 0;
+    var mutation = !/^(ping|get|list|load|fetch|search|validate|check|generate)/i.test(String(action || ''));
+    if (mutation) readGeneration_++;
+    var key = '';
+    if (sharedRead) {
+      // In-flight only, never a stale-result cache. Include the full actor,
+      // competition, round and detail scope; snapshot inputs before retries.
+      var serializedArgs = JSON.stringify(Array.prototype.slice.call(args || []));
+      args = JSON.parse(serializedArgs);
+      key = readGeneration_ + ':' + action + ':' + serializedArgs;
+      if (pendingListReads_.has(key)) return pendingListReads_.get(key).then(copyReadResult_);
+    }
     function run(attempt) {
       return callRpcOnce_(action, args, attempt).catch(function(err){
         if (!(err && err.retryable) || !isRetrySafeAction_(action) || attempt + 1 >= API_MAX_ATTEMPTS) throw err;
         return retryDelay_(attempt + 1, err && err.retryAfterMs).then(function(){ return run(attempt + 1); });
       });
     }
-    return run(0);
+    var promise = run(0).then(function(data){
+      if (sharedRead) pendingListReads_.delete(key);
+      if (mutation) readGeneration_++;
+      return data;
+    }, function(error){
+      if (sharedRead) pendingListReads_.delete(key);
+      if (mutation) readGeneration_++;
+      throw error;
+    });
+    if (sharedRead) {
+      pendingListReads_.set(key, promise);
+      return promise.then(copyReadResult_);
+    }
+    return promise;
+  }
+
+  function copyReadResult_(data) {
+    // UI renderers may enrich their own response. Do not share mutable rows.
+    return JSON.parse(JSON.stringify(data));
   }
 
   function createRunner(successHandler, failureHandler) {

@@ -41,6 +41,7 @@ try {
     await page.evaluate(()=>goReviewByCode('KCR','KCR','pAdmin'));await page.waitForSelector('#kcr-review-station');
     await page.locator('#kcr-review-station').selectOption({label:'예선 · 스테이션 3'});
     await page.locator('#review-list .review-edit-btn').first().click();
+    await page.waitForSelector('#pReviewEdit.active');
     assert.equal(await page.evaluate(()=>canReviewEditDetails()),true);
     assert.equal(await page.locator('#review-edit-save-only').isVisible(),true);
     for(const judge of judges) {
