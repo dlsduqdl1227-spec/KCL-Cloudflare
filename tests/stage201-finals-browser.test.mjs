@@ -90,8 +90,23 @@ try {
     assert.notEqual(sensoryDraft,patternDraft,'pattern/sensory drafts must not overwrite one another');
     await page.locator('#kcac-num').fill('1');
     await page.evaluate(()=>onKcacParticipantSelected_());
+    assert.equal(await page.locator('#kcac-cup-nav').isVisible(),false,'single final pattern has no cup navigator');
+    assert.equal(await page.locator('#kcac-submit-dock').isVisible(),true,'pattern submission remains visible');
     assert.ok(await page.getByText('언더필',{exact:true}).count(),'improved completion tags carry into final pattern judging');
     assert.ok(await page.getByText('크레마 경계 번짐',{exact:true}).count());
+    await page.evaluate(()=>{
+      _kcac.jars[0].smartTags.완성도=['패턴 구조 완성','기존 직접 기록 태그'];
+      loadKcacJar(0);
+    });
+    const completion=page.locator('#kcac-attrs .mob-attr-tools').filter({hasText:'언더필'});
+    assert.match(await completion.locator('.selected-tags').innerText(),/패턴 구조 완성/,'older selected tags remain intact');
+    await completion.locator('.kcl-tag-launch').click();
+    await page.locator('#kcl-tag-search').fill('언더필');
+    await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-option').filter({hasText:'언더필'}).click();
+    await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-done').click();
+    assert.deepEqual(await page.evaluate(()=>_kcac.jars[0].smartTags.완성도),['패턴 구조 완성','기존 직접 기록 태그','언더필']);
+    const reviewTags=await page.evaluate(()=>reviewKcacSmartTagMeta_('결선 Design Completion(디자인 완성도)').data);
+    assert.deepEqual(reviewTags,await page.evaluate(()=>kcacSmartTagOptions_(_kcac.jars[0],'완성도')),'review uses the identical final tag catalog');
     await page.evaluate(()=>{ document.querySelectorAll('#kcac-attrs input[data-kcac-score]').forEach(el=>{el.value='5';el.dispatchEvent(new Event('input',{bubbles:true}));}); });
     assert.equal(await page.evaluate(()=>calcKcacJarSubtotal(_kcac.jars[0])),60);
     assert.equal(await page.evaluate(()=>kcacSmartTagPayload_(_kcac.jars[0]) && kcacAttrDisplayName_('완성도',_kcac.jars[0])),'Design Completion(디자인 완성도)');
@@ -99,6 +114,18 @@ try {
     await page.screenshot({path:path.join(output,`kcac-pattern-${width}.png`)});
     const overflow=await page.evaluate(()=>document.documentElement.scrollWidth > innerWidth+1);
     assert.equal(overflow,false,'no horizontal page overflow at '+width);
+    await page.locator('#kcac-comment').fill('창작 패턴의 기존 기록과 예선 기준 태그를 함께 유지합니다.');
+    await page.locator('#kcac-comment').dispatchEvent('input');
+    await page.evaluate(()=>toggleKcacScoreLock_('완성도',0));
+    await page.locator('#kcac-submit-dock .submit-btn-nav').click();
+    const finalPattern=await page.evaluate(()=>qaSubmissions[1]);
+    assert.equal(finalPattern.rows.length,1);
+    assert.equal(finalPattern.rows[0].data[21],60,'final rubric and weighted total stay unchanged');
+    assert.equal(finalPattern.rows[0].data[23],'창작 패턴의 기존 기록과 예선 기준 태그를 함께 유지합니다.');
+    assert.equal(JSON.parse(finalPattern.rows[0].extraFields['점수잠금']).완성도,true);
+    for(const tag of ['패턴 구조 완성','기존 직접 기록 태그','언더필']) assert.match(JSON.stringify(finalPattern.rows[0].extraFields),new RegExp(tag));
+    assert.equal(finalPattern.rows[0].media.count,0,'single pattern can submit without a photo or cup navigation');
+    await page.evaluate(()=>hideOverlay());
     // KBC regeneration must still work after KCAC async guards were added.
     await page.evaluate(()=>{_selComp={code:'KBC',currentRound:'결선'};startKbc();generateKbcComment();});
     assert.match(await page.locator('#kbc-comment-gen').innerText(),/QA KBC 코멘트/);

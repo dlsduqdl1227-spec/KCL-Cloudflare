@@ -124,7 +124,16 @@ try {
       },area);
       await page.locator('#kcac-num').fill('1');
       await page.evaluate(()=>onKcacParticipantSelected_());
-      await checkOverview(page,'kcac',area==='sensory'?2:1);
+      if(area==='sensory') await checkOverview(page,'kcac',2);
+      else {
+        assert.equal(await page.locator('#kcac-cup-nav').isVisible(),false,'single pattern cup needs no navigation');
+        await page.evaluate(()=>renderKcacCupNav());
+        assert.equal(await page.locator('#kcac-previous-cup').isVisible(),false);
+        assert.equal(await page.locator('#kcac-next-cup').isVisible(),false);
+        assert.equal(await page.locator('#kcac-cup-title').textContent(),'패턴평가');
+        assert.equal(await page.locator('#kcac-comment').isVisible(),true,'single pattern comment remains available');
+        assert.equal((await inspectPage(page)).pageOverflow,false);
+      }
       assert.equal(await page.locator('#kcac-cup-nav > .submit-btn-nav').isVisible(),false,'final submission stays in existing submit dock');
       assert.equal(await page.locator('#kcac-submit-dock').isVisible(),true);
     }

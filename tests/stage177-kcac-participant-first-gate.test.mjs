@@ -39,15 +39,18 @@ const elements = {
 };
 let syncCount = 0;
 const context = {
-  _kcac: { qualFirstPattern:'', jars:[], currentIdx:0 },
+  _kcac: { qualFirstPattern:'', jars:[{type:'qual'},{type:'qual'}], currentIdx:0 },
   _selComp: { currentRound:'예선' },
   document: { getElementById:(id)=>elements[id] || null },
   normalizeKcacRoundDisplay_:(round)=>round,
   kcacValidQualPattern_:(pattern)=>pattern === 'dynamic' || pattern === 'controlled',
   participantAssignmentByNumber_:()=>null,
-  syncKcacMilkPatternSelectors_:()=>{ syncCount += 1; }
+  syncKcacMilkPatternSelectors_:()=>{ syncCount += 1; },
+  loadKcacJar:()=>{}
 };
 vm.createContext(context);
+vm.runInContext(functionSource(assessment, 'kcacIsUnifiedQualComment_'), context);
+vm.runInContext(functionSource(assessment, 'syncKcacEvaluationVisibility_'), context);
 vm.runInContext(functionSource(assessment, 'onKcacParticipantSelected_'), context);
 
 context.onKcacParticipantSelected_();
@@ -72,10 +75,17 @@ assert.equal(elements['kcac-jar-evaluation-panel'].style.display, '');
 assert.equal(syncCount, 2);
 
 context._selComp.currentRound = '결선';
+context._kcac.jars = [{type:'final-sensory'},{type:'final-sensory'}];
 context.onKcacParticipantSelected_();
 assert.equal(elements['kcac-evaluation-body'].style.display, '');
 assert.equal(elements['kcac-cup-nav'].style.display, '');
 assert.equal(elements['kcac-milk-pattern-setup'].style.display, 'none');
 assert.equal(syncCount, 2);
+
+context._kcac.jars = [{type:'final-pattern'}];
+context.onKcacParticipantSelected_();
+assert.equal(elements['kcac-cup-nav'].style.display, 'none');
+assert.equal(elements['kcac-submit-dock'].style.display, 'block');
+assert.equal(elements['kcac-evaluation-body'].style.display, '');
 
 process.stdout.write('Stage177 KCAC participant-first evaluation gate tests passed.\n');

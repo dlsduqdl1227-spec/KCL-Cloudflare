@@ -12539,18 +12539,8 @@ var KCAC_SMART_TAGS = {
       '긍정':['주제 요소 식별 가능','창작 의도 시각화 확인','주제와 패턴 연결 확인','설명 없이 식별 가능'],
       '보완':['주제 요소 불명확','주제와 패턴 연결 약함','설명 의존도 높음']
     },
-    '완성도': {
-      '긍정':['패턴 구조 완성','세부 구성 안정','디자인 밀도 적정'],
-      '보완':['패턴 구조 일부 미완성','세부 구성 흔들림','디자인 밀도 부족','형성 실패 요소 확인']
-    },
-    '표면': {
-      '긍정':['크레마 대비 선명','표면 선명','번짐 없음'],
-      '보완':['크레마 대비 약함','표면 선명도 부족','번짐 확인','기포 확인','표면 거침 확인']
-    },
-    '위치': {
-      '긍정':['중심 배치 확인','좌우 균형 유지','대칭축 유지','시각적 안정성 확인'],
-      '보완':['중심 배치 이탈','좌우 균형 이탈','대칭축 이탈','배치 불안정']
-    },
+    // 공통 시각 평가 태그는 아래에서 예선 원본으로 구성합니다.
+    // 결선 전용 항목만 별도로 정의하며, 저장된 기존 선택값은 그대로 유지합니다.
     '작업수행': {
       '긍정':['작업 동선 연속','붓기 흐름 안정','장비 사용 안정','제출 전 마감 확인'],
       '보완':['작업 동선 중단','붓기 흐름 흔들림','장비 조작 지연','작업 혼선 확인']
@@ -12575,13 +12565,14 @@ var KCAC_SMART_TAGS = {
 function kcacInheritFinalPatternTags_() {
   var mapping = {완성도:['완성도'], 표면:['표면','선명도'], 위치:['균형','위치']};
   Object.keys(mapping).forEach(function(key){
+    KCAC_SMART_TAGS.finalPattern[key] = {};
     ['긍정','보완'].forEach(function(polarity){
       var inherited = [];
       mapping[key].forEach(function(source){ inherited = inherited.concat(KCAC_SMART_TAGS.qual[source][polarity] || []); });
       // Creative final patterns are not necessarily rosettas. Keep generic
       // observations, not preliminary-only leaf/central-stem requirements.
       inherited = inherited.filter(function(tag){ return !/리프|중심줄기/.test(tag); });
-      KCAC_SMART_TAGS.finalPattern[key][polarity] = Array.from(new Set(inherited.concat(KCAC_SMART_TAGS.finalPattern[key][polarity] || [])));
+      KCAC_SMART_TAGS.finalPattern[key][polarity] = Array.from(new Set(inherited));
     });
   });
 }
@@ -12814,30 +12805,36 @@ function syncKcacMilkPatternSelectors_() {
   refreshKcacCurrentCupAssignment_(_kcac.jars[Number(_kcac.currentIdx)]);
 }
 
-function onKcacParticipantSelected_() {
-  var setup = document.getElementById('kcac-milk-pattern-setup');
-  var body = document.getElementById('kcac-evaluation-body');
+function syncKcacEvaluationVisibility_() {
   var nav = document.getElementById('kcac-cup-nav');
+  var body = document.getElementById('kcac-evaluation-body');
+  var setup = document.getElementById('kcac-milk-pattern-setup');
   var submitDock = document.getElementById('kcac-submit-dock');
+  var panel = document.getElementById('kcac-jar-evaluation-panel');
   var num = document.getElementById('kcac-num');
-  var completeBadge = document.getElementById('kcac-participant-complete');
-  var isQual = normalizeKcacRoundDisplay_((_selComp && _selComp.currentRound) || '') !== '결선';
   var hasParticipant = !!(num && String(num.value || '').trim());
-  var showMilkSetup = !!(hasParticipant && isQual);
-  var hasCupOrder = !isQual || kcacValidQualPattern_(String((_kcac && _kcac.qualFirstPattern) || ''));
-  var assignment = num ? participantAssignmentByNumber_('KCAC', num.value) : null;
+  var isQual = kcacIsUnifiedQualComment_();
+  var hasCupOrder = _kcac.jars.length > 0 && (!isQual || kcacValidQualPattern_(String(_kcac.qualFirstPattern || '')));
+  var showMilkSetup = hasParticipant && isQual;
+  // 한 잔인 결선 패턴평가는 이동할 컵이 없습니다. 제출·코멘트 영역은 별도로 유지합니다.
+  if (nav) nav.style.display = hasParticipant && hasCupOrder && _kcac.jars.length > 1 ? '' : 'none';
   if (body) body.style.display = hasParticipant ? '' : 'none';
-  if (nav) nav.style.display = hasParticipant && hasCupOrder ? '' : 'none';
-  // CSS 기본값은 숨김이므로, 참가자 선택 뒤에는 명시적으로 표시해야 모바일에서도 유지됩니다.
   if (submitDock) submitDock.style.display = hasParticipant && hasCupOrder ? 'block' : 'none';
   if (setup) setup.style.display = showMilkSetup ? 'block' : 'none';
+  if (isQual && panel) panel.style.display = hasCupOrder && !_kcac.overallMode ? '' : 'none';
+  return {showMilkSetup:showMilkSetup, hasCupOrder:hasCupOrder};
+}
+
+function onKcacParticipantSelected_() {
+  var visibility = syncKcacEvaluationVisibility_();
+  var num = document.getElementById('kcac-num');
+  var completeBadge = document.getElementById('kcac-participant-complete');
+  var assignment = num ? participantAssignmentByNumber_('KCAC', num.value) : null;
   if (completeBadge) completeBadge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
-  if (showMilkSetup) {
+  if (visibility.showMilkSetup) {
     if (typeof kcacApplyProvidedPhotosForParticipant_ === 'function') kcacApplyProvidedPhotosForParticipant_();
     syncKcacMilkPatternSelectors_();
-    var panel = document.getElementById('kcac-jar-evaluation-panel');
-    if (panel) panel.style.display = hasCupOrder ? '' : 'none';
-    if (hasCupOrder && typeof _kcac !== 'undefined' && _kcac.jars.length) loadKcacJar(_kcac.currentIdx);
+    if (visibility.hasCupOrder) loadKcacJar(_kcac.currentIdx);
   }
 }
 
@@ -12860,10 +12857,9 @@ function setKcacQualFirstPattern_(patternType) {
   if (targetIndex < 0) return;
   _kcac.currentIdx = targetIndex;
   if (typeof kcacApplyProvidedPhotosForParticipant_ === 'function') kcacApplyProvidedPhotosForParticipant_();
-  var nav = document.getElementById('kcac-cup-nav');
   var submitDock = document.getElementById('kcac-submit-dock');
   var panel = document.getElementById('kcac-jar-evaluation-panel');
-  if (nav) nav.style.display = '';
+  syncKcacEvaluationVisibility_();
   if (submitDock) submitDock.style.display = 'block';
   if (panel) panel.style.display = '';
   loadKcacJar(targetIndex);
@@ -13322,6 +13318,7 @@ function moveKcacCup_(direction) {
 }
 function renderKcacCupNav() {
   var nav = document.getElementById('kcac-cup-nav');
+  syncKcacEvaluationVisibility_();
   var overview = document.getElementById('kcac-cup-overview');
   overview.innerHTML = '';
   var sub = nav.querySelector('.submit-btn-nav');
@@ -13440,7 +13437,7 @@ function loadKcacJar(idx) {
   _kcac.currentIdx = idx;
   var j = _kcac.jars[idx];
   kcacCleanPatternSpecificSmartTags_(j);
-  document.getElementById('kcac-cup-title').textContent = '현재: ' + kcacCupFullLabel(j);
+  document.getElementById('kcac-cup-title').textContent = j.type === 'final-pattern' ? '패턴평가' : '현재: ' + kcacCupFullLabel(j);
   document.getElementById('kcac-comment').value = kcacIsUnifiedQualComment_() ? (_kcac.overallComment || '') : (j.comment || '');
   setCommentWarning('kcac-comment-warning', kcacIsUnifiedQualComment_() ? _kcac.overallGeneratedComment : j.generatedComment, kcacIsUnifiedQualComment_() ? _kcac.overallCommentEdited : j.commentEdited);
 
@@ -19993,6 +19990,9 @@ function kclRestoreDraftForCode_(code, draft) {
     // KCR inputs were rendered from cup identity above; a stale DOM snapshot
     // must never copy the formerly selected cup into a different current cup.
     if (code !== 'KCR') kclApplyFormValues_(draft.form);
+    // Restored participant fields do not dispatch change events. Reveal the
+    // restored KCAC form without reloading photos or modifying saved cup data.
+    if (code === 'KCAC' && draft.state.kcac) syncKcacEvaluationVisibility_();
     restored = true;
     kclDraftStatus_('이전 작성 내용 복원 완료');
   } catch(e) {

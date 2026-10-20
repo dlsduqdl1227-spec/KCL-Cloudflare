@@ -46,6 +46,24 @@ assert.ok(!qual['선명도']['보완'].includes('리프 경계 뭉개짐'));
 assert.ok(!qual['선명도']['보완'].includes('패턴 식별 어려움'));
 assert.doesNotMatch(assessment, /['"]레마 얼룩있음['"]/);
 
+// Finals reuse the established preliminary observations, not a second synonym list.
+// Rosetta-only leaves/stems are not requirements of a creative final pattern.
+const finalPattern = context.KCAC_SMART_TAGS.finalPattern;
+const mapping = {완성도:['완성도'], 표면:['표면','선명도'], 위치:['균형','위치']};
+for (const [key, sources] of Object.entries(mapping)) {
+  for (const tone of ['긍정','보완']) {
+    const expected = [...new Set(sources.flatMap(source => Array.from(qual[source][tone]))
+      .filter(tag => !/리프|중심줄기/.test(tag)))];
+    assert.deepEqual(Array.from(finalPattern[key][tone]), expected, key + ' ' + tone);
+  }
+}
+assert.ok(finalPattern.주제표현.긍정.includes('주제 요소 식별 가능'));
+assert.ok(finalPattern.작업수행.긍정.includes('붓기 흐름 안정'));
+assert.ok(finalPattern.청결.긍정.includes('컵 외부 청결'));
+const originalTaxonomy = JSON.stringify(context.KCAC_SMART_TAGS);
+context.kcacInheritFinalPatternTags_();
+assert.equal(JSON.stringify(context.KCAC_SMART_TAGS), originalTaxonomy, 'inheritance is idempotent and never rewrites preliminaries');
+
 const migrationContext = { smartTagDedupeList_:items=>Array.from(new Set(items)) };
 vm.createContext(migrationContext);
 vm.runInContext(functionSource(assessment, 'kcacMigrateQualSmartTagAssignments_'), migrationContext);
