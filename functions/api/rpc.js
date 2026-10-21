@@ -1660,8 +1660,8 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
     .bind(
       safeStr(payload.name) || current.name,
       nextRound,
-      boolInt(!!payload.isActive),
-      boolInt(!!payload.debriefing),
+      Object.prototype.hasOwnProperty.call(payload, 'isActive') ? boolInt(!!payload.isActive) : current.is_active,
+      Object.prototype.hasOwnProperty.call(payload, 'debriefing') ? boolInt(!!payload.debriefing) : current.debriefing,
       JSON.stringify(nextOptions),
       nowIso(), code
     ).run();
