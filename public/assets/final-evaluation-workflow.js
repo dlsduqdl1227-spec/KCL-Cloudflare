@@ -46,10 +46,19 @@ function renderFinalEvaluationList_(list,code){
   document.getElementById('review-nav-summary').textContent='제출 즉시 순위 반영';
   var wrap=document.getElementById('review-list');wrap.innerHTML='';
   if(!visible.length){wrap.innerHTML='<p style="padding:24px;text-align:center;color:var(--muted)">'+(showSubmitted?'이 회차에 제출된 평가가 없습니다.':'반려된 평가가 없습니다.')+'</p>';return;}
+  if(code==='KCR'){
+    renderKcrOfficialReviewOverview_(visible,code,_reviewState.headers,0,renderFinalEvaluationRows_);
+    return;
+  }
+  renderFinalEvaluationRows_(visible,code,wrap);
+}
+function renderFinalEvaluationRows_(visible,code,wrap){
+  var manager=reviewManageScopeForCode_(code);
+  wrap.innerHTML='';
   buildGroupedReviewItems_(visible,code).forEach(function(item){
     var group=finalCorrectionItems_(item),pending=group.filter(function(x){return x.status==='반려';});
     var row=document.createElement('div');row.className='review-item review-actual';
-    var title=reviewGroupTitle_(item,code),judge=item['심사위원명']||item.judgeName||'';
+    var title=code==='KCR'?'컵 '+(item.unit||item['컵번호']||'')+'번':reviewGroupTitle_(item,code),judge=item['심사위원명']||item.judgeName||'';
     var reason=Array.from(new Set(pending.map(function(x){return x.returnReason;}).filter(Boolean))).join(' / ');
     row.innerHTML='<div style="min-width:0;flex:1">'+reviewCategoryBadgeHtml_(item,code)+'<div class="review-info-name">'+escHtml(title)+'</div><div class="review-info-sub">'+escHtml(judge)+' · '+escHtml(String(item['총점'] ?? item.totalScore ?? '-'))+'점</div>'+(reason?'<p class="final-return-reason" style="color:#ffbf80;white-space:pre-wrap;overflow-wrap:anywhere">반려 사유: '+escHtml(reason)+'</p>':'')+'</div><div class="review-actions"><button type="button" class="review-edit-btn">'+(code==='KCR'?'검수/수정':pending.length?'반려 내용 수정':'내용 확인')+'</button>'+(manager&&group.some(function(x){return x.status!=='반려';})?'<button type="button" class="review-status-btn final-return-btn">반려</button>':'')+'</div>';
     row.querySelector('.review-edit-btn').onclick=function(){
