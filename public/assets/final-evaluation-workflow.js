@@ -1,4 +1,4 @@
-// Finals: submit -> ranking; only a manager-returned evaluation can be corrected.
+// Finals: submit -> ranking. KCR supports own corrections; other competitions require return.
 function finalRoundForCode_(code) {
   var cfg=_selComp && _selComp.code===code?_selComp:(_configs||[]).find(function(c){return c.code===code;});
   return cfg && ['본선','결선'].includes(cfg.currentRound)?cfg.currentRound:'';
@@ -14,6 +14,8 @@ function finalDraftKey_(item) {
 }
 var _finalCorrectionDrafts={};
 var _finalCorrectionSaving=false;
+function canCorrectFinalItem_(item){return !!(item&&item.finalWorkflow&&!item.stationClosed&&(_reviewState.code==='KCR'||item.status==='반려'));}
+function finalCorrectionSaveLabel_(){return _reviewState.code==='KCR'?'수정완료':'수정 후 재제출';}
 function finalCorrectionItems_(item){var items=reviewGroupItems_(item);return items.length?items:[item];}
 function readFinalDraft_(item){
   var key=finalDraftKey_(item);
@@ -22,36 +24,36 @@ function readFinalDraft_(item){
 }
 function saveFinalCorrectionDraft_(){
   var item=_reviewState.current;
-  if(!item||!item.finalWorkflow||item.status!=='반려'||_finalCorrectionSaving)return false;
+  if(!canCorrectFinalItem_(item)||_finalCorrectionSaving)return false;
   syncReviewControlsFromDom_();if(!normalizeReviewNumbers())return false;
   var updates=collectReviewUpdates(),key=finalDraftKey_(item);
   _finalCorrectionDrafts[key]=updates;
   applyReviewSavedState_(item,_reviewState.headers,updates,null);
   _reviewDraftDirty=true;
-  try{localStorage.setItem(key,JSON.stringify(updates));setReviewAutoSaveState('이 기기에 임시저장됨 · 수정 후 재제출을 눌러 완료하세요.','review-autosaved');}
-  catch(e){setReviewAutoSaveState('화면에 변경 내용을 유지했습니다. 기기 저장 공간을 확인하고 재제출해주세요.','review-autosave-error');}
+  try{localStorage.setItem(key,JSON.stringify(updates));setReviewAutoSaveState('이 기기에 임시저장됨 · '+finalCorrectionSaveLabel_()+'를 눌러 저장하세요.','review-autosaved');}
+  catch(e){setReviewAutoSaveState('화면에 변경 내용을 유지했습니다. 기기 저장 공간을 확인하고 '+finalCorrectionSaveLabel_()+'를 눌러주세요.','review-autosave-error');}
   return true;
 }
 function renderFinalEvaluationList_(list,code){
   var manager=reviewManageScopeForCode_(code),round=_reviewState.finalRound;
   var scoped=list.filter(function(item){return item.finalWorkflow&&item.round===round;});
   var returned=scoped.filter(function(item){return item.status==='반려';});
-  var visible=manager?scoped:returned;
-  document.getElementById('review-title').textContent=(_reviewState.name||code)+' · '+(manager?'평가 관리':'반려된 평가 수정');
-  document.getElementById('review-stat').textContent=competitionRoundLabel_(code,round)+' · '+(manager?'평가완료 '+(scoped.length-returned.length)+'건 · ':'')+'반려 '+returned.length+'건';
-  document.getElementById('review-total-label').textContent=manager?'제출':'반려';
-  document.getElementById('review-count-val').textContent=(manager?scoped.length:returned.length)+'건';
+  var showSubmitted=manager||code==='KCR',visible=showSubmitted?scoped:returned;
+  document.getElementById('review-title').textContent=(_reviewState.name||code)+' · '+(manager?'평가 관리':code==='KCR'?'내평가검수':'반려된 평가 수정');
+  document.getElementById('review-stat').textContent=competitionRoundLabel_(code,round)+' · '+(showSubmitted?'평가완료 '+(scoped.length-returned.length)+'건 · ':'')+'반려 '+returned.length+'건';
+  document.getElementById('review-total-label').textContent=showSubmitted?'제출':'반려';
+  document.getElementById('review-count-val').textContent=(showSubmitted?scoped.length:returned.length)+'건';
   document.getElementById('review-nav-summary').textContent='제출 즉시 순위 반영';
   var wrap=document.getElementById('review-list');wrap.innerHTML='';
-  if(!visible.length){wrap.innerHTML='<p style="padding:24px;text-align:center;color:var(--muted)">'+(manager?'이 회차에 제출된 평가가 없습니다.':'반려된 평가가 없습니다.')+'</p>';return;}
+  if(!visible.length){wrap.innerHTML='<p style="padding:24px;text-align:center;color:var(--muted)">'+(showSubmitted?'이 회차에 제출된 평가가 없습니다.':'반려된 평가가 없습니다.')+'</p>';return;}
   buildGroupedReviewItems_(visible,code).forEach(function(item){
     var group=finalCorrectionItems_(item),pending=group.filter(function(x){return x.status==='반려';});
     var row=document.createElement('div');row.className='review-item review-actual';
     var title=reviewGroupTitle_(item,code),judge=item['심사위원명']||item.judgeName||'';
     var reason=Array.from(new Set(pending.map(function(x){return x.returnReason;}).filter(Boolean))).join(' / ');
-    row.innerHTML='<div style="min-width:0;flex:1">'+reviewCategoryBadgeHtml_(item,code)+'<div class="review-info-name">'+escHtml(title)+'</div><div class="review-info-sub">'+escHtml(judge)+' · '+escHtml(String(item['총점'] ?? item.totalScore ?? '-'))+'점</div>'+(reason?'<p class="final-return-reason" style="color:#ffbf80;white-space:pre-wrap;overflow-wrap:anywhere">반려 사유: '+escHtml(reason)+'</p>':'')+'</div><div class="review-actions"><button type="button" class="review-edit-btn">'+(pending.length?'반려 내용 수정':'내용 확인')+'</button>'+(manager&&group.some(function(x){return x.status!=='반려';})?'<button type="button" class="review-status-btn final-return-btn">반려</button>':'')+'</div>';
+    row.innerHTML='<div style="min-width:0;flex:1">'+reviewCategoryBadgeHtml_(item,code)+'<div class="review-info-name">'+escHtml(title)+'</div><div class="review-info-sub">'+escHtml(judge)+' · '+escHtml(String(item['총점'] ?? item.totalScore ?? '-'))+'점</div>'+(reason?'<p class="final-return-reason" style="color:#ffbf80;white-space:pre-wrap;overflow-wrap:anywhere">반려 사유: '+escHtml(reason)+'</p>':'')+'</div><div class="review-actions"><button type="button" class="review-edit-btn">'+(code==='KCR'?'검수/수정':pending.length?'반려 내용 수정':'내용 확인')+'</button>'+(manager&&group.some(function(x){return x.status!=='반려';})?'<button type="button" class="review-status-btn final-return-btn">반려</button>':'')+'</div>';
     row.querySelector('.review-edit-btn').onclick=function(){
-      var items=pending.length?pending:group,target=Object.assign({},items[0],{_reviewGroupItems:items});
+      var items=code==='KCR'?group:pending.length?pending:group,target=Object.assign({},items[0],{_reviewGroupItems:items});
       openFinalCorrection_(target);
     };
     var button=row.querySelector('.final-return-btn');if(button)button.onclick=function(){returnFinalEvaluationUi_(group.filter(function(x){return x.status!=='반려';}),button);};
@@ -72,31 +74,31 @@ function returnFinalEvaluationUi_(items,button){
 }
 function openFinalCorrection_(item){
   clearTimeout(_reviewAutoSaveTimer);_reviewAutoSaveTimer=null;_reviewDraftDirty=false;
-  finalCorrectionItems_(item).forEach(function(x){if(x.status==='반려')applyReviewSavedState_(x,_reviewState.headers,readFinalDraft_(x),null);});
-  if(item.status==='반려')applyReviewSavedState_(item,_reviewState.headers,readFinalDraft_(item),null);
+  finalCorrectionItems_(item).forEach(function(x){if(canCorrectFinalItem_(x))applyReviewSavedState_(x,_reviewState.headers,readFinalDraft_(x),null);});
+  if(canCorrectFinalItem_(item))applyReviewSavedState_(item,_reviewState.headers,readFinalDraft_(item),null);
   openReviewEdit(item);
 }
 function configureFinalCorrectionEditor_(item){
-  var editable=item.status==='반려';
-  document.getElementById('review-edit-title').textContent=(_reviewState.name||_reviewState.code)+' · '+(editable?'반려 내용 수정':'제출된 평가');
+  var editable=canCorrectFinalItem_(item),kcr=_reviewState.code==='KCR';
+  document.getElementById('review-edit-title').textContent=(_reviewState.name||_reviewState.code)+' · '+(editable?(kcr?'평가 검수/수정':'반려 내용 수정'):'제출된 평가');
   document.getElementById('review-edit-sub').textContent=reviewGroupTitle_(item,_reviewState.code)+' · '+competitionRoundLabel_(_reviewState.code,item.round)+' · '+item.status;
   document.getElementById('review-edit-status-chip').textContent=item.status;
-  document.getElementById('review-edit-help').textContent=editable?'종이 평가표와 대조해 반려된 내용을 수정한 뒤 재제출해주세요.':'제출된 종이 평가표 입력 내용입니다. 점수와 코멘트는 읽기 전용입니다.';
+  document.getElementById('review-edit-help').textContent=editable?(kcr?'제출한 평가를 수정한 뒤 수정완료를 누르면 저장되고 순위에 반영됩니다.':'종이 평가표와 대조해 반려된 내용을 수정한 뒤 재제출해주세요.'):'제출된 종이 평가표 입력 내용입니다. 점수와 코멘트는 읽기 전용입니다.';
   document.getElementById('review-edit-help').style.display='block';
   ['review-edit-save-complete','review-edit-delete','review-edit-enable'].forEach(function(id){var el=document.getElementById(id);if(el)el.style.display='none';});
-  var save=document.getElementById('review-edit-save-only');if(save){save.style.display=editable?'block':'none';save.textContent='수정 후 재제출';}
+  var save=document.getElementById('review-edit-save-only');if(save){save.style.display=editable?'block':'none';save.textContent=finalCorrectionSaveLabel_();}
   var sticky=document.getElementById('review-edit-sticky-actions');
-  if(sticky){sticky.style.display=editable?'grid':'none';sticky.style.gridTemplateColumns='1fr';sticky.querySelectorAll('button').forEach(function(button){if(button.classList.contains('complete-primary'))button.style.display='none';else button.textContent='수정 후 재제출';});}
+  if(sticky){sticky.style.display=editable?'grid':'none';sticky.style.gridTemplateColumns='1fr';sticky.querySelectorAll('button').forEach(function(button){if(button.classList.contains('complete-primary'))button.style.display='none';else button.textContent=finalCorrectionSaveLabel_();});}
   if(!editable)document.querySelectorAll('#review-edit-fields input,#review-edit-fields textarea,#review-edit-fields select,#review-edit-fields button:not(.review-eval-like-tab)').forEach(function(el){el.disabled=true;});
   var previous=document.getElementById('final-return-editor-note');if(previous)previous.remove();
   if(item.returnReason){var note=document.createElement('p');note.id='final-return-editor-note';note.textContent='반려 사유: '+item.returnReason;note.style.cssText='padding:12px;color:#ffbf80;white-space:pre-wrap;overflow-wrap:anywhere';document.getElementById('review-edit-fields').prepend(note);}
-  setReviewAutoSaveState(editable?'수정 내용은 이 기기에 임시저장되며 재제출 시 즉시 순위에 반영됩니다.':'평가완료 · 순위 반영 중 · 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.','review-autosaved');
+  setReviewAutoSaveState(editable?'수정 내용은 이 기기에 임시저장되며 '+finalCorrectionSaveLabel_()+' 시 즉시 순위에 반영됩니다.':'평가완료 · 순위 반영 중 · 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.','review-autosaved');
 }
 function submitFinalCorrection_(){
-  var item=_reviewState.current;if(!item||item.status!=='반려'||_finalCorrectionSaving)return;
+  var item=_reviewState.current;if(!canCorrectFinalItem_(item)||_finalCorrectionSaving)return;
   if(!saveFinalCorrectionDraft_())return;
-  var items=finalCorrectionItems_(item).filter(function(x){return x.status==='반려';});
-  if(!confirm('수정한 평가를 재제출할까요?\n제출 즉시 저장되고 순위에 반영됩니다.'))return;
+  var items=finalCorrectionItems_(item).filter(canCorrectFinalItem_);
+  if(!confirm((_reviewState.code==='KCR'?'수정한 평가를 저장할까요?':'수정한 평가를 재제출할까요?')+'\n저장 즉시 순위에 반영됩니다.'))return;
   _finalCorrectionSaving=true;showOverlay();
   var code=_reviewState.code,round=item.round,name=_reviewState.name,back=_reviewState.backPanel,token=_judge.judgeToken;
   var draftKeys=items.map(finalDraftKey_);

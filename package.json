@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kcr-final-correction": "node tests/stage256-kcr-final-direct-correction.test.mjs && node tests/stage256-kcr-final-correction-browser.test.mjs",
     "test:api-safety": "node tests/stage255-api-response-safety.test.mjs",
     "test:kcac-review-catalog": "node tests/stage255-kcac-review-catalog-browser.test.mjs",
     "test:operating-ux": "node tests/stage250-operating-health-comments.test.mjs && node tests/stage251-cup-touch-browser.test.mjs",

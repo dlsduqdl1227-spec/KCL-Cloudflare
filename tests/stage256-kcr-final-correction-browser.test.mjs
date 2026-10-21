@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {createRpcFixture} from './helpers/rpc-fixture.mjs';
+import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {seedKcrStations,stationSubmission} from './helpers/kcr-station-fixture.mjs';
+const api=await createRpcFixture(),qa=await createBrowserFixture({apiHandler:api.handle});
+fs.mkdirSync('tmp/stage256-qa',{recursive:true});
+try{
+ const {stations,judges}=await seedKcrStations(api),head=judges[0];
+ await api.rpc('submitScores',stationSubmission(head,stations[1],21));
+ const finalStation={...stations[1],start:201,end:208};
+ await api.rpc('updateCompetitionAdminSettings',{code:'KCR',currentRound:'결선',isActive:true,optionSettings:{kcrProcesses:{blending:true},kcrStations:{byRound:{예선:stations,결선:[finalStation]},stations:[finalStation]}}},api.actor);
+ for(let n=201;n<=208;n++)await api.rpc('upsertParticipant',{competitionCode:'KCR',name:'숨겨야 하는 선수 '+n,affiliation:'숨겨야 하는 소속',uniqueNo:String(n),finalCupNo:String(n)},api.actor);
+ const submission={...stationSubmission(head,finalStation,21),round:'결선'};
+ submission.rows.forEach(r=>Object.assign(r.extraFields,{'Flavor(플레이버)':3,'Aftertaste(에프터테이스트)':3,'Acidity(산미)':3,'Sweetness(단맛) ×2':3,'Mouthfeel(마우스필)':3,'Overall(오버롤)':3,'Flavor 스마트태그':'블루베리',종합코멘트:'원본 '+r.data[0]}));
+ await api.rpc('submitScores',submission);
+ await api.rpc('submitScores',{...submission,judgeToken:judges[1].judgeToken});
+ const target=api.db.prepare("SELECT * FROM scores WHERE competition_code='KCR' AND round='결선' AND unit='201' AND judge_name=?").get(head.name);
+ const otherRows=JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id<>? ORDER BY id').all(target.id));
+ const config=(await api.rpc('getConfig')).configs;
+ for(const width of [390,1440]){
+  const page=await qa.page(width);await page.goto(qa.origin+'/assessment/');
+  await page.evaluate(({actor,config})=>{_judge=actor;_configs=config;_selComp=config.find(x=>x.code==='KCR');hideOverlay();_reviewCalibrationOnly=false;goReviewByCode('KCR','KCR','pSelect');},{actor:head,config});
+  await page.locator('#review-list .review-edit-btn').first().waitFor();
+  assert.equal(await page.locator('#review-list .review-edit-btn').count(),8,'eight own final cups are listed');
+  assert.match(await page.locator('#review-title').innerText(),/내평가검수/);
+  assert.equal(await page.locator('#review-count-val').innerText(),'8건');
+  assert.doesNotMatch(await page.locator('#review-list').innerText(),/숨겨야 하는|반려된 평가가 없습니다/);
+  assert.equal(await page.locator('.final-return-btn').count(),0);
+  const row=page.locator('#review-list .review-item').filter({hasText:'201 ~ 201'});
+  await row.locator('.review-edit-btn').click();
+  assert.equal(await page.locator('#review-edit-save-only').innerText(),'수정완료');
+  assert.equal(await page.locator('#review-edit-sticky-actions .save-primary').isVisible(),true,'save visible on mobile');
+  assert.equal(await page.evaluate(()=>canReviewEditDetails()),true);
+  assert.equal(await page.locator('.kcr-review-comparison').count(),1,'head comparison still available');
+  const ci=await page.evaluate(()=>_reviewState.headers.indexOf('종합코멘트'));
+  const comment=page.locator('#review-edit-fields textarea[data-col="'+ci+'"]');
+  const before=JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id=?').get(target.id));
+  await comment.fill('결선 코멘트 수정 '+width);
+  await page.waitForFunction(()=>_reviewDraftDirty);
+  await page.evaluate(()=>backToReviewList());await row.locator('.review-edit-btn').click();
+  assert.equal(await comment.inputValue(),'결선 코멘트 수정 '+width,'draft survives reopening');
+  assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id=?').get(target.id)),before,'typing does not mutate live score');
+  assert.equal((await inspectPage(page)).pageOverflow,false);
+  await page.screenshot({path:'tmp/stage256-qa/kcr-final-edit-'+width+'.png'});
+  let saved=page.waitForResponse(r=>r.request().postDataJSON()?.action==='resubmitFinalEvaluations');
+  await page.locator('#review-edit-sticky-actions .save-primary').click();assert.equal((await(await saved).json()).success,true);
+  await page.waitForFunction(()=>activePanelId_()==='pReview'&&document.querySelectorAll('#review-list .review-edit-btn').length===8);
+  let record=api.db.prepare('SELECT * FROM scores WHERE id=?').get(target.id);
+  assert.equal(record.total_score,target.total_score);
+  assert.equal(JSON.parse(record.payload_json).rows[0].extraFields.종합코멘트,'결선 코멘트 수정 '+width);
+  assert.equal(JSON.parse(record.payload_json).rows[0].extraFields.점수잠금,'{"flavor":true}');
+  assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores WHERE id<>? ORDER BY id').all(target.id)),otherRows,'other cups/judges/preliminary unchanged');
+  // A second correction must remain possible with the new revision, including a score change.
+  await row.locator('.review-edit-btn').click();
+  const fi=await page.evaluate(()=>_reviewState.headers.indexOf('Flavor(플레이버)'));
+  const score=page.locator('#review-eval-range-'+fi);
+  await score.fill('3.4');await score.dispatchEvent('change');
+  assert.equal(await page.evaluate(i=>collectReviewUpdates()[i],fi),'3.4','score control value reaches saved payload');
+  saved=page.waitForResponse(r=>r.request().postDataJSON()?.action==='resubmitFinalEvaluations');
+  await page.locator('#review-edit-sticky-actions .save-primary').click();assert.equal((await(await saved).json()).success,true);
+  await page.waitForFunction(()=>activePanelId_()==='pReview');
+  record=api.db.prepare('SELECT * FROM scores WHERE id=?').get(target.id);assert.equal(record.total_score,21.4);
+  // Reset only this disposable fixture's score via the same authenticated correction for next viewport.
+  const list=await api.rpc('getReviewList','KCR',{...head,round:'결선'}),current=list.list.find(x=>x.scoreRowId===target.id);
+  await api.rpc('resubmitFinalEvaluations',{competitionCode:'KCR',round:'결선',entries:[{rowIndex:current.rowIndex,revision:current.finalRevision,updates:{[fi]:3}}]},head);
+  assert.deepEqual(page.qaErrors,[]);await page.close();
+  console.log('Stage256 KCR head final correction UI passed at '+width+'px: own 8 cups, drafts, comment/score saves, repeat edit and data preservation.');
+ }
+}finally{await qa.close();api.close();}

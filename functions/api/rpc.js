@@ -5327,7 +5327,9 @@ async function getReviewList(env, competitionCode, actorArg) {
   const requestedRound=safeStr(actorArg && actorArg.round);
   if(['본선','결선'].includes(requestedRound) && !calibrationOnly){
     list=list.filter(item=>item.round===requestedRound && !isCalibrationMode_(item.mode || item['모드']));
-    if(actorArg.returnedOnly && !manager)list=list.filter(returnedEvaluation_);
+    // KCR judges may correct their own final submissions without a manager return.
+    // Keep this compatible with already-open clients still sending returnedOnly.
+    if(actorArg.returnedOnly && !manager && code!=='KCR')list=list.filter(returnedEvaluation_);
   }
   return {
     success: true,
@@ -5365,7 +5367,7 @@ async function finalCorrectionContext_(env, request, actorArg, returning) {
     if(!manager && !canReviewScoreRow_(row,auth.actor,code,false))return {success:false,message:'본인이 제출한 평가만 수정할 수 있습니다.'};
     if(station&&!ikrcScoreBelongsToStationServer_(row,station))return {success:false,message:'담당 스테이션 평가만 처리할 수 있습니다.'};
     if(entry.revision!==await finalEvaluationRevision_(row))return {success:false,message:'평가가 변경되었습니다. 목록을 새로고침한 뒤 다시 확인해주세요.'};
-    if(returning?returnedEvaluation_(row):!returnedEvaluation_(row))return {success:false,message:returning?'이미 반려된 평가입니다.':'반려된 평가만 재제출할 수 있습니다.'};
+    if(returning?returnedEvaluation_(row):(code!=='KCR'&&!returnedEvaluation_(row)))return {success:false,message:returning?'이미 반려된 평가입니다.':'반려된 평가만 재제출할 수 있습니다.'};
     originals.set(id,row);
   }
   return {success:true,code,actor:auth.actor,originals,entries};
@@ -5416,7 +5418,7 @@ async function resubmitFinalEvaluations(env,request,actorArg){
     changed.set(id,{...row,payload_json:JSON.stringify(payload)});
   }
   if(!await commitFinalCorrection_(env,context.code,context.originals,changed,'검수완료'))return {success:false,message:'동시에 변경된 평가가 있어 저장하지 않았습니다. 입력 내용은 유지하고 최신 평가를 확인해주세요.'};
-  return {success:true,message:'재제출 완료 · 순위에 반영되었습니다.',status:'평가완료',count:changed.size};
+  return {success:true,message:context.code==='KCR'?'수정 완료 · 순위에 반영되었습니다.':'재제출 완료 · 순위에 반영되었습니다.',status:'평가완료',count:changed.size};
 }
 async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatus, roleText, actorArg, finalPreparation = null) {
   const code = safeStr(competitionCode).toUpperCase();
@@ -5429,7 +5431,7 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   const payloadRowIndex = Math.max(0, Number(ref.payloadRowIndex) || 0);
   const current = finalPreparation?.current || await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id, code).first();
   if (!current) return { success: false, message: '수정할 데이터를 찾지 못했습니다.' };
-  if (finalOfficialEvaluation_(current) && !finalPreparation) return {success:false,message:'본·결선 평가 수정은 팀장·관리자의 반려 후 반려된 평가 수정에서 재제출해주세요.'};
+  if (finalOfficialEvaluation_(current) && !finalPreparation) return {success:false,message:code==='KCR'?'최신 내평가검수 화면에서 해당 평가를 다시 열어 수정완료를 눌러주세요. 입력 중인 화면은 그대로 두고 새 탭을 이용해주세요.':'본·결선 평가 수정은 팀장·관리자의 반려 후 반려된 평가 수정에서 재제출해주세요.'};
   const cfg = ['IKRC','KCR'].includes(code) ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
   if (code === 'KCR' && kcrClosedScore_(current, kcrClosedPrelimStations_(cfg))) return kcrClosedResponse_();
   const managerStation = code === 'IKRC' && manager ? ikrcActorAssignedStationServer_(actor, cfg) : null;

@@ -2001,7 +2001,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/shared-sensory-tags.js?v=228"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js?v=stage255"></script>
-<script src="/assets/final-evaluation-workflow.js?v=235"></script>
+<script src="/assets/final-evaluation-workflow.js?v=256"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=235">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
@@ -5335,7 +5335,7 @@ function canReviewCode_(code) {
 }
 function canReviewEditDetails() {
   if (_reviewState.current && _reviewState.current.stationClosed) return false;
-  if (_reviewState.current && _reviewState.current.finalWorkflow) return _reviewState.current.status === '반려' && canReviewCode_(_reviewState.code);
+  if (_reviewState.current && _reviewState.current.finalWorkflow) return canCorrectFinalItem_(_reviewState.current) && canReviewCode_(_reviewState.code);
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
   if (_reviewState && _reviewState.readOnlyHeadMonitor) return false;
   if (isAdminRole()) return true;
@@ -5358,7 +5358,7 @@ function isIkrcHeadMonitor_() {
 function canOpenReviewDetails_() { return !!_reviewState.finalRound || canReviewEditAny_() || isIkrcHeadMonitor_() || (!!(_reviewState.current && _reviewState.current.stationClosed) && reviewManageScopeForCode_(_reviewState.code)); }
 function canReviewEditDisqualification_() {
   if (_reviewState.current && _reviewState.current.stationClosed) return false;
-  if (_reviewState.current && _reviewState.current.finalWorkflow && _reviewState.current.status !== '반려') return false;
+  if (_reviewState.current && _reviewState.current.finalWorkflow && !canCorrectFinalItem_(_reviewState.current)) return false;
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
   if (_reviewState && _reviewState.readOnlyHeadMonitor) return false;
   return reviewManageScopeForCode_(c);
@@ -5442,7 +5442,7 @@ function updateSelectReviewButton_() {
     var reviewButton = wrap.querySelector('[data-kcr-mode="review"]');
     if (stationButton) { stationButton.disabled = false; stationButton.textContent = '켈리브레이션'; }
     if (reviewButton) reviewButton.disabled = !canReviewCode_(code);
-    if (reviewButton) reviewButton.textContent=finalRoundForCode_(code)?'반려된 평가 수정':'내평가검수';
+    if (reviewButton) reviewButton.textContent='내평가검수';
   });
   if (seedVoteBtn) {
     var isIkrcFinal = isIkrcFinalConfig_(_selComp);
@@ -6485,7 +6485,7 @@ function renderCompList() {
             '<button type="button" data-kcr-mode="cal-station">켈리브레이션</button>' +
             ((isHeadRoleForCode_('KCR') || isAdminRole() || isTeamLeaderForCode_('KCR')) ? '<button type="button" data-kcr-mode="cal-result">켈리브레이션 확인</button>' : '') +
             '<button type="button" class="primary" data-kcr-mode="eval">대회평가</button>' +
-            '<button type="button" data-kcr-mode="review">' + (c.currentRound === '예선' ? '내평가검수' : '반려된 평가 수정') + '</button>' +
+            '<button type="button" data-kcr-mode="review">내평가검수</button>' +
           '</div>'
         : '');
     div.onclick = function() {
@@ -6638,7 +6638,7 @@ function reviewActorPayload_(code) {
     teamGroup: judgeTeamText(c),
     reviewScope: manageReview ? 'manage' : 'own',
     round:_reviewState.finalRound || '',
-    returnedOnly:!!_reviewState.finalRound && !manageReview,
+    returnedOnly:!!_reviewState.finalRound && !manageReview && c!=='KCR',
     manageReview: manageReview,
     calibrationOnly: c === 'KCR' && !!_reviewCalibrationOnly,
     teamMap: (_judge && _judge.teamMap) || {},
@@ -10376,7 +10376,7 @@ function openReviewEditLoaded_(item) {
   }
   var readOnlyHeadMonitor = isIkrcHeadMonitor_() || !!item.stationClosed;
   _reviewState.current = item;
-  document.getElementById('pReviewEdit').dataset.finalCorrection=item.finalWorkflow && item.status==='반려'?'true':'false';
+  document.getElementById('pReviewEdit').dataset.finalCorrection=canCorrectFinalItem_(item)?'true':'false';
   document.querySelector('#pReviewEdit .cup-btn-num').textContent=item.finalWorkflow?'평가 내용':'검수 상세';
   document.getElementById('review-edit-save-only').textContent='수정완료';
   document.querySelector('#review-edit-sticky-actions .save-primary').textContent='수정완료';
@@ -10454,7 +10454,7 @@ function openReviewEditLoaded_(item) {
       wrap.appendChild(lockInput);
       return;
     }
-    if (String(_reviewState.code || '').toUpperCase() === 'KCR' && /자동생성상태/.test(String(h))) {
+    if (String(_reviewState.code || '').toUpperCase() === 'KCR' && /자동생성상태|^점수잠금$|^Score Locks$/i.test(String(h))) {
       var stateInput = document.createElement('input');
       stateInput.type = 'hidden';
       stateInput.id = 'review-input-' + idx;
@@ -11718,9 +11718,9 @@ function renderKcrStationChoices_() {
   if (!stations.length) wrap.innerHTML = '<div class="review-edit-help" style="grid-column:1/-1">선택한 조건에 오픈된 스테이션이 없습니다. 예선 일차 또는 운영 설정을 확인해주세요.</div>';
   if (help) help.textContent = isActiveCalibrationMode_()
     ? '켈리브레이션용 스테이션의 참가자번호만 표시됩니다. 제출 결과는 점수·코멘트·표준편차 확인용이며 공식 순위에는 반영되지 않습니다.'
-    : (finalRoundForCode_('KCR') ? '제출 즉시 순위에 반영됩니다. 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.' : '평가완료 후에도 내평가 검수에서 점수·스마트태그·코멘트를 언제든 수정할 수 있습니다. 새 평가로 중복 제출만 차단됩니다.');
+    : '평가완료 후에도 내평가검수에서 점수·스마트태그·코멘트를 수정할 수 있습니다. 수정완료 즉시 순위에 반영되며 새 평가로 중복 제출은 차단됩니다.';
   if (help && !isActiveCalibrationMode_() && _kcrCompletionState && _kcrCompletionState.ownerToken === (_judge.judgeToken || '') && _kcrCompletionState.officialUnits.length) {
-    var review = document.createElement('button'); review.type='button'; review.className='btn'; review.textContent=finalRoundForCode_('KCR')?'반려된 평가 수정':'내평가 검수'; review.onclick=function(){goReview();}; help.appendChild(review);
+    var review = document.createElement('button'); review.type='button'; review.className='btn'; review.textContent='내평가검수'; review.onclick=function(){goReview();}; help.appendChild(review);
   }
 }
 
@@ -11736,7 +11736,7 @@ function startKcrStation_(stationId) {
   var done = kcrStationCompletion_(station, isActiveCalibrationMode_());
   if (!done) { toast('제출 여부를 먼저 확인해주세요. 새로고침을 눌러 다시 확인할 수 있습니다.', true); return; }
   cups = cups.filter(function(unit){return done.indexOf(String(unit)) < 0;});
-  if (!cups.length) { toast(finalRoundForCode_('KCR')?'이미 평가완료된 스테이션입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.':'이미 평가완료된 스테이션입니다. 내평가 검수에서 확인·수정해주세요.', true); return; }
+  if (!cups.length) { toast('이미 평가완료된 스테이션입니다. 내평가검수에서 확인·수정해주세요.', true); return; }
   var registered = registeredTargetsForRange_('KCR', cups);
   if (!registered.success) { toast(registered.message, true); return; }
   if (registered.validated && registered.missing.length) {
@@ -12384,7 +12384,7 @@ function useCuppingComment(comment) {
 }
 
 function cuppingSubmitAll() {
-  if (_cupping.submitted) { toast(finalRoundForCode_('KCR')?'이미 평가완료되었습니다. 반려된 평가 수정에서 재제출할 수 있습니다.':'이미 평가완료되었습니다. 내평가 검수에서 수정해주세요.'); return; }
+  if (_cupping.submitted) { toast('이미 평가완료되었습니다. 내평가검수에서 수정해주세요.'); return; }
   if (_kcrSubmitting) { toast('제출 처리 중입니다. 잠시 기다려주세요.'); return; }
   saveCuppingCurrentFromDOM();
   if (!_cupping.cups.length) return;
