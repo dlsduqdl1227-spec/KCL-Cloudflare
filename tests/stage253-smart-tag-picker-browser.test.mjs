@@ -58,9 +58,10 @@ try{
   assert.equal(await page.evaluate(()=>_cupping.cups[1].flavorTagIds.length),0);
   await page.locator('#cupping-previous-cup').click();
   assert.equal(await page.evaluate(()=>_cupping.cups[0].flavorTagIds.length),4);
-  // The original list remains available and still uses the same handlers.
-  await page.locator('#cupping-attr-card .kcl-tag-fallback').click();
-  assert.equal(await page.locator('#cupping-attr-card .category-primary').isVisible(),true);
+  // Duplicate expand/direct-entry controls stay hidden outside the picker.
+  await page.locator('#cupping-attr-card .kcl-tag-launch').waitFor();
+  assert.equal(await page.locator('#cupping-attr-card .kcl-tag-fallback').isVisible(),false);
+  assert.equal(await page.locator('#cupping-attr-card .custom-tag-row').isVisible(),false);
   await openPicker(page,'#cupping-attr-card');
   await page.evaluate(()=>switchCuppingCup(1));
   await page.waitForFunction(()=>!document.getElementById('kcl-smart-tag-picker').open);

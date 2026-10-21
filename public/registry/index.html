@@ -619,7 +619,17 @@ function accessCodesText(v){var s=String(v||'').toUpperCase().trim();if(!s)retur
 function operatorIsAdminRow(r){var t=String((r&&(r.accountType||r.type))||'').toUpperCase();var role=String((r&&r.role)||'');return t==='ADMIN'||/관리자|admin|총괄/i.test(role);}
 function operatorVisibleForSelectedComp(r){var code=(document.getElementById('comp').value||'').toUpperCase();if(operatorIsAdminRow(r))return false;var codes=accessCodesText(r&&r.access);return code && codes.indexOf(code)>=0;}
 function roleLabelForRow(r){var t=String((r&&(r.accountType||r.type))||'').toUpperCase();if(operatorIsAdminRow(r))return '관리자';if(t==='TEAMLEAD')return '팀장';if(t==='STAFF')return '운영진';return r.role||'심사위원';}
-function syncOperatorRoleOptions(){var type=(document.getElementById('opType')&&document.getElementById('opType').value)||'JUDGE';var role=document.getElementById('opRole');if(!role)return;var isAdmin=type==='ADMIN';var roles=isAdmin?['관리자']:(type==='TEAMLEAD'?['팀장']:(type==='STAFF'?['운영진']:['센서리 심사위원','테크니컬 심사위원','센서리 헤드 심사위원','테크니컬 헤드 심사위원']));role.innerHTML=roles.map(function(r){return '<option value="'+esc(r)+'">'+esc(r)+'</option>';}).join('');Array.prototype.forEach.call(document.querySelectorAll('.operator-role-field,.operator-team-field,.operator-date-field'),function(el){el.classList.toggle('field-hidden',isAdmin);});var help=document.getElementById('operatorTeamHelp');if(help)help.textContent=isAdmin?'관리자는 모든 대회의 대회팀장·헤드·운영 기능을 사용할 수 있으며 날짜·평가팀 지정이 필요하지 않습니다.':'평가팀·스테이션은 대회 운영 방식에 맞춰 지정합니다. 적용일을 비우면 상시 권한으로 저장됩니다.';}
+function syncOperatorRoleOptions(){
+  var type=(document.getElementById('opType')&&document.getElementById('opType').value)||'JUDGE';
+  var role=document.getElementById('opRole');if(!role)return;
+  var isAdmin=type==='ADMIN',kcac=document.getElementById('comp').value==='KCAC';
+  var roles=isAdmin?['관리자']:(type==='TEAMLEAD'?['팀장']:(type==='STAFF'?['운영진']:['센서리 심사위원','테크니컬 심사위원','센서리 헤드 심사위원','테크니컬 헤드 심사위원']));
+  if(kcac&&type==='JUDGE')roles=['패턴디자인 헤드 심사위원','일반우유 센서리 헤드 심사위원','오트 센서리 헤드 심사위원','헤드 심사위원'];
+  role.innerHTML=roles.map(function(r){return '<option value="'+esc(r)+'">'+esc(r)+'</option>';}).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('.operator-role-field,.operator-team-field,.operator-date-field'),function(el){el.classList.toggle('field-hidden',isAdmin);});
+  var help=document.getElementById('operatorTeamHelp');
+  if(help)help.textContent=isAdmin?'관리자는 모든 대회의 대회팀장·헤드·운영 기능을 사용할 수 있으며 날짜·평가팀 지정이 필요하지 않습니다.':kcac?'결선은 패턴디자인 2명·일반우유 센서리 1명·오트 센서리 1명으로 역할을 지정합니다. 각 심사위원은 담당 한 잔만 평가합니다.':'평가팀·스테이션은 대회 운영 방식에 맞춰 지정합니다. 적용일을 비우면 상시 권한으로 저장됩니다.';
+}
 function setHidden_(id, hidden){var el=document.getElementById(id);if(el)el.classList.toggle('hidden',!!hidden);}
 function openDatePicker_(input){if(!input||input.disabled)return;try{if(typeof input.showPicker==='function')input.showPicker();}catch(e){}}
 var MOB_2026_PRELIM_PERMISSION_PRESET = [

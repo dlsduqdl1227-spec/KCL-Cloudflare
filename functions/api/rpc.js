@@ -3517,7 +3517,10 @@ function finalSubmissionScope_(code,payload,role) {
   const rows=Array.isArray(payload?.rows)?payload.rows:[];
   if(code==='KCAC'){
     const items=rows.map((row,i)=>extractExtraSingleRow_(payload,code,i));
-    const areas=[items.some(kcacIsPatternItem_)?'pattern':'',items.some(kcacIsSensoryItem_)?'sensory':''].filter(Boolean);
+    const sensoryItems=items.filter(kcacIsSensoryItem_);
+    const sensoryTypes=[...new Set(sensoryItems.map(kcacFinalItemScope_))];
+    const sensoryScope=sensoryTypes.length===1&&/^sensory-/.test(sensoryTypes[0])?sensoryTypes[0]:'sensory';
+    const areas=[items.some(kcacIsPatternItem_)?'pattern':'',sensoryItems.length?sensoryScope:''].filter(Boolean);
     if(areas.length)return areas.join('+');
   }
   if(code==='KTCC'){
@@ -4858,6 +4861,20 @@ async function submitScores(env, payload, signature, request = null) {
     ? normalizeRoundForCompetition_('KCR', initial.round || (cfg && cfg.current_round) || '예선')
     : safeStr(initial.round || (cfg && cfg.current_round) || '예선');
   if (initial.code === 'KCR') basePayload.round = submitRound;
+  let kcacSplitFinal = false;
+  if (initial.code === 'KCAC' && roundName_(submitRound) === '결선') {
+    const panelMode=parseJson(cfg && cfg.option_settings,{}).kcacFinalPanelMode;
+    const assigned=kcacFinalRoleScope_(actorRole);
+    if (panelMode==='split-four-heads-160' || assigned) {
+      kcacSplitFinal = true;
+      const allowed=hasManageAccess(auth.actor,'KCAC');
+      if (!allowed && !assigned) return {success:false,message:'관리자에게 KCAC 결선 담당 평가 배정을 요청해주세요. 입력 내용은 유지됩니다.'};
+      if (rows.length!==1) return {success:false,message:'KCAC 결선은 배정된 한 잔만 제출합니다. 기존 입력은 유지되며 담당 평가 화면에서 확인해주세요.'};
+      const item=extractExtraSingleRow_(basePayload,'KCAC',0),scope=kcacFinalItemScope_(item);
+      if (!scope || (kcacIsPatternItem_(item)&&kcacIsSensoryItem_(item)) || (!allowed && scope!==assigned)) return {success:false,message:'본인에게 배정된 KCAC 결선 평가만 제출할 수 있습니다. 입력 내용은 유지됩니다.'};
+      rows[0].extraFields={...(rows[0].extraFields||{}),'결선 심사방식':'4인 합산 160점','창작주제':'동물'};
+    }
+  }
   if (initial.code === 'MOB' && !hasManageAccess(auth.actor, 'MOB')) {
     const mobParticipantDate = mobActiveParticipantDateFromConfig_(cfg);
     if (mobParticipantDate) {
@@ -5011,10 +5028,15 @@ async function submitScores(env, payload, signature, request = null) {
     if (finalOfficialEvaluation_(x)) {
       const existing=(await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? AND unit=?').bind(x.code,x.round,x.unit).all()).results || [];
       const finalScope=finalSubmissionScope_(x.code,onePayload,x.role);
-      if (existing.some(row=>scoreOwnedByActor_(row,auth.actor) && scoreEvaluationCategoryKey_(row.mode)===scoreEvaluationCategoryKey_(x.mode) && finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope)) {
+      if (existing.some(row=>scoreOwnedByActor_(row,auth.actor) && scoreEvaluationCategoryKey_(row.mode)===scoreEvaluationCategoryKey_(x.mode) && (kcacSplitFinal || finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope))) {
         return {success:false,duplicate:true,message:'이미 평가완료된 기록입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청한 뒤 반려된 평가 수정에서 재제출해주세요.'};
       }
-      onePayload.finalEvaluationKey=await sha256Hex_(JSON.stringify([x.code,x.round,x.unit,actorIdentityKey,scoreEvaluationCategoryKey_(x.mode),finalScope]));
+      if (kcacSplitFinal) {
+        const panelLimit=finalScope==='pattern'?2:1;
+        const samePanel=existing.filter(row=>!isCalibrationMode_(row.mode) && finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope);
+        if (samePanel.length>=panelLimit) return {success:false,message:'해당 KCAC 결선 평가 영역은 모두 제출되었습니다. 기존 평가를 확인·반려하여 수정해주세요.'};
+      }
+      onePayload.finalEvaluationKey=await sha256Hex_(JSON.stringify([x.code,x.round,x.unit,actorIdentityKey,scoreEvaluationCategoryKey_(x.mode),kcacSplitFinal?'four-head':finalScope]));
     }
     if (x.code === 'KCR') {
       // A judge has one official evaluation per entrant/round. Role, day, process
@@ -6694,6 +6716,21 @@ function mobDedupOfficialRows_(rows) {
   return Array.from(map.values());
 }
 
+function kcacFinalRoleScope_(role) {
+  const r=safeStr(role).replace(/\s/g,'');
+  if (/패턴디자인/.test(r)) return 'pattern';
+  if (/일반우유센서리/.test(r)) return 'sensory-regular';
+  if (/오트센서리/.test(r)) return 'sensory-oat';
+  return '';
+}
+function kcacFinalItemScope_(item) {
+  if (kcacIsPatternItem_(item)) return 'pattern';
+  const type=safeStr(item && (item['패턴종류'] || item.patternType));
+  if (kcacIsSensoryItem_(item) && ['sensory-regular','sensory-oat'].includes(type)) return type;
+  if (kcacIsSensoryItem_(item) && /대체우유|오트|oat/i.test(type)) return 'sensory-oat';
+  if (kcacIsSensoryItem_(item) && /일반우유|regular/i.test(type)) return 'sensory-regular';
+  return '';
+}
 function kcacItemPurposeText_(item) {
   return safeStr((item && (item['잔용도'] || item['컵용도'] || item['평가용도'] || item.purpose || item['우유종류'] || item['우유명'] || '')) || '');
 }
@@ -6877,7 +6914,8 @@ function mobComponentsFromItem_(item) {
   const hasCreative = disqualified ? false : (sensoryRole ? creative > 0 : (techRole ? false : creative > 0));
   return { tech, sensory, creative, penalty, hasTech, hasSensory, hasCreative, time: itemEndTimeSeconds_(item), disqualified };
 }
-function aggregateRankingGroup_(code, g, round) {
+function aggregateRankingGroup_(code, g, round, options) {
+  options = options || {};
   code = safeStr(code).toUpperCase();
   const rows = g.rows || [];
   const activeRows = rows.filter(item => !itemOfficialDq_(item));
@@ -6964,17 +7002,19 @@ function aggregateRankingGroup_(code, g, round) {
     if (r === '결선') {
       const patternAggs = submissionAggs.filter(x => x.hasPattern);
       const sensoryAggs = submissionAggs.filter(x => x.hasSensory);
-      const patternTotal = avgFinite_(patternAggs.map(x => x.patternTotal));
-      const sensoryTotal = avgFinite_(sensoryAggs.map(x => x.sensoryTotal));
+      const fourHead = options.kcacFinalPanelMode==='split-four-heads-160' || activeRows.some(item=>item['결선 심사방식']==='4인 합산 160점');
+      const combine = values => fourHead ? values.reduce((a,b)=>a+b,0) : avgFinite_(values);
+      const patternTotal = combine(patternAggs.map(x => x.patternTotal));
+      const sensoryTotal = combine(sensoryAggs.map(x => x.sensoryTotal));
       const timePenalty = Math.max(0, ...submissionAggs.map(x => x.timePenalty || 0));
       const score = Math.max(0, roundScoreValue_(patternTotal + sensoryTotal - timePenalty)) || 0;
       return {
-        score, total:score, basis:'패턴 평균 + 센서리 평균 - 시간감점',
+        score, total:score, basis:fourHead?'패턴디자인 2명 + 센서리 2명 합산 · 160점 만점':'패턴 평균 + 센서리 평균 - 시간감점',
         tie:{
           timePenalty,
-          sensory: roundScoreValue_(avgFinite_(sensoryAggs.map(x => x.sensory))) || 0,
-          presentation: roundScoreValue_(avgFinite_(sensoryAggs.map(x => x.presentation))) || 0,
-          patternCompletion: roundScoreValue_(avgFinite_(patternAggs.map(x => x.patternCompletion))) || 0,
+          sensory: roundScoreValue_(combine(sensoryAggs.map(x => x.sensory))) || 0,
+          presentation: roundScoreValue_(combine(sensoryAggs.map(x => x.presentation))) || 0,
+          patternCompletion: roundScoreValue_(combine(patternAggs.map(x => x.patternCompletion))) || 0,
           time: submissionAggs.reduce((m,x)=>Math.min(m, x.time || 999999), 999999)
         }
       };
@@ -7130,7 +7170,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
         latest['진출판정'] || ''
       ].filter(Boolean).join(' · ');
     }
-    const agg = aggregateRankingGroup_(code, g, g.round);
+    const agg = aggregateRankingGroup_(code, g, g.round, code==='KCAC'?parseJson(cfg && cfg.option_settings,{}):{});
     // IKRC 실시간 순위는 현재 제출된 헤드·센서리 공식점수를 인원수 고정 없이 즉시 누적한다.
     if (code === 'IKRC' && (!agg || Number(agg.confirmedJudgeCount || 0) < 1)) return;
     const aggregateScore = toNumber(agg && agg.score);

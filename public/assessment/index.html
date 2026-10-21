@@ -1996,12 +1996,12 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 .panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap{overflow-y:visible;}
 @media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}.eval-wrap,.panel{min-height:100dvh!important;overflow-y:visible!important}.tabs,.review-tabs{overflow-x:auto!important;}}
 </style>
-<script src="/assets/kcr-sensory-tags.js?v=228"></script>
+<script src="/assets/kcr-sensory-tags.js?v=260"></script>
 <script src="/assets/kcr-sensory-comments.js?v=228"></script>
 <script src="/assets/shared-sensory-tags.js?v=228"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js?v=stage255"></script>
-<script src="/assets/final-evaluation-workflow.js?v=257"></script>
+<script src="/assets/final-evaluation-workflow.js?v=261"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=258">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
@@ -2009,10 +2009,11 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <link rel="stylesheet" href="/assets/station-manager.css?v=246">
 <script defer src="/assets/station-manager.js?v=246"></script>
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
-<link rel="stylesheet" href="/assets/smart-tag-picker.css?v=253">
-<script defer src="/assets/smart-tag-picker.js?v=255"></script>
+<link rel="stylesheet" href="/assets/smart-tag-picker.css?v=260">
+<script defer src="/assets/smart-tag-picker.js?v=260"></script>
 <link rel="stylesheet" href="/assets/multi-cup-navigation.css?v=253">
 <link rel="stylesheet" href="/assets/operational-health.css?v=259">
+<link rel="stylesheet" href="/assets/evaluation-attribute-layout.css?v=260">
 <script src="/assets/operational-health.js?v=259"></script>
 </head>
 <body>
@@ -2354,9 +2355,12 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <!-- 6: KCR 커핑 평가 화면 -->
 <div id="evalCupping" class="eval-wrap">
   <div class="eval-header">
-    <div>
+    <div class="kcr-evaluation-brand">
+      <span data-comp-logo="KCR" data-logo-class="evaluation-header-logo"></span>
+      <div class="kcr-evaluation-brand-copy">
       <div class="eval-title" id="cupping-eval-title">KCR CUPPING</div>
       <div class="eval-sub" id="cupping-eval-sub"></div>
+      </div>
     </div>
     <div>
       <div class="eval-total-label">Total</div>
@@ -2375,7 +2379,6 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <button type="button" class="btn-outline" id="cupping-next-cup" aria-label="다음 컵" title="다음 컵" onclick="switchCuppingCup(_cupping.currentIdx + 1)">›</button>
   </div>
   <div class="eval-content">
-    <div class="eval-hero-logo" data-comp-logo="KCR"></div>
     <div class="attr-tabs" id="cupping-attr-tabs">
       <button type="button" class="attr-tab active" data-attr="flavor" onclick="switchCuppingAttr('flavor')">Flavor(플레이버)</button>
       <button type="button" class="attr-tab" data-attr="aftertaste" onclick="switchCuppingAttr('aftertaste')">Aftertaste(에프터테이스트)</button>
@@ -2402,9 +2405,10 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <div id="pKcacFinalArea" class="panel">
   <div class="hero-logo-wrap" data-comp-logo="KCAC"></div>
   <h2>결선 평가 영역</h2>
-  <p class="review-edit-help">오늘 담당하는 평가 영역을 선택하세요.</p>
-  <button class="btn" type="button" onclick="startKcac('pattern')">창작패턴 · 테크니컬 평가 (1잔 · 60점)</button>
-  <button class="btn-outline" type="button" onclick="startKcac('sensory')">센서리 · 프레젠테이션 평가 (2잔 · 40점)</button>
+  <p class="review-edit-help">창작 주제: 동물 · 담당 평가를 선택하세요.</p>
+  <button class="btn" type="button" onclick="startKcac('pattern')">패턴디자인 (1잔 · 60점)</button>
+  <button class="btn-outline" type="button" onclick="startKcac('sensory-regular')">일반우유 센서리 (1잔 · 20점)</button>
+  <button class="btn-outline" type="button" onclick="startKcac('sensory-oat')">어메이징오트바리스타 센서리 (1잔 · 20점)</button>
   <button class="btn-danger" type="button" onclick="goHomePanel_()">대회 선택으로</button>
 </div>
 <div id="evalKcac" class="eval-wrap">
@@ -5167,6 +5171,7 @@ function normalizeRoleLabel_(role, accountType) {
   var isHead = compact.indexOf('헤드') > -1 || /head/.test(compact);
   var isTech = compact.indexOf('테크') > -1 || compact.indexOf('기술') > -1 || /technical|tech|^t\d*$|^tjudge\d*$|^technicaljudge\d*$/.test(compact);
   var isSensory = compact.indexOf('센서') > -1 || compact.indexOf('감각') > -1 || /sensory|sensor|^s\d*$|^sjudge\d*$|^sensoryjudge\d*$/.test(compact);
+  if (isHead && /패턴디자인|일반우유센서리|오트센서리/.test(compact)) return raw;
   if (isHead) return isTech ? '테크니컬 헤드 심사위원' : '센서리 헤드 심사위원';
   if (isTech) return '테크니컬 심사위원';
   if (isSensory || compact.indexOf('심사') > -1 || /judge/.test(compact) || type === 'JUDGE') return '센서리 심사위원';
@@ -9136,7 +9141,7 @@ function renderReviewSmartTagField_(item) {
   html += '<input type="hidden" id="' + reviewSmartTagInputId_(item.idx) + '" data-col="' + item.idx + '" value="' + escHtml(selected.join(', ')) + '">';
   html += '<div class="selected-tags mob-inline-selected-tags" id="' + reviewSmartTagSelectedId_(item.idx) + '">' + reviewSelectedSmartTagsHtml_(item.idx, selected, disabled) + '</div>';
   html += '<div class="mob-inline-tag-buttons" id="' + reviewSmartTagButtonsId_(item.idx) + '">' + reviewSmartTagButtonsHtml_(item.idx, meta, selected, disabled) + '</div>';
-  if (meta.competition !== 'KCR') html += '<div class="custom-tag-row"><input type="text" id="' + reviewSmartTagCustomId_(item.idx) + '" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'){addReviewCustomSmartTag(' + item.idx + ');event.preventDefault()}"' + (disabled ? ' disabled' : '') + '><button type="button" onclick="addReviewCustomSmartTag(' + item.idx + ')"' + (disabled ? ' disabled' : '') + '>추가</button></div>';
+  if (!meta.isFlavorReference) html += '<div class="custom-tag-row"><input type="text" id="' + reviewSmartTagCustomId_(item.idx) + '" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'&&!event.isComposing){addReviewCustomSmartTag(' + item.idx + ');event.preventDefault()}"' + (disabled ? ' disabled' : '') + '><button type="button" onclick="addReviewCustomSmartTag(' + item.idx + ')"' + (disabled ? ' disabled' : '') + '>추가</button></div>';
   html += '</div>';
   return html;
 }
@@ -9311,8 +9316,15 @@ function addReviewCustomSmartTag(idx) {
   if (!input) return;
   var tag = input.value.trim().replace(/[<>"]/g, '');
   if (!tag) return;
-  input.value = '';
+  var meta = reviewSmartTagMeta_((_reviewState.headers || [])[idx] || '');
+  if (meta && meta.competition === 'KCR') {
+    if (meta.isFlavorReference) return;
+    tag = KcrSensoryTags.customId(meta.category, tag);
+    if (!tag) { toast('직접 입력 태그는 80자 이내로 입력해주세요.', true); return; }
+  }
+  if (reviewSmartTagCurrent_(idx).indexOf(tag) > -1) { toast('이미 선택한 태그입니다.', true); return; }
   toggleReviewSmartTag(idx, tag);
+  if (reviewSmartTagCurrent_(idx).indexOf(tag) > -1) input.value = '';
 }
 function buildReviewEvalLikeGroups(scoreItems, intensityItems, commentItems, tagItems) {
   var byKey = {};
@@ -12065,6 +12077,7 @@ function renderKcrSensoryTagsHtml_(c, attr) {
     html += '</div>';
   });
 
+  html += '<div class="custom-tag-row"><input type="text" id="kcr-custom-tag-' + attr + '" maxlength="80" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'&&!event.isComposing){addKcrCustomTag(\'' + attr + '\');event.preventDefault()}"><button type="button" onclick="addKcrCustomTag(\'' + attr + '\')">추가</button></div>';
   var commentState = kcrCommentState_(c, attr);
   html += '<div class="kcr-sensory-comment"><div class="kcr-sensory-comment-head"><div class="kcr-sensory-comment-title">' + escHtml(KCR_SENSORY_CONFIG.categoryLabels[attr].ko) + ' 코멘트</div>';
   if (commentState.commentTouched) html += '<button type="button" class="kcr-comment-reset" onclick="resetKcrSensoryComment(\'' + attr + '\')">자동 생성으로 되돌리기</button>';
@@ -12073,6 +12086,16 @@ function renderKcrSensoryTagsHtml_(c, attr) {
   return html + '</div>';
 }
 
+function addKcrCustomTag(attr) {
+  var input = document.getElementById('kcr-custom-tag-' + attr);
+  var c = _cupping.cups[_cupping.currentIdx];
+  if (!input || !c || !input.value.trim()) return;
+  var id = KcrSensoryTags.customId(attr, input.value);
+  if (!id) { toast('직접 입력 태그는 80자 이내로 입력해주세요.', true); return; }
+  if ((c[kcrTagIdsKey_(attr)] || []).indexOf(id) > -1) { toast('이미 선택한 태그입니다.', true); return; }
+  toggleKcrTag(attr, id);
+  if ((c[kcrTagIdsKey_(attr)] || []).indexOf(id) > -1) input.value = '';
+}
 function openKcrTagFamily(attr, family) {
   var c = _cupping.cups[_cupping.currentIdx];
   if (!c) return;
@@ -12615,6 +12638,16 @@ function kcacInheritFinalPatternTags_() {
 }
 kcacInheritFinalPatternTags_();
 
+function kcacAssignedFinalArea_() {
+  var role = String((_judge && _judge.roleMap && _judge.roleMap.KCAC) || (_judge && _judge.role) || '').replace(/\s/g, '');
+  if (/패턴디자인/.test(role)) return 'pattern';
+  if (/일반우유센서리/.test(role)) return 'sensory-regular';
+  if (/오트센서리/.test(role)) return 'sensory-oat';
+  return '';
+}
+function kcacSplitFinalPanel_() {
+  return !!kcacAssignedFinalArea_() || !!(_selComp && _selComp.optionSettings && _selComp.optionSettings.kcacFinalPanelMode === 'split-four-heads-160');
+}
 function startKcac(finalArea) {
   // KCAC는 예선·결선 모두 헤드 심사위원 4명의 공식 평가만 사용합니다.
   // 이전 대회에서 남은 공통 켈리브레이션 상태가 KCAC에 유입되지 않도록 항상 초기화합니다.
@@ -12622,12 +12655,17 @@ function startKcac(finalArea) {
   var rawRoundName = String((_selComp && _selComp.currentRound) || '');
   var roundName = normalizeKcacRoundDisplay_(rawRoundName);
   var isMainFinal = roundName === '결선';
-  if (isMainFinal && !isSensoryRoleForCode_('KCAC') && !isTechnicalRoleForCode_('KCAC') && finalArea !== 'pattern' && finalArea !== 'sensory') {
+  var splitFinal = isMainFinal && kcacSplitFinalPanel_();
+  if (splitFinal && !(isAdminRole() || isTeamLeaderForCode_('KCAC'))) {
+    finalArea = kcacAssignedFinalArea_();
+    if (!finalArea) { toast('관리자에게 KCAC 결선 담당 평가 배정을 요청해주세요.', true); return; }
+  }
+  if (isMainFinal && ((splitFinal && ['pattern','sensory-regular','sensory-oat'].indexOf(finalArea) < 0) || (!splitFinal && !isSensoryRoleForCode_('KCAC') && !isTechnicalRoleForCode_('KCAC') && ['pattern','sensory','sensory-regular','sensory-oat'].indexOf(finalArea) < 0))) {
     showPanel('pKcacFinalArea');
     return;
   }
   document.getElementById('kcac-round-badge').textContent = roundName;
-  document.getElementById('kcac-sub').textContent = judgeLineText() + '  ' + roundName + ' · 헤드 심사위원 공식평가 · 공식 점수 반영';
+  document.getElementById('kcac-sub').textContent = judgeLineText() + '  ' + roundName + ' · 헤드 심사위원 공식평가' + (isMainFinal ? ' · 창작 주제: 동물' : '') + ' · 공식 점수 반영';
 
   _kcac.jars = [];
   _kcacOpenSmartTagBranches = {};
@@ -12639,6 +12677,7 @@ function startKcac(finalArea) {
   _kcac.penalty = 0;
   _kcac.leafCountWarnings = [];
   _kcac.roundName = roundName;
+  _kcac.finalArea = isMainFinal ? finalArea || '' : '';
   _kcac.isBlindPrelim = !isMainFinal;
   _kcac.qualMappingVersion = 2;
   _kcac.qualFirstPattern = '';
@@ -12650,9 +12689,9 @@ function startKcac(finalArea) {
     _kcac.jars.push(makeKcacJar('SLOW Rosetta', 'qual', '대체우유', '어메이징 오트바리스타', '예선 패턴평가', 'controlled'));
   } else {
     // KCAC 결선은 헤드 심사위원으로만 구성되지만 역할별 담당 영역은 분리됩니다.
-    if (isSensoryRoleForCode_('KCAC') || (!isTechnicalRoleForCode_('KCAC') && finalArea === 'sensory')) {
-      _kcac.jars.push(makeKcacJar('일반우유 센서리용아트', 'final-sensory', '일반우유', '매일우유 오리지널', '센서리용아트', 'sensory-regular'));
-      _kcac.jars.push(makeKcacJar('대체우유 센서리용아트', 'final-sensory', '대체우유', '어메이징 오트바리스타', '센서리용아트', 'sensory-oat'));
+    if (/^sensory/.test(finalArea || '') || (!splitFinal && isSensoryRoleForCode_('KCAC'))) {
+      if (finalArea !== 'sensory-oat') _kcac.jars.push(makeKcacJar('일반우유 센서리', 'final-sensory', '일반우유', '매일우유 오리지널', '센서리용아트', 'sensory-regular'));
+      if (finalArea !== 'sensory-regular') _kcac.jars.push(makeKcacJar('어메이징오트바리스타 센서리', 'final-sensory', '대체우유', '어메이징 오트바리스타', '센서리용아트', 'sensory-oat'));
     } else {
       _kcac.jars.push(makeKcacJar('일반우유 창작패턴', 'final-pattern', '일반우유', '매일우유 오리지널', '창작패턴평가', 'final-pattern'));
     }
@@ -13690,7 +13729,7 @@ function kcacScoreWeightText_(j, key) {
   var weight = kcacScoreWeight_(j, key);
   if (!weight) return '';
   var multiplier = weight / 5;
-  return '규정 배점 ' + weight + '% · 0~5점 환산 ×' + fmtScore(multiplier, multiplier % 1 ? 1 : 0);
+  return '배점 ' + weight + (j.type === 'qual' ? '%' : '점') + ' · 0~5점 환산 ×' + fmtScore(multiplier, multiplier % 1 ? 1 : 0);
 }
 
 function kcacScoreWeightBadgeHtml_(j, key) {
@@ -13698,7 +13737,7 @@ function kcacScoreWeightBadgeHtml_(j, key) {
   var multiplier = weight ? weight / 5 : 0;
   if (!weight) return '';
   var cls = multiplier >= 4 ? ' high' : (multiplier >= 2 ? ' mid' : '');
-  return '<span class="kcac-weight-chip' + cls + '"><b>' + weight + '%</b><em>×' + fmtScore(multiplier, multiplier % 1 ? 1 : 0) + '</em></span>';
+  return '<span class="kcac-weight-chip' + cls + '"><b>' + weight + (j.type === 'qual' ? '%' : '점') + '</b><em>×' + fmtScore(multiplier, multiplier % 1 ? 1 : 0) + '</em></span>';
 }
 
 function calcKcacJarPenalty(j, includeTimePenalty) {
@@ -15313,8 +15352,17 @@ function renderKbcInlineTagSection_(attr) {
   if (smartTagHasSelectableFamilies_(KBC_SMART_TAGS[group][category])) html += '<div class="smart-tags-hint">계열 버튼만 선택해도 저장되며, 세부 특성을 고르면 같은 계열 선택을 대체합니다.</div>';
   html += '<div class="selected-tags mob-inline-selected-tags" id="' + kbcInlineTagSelectionId_(group, category) + '">' + kbcSelectedTagsHtml_(group, category) + '</div>';
   html += '<div class="mob-inline-tag-buttons" id="' + kbcInlineTagButtonsId_(group, category) + '">' + kbcTagButtonsHtml_(group, category) + '</div>';
+  html += '<div class="custom-tag-row"><input type="text" id="kbc-custom-tag-' + group + '-' + kbcCategoryId_(category) + '" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'&&!event.isComposing){addKbcCustomTag(\'' + group + '\',\'' + escapeJsString_(category) + '\');event.preventDefault()}"><button type="button" onclick="addKbcCustomTag(\'' + group + '\',\'' + escapeJsString_(category) + '\')">추가</button></div>';
   html += '</div>';
   return html;
+}
+function addKbcCustomTag(group, category) {
+  var input = document.getElementById('kbc-custom-tag-' + group + '-' + kbcCategoryId_(category));
+  if (!input) return;
+  var tag = input.value.trim().replace(/[<>"]/g, '');
+  if (!tag) return;
+  if (kbcCategoryTags_(group, category).indexOf(tag) > -1) { toast('이미 선택한 태그입니다.', true); return; }
+  if (kbcToggleTagValue_(group, category, tag)) { input.value = ''; kbcRefreshInlineTagCategory_(group, category); }
 }
 function kbcRefreshInlineTagCategory_(group, category) {
   var selectedWrap = document.getElementById(kbcInlineTagSelectionId_(group, category));
@@ -19806,7 +19854,7 @@ function kclDraftContextKey_(code) {
   if (code === 'KCR' && typeof _cupping !== 'undefined' && _cupping && _cupping.station) station = _cupping.station.id || _cupping.station.prefix || '';
   if (code === 'IKRC' && typeof _ikrcStation !== 'undefined' && _ikrcStation) station = _ikrcStation.id || _ikrcStation.prefix || '';
   // 결선 패턴/센서리는 서로 다른 평가표입니다. 같은 헤드가 화면을 바꿔도 임시저장을 섞지 않습니다.
-  if (code === 'KCAC' && typeof _kcac !== 'undefined' && _kcac && _kcac.jars && _kcac.jars[0] && _kcac.jars[0].type !== 'qual') station = _kcac.jars[0].type;
+  if (code === 'KCAC' && typeof _kcac !== 'undefined' && _kcac && _kcac.jars && _kcac.jars[0] && _kcac.jars[0].type !== 'qual') station = _kcac.jars[0].type + (_kcac.finalArea ? '_' + _kcac.finalArea : '');
   return [type, scope, station].filter(Boolean).join('_') || 'competition';
 }
 function kclDraftKey_(code) {
@@ -19952,6 +20000,7 @@ function kclRestoreDraftForCode_(code, draft) {
       if (typeof calcCuppingTotal === 'function') calcCuppingTotal();
     }
     if (code === 'KCAC' && draft.state.kcac) {
+      if (_kcac.finalArea && draft.state.kcac.finalArea !== _kcac.finalArea) throw new Error('담당 평가 영역이 다른 임시저장입니다. 기존 임시저장은 보관됩니다.');
       _kcac = draft.state.kcac;
       if (typeof normalizeKcacQualStorage_ === 'function') normalizeKcacQualStorage_();
       _kcacOpenSmartTagBranches = {};

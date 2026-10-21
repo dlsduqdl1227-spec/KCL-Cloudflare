@@ -644,7 +644,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   html,body{background:#fff!important}
 }
 </style>
-<script src="/assets/kcr-sensory-tags.js?v=228"></script>
+<script src="/assets/kcr-sensory-tags.js?v=260"></script>
 <script src="/assets/kcl-api-shim.js?v=stage255"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
@@ -1539,7 +1539,7 @@ function buildReportIntro(res, scores) {
   var introTitle = code === 'IKRC' ? '공식 제출 평가 결과' : (code === 'KCAC' ? '라떼아트 공식 평가 결과' : '공식 검수 완료 평가 결과');
   var introText = code === 'IKRC'
     ? '켈리브레이션을 제외하고, 이 선수의 블라인드코드에 정확히 제출된 헤드·센서리 심사만 표시합니다.'
-    : (code === 'KCAC' ? 'FAST·SLOW 로제타의 라떼아트 평가 항목과 심사 코멘트를 기준으로 표시됩니다.' : '이 리포트는 운영팀 검수를 완료한 공식 평가 항목만 기준으로 표시됩니다.');
+    : (code === 'KCAC' ? (rounds.indexOf('결선') >= 0 ? '선택한 라운드의 라떼아트 평가와 심사 코멘트입니다. 결선 창작 주제: 동물.' : 'FAST·SLOW 로제타의 라떼아트 평가 항목과 심사 코멘트를 기준으로 표시됩니다.') : '이 리포트는 운영팀 검수를 완료한 공식 평가 항목만 기준으로 표시됩니다.');
   box.innerHTML = '<div class="intro-title">' + escHtml(introTitle) + '</div>' +
     '<div class="intro-text">' + escHtml(introText) +
     (count ? countText : '') + (rounds.length ? ' · 라운드 ' + rounds.join(', ') : '') + '</div>';

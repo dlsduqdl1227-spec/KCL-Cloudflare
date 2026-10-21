@@ -1,0 +1,33 @@
+/* Attribute sequence only. Cup navigation and score data remain unchanged. */
+#cupping-attr-tabs,
+#ikrc-attr-tabs,
+.review-eval-like-tabs.review-attr-tabs {
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  gap:6px;
+  width:100%;
+  max-width:560px;
+  margin:0 auto 18px;
+  position:static!important;
+  overflow:visible;
+}
+#cupping-attr-tabs .attr-tab,
+#ikrc-attr-tabs .attr-tab,
+.review-attr-tabs .review-eval-like-tab {
+  width:100%;
+  min-width:0!important;
+  min-height:44px;
+  text-align:center;
+  justify-content:center;
+  white-space:normal!important;
+  padding:10px 30px;
+}
+#evalCupping .kcr-evaluation-brand {display:flex;align-items:center;gap:10px;min-width:0}
+#evalCupping .kcr-evaluation-brand > [data-comp-logo] {display:flex;align-items:center;flex:0 0 42px}
+#evalCupping .evaluation-header-logo {width:42px;height:50px;object-fit:contain;display:block}
+#evalCupping .kcr-evaluation-brand-copy {min-width:0}
+@media(max-width:380px) {
+  #evalCupping .kcr-evaluation-brand {gap:7px}
+  #evalCupping .kcr-evaluation-brand > [data-comp-logo] {flex-basis:32px}
+  #evalCupping .evaluation-header-logo {width:32px;height:42px}
+}

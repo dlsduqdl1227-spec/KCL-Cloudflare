@@ -19,13 +19,15 @@ try {
   await page.waitForFunction(()=>document.body.classList.contains('kcr-viewport-active'));
   assert.equal(await page.locator('#cupping-cup-nav .cup-btn').count(),9);
   await page.locator('#cupping-attr-tabs [data-attr=acidity]').click();
-  // The compact tag picker keeps the original list behind an explicit expand control.
-  await page.locator('#cupping-attr-card .kcl-tag-fallback').click();
-  await page.locator('#cupping-attr-card .kcr-tag-family-btn').filter({hasText:'보완 표현'}).click();
-  const dry=page.locator('#cupping-attr-card button').filter({hasText:/^드라이한Dry$/});
-  assert.equal(await page.locator('#cupping-attr-card .kcl-tag-fallback').getAttribute('aria-expanded'),'true','changing categories must not collapse the original tag list');
-  await dry.click();
-  await page.waitForFunction(()=>document.querySelector('#cupping-attr-card .kcl-tag-fallback')?.getAttribute('aria-expanded')==='true');
+  await page.locator('#cupping-attr-card .kcl-tag-launch').click();
+  await page.locator('#kcl-tag-search').fill('Dry');
+  await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-option').first().click();
+  if(width===1440){
+   await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-custom input').fill('상큼한 귤피, 섬세한 산미');
+   await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-custom button').click();
+  }
+  await page.locator('#kcl-smart-tag-picker .kcl-tag-picker-done').click();
+  assert.equal(await page.locator('#cupping-attr-card .kcl-tag-fallback').isVisible(),false);
   const field=page.locator('#kcr-sensory-comment-acidity');
   assert.match(await field.inputValue(),/산미에서 드라이한 감각/);
   assert.equal(await field.evaluate(el=>parseFloat(getComputedStyle(el).fontSize)),16);
@@ -86,6 +88,7 @@ try {
    await page.locator('.review-edit-btn').first().click();await page.locator('#pReviewEdit.active').waitFor();
    await page.locator('#review-edit-fields .review-attr-tabs .review-eval-like-tab').filter({hasText:'Acidity'}).click();
    assert.match(await page.locator('#review-edit-fields').innerText(),/드라이한/);
+   assert.match(await page.locator('#review-edit-fields').innerText(),/상큼한 귤피, 섬세한 산미/);
    assert.equal(await page.locator('#review-kcr-comment-22').inputValue(),'산미에서 느낀 드라이한 인상을 직접 기록합니다.');
    assert.equal(await page.locator('#review-edit-fields textarea').filter({visible:true}).count()>0,true);
    const detail=await api.rpc('getReviewList','KCR',judges[1]);
@@ -114,6 +117,7 @@ try {
    const updated=await api.rpc('getReviewList','KCR',judges[1]);
    assert.match(JSON.stringify(updated.list.find(r=>r.unit==='1')),/검수에서도 드라이한 산미 코멘트/);
    assert.match(JSON.stringify(updated.list.find(r=>r.unit==='1')),/acidity_dry/);
+   assert.match(JSON.stringify(updated.list.find(r=>r.unit==='1')),/custom_acidity/);
    assert.equal(api.db.prepare('SELECT COUNT(*) n FROM scores').get().n,9,'review saves cannot create duplicates');
   }
   await page.evaluate(()=>{hideEval();showPanel('pLogin');});

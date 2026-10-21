@@ -1,7 +1,8 @@
 .kcl-tag-toolbar {display:flex;align-items:center;gap:8px;margin:8px 0}
 .kcl-tag-toolbar button {min-height:46px;padding:10px 14px;border:1px solid #777;border-radius:9px;font-size:14px;font-weight:700}
 .kcl-tag-launch {flex:1;background:#fff;color:#111}
-.kcl-tag-fallback {background:transparent;color:#ccc}
+.kcl-tag-fallback {display:none!important}
+.kcl-quick-tags:not(.kcl-tags-expanded) .custom-tag-row {display:none!important}
 .kcl-quick-tags:not(.kcl-tags-expanded) .category-primary,
 .kcl-quick-tags:not(.kcl-tags-expanded) .category-secondary,
 .kcl-quick-tags:not(.kcl-tags-expanded) .category-tertiary,

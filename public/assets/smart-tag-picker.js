@@ -173,7 +173,8 @@
     var originalInput = root.querySelector('.custom-tag-row input');
     var originalAdd = root.querySelector('.custom-tag-row button');
     if (originalInput && originalAdd) {
-      var input = document.createElement('input'); input.type = 'text'; input.placeholder = '직접 입력';
+      var input = document.createElement('input'); input.type = 'text'; input.placeholder = '원하는 표현 직접 입력';
+      if (originalInput.maxLength > 0) input.maxLength = originalInput.maxLength;
       input.setAttribute('aria-label', '스마트태그 직접 입력'); input.value = originalInput.value;
       input.disabled = originalInput.disabled;
       input.addEventListener('input', function () {
@@ -184,7 +185,17 @@
         var current = source(), field = current && current.querySelector('.custom-tag-row input');
         var trigger = current && current.querySelector('.custom-tag-row button');
         if (!field || !trigger || trigger.disabled) return;
-        field.value = input.value; trigger.click(); input.value = field.value; render(); schedule();
+        if (!input.value.trim()) { status.textContent = '추가할 표현을 입력해주세요.'; input.focus(); return; }
+        var before = selectionNodes(current).map(text).join('|');
+        field.value = input.value; trigger.click();
+        // KCR rebuilds its source controls after a selection; preserve rejected
+        // input but clear accepted text without touching the evaluation itself.
+        current = source();
+        if (!current) { close(); return; }
+        var changed = before !== selectionNodes(current).map(text).join('|');
+        if (changed) input.value = '';
+        status.textContent = changed ? '태그가 추가되었습니다.' : (text(document.getElementById('toast')) || '선택 개수와 중복 조건을 확인해주세요.');
+        render(); schedule();
       });
       add.disabled = originalAdd.disabled;
       input.addEventListener('keydown', function (event) { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); add.click(); } });

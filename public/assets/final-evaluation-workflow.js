@@ -5,8 +5,8 @@ function finalRoundForCode_(code) {
 }
 function participantCompletionForActiveArea_(code,item){
   if(code!=='KCAC'||!finalRoundForCode_(code)||!item||!Array.isArray(item.completedEvaluationScopes)||!_kcac.jars.length)return item;
-  var area=_kcac.jars.some(function(j){return j.type==='final-pattern';})?'pattern':'sensory';
-  var complete=item.completedEvaluationScopes.some(function(scope){return String(scope).split('+').indexOf(area)>=0;});
+  var area=_kcac.jars.some(function(j){return j.type==='final-pattern';})?'pattern':_kcac.finalArea||'sensory';
+  var complete=item.completedEvaluationScopes.some(function(scope){var parts=String(scope).split('+');return parts.indexOf(area)>=0 || (/^sensory/.test(area)&&parts.indexOf('sensory')>=0);});
   return Object.assign({},item,{evaluationCompleted:complete,display:complete?item.display:String(item.display||'').replace(/\s*·\s*✓?\s*평가완료/g,'')});
 }
 function finalDraftKey_(item) {
@@ -91,6 +91,7 @@ function configureFinalCorrectionEditor_(item){
   var editable=canCorrectFinalItem_(item),kcr=_reviewState.code==='KCR';
   document.getElementById('review-edit-title').textContent=(_reviewState.name||_reviewState.code)+' · '+(editable?(kcr?'평가 검수/수정':'반려 내용 수정'):'제출된 평가');
   document.getElementById('review-edit-sub').textContent=reviewGroupTitle_(item,_reviewState.code)+' · '+competitionRoundLabel_(_reviewState.code,item.round)+' · '+item.status;
+  if(_reviewState.code==='KCAC'&&['본선','결선'].includes(item.round))document.getElementById('review-edit-sub').textContent+=' · 창작 주제: '+(item['창작주제']||'동물');
   document.getElementById('review-edit-status-chip').textContent=item.status;
   document.getElementById('review-edit-help').textContent=editable?(kcr?'제출한 평가를 수정한 뒤 수정완료를 누르면 저장되고 순위에 반영됩니다.':'종이 평가표와 대조해 반려된 내용을 수정한 뒤 재제출해주세요.'):'제출된 종이 평가표 입력 내용입니다. 점수와 코멘트는 읽기 전용입니다.';
   document.getElementById('review-edit-help').style.display='block';

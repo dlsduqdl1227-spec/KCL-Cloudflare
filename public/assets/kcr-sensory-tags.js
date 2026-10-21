@@ -276,6 +276,25 @@
   var byId = {};
   tags.forEach(function(tag) { byId[tag.id] = tag; });
 
+  // Custom values travel in the existing tag-id fields, with separators encoded.
+  // Resolving the label from the id keeps drafts, review and debriefing identical.
+  function customId(category, value) {
+    var label = String(value || "").trim().replace(/\s+/g, " ");
+    if (CATEGORY_ORDER.indexOf(category) < 0 || !label || label.length > 80) return "";
+    return "custom_" + category + ":" + encodeURIComponent(label);
+  }
+  function getTag(id) {
+    id = String(id || "");
+    if (byId[id]) return byId[id];
+    var match = /^custom_(flavor|aftertaste|acidity|sweetness|mouthfeel):(.+)$/.exec(id);
+    if (!match) return null;
+    try {
+      var label = decodeURIComponent(match[2]);
+      if (customId(match[1], label) !== id) return null;
+      return { id:id, category:match[1], group:"primary", family:"custom", labelKo:label, labelEn:"직접 입력", isActive:true, isCustom:true };
+    } catch (_) { return null; }
+  }
+
   function uniqueIds(ids) {
     var out = [];
     (Array.isArray(ids) ? ids : []).forEach(function(id) {
@@ -286,7 +305,7 @@
   }
   function sanitizeKnown(ids, category) {
     return uniqueIds(ids).filter(function(id) {
-      var tag = byId[id];
+      var tag = getTag(id);
       return !!(tag && tag.isActive && tag.category === category);
     });
   }
@@ -309,7 +328,7 @@
   }
   function toggle(ids, id, category, otherSelectionCount) {
     var selected = sanitize(ids, category);
-    var tag = byId[String(id || "")];
+    var tag = getTag(id);
     if (!tag || !tag.isActive || tag.category !== category) {
       return { success: false, selected: selected, message: "현재 평가 항목에 사용할 수 없는 태그입니다." };
     }
@@ -345,7 +364,7 @@
     return (FAMILY_ORDER[category] || []).filter(function(family) { return list(category, family).length > 0; });
   }
   function labels(ids) {
-    return uniqueIds(ids).map(function(id) { return byId[id]; }).filter(Boolean).map(function(tag) { return tag.labelKo; });
+    return uniqueIds(ids).map(getTag).filter(Boolean).map(function(tag) { return tag.labelKo; });
   }
   function syncAftertasteFlavorRefs(flavorTagIds, aftertasteFlavorTagIds) {
     var allowed = sanitize(flavorTagIds, "flavor");
@@ -361,7 +380,8 @@
     maxSelections: MAX_SELECTIONS
   };
   global.KcrSensoryTags = {
-    get: function(id) { return byId[String(id || "")] || null; },
+    get: getTag,
+    customId: customId,
     list: list,
     families: families,
     familyTag: familyTag,
