@@ -8,6 +8,13 @@
 .kcr-review-cup-navigation button:disabled { opacity:.4; cursor:default; }
 .kcr-review-cup-navigation button:focus-visible { outline:2px solid #a3d6ff; outline-offset:2px; }
 .kcr-review-cup-navigation span { white-space:nowrap; font-size:13px; color:var(--text-3,#aaa); }
+.kcr-review-comparison-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.kcr-review-comparison-actions:empty { display:none; }
+.kcr-review-comparison-actions button { flex:1 1 150px; width:auto; min-height:44px; margin:0; padding:12px; border:1px solid var(--border); border-radius:10px; color:var(--text,#fff); background:var(--bg-card,#171717); font:inherit; font-size:14px; cursor:pointer; }
+.kcr-review-comparison-actions button[aria-expanded="true"] { border-color:#a3d6ff; }
+.kcr-review-comparison-actions button:focus-visible { outline:2px solid #a3d6ff; outline-offset:2px; }
+.kcr-review-comparison-actions button:disabled { opacity:.5; cursor:wait; }
+.kcr-review-comparison-actions button[hidden], #kcr-review-comparison[hidden] { display:none; }
 .kcr-station-comparison { min-width:0; width:100%; padding:14px; border:1px solid #393939; border-radius:12px; background:#131313; box-sizing:border-box; }
 .kcr-station-comparison h3 { font-size:17px; margin:0 0 8px; line-height:1.5; overflow-wrap:anywhere; }
 .kcr-station-comparison h4 { font-size:15px; margin:8px 0; }

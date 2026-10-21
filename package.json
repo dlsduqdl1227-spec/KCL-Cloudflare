@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kcr-final-head-comparison": "node tests/stage258-kcr-final-head-comparison.test.mjs",
     "test:kcr-review-selection": "node tests/stage257-kcr-review-owner-selection.test.mjs",
     "test:kcr-final-correction": "node tests/stage256-kcr-final-direct-correction.test.mjs && node tests/stage256-kcr-final-correction-browser.test.mjs",
     "test:api-safety": "node tests/stage255-api-response-safety.test.mjs",

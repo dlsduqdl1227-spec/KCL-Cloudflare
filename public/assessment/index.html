@@ -2002,7 +2002,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js?v=stage255"></script>
 <script src="/assets/final-evaluation-workflow.js?v=257"></script>
-<link rel="stylesheet" href="/assets/kcl-ui.css?v=257">
+<link rel="stylesheet" href="/assets/kcl-ui.css?v=258">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
 <script defer src="/assets/kcr-viewport.js?v=228"></script>
@@ -6960,7 +6960,7 @@ function buildKcrStationComparisonHtml_(stats) {
   metrics.forEach(function(metric){
     html += '<tr><th scope="row">' + escHtml(labels[metric.key] || metric.label) + '</th><td>' + number(metric.avg) + '</td><td>' + (metric.count > 1 ? number(metric.stddev) : '—') + '</td><td>' + number(metric.headAvg) + '</td><td>' + (metric.headCount > 1 ? number(metric.headStddev) : '—') + '</td></tr>';
   });
-  html += '</tbody></table></div><p class="kcr-comparison-note">개별 편차는 해당 스테이션 평균 대비 차이입니다. +는 평균보다 높음, −는 낮음이며 점수 조정값이 아닙니다.</p>';
+  html += '</tbody></table></div><p class="kcr-comparison-note">개별 편차는 이 컵의 심사위원 평균 대비 차이입니다. +는 평균보다 높음, −는 낮음이며 점수 조정값이 아닙니다.</p>';
   function judgeTable(rows,headOnly) {
     var table = '<div class="kcr-comparison-table-wrap" tabindex="0" role="region" aria-label="' + (headOnly ? '헤드별 편차' : '심사위원별 점수와 편차') + '"><table><caption>' + (headOnly ? '헤드심사위원 간 비교 · 헤드 평균 대비 차이' : '심사위원별 점수 (전체 평균 대비 차이)') + '</caption><thead><tr><th>심사위원</th><th>총점</th>' + metrics.map(function(metric){return '<th>' + escHtml(labels[metric.key] || metric.label) + '</th>';}).join('') + '</tr></thead><tbody>';
     rows.forEach(function(row){
@@ -6986,17 +6986,20 @@ function buildKcrStationComparisonHtml_(stats) {
 var _kcrComparisonSelection = {station:'',unit:''};
 var _kcrOfficialReviewSelection = {station:'',unit:''};
 var _kcrComparisonLoadGeneration = 0;
-function renderKcrSelectedComparison_(item, container, force) {
+function renderKcrSelectedComparison_(item, container, force, onComplete) {
   var generation = ++_kcrComparisonLoadGeneration;
-  if (!item || !container) return;
-  if (item._stddev && !force) { container.innerHTML = buildKcrStationComparisonHtml_(item._stddev); return; }
-  if (!item.comparisonAvailable && !item._stddev) { container.innerHTML = ''; return; }
+  var complete = function(){ if (generation === _kcrComparisonLoadGeneration && onComplete) onComplete(); };
+  if (!item || !container) { complete(); return; }
+  if (item._stddev && !force) { container.innerHTML = buildKcrStationComparisonHtml_(item._stddev); complete(); return; }
+  if (!item.comparisonAvailable && !item._stddev) { container.innerHTML = ''; complete(); return; }
   container.innerHTML = '<p class="kcr-comparison-note">선택한 참가자의 점수·코멘트를 불러오는 중입니다.</p>';
   loadKcrReviewDetail_(item, function(detail){
+    complete();
     if (generation !== _kcrComparisonLoadGeneration || !container.isConnected || activePanelId_() !== 'pReview') return;
     item._stddev = detail._stddev || null;
     container.innerHTML = detail._stddev ? buildKcrStationComparisonHtml_(detail._stddev) : '<p class="kcr-comparison-note">확인할 비교 기록이 없습니다.</p>';
   }, function(message){
+    complete();
     if (generation !== _kcrComparisonLoadGeneration || !container.isConnected || activePanelId_() !== 'pReview') return;
     container.innerHTML = '<p class="kcr-comparison-note"></p><button type="button" class="kcr-comparison-refresh">다시 불러오기</button>';
     container.querySelector('p').textContent = message;
@@ -7026,7 +7029,8 @@ function renderKcrOfficialReviewOverview_(list, code, headers, supersededCount, 
   }
   if (!keys.length) { wrap.innerHTML='<p class="kcr-comparison-note">제출된 대회평가가 없습니다.</p>'; summary(); return; }
   if (!groups[_kcrOfficialReviewSelection.station]) _kcrOfficialReviewSelection.station=keys[0];
-  wrap.innerHTML='<div class="kcr-comparison-filters"><label>스테이션<select id="kcr-review-station"></select></label><label>컵번호<select id="kcr-review-unit"></select></label></div>'+(finalRenderer?'<div class="kcr-review-cup-navigation"><button type="button" id="kcr-review-prev">← 이전 컵</button><span id="kcr-review-position" aria-live="polite"></span><button type="button" id="kcr-review-next">다음 컵 →</button></div>':'')+'<div id="kcr-review-submissions"></div><div id="kcr-review-comparison"></div>';
+  var comparisonOpen=false;
+  wrap.innerHTML='<div class="kcr-comparison-filters"><label>스테이션<select id="kcr-review-station"></select></label><label>컵번호<select id="kcr-review-unit"></select></label></div>'+(finalRenderer?'<div class="kcr-review-cup-navigation"><button type="button" id="kcr-review-prev">← 이전 컵</button><span id="kcr-review-position" aria-live="polite"></span><button type="button" id="kcr-review-next">다음 컵 →</button></div>':'')+'<div id="kcr-review-submissions"></div><div id="kcr-review-comparison-actions" class="kcr-review-comparison-actions"></div><div id="kcr-review-comparison"></div>';
   var stations=document.getElementById('kcr-review-station'),units=document.getElementById('kcr-review-unit');
   keys.forEach(function(key){stations.add(new Option(groups[key].label,key));});stations.value=_kcrOfficialReviewSelection.station;
   function renderUnit(){
@@ -7036,11 +7040,31 @@ function renderKcrOfficialReviewOverview_(list, code, headers, supersededCount, 
     else renderReviewRowsInto_(rows,code,headers,supersededCount,document.getElementById('kcr-review-submissions'));
     var comparison=rows.find(function(row){return !!row._stddev || !!row.comparisonAvailable;});
     var comparisonContainer=document.getElementById('kcr-review-comparison');
+    var comparisonActions=document.getElementById('kcr-review-comparison-actions');
+    comparisonActions.innerHTML='';
     comparisonContainer.innerHTML='';
-    // Keep the final edit list focused on the owner's selected cup. Peer comparisons
-    // remain available in the editor's collapsed, read-only comparison section.
-    if(comparison&&!finalRenderer)renderKcrSelectedComparison_(comparison,comparisonContainer);
-    else ++_kcrComparisonLoadGeneration;
+    ++_kcrComparisonLoadGeneration;
+    // Peer scores are read-only and separate from the owner's editable submission.
+    // Retain an open comparison when changing cups, never the previous cup's response.
+    if(comparison&&finalRenderer){
+      comparisonActions.innerHTML='<button type="button" id="kcr-review-compare-toggle" aria-controls="kcr-review-comparison" aria-expanded="false">점수·표준편차 비교</button><button type="button" id="kcr-review-compare-refresh" hidden>통계 새로고침</button>';
+      var toggle=comparisonActions.querySelector('#kcr-review-compare-toggle'),refresh=comparisonActions.querySelector('#kcr-review-compare-refresh');
+      function showComparison(force){
+        toggle.setAttribute('aria-expanded',String(comparisonOpen));
+        toggle.textContent=comparisonOpen?'점수 비교 닫기':'점수·표준편차 비교';
+        refresh.hidden=!comparisonOpen;
+        comparisonContainer.hidden=!comparisonOpen;
+        if(!comparisonOpen){++_kcrComparisonLoadGeneration;comparisonContainer.innerHTML='';return;}
+        refresh.disabled=true;
+        renderKcrSelectedComparison_(comparison,comparisonContainer,force,function(){refresh.disabled=false;});
+      }
+      toggle.onclick=function(){comparisonOpen=!comparisonOpen;showComparison(false);};
+      refresh.onclick=function(){showComparison(true);};
+      showComparison(false);
+    }else{
+      comparisonContainer.hidden=false;
+      if(comparison)renderKcrSelectedComparison_(comparison,comparisonContainer);
+    }
     if(finalRenderer){
       document.getElementById('kcr-review-position').textContent=(units.selectedIndex+1)+' / '+units.options.length+'컵';
       document.getElementById('kcr-review-prev').disabled=units.selectedIndex<=0;
