@@ -102,13 +102,14 @@ try{
    renderOperationalHealth_({success:true,available:true,state:'warning',requests:200,errors:2,errorPercent:1,resourceErrors:2,cpuP50Ms:2.5,cpuP99Ms:18,
     windowStart:'2026-10-20T07:30:00Z',windowEnd:'2026-10-20T07:45:00Z',updatedAt:'2026-10-20T07:46:00Z'});
   },api.actor);
+  await page.locator('#server-health-body summary').click();
   assert.match(await page.locator('#server-health-body').innerText(),/200건|18.00 ms/);
   assert.doesNotMatch(await page.locator('#pAdmin').innerText(),/D1 계정 사용량|남음/);
   await page.locator('#server-health-card').scrollIntoViewIfNeeded();
   assert.equal((await inspectPage(page)).pageOverflow,false);
   await page.screenshot({path:`tmp/stage251-qa/health-${width}.png`});
   await page.evaluate(()=>renderOperationalHealth_({success:true,available:false,state:'unavailable',message:'집계 연결을 확인해주세요.'}));
-  assert.doesNotMatch(await page.locator('#server-health-body').innerText(),/정상|0건/);
+  assert.doesNotMatch(await page.locator('#server-health-body .server-health-signal').innerText(),/정상|0건/);
   assert.equal(await page.evaluate(()=>JSON.stringify(_cupping.cups)),saved);
   assert.deepEqual(page.qaErrors,[]);assert.deepEqual(page.qaMissing,[]);
   await page.close();

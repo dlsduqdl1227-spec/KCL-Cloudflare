@@ -1,0 +1,22 @@
+/* Admin diagnostics only; no evaluation layout or storage changes. */
+#server-health-card .server-health-body { margin-top:14px; min-width:0; }
+#server-health-card [data-state="ok"] { --health-color:#71e5ac; --health-tint:rgba(40,161,102,.12); }
+#server-health-card [data-state="warning"] { --health-color:#ffba70; --health-tint:rgba(237,137,42,.12); }
+#server-health-card [data-state="error"] { --health-color:#ff9090; --health-tint:rgba(222,67,67,.12); }
+#server-health-card [data-state="unknown"] { --health-color:#c1c8d4; --health-tint:rgba(145,155,174,.1); }
+#server-health-card .server-health-signal { display:flex; align-items:flex-start; gap:16px; padding:18px; border:1px solid var(--health-color); border-radius:12px; background:var(--health-tint); min-width:0; }
+#server-health-card .server-health-lamp { flex:0 0 20px; width:20px; height:20px; margin-top:8px; border-radius:50%; background:var(--health-color); box-shadow:0 0 0 5px var(--health-tint); }
+#server-health-card .server-health-copy { min-width:0; }
+#server-health-card .server-health-label { display:block; color:var(--health-color); font-size:28px; line-height:1.3; font-weight:900; }
+#server-health-card .server-health-copy p { color:#e3e5eb; font-size:14px; line-height:1.7; margin:8px 0 0; word-break:keep-all; overflow-wrap:anywhere; }
+#server-health-card .server-health-legend { display:flex; flex-wrap:wrap; gap:8px 16px; margin:12px 0; font-size:12px; line-height:1.6; }
+#server-health-card .server-health-legend span { color:var(--health-color); white-space:nowrap; }
+#server-health-card .server-health-updated { font-size:12px; color:#b9bec9; line-height:1.6; overflow-wrap:anywhere; }
+#server-health-card .server-health-details { margin-top:12px; border-top:1px solid #45454f; }
+#server-health-card .server-health-details summary { display:list-item; min-height:44px; padding:12px 4px; box-sizing:border-box; cursor:pointer; color:#e5e7ed; font-size:14px; font-weight:700; }
+#server-health-card .server-health-details summary:focus-visible { outline:2px solid #a3d6ff; outline-offset:2px; border-radius:4px; }
+#server-health-card .server-health-rules { color:#b9bec9; font-size:12px; line-height:1.7; margin:12px 0 0; word-break:keep-all; overflow-wrap:anywhere; }
+@media(max-width:420px) {
+  #server-health-card .server-health-signal { padding:14px; gap:12px; }
+  #server-health-card .server-health-label { font-size:25px; }
+}
