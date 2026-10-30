@@ -806,11 +806,11 @@ input[type=range].kcl-range,
 .ikrc-comment-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .ikrc-comment-actions .btn-gen-comment,.ikrc-comment-actions .btn-outline{margin:0}
 .ikrc-comment-actions [aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
-#kbc-auto-comment-reset,#ikrc-ai-comment-reset{grid-column:1/-1}
+#ikrc-ai-comment-reset{grid-column:1/-1}
 .comment-regenerate-btn{width:100%;margin:12px 0 0!important}
 .review-ai-comment-actions{display:flex;flex-direction:column;gap:7px;min-width:166px}
 .review-ai-comment-actions .btn-gen-comment,.review-ai-comment-actions .btn-outline{width:100%;min-width:0!important;margin:0!important;white-space:normal!important}
-@media(max-width:420px){.ikrc-comment-actions{grid-template-columns:1fr}#kbc-auto-comment-reset,#ikrc-ai-comment-reset{grid-column:auto}}
+@media(max-width:420px){.ikrc-comment-actions{grid-template-columns:1fr}#ikrc-ai-comment-reset{grid-column:auto}}
 .review-score-input{margin-top:10px!important;text-align:center;font-weight:700}
 .review-readonly-block{background:rgba(255,255,255,.035);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px}
 .review-field{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}
@@ -2565,21 +2565,6 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div id="kbc-participant-complete" class="participant-complete-badge" style="display:none">✓ 내 평가 제출완료</div>
     <input type="number" id="kbc-num" placeholder="참가자 번호" inputmode="numeric" oninput="applyParticipantNumberInput_('KBC','kbc-num','kbc-name')">
     <input type="text" id="kbc-name" placeholder="참가자명">
-    <div class="timer-box">
-      <div class="timer-help">2026 KBC 기준 시연시간을 입력하세요. 예선은 07분00초 이내 진행, 08분00초부터 실격이며 본/결선은 10분00초 이내 진행, 11분00초부터 실격입니다.</div>
-      <input type="text" id="kbc-end-time" placeholder="경기시간 (예: 07분00초)" inputmode="numeric" autocomplete="off" onfocus="placeKbcTimeCursorBeforeSecond_(this)" onclick="placeKbcTimeCursorBeforeSecond_(this)" onkeyup="placeKbcTimeCursorBeforeSecond_(this)" oninput="formatKbcTimeInput_(this); updateKbcTimeStatus_()" onblur="normalizeKbcTimeInput_(this); updateKbcTimeStatus_()" style="margin-bottom:10px">
-      <input type="number" id="kbc-time-penalty" placeholder="시간감점 자동 계산" min="0" step="1" inputmode="numeric" readonly style="margin-bottom:0">
-      <div id="kbc-time-status" class="time-status"></div>
-      <div id="kbc-time-guide" class="time-rule-guide"></div>
-    </div>
-    <div class="review-readonly-block" style="margin-bottom:14px">
-      <div class="review-field-label">시간 처리</div>
-      <div class="review-field-readonly" id="kbc-auto-disq-display">정상 · 시간감점 없음</div>
-    </div>
-    <div class="timer-help" id="kbc-disq-help" style="margin-top:-8px;margin-bottom:14px">
-      시간은 00분00초 형식으로만 입력되며, 제한시간 초과 시 5초마다 1점씩 자동 감점됩니다.
-    </div>
-
     <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
 
     <div id="kbc-service-block">
@@ -2602,22 +2587,32 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="sub-section"><div class="sub-section-title">Machine &amp; Equipment Professionalism (0~5점, 0.2단위)</div></div>
       <div id="kbc-machine-rows"></div>
     </div>
-    <div class="big-final-box">
-      <div class="big-final-label">총점</div>
-      <div class="big-final-num" id="kbc-final-big">0.0</div>
-    </div>
     <div class="section-label">종합 코멘트</div>
     <div id="kbc-comment-reference"></div>
     <div class="section-label" style="margin-top:16px">AI 자동 코멘트 사용 여부</div>
     <div class="ikrc-comment-actions">
       <button id="kbc-auto-comment-generate" class="btn-gen-comment" type="button" onclick="generateKbcComment()">AI 코멘트 생성 / 다시 생성</button>
       <button id="kbc-auto-comment-disable" class="btn-outline" type="button" onclick="clearKbcGeneratedComment()">AI 코멘트 사용 안 함</button>
-      <button id="kbc-auto-comment-reset" class="btn-outline" type="button" onclick="resetKbcAiCommentGeneration()">AI 코멘트 생성 초기화</button>
     </div>
     <div id="kbc-comment-mode-note" class="review-edit-help" style="margin-bottom:10px">자동 생성을 사용하지 않고 아래 종합 의견을 직접 작성할 수 있습니다.</div>
     <div class="gen-comment-area" id="kbc-comment-gen"></div>
     <div id="kbc-comment-warning" class="comment-edit-warning" style="display:none"></div>
     <textarea id="kbc-comment" placeholder="위 평가 내용을 참고해 종합 의견을 입력하세요" oninput="onKbcCommentInput()"></textarea>
+    <section id="kbc-finish-check" aria-labelledby="kbc-finish-title">
+      <div class="section-label" id="kbc-finish-title">경기시간 · 제출 전 확인</div>
+      <div class="timer-box">
+        <label class="review-field-label" for="kbc-end-time">경기시간</label>
+        <div class="timer-help" id="kbc-time-input-help">평가와 코멘트 작성을 마친 뒤 실제 경기시간을 입력하세요. 예: 0705 → 07분05초</div>
+        <input type="text" id="kbc-end-time" placeholder="경기시간 (예: 07분00초)" aria-describedby="kbc-time-input-help kbc-time-status kbc-time-guide" inputmode="numeric" autocomplete="off" onfocus="placeKbcTimeCursorBeforeSecond_(this)" onclick="placeKbcTimeCursorBeforeSecond_(this)" onkeyup="placeKbcTimeCursorBeforeSecond_(this)" oninput="formatKbcTimeInput_(this); updateKbcTimeStatus_()" onblur="normalizeKbcTimeInput_(this); updateKbcTimeStatus_()" style="margin-bottom:10px">
+        <input type="hidden" id="kbc-time-penalty">
+        <div id="kbc-time-status" class="time-status" role="status"></div>
+        <div id="kbc-time-guide" class="time-rule-guide"></div>
+      </div>
+      <div class="big-final-box">
+        <div class="big-final-label">최종 점수 · 시간감점 반영</div>
+        <div class="big-final-num" id="kbc-final-big">0.0</div>
+      </div>
+    </section>
     <button class="btn" onclick="kbcSubmit()">제출</button>
     <div class="divider"></div>
     <button class="btn-danger" onclick="backToSelect()">대회 선택으로</button>
@@ -9889,7 +9884,7 @@ function ensureReviewOverallCard_() {
   if (currentCode === 'KBC' || currentCode === 'IKRC') {
     generateButton = '<div class="review-ai-comment-actions">' +
       '<button id="review-ai-comment-generate-' + idx + '" type="button" class="btn-gen-comment" onclick="generateReviewOverallComment(' + idx + ')">AI 코멘트 생성 / 다시 생성</button>' +
-      '<button id="review-ai-comment-reset-' + idx + '" type="button" class="btn-outline" onclick="resetReviewAiCommentGeneration(' + idx + ')">AI 코멘트 생성 초기화</button>' +
+      '<button id="review-ai-comment-reset-' + idx + '" type="button" class="btn-outline" onclick="resetReviewAiCommentGeneration(' + idx + ')">' + (currentCode === 'KBC' ? 'AI 코멘트 사용 안 함' : 'AI 코멘트 생성 초기화') + '</button>' +
       '</div>';
   }
   if (!editable) generateButton = '';
@@ -9955,7 +9950,7 @@ function resetReviewAiCommentGeneration(commentIdx) {
     scheduleReviewAutoSave(true);
   }
   delete _reviewGeneratedComments[key];
-  toast('검수 AI 코멘트 생성만 초기화했습니다. 점수·강도·스마트태그와 직접 수정한 종합 의견은 유지됩니다.');
+  toast(code === 'KBC' ? 'AI 코멘트 사용을 해제했습니다. 직접 수정한 종합 의견은 유지됩니다.' : '검수 AI 코멘트 생성만 초기화했습니다. 점수·강도·스마트태그와 직접 수정한 종합 의견은 유지됩니다.');
 }
 function generateReviewOverallComment(commentIdx) {
   var code = reviewCommentGeneratorCode_();
@@ -9984,7 +9979,7 @@ function generateReviewOverallComment(commentIdx) {
     _reviewCommentGenerationTokens[requestKey] = requestToken + 1;
     delete _reviewCommentGenerationTimers[requestKey];
     setReviewAiCommentGenerationBusy_(commentIdx, false);
-    area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 응답이 지연되고 있습니다.</p>' + ((code === 'KBC' || code === 'IKRC') ? '<button type="button" class="btn-outline comment-regenerate-btn" onclick="resetReviewAiCommentGeneration(' + commentIdx + ')">AI 코멘트 생성 초기화</button>' : '<button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">다시 시도</button>');
+    area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 응답이 지연되고 있습니다.</p>' + (code === 'IKRC' ? '<button type="button" class="btn-outline comment-regenerate-btn" onclick="resetReviewAiCommentGeneration(' + commentIdx + ')">AI 코멘트 생성 초기화</button>' : '<button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateReviewOverallComment(' + commentIdx + ')">다시 시도</button>');
   }, 20000);
   var runner = google.script.run
     .withSuccessHandler(function(res) {
@@ -15117,7 +15112,6 @@ function updateKbcTimeStatus_() {
     if (penaltyInput) penaltyInput.value = '';
     el.className = 'time-status';
     el.textContent = '시간 미입력 · 제한 ' + kbcTimeLimitText_() + ' · 실격 ' + kbcDisqTimeLimitText_();
-    kbcSetAutoDqDisplay_(false, 0, false);
     calcKbcTotal();
     return;
   }
@@ -15126,7 +15120,6 @@ function updateKbcTimeStatus_() {
     if (penaltyInput) penaltyInput.value = '';
     el.className = 'time-status';
     el.textContent = '입력 중 · 숫자 4자리로 입력하면 00분00초 형식으로 자동 정리됩니다.';
-    kbcSetAutoDqDisplay_(false, 0, false);
     calcKbcTotal();
     return;
   }
@@ -15135,7 +15128,6 @@ function updateKbcTimeStatus_() {
     if (penaltyInput) penaltyInput.value = '';
     el.className = 'time-status dq';
     el.textContent = '시간 형식 오류 · 00분00초 형식만 사용할 수 있습니다. 예: 07분00초';
-    kbcSetAutoDqDisplay_(false, 0, false);
     calcKbcTotal();
     return;
   }
@@ -15148,7 +15140,6 @@ function updateKbcTimeStatus_() {
   if (dq) el.textContent = '실격 · ' + text + ' / 실격 기준 ' + kbcDisqTimeLimitText_();
   else if (over) el.textContent = '시간 초과 · 자동감점 -' + penalty + '점 · ' + text + ' / 제한 ' + kbcTimeLimitText_();
   else el.textContent = '정상 · 제한시간 이내 · ' + text + ' / 제한 ' + kbcTimeLimitText_();
-  kbcSetAutoDqDisplay_(over, penalty, dq);
   calcKbcTotal();
 }
 
@@ -15533,22 +15524,6 @@ function cancelKbcCommentGeneration_() {
   _kbcCommentGenerationTimer = null;
   setKbcCommentGenerationBusy_(false);
 }
-function resetKbcAiCommentGeneration() {
-  cancelKbcCommentGeneration_();
-  var textarea = document.getElementById('kbc-comment');
-  var current = textarea ? textarea.value.trim() : '';
-  var generated = String(_kbcGeneratedComment || '').trim();
-  if (textarea && generated && current === generated) textarea.value = '';
-  _kbcGeneratedComment = '';
-  _kbcCommentEdited = true;
-  _kbcAutoCommentEnabled = false;
-  setCommentWarning('kbc-comment-warning', '', true);
-  var area = document.getElementById('kbc-comment-gen');
-  if (area) { area.innerHTML = ''; area.classList.remove('active'); }
-  setKbcAutoCommentModeUi_();
-  if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
-  toast('AI 코멘트 생성만 초기화했습니다. 점수·스마트태그·항목별 코멘트와 직접 수정한 종합 의견은 유지됩니다.');
-}
 function clearKbcGeneratedComment() {
   cancelKbcCommentGeneration_();
   var textarea = document.getElementById('kbc-comment');
@@ -15561,20 +15536,9 @@ function clearKbcGeneratedComment() {
   var area = document.getElementById('kbc-comment-gen');
   if (area) { area.innerHTML = ''; area.classList.remove('active'); }
   setKbcAutoCommentModeUi_();
+  if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
   toast('KBC AI 자동 코멘트 사용을 해제했습니다. 종합 의견을 직접 작성할 수 있습니다.');
 }
-function kbcSetAutoDqDisplay_(flag, penalty, dq) {
-  var auto = document.getElementById('kbc-auto-disq-display');
-  penalty = Number(penalty || kbcTimePenalty_()) || 0;
-  if (auto) {
-    if (dq) auto.textContent = '실격 · 시간 초과';
-    else if (flag) auto.textContent = '시간 초과 · 자동감점 ' + fmtScore(penalty,1) + '점';
-    else auto.textContent = penalty ? ('정상 시간 · 자동감점 ' + fmtScore(penalty,1) + '점') : '정상 · 시간감점 없음';
-  }
-  var help = document.getElementById('kbc-disq-help');
-  if (help) help.textContent = dq ? '실격 기준시간에 도달하여 실격으로 저장됩니다.' : (flag ? '제한시간 초과분은 5초마다 1점씩 자동 감점됩니다.' : '제한시간 이내이면 시간감점 없이 저장됩니다.');
-}
-
 function startKbc() {
   // KBC는 공유 평가목적 상태가 이전 화면에서 남아 있어도 항상 공식 대회평가로 시작합니다.
   setEvaluationPurpose_('competition');
@@ -15661,7 +15625,7 @@ function generateKbcComment() {
     _kbcCommentGenerationToken += 1;
     _kbcCommentGenerationTimer = null;
     setKbcCommentGenerationBusy_(false);
-    area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 응답이 지연되고 있습니다.</p><button type="button" class="btn-outline comment-regenerate-btn" onclick="resetKbcAiCommentGeneration()">AI 코멘트 생성 초기화</button>';
+    area.innerHTML = '<p style="color:#aaa;font-size:13px;text-align:center">생성 응답이 지연되고 있습니다.</p><button type="button" class="btn-gen-comment comment-regenerate-btn" onclick="generateKbcComment()">다시 시도</button>';
   }, 20000);
 
   google.script.run

@@ -30,12 +30,13 @@ function functionSource(source, name) {
 assert.match(assessment, /id="kbc-comment-reference"/);
 assert.match(assessment, /id="kbc-auto-comment-generate"[\s\S]*AI 코멘트 생성 \/ 다시 생성/);
 assert.match(assessment, /id="kbc-auto-comment-disable"[\s\S]*AI 코멘트 사용 안 함/);
-assert.match(assessment, /id="kbc-auto-comment-reset"[\s\S]*AI 코멘트 생성 초기화/);
+assert.doesNotMatch(assessment, /id="kbc-auto-comment-reset"/);
 assert.match(assessment, /_kbcAutoCommentEnabled\s*=\s*false/);
 assert.match(assessment, /class="btn-gen-comment comment-regenerate-btn" onclick="generateKbcComment\(\)"[\s\S]*AI 코멘트 다시 생성/);
 
 const tagSection = functionSource(assessment, "renderKbcInlineTagSection_");
-assert.doesNotMatch(tagSection, /custom-tag-row|직접 입력|addKbcInlineCustomTag/);
+assert.match(tagSection, /custom-tag-row/);
+assert.match(tagSection, /addKbcCustomTag/);
 assert.doesNotMatch(assessment, /function addKbcInlineCustomTag\(/);
 
 const evidence = functionSource(assessment, "kbcCommentEvidenceItems_");
@@ -58,12 +59,12 @@ assert.match(generateClient, /_kbcAutoCommentEnabled\s*=\s*true/);
 const clearClient = functionSource(assessment, "clearKbcGeneratedComment");
 assert.match(clearClient, /_kbcAutoCommentEnabled\s*=\s*false/);
 assert.match(clearClient, /_kbcGeneratedComment\s*=\s*''/);
-const resetClient = functionSource(assessment, "resetKbcAiCommentGeneration");
-assert.match(resetClient, /cancelKbcCommentGeneration_/);
-assert.match(resetClient, /current\s*===\s*generated/);
-assert.match(resetClient, /_kbcGeneratedComment\s*=\s*''/);
-assert.match(resetClient, /kclSaveActiveEvalDraftNow_/);
-assert.doesNotMatch(resetClient, /_kbcTags\s*=|_kbcYN\s*=|kbcScoreValue_\(|KBC_(?:SERVICE|ESPRESSO|SIGNATURE_SENSORY|MACHINE)\s*=/);
+assert.match(clearClient, /cancelKbcCommentGeneration_/);
+assert.match(clearClient, /current\s*===\s*_kbcGeneratedComment.trim\(\)/);
+assert.match(clearClient, /kclSaveActiveEvalDraftNow_/);
+assert.doesNotMatch(clearClient, /_kbcTags\s*=|_kbcYN\s*=|kbcScoreValue_\(|KBC_(?:SERVICE|ESPRESSO|SIGNATURE_SENSORY|MACHINE)\s*=/);
+assert.doesNotMatch(generateClient, /resetKbcAiCommentGeneration|AI 코멘트 생성 초기화/);
+assert.match(generateClient, /다시 시도/);
 assert.match(generateClient, /requestToken/);
 assert.match(generateClient, /_kbcCommentGenerationTimer/);
 assert.match(generateClient, /requestToken\s*!==\s*_kbcCommentGenerationToken/);
@@ -77,6 +78,7 @@ assert.match(reviewReference, /현재 검수 화면에서 수정한 점수·스�
 const reviewCard = functionSource(assessment, "ensureReviewOverallCard_");
 assert.match(reviewCard, /AI 코멘트 생성 \/ 다시 생성/);
 assert.match(reviewCard, /AI 코멘트 생성 초기화/);
+assert.match(reviewCard, /currentCode === 'KBC' \? 'AI 코멘트 사용 안 함'/);
 assert.match(reviewCard, /resetReviewAiCommentGeneration/);
 assert.match(reviewCard, /review-kbc-comment-reference/);
 const reviewGenerate = functionSource(assessment, "generateReviewOverallComment");
