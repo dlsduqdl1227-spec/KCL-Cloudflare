@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kbc-finish-flow": "node tests/stage165-kbc-overall-comment.test.mjs && node tests/stage263-kbc-finish-flow-browser.test.mjs",
     "test:kcac-final-panel": "node tests/stage261-kcac-four-head-panel.test.mjs && node tests/stage261-kcac-panel-browser.test.mjs",
     "test:unified-tag-entry": "node tests/stage260-tags-layout-browser.test.mjs && node tests/stage253-smart-tag-picker-browser.test.mjs && node tests/stage228-kcr-mobile-viewport.test.mjs",
     "test:health-signals": "node tests/stage250-operating-health-comments.test.mjs && node tests/stage259-health-signals.test.mjs",
