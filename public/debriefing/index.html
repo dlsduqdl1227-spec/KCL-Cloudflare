@@ -644,7 +644,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   html,body{background:#fff!important}
 }
 </style>
-<script src="/assets/kcr-sensory-tags.js?v=260"></script>
+<script src="/assets/kcr-sensory-tags.js?v=stage264"></script>
 <script src="/assets/kcl-api-shim.js?v=stage255"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
@@ -1707,7 +1707,7 @@ function tagValsFor_(s, names) {
     if (!ok) return;
     out = out.concat(splitPublicTokens_(s[k]));
   });
-  return uniqueList_(out).slice(0, 5);
+  return uniqueList_(out);
 }
 function joinNatural_(arr, fallback) {
   arr = uniqueList_(arr).filter(Boolean);
@@ -1948,7 +1948,6 @@ function buildSmartTagBox(s, compCode) {
     if (raw == null || String(raw).trim() === '') return;
     var chips = uniqueList_(splitPublicTokens_(raw));
     if (String(compCode || '').toUpperCase() === 'KCR') chips = kcrPublicTagLabels_(chips);
-    chips = chips.slice(0, 6);
     if (!chips.length) return;
     rows.push({ label: smartTagPublicLabel_(k), chips: chips });
   });

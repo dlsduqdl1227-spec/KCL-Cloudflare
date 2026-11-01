@@ -7,7 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const rpc = fs.readFileSync(path.join(root, "functions", "api", "rpc.js"), "utf8");
 const registry = fs.readFileSync(path.join(root, "public", "registry", "index.html"), "utf8");
 
-assert.match(rpc, /const scheduleLabel = competitionDate \|\| operatingDay/);
+assert.match(rpc, /const scheduleLabel = code==='KBC'/);
+assert.match(rpc, /competitionDate \|\| operatingDay/);
 // Final rounds may prepend the editable performance order; the date label remains.
 assert.match(rpc, /display: [^\n]*\(scheduleLabel \? \(scheduleLabel \+ ' · '\) : ''\)/);
 assert.match(registry, /function participantScheduleText_\(r\)/);

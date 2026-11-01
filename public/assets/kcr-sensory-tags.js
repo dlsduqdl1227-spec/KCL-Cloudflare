@@ -2,7 +2,6 @@
   "use strict";
 
   var CATEGORY_ORDER = ["flavor", "aftertaste", "acidity", "sweetness", "mouthfeel"];
-  var MAX_SELECTIONS = { flavor: 5, mouthfeel: 3, acidity: 3, sweetness: 3, aftertaste: 3 };
   var CATEGORY_LABELS = {
     flavor: { ko: "플레이버", en: "Flavor" },
     aftertaste: { ko: "에프터테이스트", en: "Aftertaste" },
@@ -280,7 +279,7 @@
   // Resolving the label from the id keeps drafts, review and debriefing identical.
   function customId(category, value) {
     var label = String(value || "").trim().replace(/\s+/g, " ");
-    if (CATEGORY_ORDER.indexOf(category) < 0 || !label || label.length > 80) return "";
+    if (CATEGORY_ORDER.indexOf(category) < 0 || !label) return "";
     return "custom_" + category + ":" + encodeURIComponent(label);
   }
   function getTag(id) {
@@ -310,47 +309,17 @@
     });
   }
   function sanitize(ids, category) {
-    var selected = sanitizeKnown(ids, category);
-    var childFamilies = {};
-    selected.forEach(function(id) {
-      var tag = byId[id];
-      if (tag && tag.parentId) childFamilies[tag.family] = true;
-    });
-    return selected.filter(function(id) {
-      var tag = byId[id];
-      return !(tag && tag.isFamily && childFamilies[tag.family]);
-    });
-  }
-  function maxMessage(category) {
-    return category === "flavor"
-      ? "대표적인 플레이버는 최대 5개까지 선택할 수 있습니다."
-      : "대표적인 특성은 최대 3개까지 선택할 수 있습니다.";
+    return sanitizeKnown(ids, category);
   }
   function toggle(ids, id, category, otherSelectionCount) {
     var selected = sanitize(ids, category);
     var tag = getTag(id);
     if (!tag || !tag.isActive || tag.category !== category) {
-      return { success: false, selected: selected, message: "현재 평가 항목에 사용할 수 없는 태그입니다." };
+      return {success:false, selected:selected, message:'현재 평가 항목에 사용할 수 없는 태그입니다.'};
     }
-    var currentIndex = selected.indexOf(tag.id);
-    if (currentIndex > -1) {
-      selected.splice(currentIndex, 1);
-      return { success: true, selected: selected, removed: true, message: "" };
-    }
-    if (tag.isFamily) {
-      selected = selected.filter(function(selectedId) {
-        var selectedTag = byId[selectedId];
-        return !(selectedTag && selectedTag.family === tag.family);
-      });
-    } else if (tag.parentId) {
-      selected = selected.filter(function(selectedId) { return selectedId !== tag.parentId; });
-    }
-    var max = MAX_SELECTIONS[category] || 3;
-    if (selected.length + Math.max(0, Number(otherSelectionCount) || 0) >= max) {
-      return { success: false, selected: selected, message: maxMessage(category) };
-    }
-    selected.push(tag.id);
-    return { success: true, selected: selected, removed: false, message: "" };
+    var index = selected.indexOf(tag.id);
+    if (index >= 0) selected.splice(index, 1); else selected.push(tag.id);
+    return {success:true, selected:selected, removed:index >= 0, message:''};
   }
   function list(category, family) {
     return tags.filter(function(tag) {
@@ -376,8 +345,7 @@
     categoryOrder: CATEGORY_ORDER,
     categoryLabels: CATEGORY_LABELS,
     familyOrder: FAMILY_ORDER,
-    familyLabels: FAMILY_LABELS,
-    maxSelections: MAX_SELECTIONS
+    familyLabels: FAMILY_LABELS
   };
   global.KcrSensoryTags = {
     get: getTag,
@@ -388,7 +356,6 @@
     labels: labels,
     sanitize: sanitize,
     toggle: toggle,
-    maxMessage: maxMessage,
     syncAftertasteFlavorRefs: syncAftertasteFlavorRefs
   };
 })(typeof window !== "undefined" ? window : globalThis);
