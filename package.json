@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:final-audit": "node tests/stage266-kbc-final-assignment-audit.test.mjs && node tests/stage261-kcac-four-head-panel.test.mjs && node tests/stage261-kcac-panel-browser.test.mjs",
     "test:kbc-main-days": "node tests/stage264-kbc-main-days.test.mjs && node tests/stage264-kbc-main-days-browser.test.mjs",
     "test:unlimited-notes": "node tests/kcr-sensory-tags.test.mjs && node tests/stage265-unlimited-notes.test.mjs && node tests/stage265-unlimited-notes-browser.test.mjs",
     "test:kbc-finish-flow": "node tests/stage165-kbc-overall-comment.test.mjs && node tests/stage263-kbc-finish-flow-browser.test.mjs",
