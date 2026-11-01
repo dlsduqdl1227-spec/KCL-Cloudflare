@@ -656,7 +656,7 @@ input[type=range].kcl-range,
 .smart-tags-hint{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5}
 .selected-tags{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;min-height:28px}
 .selected-tag{background:#fff;color:#000;padding:5px 10px;border-radius:6px;
-  font-size:12px;cursor:pointer;font-weight:600}
+  font-size:12px;cursor:pointer;font-weight:600;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .mob-attr-tools{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
 .mob-attr-tag-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
   font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;margin-bottom:6px}
@@ -1996,7 +1996,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 .panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap{overflow-y:visible;}
 @media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}.eval-wrap,.panel{min-height:100dvh!important;overflow-y:visible!important}.tabs,.review-tabs{overflow-x:auto!important;}}
 </style>
-<script src="/assets/kcr-sensory-tags.js?v=260"></script>
+<script src="/assets/kcr-sensory-tags.js?v=stage264"></script>
 <script src="/assets/kcr-sensory-comments.js?v=228"></script>
 <script src="/assets/shared-sensory-tags.js?v=228"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
@@ -2560,6 +2560,11 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <div class="eval-content">
     <div class="eval-hero-logo" data-comp-logo="KBC"></div>
     <div class="section-label">참가자 번호</div>
+    <div id="kbc-main-day-wrap" class="review-edit-help" hidden>
+      <label for="kbc-main-day">본선 일차</label>
+      <select id="kbc-main-day" onchange="refreshKbcDayFilter_()"><option value="all">전체 본선 (1·2일차)</option><option value="1">본선 1일차</option><option value="2">본선 2일차</option><option value="">일차 미지정</option></select>
+      <div>날짜별 선수 목록을 확인하세요. 점수는 양일 통합 본선 순위에 반영되며, 상위 6명이 결선에 진출합니다.</div>
+    </div>
     <div class="participant-refresh-row"><select id="kbc-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KBC','kbc-participant-select','kbc-num','kbc-name')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="KBC" onclick="refreshEvaluationList_('KBC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="kbc-participant-help" class="participant-picker-help"></div>
     <div id="kbc-participant-complete" class="participant-complete-badge" style="display:none">✓ 내 평가 제출완료</div>
@@ -3215,7 +3220,6 @@ var SMART_TAGS = {
 
 var BODY_CONFLICTS = KCL_SENSORY_SMART_TAGS.mouthfeelConflicts;
 
-var MAX_TAGS = 5;
 
 var BODY_SMART_TAG_GROUPS = KCL_SENSORY_SMART_TAGS.mouthfeel;
 
@@ -3312,41 +3316,24 @@ function smartTagCanonicalPath_(tag) {
   return String(tag || '').trim().replace(/^향미\s*계열\s*>\s*/i, '');
 }
 function smartTagTogglePathValue_(selected, value) {
-  selected = smartTagDedupeList_(selected).map(smartTagCanonicalPath_);
+  selected = smartTagDedupeList_((selected || []).map(smartTagCanonicalPath_));
   value = smartTagCanonicalPath_(value);
-  var wasSelected = selected.indexOf(value) > -1;
-  var next = selected.filter(function(tag){ return !smartTagSamePath_(tag, value); });
-  if (!wasSelected && value) next.push(value);
-  return next;
+  var idx = selected.indexOf(value);
+  if (idx >= 0) selected.splice(idx, 1); else if (value) selected.push(value);
+  return selected;
 }
 function smartTagToggleLabelBranchValue_(selected, value, branchData, ancestors) {
   selected = smartTagDedupeList_(selected);
   value = String(value || '').trim();
-  var wasSelected = selected.indexOf(value) > -1;
-  var remove = {};
-  smartTagCollectDataLabels_(branchData).forEach(function(label){ remove[label] = true; });
-  (ancestors || []).forEach(function(label){ if (label) remove[label] = true; });
-  if (value) remove[value] = true;
-  var next = selected.filter(function(tag){ return !remove[tag]; });
-  if (!wasSelected && value) next.push(value);
-  return next;
+  var idx = selected.indexOf(value);
+  if (idx >= 0) selected.splice(idx, 1); else if (value) selected.push(value);
+  return selected;
 }
 function smartTagNormalizeSelection_(selected, data, valueMode) {
   var normalized = smartTagDedupeList_(selected);
   if (!data || Array.isArray(data)) return normalized;
   normalized = normalized.filter(function(tag){ return !smartTagIsToneGroup_(smartTagLeaf_(tag)); });
-  if (valueMode === 'path') {
-    normalized = smartTagDedupeList_(normalized.map(smartTagCanonicalPath_));
-    return normalized.filter(function(tag, idx, list){
-      return !list.some(function(other, otherIdx){
-        return otherIdx !== idx && String(other).indexOf(String(tag) + ' > ') === 0;
-      });
-    });
-  }
-  var relations = smartTagCollectCategoryRelations_(data);
-  return normalized.filter(function(tag){
-    return !relations[tag] || !normalized.some(function(other){ return other !== tag && relations[tag][other]; });
-  });
+  return valueMode === 'path' ? smartTagDedupeList_(normalized.map(smartTagCanonicalPath_)) : normalized;
 }
 function smartTagSelectedMatches_(selected, value) {
   if (!value) return false;
@@ -3850,6 +3837,11 @@ function renderParticipantControl_(code, cfg) {
   sel.disabled = false;
   sel.innerHTML = '<option value="">' + escHtml(cfg.placeholder || '선수등록에서 선택') + '</option>' +
     list.map(function(a, i){
+      if (code === 'KBC' && _selComp && _selComp.currentRound === '본선') {
+        var day = document.getElementById('kbc-main-day').value;
+        var isCurrent = numInput && participantNumberMatches_(a.number, numInput.value);
+        if (day !== 'all' && String(a.operatingDay || '') !== day && !isCurrent) return '';
+      }
       a=participantCompletionForActiveArea_(code,a);
       var label = a.display || ((a.number || '-') + ' · ' + participantNameForAssignment_(a));
       if (a.evaluationCompleted && !/평가완료/.test(label)) label += ' · ✓ 평가완료';
@@ -5820,7 +5812,7 @@ function adminRoundOptionsHtml_(code, selected) {
   return rounds.map(function(r){ return '<option value="' + escHtml(r) + '" ' + (r === selected ? 'selected' : '') + '>' + escHtml(r) + '</option>'; }).join('');
 }
 // Shared score-sheet names are presentation only. Canonical rounds remain separate.
-function usesSharedFinalRules_(code) { return ['KBC','MOC'].indexOf(String(code || '').toUpperCase()) >= 0; }
+function usesSharedFinalRules_(code) { return ['MOC'].indexOf(String(code || '').toUpperCase()) >= 0; }
 function competitionRoundLabel_(code, round) {
   var r = normalizeRoundForCompetition_(code, round);
   return usesSharedFinalRules_(code) && r === '본선' ? '결선 · 본선 경기' : (r || '-');
@@ -9122,17 +9114,16 @@ function renderReviewSmartTagField_(item) {
   var smartTagHint = '';
   if (meta.competition === 'KCR' && !meta.isFlavorReference) {
     smartTagHint = meta.category === 'flavor'
-      ? '1차 계열도 선택할 수 있으며, 세부 특성을 선택하면 같은 계열 선택을 대체합니다. '
+      ? '1차 계열도 선택할 수 있으며, 계열과 세부 특성을 함께 선택할 수 있습니다. '
       : '계열을 선택하면 세부 특성이 표시됩니다. ';
   } else if (selectableFamilies) {
-    smartTagHint = '계열 버튼만 선택해도 저장되며, 세부 특성을 선택하면 같은 계열 선택을 대체합니다. ';
+    smartTagHint = '계열 버튼만 선택해도 저장되며, 계열과 세부 특성을 함께 선택할 수 있습니다. ';
   } else if (hierarchical) {
     smartTagHint = '카테고리를 선택하면 하위 특성이 표시됩니다. ';
   }
   var html = '<div class="smart-tags-section review-smart-tags' + (meta.competition === 'KCR' ? ' kcr-review-smart-tags' : '') + (hierarchical ? ' hierarchical-review-smart-tags' : '') + (meta.sharedSensory ? ' shared-sensory-smart-tags' : '') + '" id="review-smart-tags-' + item.idx + '">';
   html += '<div class="smart-tags-title">' + escHtml(reviewFormatAttributeName(item.h)) + '</div>';
-  var max = meta.competition === 'KCR' ? KCR_SENSORY_CONFIG.maxSelections[meta.isFlavorReference ? 'aftertaste' : meta.category] : MAX_TAGS;
-  html += '<div class="smart-tags-hint">' + smartTagHint + '특성 선택 (최대 ' + max + '개)</div>';
+  html += '<div class="smart-tags-hint">' + smartTagHint + '특성 선택 · 개수 제한 없음</div>';
   html += '<input type="hidden" id="' + reviewSmartTagInputId_(item.idx) + '" data-col="' + item.idx + '" value="' + escHtml(selected.join(', ')) + '">';
   html += '<div class="selected-tags mob-inline-selected-tags" id="' + reviewSmartTagSelectedId_(item.idx) + '">' + reviewSelectedSmartTagsHtml_(item.idx, selected, disabled) + '</div>';
   html += '<div class="mob-inline-tag-buttons" id="' + reviewSmartTagButtonsId_(item.idx) + '">' + reviewSmartTagButtonsHtml_(item.idx, meta, selected, disabled) + '</div>';
@@ -9157,16 +9148,8 @@ function reviewCleanCupExclusiveTagGroup_(tag) {
   return '';
 }
 function reviewApplySmartTagConflicts_(header, tag, selected) {
-  var leaf = reviewSmartTagLeaf_(tag);
-  var out = selected.slice();
-  if (!reviewIsIkrc_() && /Body|Mouthfeel|바디|마우스필|질감/i.test(String(header || '')) && BODY_CONFLICTS[leaf]) {
-    out = out.filter(function(t){ return BODY_CONFLICTS[leaf].indexOf(reviewSmartTagLeaf_(t)) < 0; });
-  }
-  if (/Clean\s*Cup|클린컵/i.test(String(header || ''))) {
-    var group = reviewCleanCupExclusiveTagGroup_(leaf);
-    if (group) out = out.filter(function(t){ var g = reviewCleanCupExclusiveTagGroup_(t); return !g || g === group; });
-  }
-  return out;
+  // Observations may coexist; only the judge explicitly removes a selected note.
+  return selected.slice();
 }
 function reviewSetSmartTagCurrent_(idx, selected) {
   selected = reviewParseSmartTags_(selected.join(', '));
@@ -9203,7 +9186,7 @@ function toggleReviewSmartTag(idx, tag) {
       otherCount = otherIdx >= 0 ? reviewParseSmartTags_(reviewFieldValueByIndex_(otherIdx)).length : 0;
     }
     var result = KcrSensoryTags.toggle(selected, tag, meta.category, otherCount);
-    if (!result.success) { toast(result.message || KcrSensoryTags.maxMessage(maxCategory), true); return; }
+    if (!result.success) { toast(result.message || '사용할 수 없는 태그입니다.', true); return; }
     reviewSetSmartTagCurrent_(idx, result.selected);
     reviewSyncKcrSensoryComment_(meta.isFlavorReference ? 'aftertaste' : meta.category, false);
     if (meta.category === 'flavor' && !meta.isFlavorReference) {
@@ -9226,7 +9209,6 @@ function toggleReviewSmartTag(idx, tag) {
     selected = reviewApplySmartTagConflicts_(header, tag, selected);
     var candidate = selected.concat([tag]);
     if (meta) candidate = smartTagNormalizeSelection_(candidate, meta.data, meta.valueMode);
-    if (candidate.length > MAX_TAGS) { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return; }
     selected = candidate;
   }
   reviewSetSmartTagCurrent_(idx, selected);
@@ -9261,7 +9243,6 @@ function reviewToggleSmartTagBranch_(idx, tag, branchData, ancestors, valueMode)
   var next = valueMode === 'path'
     ? smartTagTogglePathValue_(selected, tag)
     : smartTagToggleLabelBranchValue_(selected, tag, branchData, ancestors);
-  if (next.length > MAX_TAGS) { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return false; }
   reviewSetSmartTagCurrent_(idx, next);
   scheduleReviewAutoSave(true);
   return true;
@@ -9315,7 +9296,7 @@ function addReviewCustomSmartTag(idx) {
   if (meta && meta.competition === 'KCR') {
     if (meta.isFlavorReference) return;
     tag = KcrSensoryTags.customId(meta.category, tag);
-    if (!tag) { toast('직접 입력 태그는 80자 이내로 입력해주세요.', true); return; }
+    if (!tag) { toast('사용할 표현을 입력해주세요.', true); return; }
   }
   if (reviewSmartTagCurrent_(idx).indexOf(tag) > -1) { toast('이미 선택한 태그입니다.', true); return; }
   toggleReviewSmartTag(idx, tag);
@@ -11062,6 +11043,8 @@ function rankingScopedResponse_(res, code, round) {
   return Object.assign({}, res, {selectedRound:round, ranking:(res.ranking || []).filter(function(item){ return item.round === round; })});
 }
 function goRankingByCode(code, name, round) {
+  var previousPlan = document.getElementById('kbc-finalist-entry');
+  if (previousPlan) previousPlan.remove();
   var requestToken = ++_rankingRequestToken;
   ++_rankingDetailRequestToken;
   var rankingCode = String(code || '').toUpperCase();
@@ -11141,7 +11124,43 @@ function goRankingByCode(code, name, round) {
     .getRanking(code, adminActorPayload_(), selectedRound);
 }
 
+var _kbcFinalistPlanRequest = 0;
+function renderKbcFinalistEntry_(res) {
+  var old = document.getElementById('kbc-finalist-entry');
+  if (old) old.remove();
+  if (!res || res.compCode !== 'KBC' || res.selectedRound !== '본선') return;
+  var box = document.createElement('section'); box.id = 'kbc-finalist-entry'; box.className = 'review-readonly-block';
+  box.innerHTML = '<strong>본선 1·2일차 통합 순위 · 결선 6명</strong><p>양일 평가와 검수를 마친 뒤 진출자를 확인하세요. 결선은 1일차로 진행하며 본선 점수를 이월하지 않습니다.</p><button type="button" class="btn-outline" onclick="loadKbcFinalistPlan_()">상위 6명 결선 배정 확인</button><div id="kbc-finalist-plan" role="status"></div>';
+  document.getElementById('ranking-list').before(box);
+}
+function loadKbcFinalistPlan_() {
+  var request = ++_kbcFinalistPlanRequest, area = document.getElementById('kbc-finalist-plan');
+  if (!area) return;
+  area.textContent = '본선 평가·검수와 결선 배정을 확인하는 중...';
+  function current() { return request === _kbcFinalistPlanRequest && area === document.getElementById('kbc-finalist-plan'); }
+  google.script.run.withSuccessHandler(function(res) {
+    if (!current()) return;
+    area.textContent = '';
+    var info = document.createElement('p'); info.textContent = res.message || ''; area.appendChild(info);
+    if (!res.success) return;
+    var list = document.createElement('ol'); list.style.paddingLeft='22px'; list.style.lineHeight='1.7';
+    (res.candidates || []).forEach(function(item) { var row=document.createElement('li'); row.textContent=item.name+' · 본선 '+item.mainNumber+'번 · '+item.score+'점 → 결선 '+item.finalNumber+'번'; list.appendChild(row); });
+    area.appendChild(list);
+    if (res.ready) {
+      var save=document.createElement('button'); save.type='button'; save.className='btn'; save.textContent='확인한 6명을 결선에 배정';
+      save.onclick=function(){
+        if (!confirm('위 6명을 표시된 결선 번호로 배정할까요? 본선 기록은 보존하고 결선 점수는 새로 시작합니다.')) return;
+        save.disabled=true;
+        google.script.run.withSuccessHandler(function(result){if(current()){info.textContent=result.message||'';if(result.success)save.remove();else save.disabled=false;}})
+          .withFailureHandler(function(){if(current()){info.textContent='저장 확인이 지연됩니다. 배정 확인을 다시 눌러 현재 상태를 확인하세요.';save.disabled=false;}})
+          .assignKbcFinalists({revision:res.revision},_judge);
+      };
+      area.appendChild(save);
+    }
+  }).withFailureHandler(function(){if(current())area.textContent='진출자 확인에 실패했습니다. 다시 시도해주세요.';}).getKbcFinalistPlan(_judge);
+}
 function renderRanking(res) {
+  renderKbcFinalistEntry_(res);
   var list = (res.ranking || []).filter(function(item){ return !res.selectedRound || item.round === res.selectedRound; });
   var rankingCode = String(res.compCode || '').toUpperCase();
   document.getElementById('rank-summary-sub').textContent =
@@ -11217,6 +11236,7 @@ function renderRanking(res) {
         '<div class="rank-info">' +
           '<div class="rank-unit">' + escHtml(unitText) + '</div>' +
           '<div class="rank-meta">' + ktccMeta + ikrcMeta + (displayScoreBasis ? escHtml(displayScoreBasis) + ' 기준 · ' : '') + (item.teamSummary ? (isKtccRank ? '테이블 ' : '평가팀 ') + escHtml(item.teamSummary) + ' · ' : '') + reviewProgressMeta + tieText + dqText + '</div>' +
+          (rankingCode === 'KBC' && item.round === '본선' ? '<div class="rank-meta">' + escHtml(item.operatingDay ? '본선 ' + item.operatingDay + '일차' : '본선 일차 미지정') + (Number(item.rank) <= 6 && !item.disqualified ? ' · 결선 진출 대상 (현재 순위)' : '') + '</div>' : '') +
           '<div class="rank-detail-hint">눌러서 상세 점수 / 디브리핑 확인</div>' +
         '</div>' +
         '<div class="rank-score">' + scoreLabel + '</div>';
@@ -12031,12 +12051,11 @@ function renderKcrSensoryTagsHtml_(c, attr) {
   var ids = KcrSensoryTags.sanitize(c[kcrTagIdsKey_(attr)] || [], attr);
   c[kcrTagIdsKey_(attr)] = ids;
   if (attr === 'aftertaste') c.aftertasteFlavorTagIds = KcrSensoryTags.syncAftertasteFlavorRefs(c.flavorTagIds || [], c.aftertasteFlavorTagIds || []);
-  var max = KCR_SENSORY_CONFIG.maxSelections[attr] || 3;
   var totalSelected = ids.length + (attr === 'aftertaste' ? c.aftertasteFlavorTagIds.length : 0);
   var openFamily = kcrOpenFamilyFor_(c, attr);
   var html = '<div class="smart-tags-section kcr-smart-tags-section">';
-  var hierarchyHint = attr === 'flavor' ? '1차 계열도 선택할 수 있고, 세부 특성을 선택하면 같은 계열 선택을 대체합니다.' : '계열을 선택하면 세부 특성이 표시됩니다.';
-  html += '<div class="kcr-tag-section-head"><div><div class="smart-tags-title">Smart Tags</div><div class="smart-tags-hint">대표 특성 ' + totalSelected + ' / ' + max + '개 · ' + hierarchyHint + '</div></div>';
+  var hierarchyHint = attr === 'flavor' ? '1차 계열도 선택할 수 있고, 계열과 세부 특성을 함께 선택할 수 있습니다.' : '계열을 선택하면 세부 특성이 표시됩니다.';
+  html += '<div class="kcr-tag-section-head"><div><div class="smart-tags-title">Smart Tags</div><div class="smart-tags-hint">대표 특성 ' + totalSelected + '개 · ' + hierarchyHint + '</div></div>';
   html += '<button type="button" class="kcr-tag-clear" onclick="clearKcrTags(\'' + attr + '\')">선택 초기화</button></div>';
   html += '<div class="selected-tags" id="st-' + attr + '">';
   ids.forEach(function(id) { html += kcrSelectedTagHtml_(attr, id, 'toggleKcrTag'); });
@@ -12044,7 +12063,7 @@ function renderKcrSensoryTagsHtml_(c, attr) {
   html += '</div>';
 
   if (attr === 'aftertaste') {
-    html += '<div class="kcr-aftertaste-flavor"><div class="kcr-aftertaste-flavor-title">남아 있는 플레이버</div><div class="kcr-aftertaste-flavor-hint">Flavor에서 선택한 태그 중 실제로 여운에 남는 향미만 다시 선택합니다. 일반 Aftertaste 태그와 합쳐 최대 3개입니다.</div>';
+    html += '<div class="kcr-aftertaste-flavor"><div class="kcr-aftertaste-flavor-title">남아 있는 플레이버</div><div class="kcr-aftertaste-flavor-hint">Flavor에서 선택한 태그 중 실제로 여운에 남는 향미만 다시 선택합니다. 필요한 표현을 개수 제한 없이 선택하세요.</div>';
     html += '<div class="kcr-aftertaste-flavor-list">';
     (c.flavorTagIds || []).forEach(function(id) {
       var tag = KcrSensoryTags.get(id);
@@ -12072,7 +12091,7 @@ function renderKcrSensoryTagsHtml_(c, attr) {
     html += '</div>';
   });
 
-  html += '<div class="custom-tag-row"><input type="text" id="kcr-custom-tag-' + attr + '" maxlength="80" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'&&!event.isComposing){addKcrCustomTag(\'' + attr + '\');event.preventDefault()}"><button type="button" onclick="addKcrCustomTag(\'' + attr + '\')">추가</button></div>';
+  html += '<div class="custom-tag-row"><input type="text" id="kcr-custom-tag-' + attr + '" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'&&!event.isComposing){addKcrCustomTag(\'' + attr + '\');event.preventDefault()}"><button type="button" onclick="addKcrCustomTag(\'' + attr + '\')">추가</button></div>';
   var commentState = kcrCommentState_(c, attr);
   html += '<div class="kcr-sensory-comment"><div class="kcr-sensory-comment-head"><div class="kcr-sensory-comment-title">' + escHtml(KCR_SENSORY_CONFIG.categoryLabels[attr].ko) + ' 코멘트</div>';
   if (commentState.commentTouched) html += '<button type="button" class="kcr-comment-reset" onclick="resetKcrSensoryComment(\'' + attr + '\')">자동 생성으로 되돌리기</button>';
@@ -12086,7 +12105,7 @@ function addKcrCustomTag(attr) {
   var c = _cupping.cups[_cupping.currentIdx];
   if (!input || !c || !input.value.trim()) return;
   var id = KcrSensoryTags.customId(attr, input.value);
-  if (!id) { toast('직접 입력 태그는 80자 이내로 입력해주세요.', true); return; }
+  if (!id) { toast('사용할 표현을 입력해주세요.', true); return; }
   if ((c[kcrTagIdsKey_(attr)] || []).indexOf(id) > -1) { toast('이미 선택한 태그입니다.', true); return; }
   toggleKcrTag(attr, id);
   if ((c[kcrTagIdsKey_(attr)] || []).indexOf(id) > -1) input.value = '';
@@ -12126,7 +12145,6 @@ function toggleKcrAftertasteFlavorTag(attr, id) {
   var idx = c.aftertasteFlavorTagIds.indexOf(id);
   if (idx > -1) c.aftertasteFlavorTagIds.splice(idx, 1);
   else {
-    if ((c.aftertasteTagIds || []).length + c.aftertasteFlavorTagIds.length >= KCR_SENSORY_CONFIG.maxSelections.aftertaste) { toast(KcrSensoryTags.maxMessage('aftertaste'), true); return; }
     if ((c.flavorTagIds || []).indexOf(id) < 0) { toast('Flavor에서 현재 선택된 태그만 연결할 수 있습니다.', true); return; }
     c.aftertasteFlavorTagIds.push(id);
   }
@@ -12228,7 +12246,7 @@ function kcrCommentReferenceHtml_(c) {
     var ids = meta.key === 'aftertaste'
       ? (c.aftertasteTagIds || []).concat(c.aftertasteFlavorTagIds || [])
       : (c[kcrTagIdsKey_(meta.key)] || []);
-    var tags = meta.key === 'overall' ? [] : KcrSensoryTags.labels(ids).slice(0, 2);
+    var tags = meta.key === 'overall' ? [] : KcrSensoryTags.labels(ids);
     var tagText = meta.key === 'overall' ? '' : (tags.length ? ('선택 표현: ' + tags.join(', ')) : '선택된 스마트태그 없음');
     var commentText = '';
     if (meta.key !== 'overall') {
@@ -15340,7 +15358,7 @@ function renderKbcInlineTagSection_(attr) {
   var sharedSensoryClass = group === 'espresso' || group === 'signature' ? ' shared-sensory-smart-tags' : '';
   var html = '<div class="mob-attr-tools' + sharedSensoryClass + '">';
   html += '<div class="mob-attr-tag-head"><span>' + escHtml(category) + '</span><span>Smart Tags</span></div>';
-  if (smartTagHasSelectableFamilies_(KBC_SMART_TAGS[group][category])) html += '<div class="smart-tags-hint">계열 버튼만 선택해도 저장되며, 세부 특성을 고르면 같은 계열 선택을 대체합니다.</div>';
+  if (smartTagHasSelectableFamilies_(KBC_SMART_TAGS[group][category])) html += '<div class="smart-tags-hint">계열 버튼만 선택해도 저장되며, 계열과 세부 특성을 함께 선택할 수 있습니다.</div>';
   html += '<div class="selected-tags mob-inline-selected-tags" id="' + kbcInlineTagSelectionId_(group, category) + '">' + kbcSelectedTagsHtml_(group, category) + '</div>';
   html += '<div class="mob-inline-tag-buttons" id="' + kbcInlineTagButtonsId_(group, category) + '">' + kbcTagButtonsHtml_(group, category) + '</div>';
   html += '<div class="custom-tag-row"><input type="text" id="kbc-custom-tag-' + group + '-' + kbcCategoryId_(category) + '" placeholder="직접 입력" onkeydown="if(event.key===\'Enter\'&&!event.isComposing){addKbcCustomTag(\'' + group + '\',\'' + escapeJsString_(category) + '\');event.preventDefault()}"><button type="button" onclick="addKbcCustomTag(\'' + group + '\',\'' + escapeJsString_(category) + '\')">추가</button></div>';
@@ -15370,18 +15388,7 @@ function kbcCleanCupExclusiveTagGroup_(tag) {
   return '';
 }
 function kbcToggleTagValue_(group, category, tag) {
-  var arr = kbcCategoryTags_(group, category);
-  var adding = arr.indexOf(tag) < 0;
-  var next = smartTagTogglePathValue_(arr, tag);
-  if (adding && /Clean Cup|클린컵/i.test(String(category || ''))) {
-    var tagGroup = kbcCleanCupExclusiveTagGroup_(tag);
-    if (tagGroup === 'positive') {
-      next = next.filter(function(t){ return kbcCleanCupExclusiveTagGroup_(t) !== 'negative'; });
-    } else if (tagGroup === 'negative') {
-      next = next.filter(function(t){ return kbcCleanCupExclusiveTagGroup_(t) !== 'positive'; });
-    }
-  }
-  if (next.length > MAX_TAGS) { toast(category + ' 항목은 최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return false; }
+  var next = smartTagTogglePathValue_(kbcCategoryTags_(group, category), tag);
   var data = (KBC_SMART_TAGS[group] && KBC_SMART_TAGS[group][category]) || [];
   _kbcTags[group][category] = smartTagNormalizeSelection_(next, data, 'path');
   refreshKbcCommentReference_();
@@ -15539,11 +15546,16 @@ function clearKbcGeneratedComment() {
   if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
   toast('KBC AI 자동 코멘트 사용을 해제했습니다. 종합 의견을 직접 작성할 수 있습니다.');
 }
+function refreshKbcDayFilter_() {
+  renderParticipantControl_('KBC', {selectId:'kbc-participant-select',helpId:'kbc-participant-help',numId:'kbc-num',nameId:'kbc-name',placeholder:'선수등록에서 참가자 선택'});
+}
 function startKbc() {
   // KBC는 공유 평가목적 상태가 이전 화면에서 남아 있어도 항상 공식 대회평가로 시작합니다.
   setEvaluationPurpose_('competition');
   cancelKbcCommentGeneration_();
-  document.getElementById('kbc-round-badge').textContent = _selComp.currentRound;
+  document.getElementById('kbc-round-badge').textContent = _selComp.currentRound === '결선' ? '결선 · 1일차' : _selComp.currentRound;
+  document.getElementById('kbc-main-day-wrap').hidden = _selComp.currentRound !== '본선';
+  document.getElementById('kbc-main-day').value = 'all';
   document.getElementById('kbc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + roleText() + ' · ' + evaluationPurposeDisplayLabel_() + evaluationTeamContextText_() + (isActiveCalibrationMode_() ? ' · 공식 점수·순위 제외' : ' · 공식 점수 반영');
   var isMain = kbcIsMainRound_();
   _kbcTags = kbcCreateTagState_();
@@ -15731,6 +15743,7 @@ function kbcSubmit() {
     '참가자번호': num,
     '선수명': playerName,
     '경기시간': timeText,
+    '본선일차': _selComp.currentRound === '본선' && selectedAssignment ? selectedAssignment.operatingDay || '' : '',
     'Service Professionalism(서비스의 전문성)': presentationVal,
     'Espresso Taste & Design(맛과 설계) ×2': espressoVals[0],
     'Espresso Clean Cup(클린컵)': espressoVals[1],
@@ -16187,7 +16200,7 @@ function renderMobInlineTagSection_(attr) {
     (group === 'signature' && /^(Creative Flavor|Creative Balance|Creative Mouthfeel)$/.test(category));
   var html = '<div class="mob-attr-tools' + (sharedSensory ? ' shared-sensory-smart-tags' : '') + '">';
   html += '<div class="mob-attr-tag-head"><span>' + escHtml(category) + '</span><span>Smart Tags</span></div>';
-  if (smartTagHasSelectableFamilies_(MOB_SMART_TAGS[group][category])) html += '<div class="smart-tags-hint">계열 버튼만 선택해도 저장되며, 세부 특성을 고르면 같은 계열 선택을 대체합니다.</div>';
+  if (smartTagHasSelectableFamilies_(MOB_SMART_TAGS[group][category])) html += '<div class="smart-tags-hint">계열 버튼만 선택해도 저장되며, 계열과 세부 특성을 함께 선택할 수 있습니다.</div>';
   html += '<div class="selected-tags mob-inline-selected-tags" id="' + mobInlineTagSelectionId_(group, category) + '">' + mobSelectedTagsHtml_(group, category, true) + '</div>';
   html += '<div class="mob-inline-tag-buttons" id="' + mobInlineTagButtonsId_(group, category) + '">' + mobTagButtonsHtml_(group, category) + '</div>';
   html += '<div class="custom-tag-row"><input type="text" id="' + mobInlineCustomTagId_(group, category) + '" placeholder="' + escHtml(category) + ' 직접 입력" onkeydown="if(event.key===\'Enter\'){addMobInlineCustomTag(\'' + group + '\',\'' + escapeJsString_(category) + '\');event.preventDefault()}"><button onclick="addMobInlineCustomTag(\'' + group + '\',\'' + escapeJsString_(category) + '\')">추가</button></div>';
@@ -16209,22 +16222,7 @@ function mobCleanCupExclusiveTagGroup_(tag) {
   return '';
 }
 function mobToggleTagValue_(group, category, tag) {
-  var arr = mobCategoryTags_(group, category);
-  var adding = arr.indexOf(tag) < 0;
-  var next = smartTagTogglePathValue_(arr, tag);
-  if (adding) {
-    var leaf = smartTagLeaf_(tag);
-    if (/Clean\s*Cup|클린컵/i.test(String(category || ''))) {
-      var cupGroup = mobCleanCupExclusiveTagGroup_(tag);
-      if (cupGroup) {
-        next = next.filter(function(t){ var g = mobCleanCupExclusiveTagGroup_(t); return !g || g === cupGroup; });
-      }
-    }
-    if (/Mouthfeel|질감/i.test(String(category || '')) && BODY_CONFLICTS[leaf]) {
-      next = next.filter(function(t){ return BODY_CONFLICTS[leaf].indexOf(smartTagLeaf_(t)) < 0; });
-    }
-  }
-  if (next.length > MAX_TAGS) { toast(category + ' 항목은 최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return false; }
+  var next = smartTagTogglePathValue_(mobCategoryTags_(group, category), tag);
   var data = (MOB_SMART_TAGS[group] && MOB_SMART_TAGS[group][category]) || [];
   _mobTags[group][category] = smartTagNormalizeSelection_(next, data, 'path');
   return true;
@@ -16303,8 +16301,7 @@ function mobAvg_(vals) {
 function mobTagSummary_(tags) {
   tags = mobFlattenTags_(tags);
   if (!tags.length) return '선택 없음';
-  var text = tags.slice(0, 6).join(', ');
-  if (tags.length > 6) text += ' 외 ' + (tags.length - 6) + '개';
+  var text = tags.join(', ');
   return text;
 }
 function mobVisibleTagGroups_() {
@@ -16369,7 +16366,7 @@ function mobCollectTagPayload_() {
   var out = { technical:{}, signatureTechnical:{}, brewing:{}, signature:{} };
   groups.forEach(function(group){
     out[group.key] = {};
-    for (var category in group.data) out[group.key][category] = mobCategoryTags_(group.key, category).slice(0, MAX_TAGS);
+    for (var category in group.data) out[group.key][category] = mobCategoryTags_(group.key, category).slice();
   });
   return out;
 }
@@ -16383,7 +16380,7 @@ function renderMobCommentReference() {
   wrap.innerHTML = attrs.map(function(attr){
     var score = mobScoreValue_(attr.id);
     var meta = mobAttrTagMeta_(attr);
-    var tags = meta ? mobCategoryTags_(meta.group, meta.category).map(smartTagLeaf_).slice(0, 2) : [];
+    var tags = meta ? mobCategoryTags_(meta.group, meta.category).map(smartTagLeaf_) : [];
     var tagText = tags.length ? (' 선택 표현은 ' + tags.join(', ') + '입니다.') : ' 선택된 스마트태그는 없습니다.';
     return '<div class="mob-comment-reference-card"><div class="mob-comment-reference-title">' + escHtml(attr.name) + '</div><div class="mob-comment-reference-text">' + escHtml(fmtScore(score,1) + '점(' + mobGetDesc(score) + ').' + tagText) + '</div></div>';
   }).join('');
@@ -17532,7 +17529,7 @@ function renderIkrcSmartTags_(attr, sample) {
   sample[tagKey] = selectedTags;
   var html = '<div class="smart-tags-section shared-sensory-smart-tags">';
   html += '<div class="smart-tags-title">Smart Tags</div>';
-  html += '<div class="smart-tags-hint">' + (smartTagHasSelectableFamilies_(tagData) ? '계열 버튼만 선택해도 저장되며, 세부 특성을 고르면 같은 계열 선택을 대체합니다. ' : '카테고리를 누르면 하위 특성이 표시됩니다. ') + '최대 ' + MAX_TAGS + '개 · 직접 입력 가능</div>';
+  html += '<div class="smart-tags-hint">' + (smartTagHasSelectableFamilies_(tagData) ? '계열 버튼만 선택해도 저장되며, 계열과 세부 특성을 함께 선택할 수 있습니다. ' : '카테고리를 누르면 하위 특성이 표시됩니다. ') + '개수 제한 없음 · 직접 입력 가능</div>';
   html += '<div class="selected-tags" id="ikrc-st-' + attr + '">';
   selectedTags.forEach(function(tag){ html += '<span class="selected-tag" onclick="removeIkrcTag(\'' + attr + '\',\'' + escapeJsString_(tag) + '\')">' + escHtml(smartTagLeaf_(tag)) + ' ×</span>'; });
   html += '</div>';
@@ -18090,7 +18087,6 @@ function toggleIkrcSecondary(attr, primary, secondary, button) {
 function toggleIkrcBranchValue_(attr, tag, branchData, ancestors) {
   var s = _ikrcSamples[_ikrcIdx], key = ikrcTagKey_(attr); if (!s[key]) s[key] = [];
   var next = smartTagToggleLabelBranchValue_(s[key], tag, branchData, ancestors);
-  if (next.length > MAX_TAGS) { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return false; }
   s[key] = smartTagNormalizeSelection_(next, IKRC_SMART_TAGS[attr], 'label');
   refreshIkrcTagDisplay(attr);
   return true;
@@ -18098,10 +18094,8 @@ function toggleIkrcBranchValue_(attr, tag, branchData, ancestors) {
 function selectIkrcTag(attr, tag, parentPrimary, parentSecondary) {
   var s = _ikrcSamples[_ikrcIdx], key = ikrcTagKey_(attr); if (!s[key]) s[key] = [];
   s[key] = smartTagNormalizeSelection_(s[key], IKRC_SMART_TAGS[attr], 'label');
-  if (parentPrimary) { var pIdx = s[key].indexOf(parentPrimary); if (pIdx > -1) s[key].splice(pIdx,1); }
-  if (parentSecondary) { var sIdx = s[key].indexOf(parentSecondary); if (sIdx > -1) s[key].splice(sIdx,1); }
   var idx = s[key].indexOf(tag);
-  if (idx > -1) s[key].splice(idx,1); else if (s[key].length < MAX_TAGS) s[key].push(tag); else { toast('최대 ' + MAX_TAGS + '개까지 선택 가능합니다', true); return; }
+  if (idx > -1) s[key].splice(idx,1); else s[key].push(tag);
   s[key] = smartTagNormalizeSelection_(s[key], IKRC_SMART_TAGS[attr], 'label');
   refreshIkrcTagDisplay(attr);
 }

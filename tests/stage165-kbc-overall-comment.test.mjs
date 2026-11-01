@@ -98,7 +98,8 @@ assert.match(functionSource(assessment, "scheduleReviewAutoSave"), /refreshRevie
 const generateServer = functionSource(rpc, "generateKbcComment");
 assert.match(generateServer, /payload\.evaluatedItems/);
 assert.match(generateServer, /sourceItems\.map/);
-assert.match(generateServer, /item\.tags\.slice\(0,2\)/);
+assert.doesNotMatch(generateServer, /item\.tags\.slice\(/);
+assert.match(generateServer, /item\.tags\.join\(/);
 assert.match(generateServer, /item\.comment/);
 assert.match(generateServer, /sectionOrder\.map/);
 assert.match(generateServer, /timePenalty/);

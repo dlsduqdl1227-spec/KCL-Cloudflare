@@ -37,7 +37,7 @@ const selectIkrcTag = functionSource(assessment, "selectIkrcTag");
 assert.doesNotMatch(selectIkrcTag, /BODY_CONFLICTS/, "IKRC 마우스필 긍정·보완 태그는 서로 선택 해제하면 안 됩니다.");
 
 const reviewConflicts = functionSource(assessment, "reviewApplySmartTagConflicts_");
-assert.match(reviewConflicts, /!reviewIsIkrc_\(\)/, "IKRC 검수에서도 마우스필 긍정·보완 태그를 함께 유지해야 합니다.");
+assert.doesNotMatch(reviewConflicts, /BODY_CONFLICTS|\.filter\(/, "IKRC 검수에서도 마우스필 긍정·보완 태그를 함께 유지해야 합니다.");
 
 assert.match(assessment, /<div id="pIkrcBlindManager"/);
 assert.match(assessment, /data-act="ikrc-blind">블라인드코드 · 선수 연결/);

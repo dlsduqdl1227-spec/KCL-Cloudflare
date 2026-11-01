@@ -39,10 +39,10 @@ try{
   }
   assert.equal(await page.evaluate(()=>_cupping.cups[0].flavorTagIds.length),5);
   await searchTag(page,'아몬드');await page.locator(picker+' .kcl-tag-picker-option').first().click();
-  assert.equal(await page.evaluate(()=>_cupping.cups[0].flavorTagIds.length),5,'existing maximum enforced');
-  assert.match(await page.locator(picker+' .kcl-tag-picker-status').innerText(),/최대|개수/);
+  assert.equal(await page.evaluate(()=>_cupping.cups[0].flavorTagIds.length),6,'all selected flavor observations remain available');
+  assert.doesNotMatch(await page.locator(picker+' .kcl-tag-picker-status').innerText(),/최대 [35]개/);
   await page.locator(picker+' .kcl-tag-picker-chip').first().click();
-  assert.equal(await page.evaluate(()=>_cupping.cups[0].flavorTagIds.length),4);
+  assert.equal(await page.evaluate(()=>_cupping.cups[0].flavorTagIds.length),5);
   const state=await page.evaluate(()=>({score:_cupping.cups[0].flavor,note:_cupping.cups[0].noteOverall,lock:_cupping.cups[0].flavorLocked,peer:JSON.stringify(_cupping.cups[1])}));
   assert.deepEqual(state,before,'only selected tags can change, never scores/locks/other cups');
   assert.equal(await page.locator('#kcr-sensory-comment-flavor').inputValue(),'직접 남긴 향미 기록 유지');
@@ -57,7 +57,7 @@ try{
   await page.locator('#cupping-next-cup').click();
   assert.equal(await page.evaluate(()=>_cupping.cups[1].flavorTagIds.length),0);
   await page.locator('#cupping-previous-cup').click();
-  assert.equal(await page.evaluate(()=>_cupping.cups[0].flavorTagIds.length),4);
+  assert.equal(await page.evaluate(()=>_cupping.cups[0].flavorTagIds.length),5);
   // Duplicate expand/direct-entry controls stay hidden outside the picker.
   await page.locator('#cupping-attr-card .kcl-tag-launch').waitFor();
   assert.equal(await page.locator('#cupping-attr-card .kcl-tag-fallback').isVisible(),false);

@@ -217,7 +217,7 @@
     if (!el || !el.isConnected || !root.contains(el) || isDisabled(el)) return;
     var before = selectionNodes(root).map(text).join('|');
     var priorToast = text(document.getElementById('toast'));
-    el.click(); // Original validation, max count, conflicts, autosave and per-cup isolation.
+    el.click(); // Original selection handlers preserve autosave and per-cup isolation.
     root = source();
     if (!root) { close(); return; }
     var after = selectionNodes(root).map(text).join('|');

@@ -69,15 +69,15 @@ assert.equal(api.list("flavor", "tropical").some((tag) => tag.id === tropicalPar
 let hierarchySelection = Array.from(api.toggle([], tropicalParent.id, "flavor", 0).selected);
 assert.deepEqual(hierarchySelection, [tropicalParent.id], "A broad family must be selectable on its own");
 hierarchySelection = Array.from(api.toggle(hierarchySelection, pineappleId, "flavor", 0).selected);
-assert.deepEqual(hierarchySelection, [pineappleId], "Selecting a child must replace its family tag");
+assert.deepEqual(hierarchySelection, [tropicalParent.id, pineappleId], "Adding a child preserves the selected family");
 hierarchySelection = Array.from(api.toggle(hierarchySelection, tropicalParent.id, "flavor", 0).selected);
-assert.deepEqual(hierarchySelection, [tropicalParent.id], "Selecting the family again must replace same-family children");
-assert.deepEqual(Array.from(api.sanitize([tropicalParent.id, pineappleId], "flavor")), [pineappleId], "Saved parent-child conflicts must prefer the more specific child");
+assert.deepEqual(hierarchySelection, [pineappleId], "Explicitly deselecting the family preserves its children");
+assert.deepEqual(Array.from(api.sanitize([tropicalParent.id, pineappleId], "flavor")), [tropicalParent.id, pineappleId], "Saved family and child observations are both preserved");
 const fullHierarchySelection = [tropicalParent.id, flavorIds[0], flavorIds[5], "flavor_berry_strawberry", "flavor_pome_apple"];
 const fullHierarchyReplacement = api.toggle(fullHierarchySelection, pineappleId, "flavor", 0);
 assert.equal(fullHierarchyReplacement.success, true, "Replacing a family at the five-tag limit must not be blocked");
-assert.equal(fullHierarchyReplacement.selected.length, 5);
-assert.equal(fullHierarchyReplacement.selected.includes(tropicalParent.id), false);
+assert.equal(fullHierarchyReplacement.selected.length, 6);
+assert.equal(fullHierarchyReplacement.selected.includes(tropicalParent.id), true);
 assert.equal(fullHierarchyReplacement.selected.includes(pineappleId), true);
 assert.deepEqual(Array.from(api.syncAftertasteFlavorRefs([tropicalParent.id], [tropicalParent.id])), [tropicalParent.id]);
 let selected = [];
@@ -88,8 +88,8 @@ for (const id of flavorIds.slice(0, 5)) {
 }
 assert.deepEqual(selected, flavorIds.slice(0, 5), "Selection order must be retained");
 const blockedFlavor = api.toggle(selected, flavorIds[5], "flavor", 0);
-assert.equal(blockedFlavor.success, false);
-assert.equal(blockedFlavor.selected.length, 5);
+assert.equal(blockedFlavor.success, true);
+assert.equal(blockedFlavor.selected.length, 6);
 const deselectedFlavor = api.toggle(selected, flavorIds[2], "flavor", 0);
 assert.equal(deselectedFlavor.success, true);
 assert.deepEqual(Array.from(deselectedFlavor.selected), [flavorIds[0], flavorIds[1], flavorIds[3], flavorIds[4]]);
@@ -98,7 +98,7 @@ const aftertasteIds = Array.from(api.list("aftertaste")).slice(0, 3).map((tag) =
 let aftertaste = [];
 for (const id of aftertasteIds.slice(0, 2)) aftertaste = Array.from(api.toggle(aftertaste, id, "aftertaste", 1).selected);
 const blockedAftertaste = api.toggle(aftertaste, aftertasteIds[2], "aftertaste", 1);
-assert.equal(blockedAftertaste.success, false, "Aftertaste tags and Flavor references share a limit of three");
+assert.equal(blockedAftertaste.success, true, "Aftertaste tags and Flavor references have no shared count limit");
 assert.deepEqual(Array.from(api.syncAftertasteFlavorRefs([flavorIds[0]], [flavorIds[0], flavorIds[1]])), [flavorIds[0]]);
 assert.deepEqual(Array.from(api.sanitize(["citrus", "flavor_citrus", flavorIds[0]], "flavor")), [flavorIds[0]], "Navigation labels must never be stored as tags");
 

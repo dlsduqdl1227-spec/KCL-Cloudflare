@@ -657,6 +657,8 @@ async function dispatch(action, args, env, request) {
     updateReviewStatus: () => updateReviewStatus(env, args[0], [args[1]], args[2], args[3], args[4]),
     updateReviewStatusBatch: () => updateReviewStatus(env, args[0], args[1], args[2], args[3], args[4]),
     deleteReviewRow: () => deleteReviewRow(env, args[0], args[1], args[3] || args[2]),
+    getKbcFinalistPlan: () => getKbcFinalistPlan(env, args[0]),
+    assignKbcFinalists: () => assignKbcFinalists(env, args[0], args[1]),
     getRanking: () => getRanking(env, args[0], args[1], args[2]),
     getRankingDetail: () => getRankingDetail(env, args[0], args[1], args[2], args[3]),
     getAdminDebriefPreviewOptions: () => getAdminDebriefPreviewOptions(env, args[0], args[1]),
@@ -2978,16 +2980,20 @@ function redactKcrParticipantIdentity_(value, headers) {
   }
   return redactParticipantIdentityObject_(copy(value), headers);
 }
+function kbcMainDay_(value) {
+  const match=/^([12])(?:일차)?$/.exec(safeStr(value).replace(/\s/g,''));
+  return match ? match[1] : '';
+}
 function participantScheduleForRound_(row, round) {
   const extra = parseJson(row && row.extra_json, {});
   const assigned = extra.roundSchedules && extra.roundSchedules[round];
   if (assigned && typeof assigned === 'object') return {
-    date:normalizeEffectiveDate_(assigned.date), day:safeStr(assigned.day), team:safeStr(assigned.team)
+    date:normalizeEffectiveDate_(assigned.date), day:row.competition_code==='KBC' ? (round==='결선'?'1':round==='본선'?kbcMainDay_(assigned.day):safeStr(assigned.day)) : safeStr(assigned.day), team:safeStr(assigned.team)
   };
-  if (round !== '예선' && safeStr(extra['일정구분']) !== round) return {date:'',day:'',team:''};
+  if (round !== '예선' && safeStr(extra['일정구분']) !== round) return {date:'',day:row.competition_code==='KBC'&&round==='결선'?'1':'',team:''};
   return {
     date:normalizeEffectiveDate_((round === '예선' && extra['예선일']) || extra['대회일'] || extra.competitionDate || extra.competition_date || extra['날짜']),
-    day:safeStr(extra['운영일차'] || extra.operatingDay || extra.scheduleDay),
+    day:row.competition_code==='KBC'&&round==='결선'?'1':row.competition_code==='KBC'&&round==='본선'?kbcMainDay_(extra['운영일차']||extra.operatingDay||extra.scheduleDay):safeStr(extra['운영일차'] || extra.operatingDay || extra.scheduleDay),
     team:safeStr(extra['심사조'] || extra.judgeTeam || extra.teamGroup || extra['평가조'])
   };
 }
@@ -3107,7 +3113,9 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     const competitionDate = schedule.date;
     const operatingDay = schedule.day;
     const scheduleTeam = schedule.team;
-    const scheduleLabel = competitionDate || operatingDay;
+    const scheduleLabel = code==='KBC' && currentRound==='본선'
+      ? ['본선 '+(operatingDay?operatingDay+'일차':'일차 미지정'),competitionDate].filter(Boolean).join(' · ')
+      : code==='KBC' && currentRound==='결선' ? ['결선 1일차',competitionDate].filter(Boolean).join(' · ') : competitionDate || operatingDay;
     const number = participantRoundNumber_(r, code, currentRound);
     const rawName = code === 'KTCC' ? (r.team_name || r.name || '') : (r.name || '');
     const displayName = hideIdentity ? '' : rawName;
@@ -7265,8 +7273,76 @@ async function getRanking(env, competitionCode, actorArg, requestedRound) {
   const selectedRound = rankingRoundScope_(requestedRound);
   if (selectedRound === null) return { success:false, message:'예선, 본선 또는 결선을 선택해주세요.' };
   const data = await buildRankingData_(env, code, selectedRound, code === 'KCR');
-  const ranking = data.ranking.map(item => redactKcacIdentityForActor_(auth.actor, code, item, data.headers));
+  const ranking = data.ranking.map(item => {
+    if(code==='KBC' && item.round==='본선'){
+      const participant=data.participantRows.find(row=>participantEvaluationCompletionUnitKey_('KBC',row.main_cup_no)===participantEvaluationCompletionUnitKey_('KBC',item.unit));
+      item={...item,operatingDay:participant?participantScheduleForRound_(participant,'본선').day:''};
+    }
+    return redactKcacIdentityForActor_(auth.actor, code, item, data.headers);
+  });
   return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : code, currentRound: data.cfg ? data.cfg.current_round : '', selectedRound, unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking, tieBreakRule: tieRuleLabel_(code, selectedRound || (data.cfg ? data.cfg.current_round : '')) };
+}
+async function kbcFinalistContext_(env, actorArg) {
+  const auth=await requireManageActorForCode_(env,actorArg,'KBC','결선 배정은 관리자 또는 KBC 대회팀장만 가능합니다.');
+  if(!auth.ok)return auth.res;
+  const participants=(await env.DB.prepare("SELECT * FROM participants WHERE competition_code='KBC' ORDER BY id").all()).results||[];
+  const scores=(await env.DB.prepare("SELECT * FROM scores WHERE competition_code='KBC' AND round IN ('본선','결선') ORDER BY id").all()).results||[];
+  const data=await buildRankingData_(env,'KBC','본선',false);
+  const ranking=data.ranking.filter(row=>row.round==='본선');
+  const eligible=ranking.filter(row=>!row.disqualified);
+  const mains=participants.filter(row=>safeStr(row.main_cup_no));
+  const key=value=>participantEvaluationCompletionUnitKey_('KBC',value);
+  const candidates=eligible.slice(0,6).map((row,index)=>{
+    const matches=mains.filter(p=>key(p.main_cup_no)===key(row.unit));
+    const participant=matches.length===1?matches[0]:null;
+    return {participantId:participant?participant.id:null,name:participant?participant.name:row.playerNameSummary,mainNumber:row.unit,finalNumber:String(index+1),rank:index+1,score:row.score,day:participant?participantScheduleForRound_(participant,'본선').day:''};
+  });
+  let message='본선 통합 순위 상위 6명입니다. 명단과 결선 번호를 확인한 뒤 배정하세요.';
+  let ready=true;
+  if(eligible.length<6){ready=false;message='결선 진출 가능한 본선 평가가 6명 이상 필요합니다.';}
+  else if(mains.some(p=>!ranking.some(row=>key(row.unit)===key(p.main_cup_no)))){ready=false;message='아직 평가가 없는 본선 선수가 있습니다. 1·2일차 평가를 모두 마친 뒤 배정하세요.';}
+  else if(candidates.some(row=>!row.participantId)||new Set(candidates.map(row=>row.participantId)).size!==6){ready=false;message='본선 번호와 선수등록 연결이 중복되거나 누락되었습니다. 선수등록을 확인하세요.';}
+  else if(eligible[6]&&eligible[5].score===eligible[6].score&&compareTie_('KBC',eligible[5],eligible[6],'본선')===0){ready=false;message='6위 경계에서 총점과 에스프레소 점수가 같습니다. 동점 판정을 완료한 뒤 배정하세요.';}
+  else if(scores.some(row=>row.round==='결선')){ready=false;message='결선 평가가 이미 시작되었습니다. 기존 결선 배정과 점수를 유지합니다.';}
+  else if(participants.some(row=>safeStr(row.final_cup_no))){ready=false;message='기존 결선 배정이 있습니다. 선수등록에서 배정된 명단을 확인하세요.';}
+  const revision=await sha256Hex_(JSON.stringify({participants,scores}));
+  return {success:true,ready,message,candidates,revision,participants,scores};
+}
+async function getKbcFinalistPlan(env, actorArg) {
+  const result=await kbcFinalistContext_(env,actorArg);
+  const {participants,scores,...publicResult}=result;
+  return publicResult;
+}
+async function assignKbcFinalists(env, payload, actorArg) {
+  const context=await kbcFinalistContext_(env,actorArg);
+  if(!context.success)return context;
+  if(!payload||payload.revision!==context.revision)return {success:false,message:'본선 평가 또는 선수 정보가 변경됐습니다. 진출자 명단을 다시 확인하세요.'};
+  if(!context.ready)return {success:false,message:context.message};
+  const changes=context.candidates.map(candidate=>{
+    const participant=context.participants.find(row=>row.id===candidate.participantId),extra=parseJson(participant.extra_json,{});
+    extra.roundSchedules={...extra.roundSchedules,결선:{...(extra.roundSchedules&&extra.roundSchedules.결선||{}),day:'1',order:candidate.rank}};
+    extra.kbcFinalQualification={sourceRound:'본선',rank:candidate.rank,score:candidate.score,assignedAt:nowIso()};
+    return {id:candidate.participantId,number:candidate.finalNumber,extra:JSON.stringify(extra)};
+  });
+  // One guarded statement: a concurrent score, review or registry edit invalidates
+  // the entire assignment. Only final numbers and final schedule metadata change.
+  const result=await env.DB.prepare(`WITH p AS (SELECT value FROM json_each(?)), s AS (SELECT value FROM json_each(?)),
+    plan AS (SELECT json_extract(value,'$.id') id,json_extract(value,'$.number') number,json_extract(value,'$.extra') extra FROM json_each(?)),
+    safe AS (SELECT 1 WHERE
+      (SELECT COUNT(*) FROM participants WHERE competition_code='KBC')=(SELECT COUNT(*) FROM p)
+      AND NOT EXISTS(SELECT 1 FROM p LEFT JOIN participants r ON r.id=json_extract(p.value,'$.id')
+        WHERE r.id IS NULL OR r.updated_at IS NOT json_extract(p.value,'$.updated_at') OR r.extra_json IS NOT json_extract(p.value,'$.extra_json')
+        OR r.main_cup_no IS NOT json_extract(p.value,'$.main_cup_no') OR r.final_cup_no IS NOT json_extract(p.value,'$.final_cup_no'))
+      AND (SELECT COUNT(*) FROM scores WHERE competition_code='KBC' AND round IN ('본선','결선'))=(SELECT COUNT(*) FROM s)
+      AND NOT EXISTS(SELECT 1 FROM s LEFT JOIN scores r ON r.id=json_extract(s.value,'$.id')
+        WHERE r.id IS NULL OR r.competition_code<>'KBC' OR r.round IS NOT json_extract(s.value,'$.round') OR r.unit IS NOT json_extract(s.value,'$.unit')
+        OR r.payload_json IS NOT json_extract(s.value,'$.payload_json') OR r.total_score IS NOT json_extract(s.value,'$.total_score')
+        OR r.review_status IS NOT json_extract(s.value,'$.review_status') OR r.disqualified IS NOT json_extract(s.value,'$.disqualified')))
+    UPDATE participants SET final_cup_no=(SELECT number FROM plan WHERE id=participants.id),extra_json=(SELECT extra FROM plan WHERE id=participants.id),updated_at=?
+    WHERE competition_code='KBC' AND id IN(SELECT id FROM plan) AND EXISTS(SELECT 1 FROM safe)`)
+    .bind(JSON.stringify(context.participants),JSON.stringify(context.scores),JSON.stringify(changes),nowIso()).run();
+  if(Number(result.meta&&result.meta.changes)!==6)return {success:false,message:'동시에 변경된 기록이 있습니다. 진출자 명단을 다시 확인하세요.'};
+  return {success:true,message:'상위 6명을 결선 1일차에 배정했습니다. 운영관리에서 결선을 선택하면 새 점수로 평가할 수 있습니다.'};
 }
 async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const code = safeStr(competitionCode).toUpperCase(); const targetUnit = safeStr(unit); const targetRound = rankingRoundScope_(round);
@@ -7832,8 +7908,8 @@ function _intensityText_(value) {
   const labels = { 1:'매우 약함', 2:'약함', 3:'약간 약함', 4:'중간', 5:'약간 강함', 6:'강함', 7:'매우 강함' };
   return labels[parseInt(value, 10)] || '-';
 }
-function _tags(arr, max=4) {
-  return Array.isArray(arr) ? arr.map(safeStr).filter(Boolean).slice(0,max) : [];
+function _tags(arr) {
+  return Array.isArray(arr) ? arr.map(safeStr).filter(Boolean) : [];
 }
 function _joinTags(arr, fallback='') {
   const t = _tags(arr, 4);
@@ -7911,15 +7987,15 @@ function _cleanTagText_(v) {
     .replace(/\s+/g, ' ')
     .trim();
 }
-function _tagList_(tags, key, max=3) {
+function _tagList_(tags, key) {
   const raw = tags && tags[key];
   const arr = Array.isArray(raw) ? raw : (raw ? String(raw).split(/[,;\n]/) : []);
-  return arr.map(_cleanTagText_).filter(Boolean).slice(0, max);
+  return arr.map(_cleanTagText_).filter(Boolean);
 }
 function _tagPhrase_(tags, key, fallback) {
   return _joinWithComma(_tagList_(tags, key, 3), fallback);
 }
-function _flatTagList_(obj, max=6) {
+function _flatTagList_(obj) {
   const out = [];
   function add(v) {
     const s = _cleanTagText_(v);
@@ -7932,7 +8008,7 @@ function _flatTagList_(obj, max=6) {
     String(x).split(/[,;\n]/).forEach(add);
   }
   walk(obj);
-  return out.slice(0, max);
+  return out;
 }
 function _tagSummary_(tags, fallback) {
   return _joinWithComma(_flatTagList_(tags, 5), fallback);
@@ -7947,8 +8023,8 @@ function _toneByScore_(v, max=5) {
   if (ratio >= .38) return '보완 여지가 있는';
   return '개선이 필요한';
 }
-function _briefComments(text, max=2) {
-  return safeStr(text).split(/\s*\/\s*/).map(safeStr).filter(Boolean).slice(0, max);
+function _briefComments(text) {
+  return safeStr(text).split(/\s*\/\s*/).map(safeStr).filter(Boolean);
 }
 function _areaKorean_(name) {
   const s = safeStr(name);
@@ -8037,9 +8113,8 @@ function _conciseCommentOptions_(lines) {
   const alternate = clean.length>1 ? [clean.at(-1),...clean.slice(0,-1)] : clean;
   return _result([clean.join('\n'),alternate.join('\n')]);
 }
-function _shortObservation_(text, limit=80) {
-  const value = safeStr(text).replace(/\s+/g,' ').trim();
-  return value.length>limit ? value.slice(0,limit).replace(/\s+\S*$/,'')+'…' : value;
+function _shortObservation_(text) {
+  return safeStr(text).replace(/\s+/g,' ').trim();
 }
 function _compactQuality_(score,max=5) {
   const ratio=_num(score)/max;
@@ -8062,7 +8137,7 @@ function _coffeeIntensity_(value) {
   }[numeric] || '';
 }
 function _coffeeEvidence_(tags, key) {
-  return Array.from(new Set(_tags(tags && tags[key], 8).map(_cleanTagText_).filter(Boolean))).slice(0, 3).join('·');
+  return Array.from(new Set(_tags(tags && tags[key], 8).map(_cleanTagText_).filter(Boolean))).join('·');
 }
 function _coffeeNotes_(value) {
   const aliases = [
@@ -8392,7 +8467,7 @@ function generateKbcComment(payload) {
     if (!sectionItems.length) return '';
     const observations=sectionItems.map(item=>{
       const label=displayLabel(item,section)||section;
-      const tags=item.tags.slice(0,2).join('·');
+      const tags=item.tags.join('·');
       return label+_topicParticle_(label)+' '+(tags?tags+' 특성의 ':'')+impressionText(item);
     });
     return section+'에서 '+observations.join(', ')+'이었습니다.';
@@ -8421,8 +8496,8 @@ function _kcacTagEvidence_(payload) {
     });
   }
 
-  positive = Array.from(new Set(positive)).slice(0, 5);
-  refinement = Array.from(new Set(refinement)).slice(0, 5);
+  positive = Array.from(new Set(positive));
+  refinement = Array.from(new Set(refinement));
   return { positive, refinement, custom };
 }
 function _kcacTone_(average, evidence) {
@@ -8438,9 +8513,9 @@ function _kcacTone_(average, evidence) {
   return '매우 선명하고 완성도 높은';
 }
 function _kcacEvidenceSentence_(evidence) {
-  const positive = _joinWithComma((evidence.positive || []).slice(0, 3));
-  const refinement = _joinWithComma((evidence.refinement || []).slice(0, 3));
-  const custom = _joinWithComma((evidence.custom || []).slice(0, 2));
+  const positive = _joinWithComma((evidence.positive || []));
+  const refinement = _joinWithComma((evidence.refinement || []));
+  const custom = _joinWithComma((evidence.custom || []));
   if (positive && refinement) return `강점 관찰로 ${positive}, 보완 관찰로 ${refinement}${_subjectParticle_(refinement)} 기록되었습니다.`;
   if (refinement) return `보완 관찰로 ${refinement}${_subjectParticle_(refinement)} 기록되어 긍정적으로만 해석하지 않았습니다.`;
   if (positive) return `강점 관찰로 ${positive}${_subjectParticle_(positive)} 기록되었습니다.`;
@@ -8489,15 +8564,15 @@ function _kcacPolarityLeafSet_(values) {
 function _kcacAreaObservation_(item, tagsByArea, polarity) {
   const key = _kcacCanonicalAreaKey_(item.name);
   const label = _kcacAreaLabel_(key);
-  const tags = (tagsByArea[key] || []).slice(0, 4);
+  const tags = (tagsByArea[key] || []);
   const positive = tags.filter(tag => polarity.positive.has(tag));
   const refinement = tags.filter(tag => polarity.refinement.has(tag));
   const custom = tags.filter(tag => !polarity.positive.has(tag) && !polarity.refinement.has(tag));
   const level = _toneByScore_(item.score, 5);
   const parts = [];
-  if (positive.length) parts.push(`강점 관찰은 ${_joinWithComma(positive.slice(0, 2))}`);
-  if (refinement.length) parts.push(`보완 관찰은 ${_joinWithComma(refinement.slice(0, 2))}`);
-  if (custom.length) parts.push(`추가 기록은 ${_joinWithComma(custom.slice(0, 2))}`);
+  if (positive.length) parts.push(`강점 관찰은 ${_joinWithComma(positive)}`);
+  if (refinement.length) parts.push(`보완 관찰은 ${_joinWithComma(refinement)}`);
+  if (custom.length) parts.push(`추가 기록은 ${_joinWithComma(custom)}`);
   const subject = `${label}${_topicParticle_(label)}`;
   return parts.length
     ? `${subject} ${level} 수준으로 기록되었으며, ${parts.join(', ')}입니다.`
@@ -8510,7 +8585,7 @@ function _kcacCombinedCupObservation_(cup) {
   // 우유 배정은 심사 운영용 정보입니다. 선수용 종합코멘트에는 FAST/SLOW 패턴만 언급합니다.
   const subject = pattern;
   const evidence = _kcacTagEvidence_({ smartTags:cup.smartTags, smartTagPolarity:cup.smartTagPolarity });
-  const clean = values => Array.from(new Set((values || []).map(value => _cleanTagText_(safeStr(value).replace(/^[^:：]{1,40}[:：]\s*/, ''))).filter(Boolean))).slice(0, 2);
+  const clean = values => Array.from(new Set((values || []).map(value => _cleanTagText_(safeStr(value).replace(/^[^:：]{1,40}[:：]\s*/, ''))).filter(Boolean)));
   const positive = clean(evidence.positive);
   const refinement = clean(evidence.refinement);
   const scoreItems = Object.keys(cup.scores || {}).map(key => ({ name:key, score:cup.scores[key] }));
@@ -8525,7 +8600,9 @@ function _kcacCombinedCupObservation_(cup) {
   else observation = '패턴 구조와 시각적 균형을 중심으로 확인했습니다.';
   const leaf = safeStr(cup.leafCount);
   const leafText = leaf ? ` 리프 ${leaf}개가 기록되었습니다.` : '';
-  return `${subject}는 ${observation}${leafText}`;
+  const custom=_flatTagList_(cup.smartTags||{}).filter(tag=>!positive.includes(tag)&&!refinement.includes(tag));
+  const customText=custom.length?` 추가 관찰로 ${_joinWithComma(custom)}가 기록됐습니다.`:'';
+  return `${subject}는 ${observation}${leafText}${customText}`;
 }
 
 function _generateKcacCombinedComment_(payload) {
@@ -8582,19 +8659,18 @@ function generateKcacComment(payload) {
     refinement:_kcacPolarityLeafSet_((payload.smartTagPolarity || {}).refinement)
   };
 
-  function conciseEvidence(kind, limit) {
+  function conciseEvidence(kind) {
     const set = polarity[kind];
     const found = [];
     let used = 0;
     Object.keys(tagsByArea).forEach(key => {
-      if (used >= limit) return;
-      const selected = (tagsByArea[key] || []).filter(tag => set && set.has(tag)).slice(0, limit - used);
+      const selected = (tagsByArea[key] || []).filter(tag => set && set.has(tag));
       if (!selected.length) return;
       found.push(`${_kcacAreaLabel_(key)}의 ${_joinWithComma(selected)}`);
       used += selected.length;
     });
     if (found.length) return found.join(', ');
-    const fallback = (evidence[kind] || []).map(value => _cleanTagText_(safeStr(value).replace(/^[^:：]{1,40}[:：]\s*/, ''))).filter(Boolean).slice(0, limit);
+    const fallback = (evidence[kind] || []).map(value => _cleanTagText_(safeStr(value).replace(/^[^:：]{1,40}[:：]\s*/, ''))).filter(Boolean);
     return _joinWithComma(fallback);
   }
 
@@ -8613,6 +8689,11 @@ function generateKcacComment(payload) {
     ? '맛의 균형과 질감의 연결성을 중심으로 확인했습니다.'
     : '형태, 대칭, 표면과 선명도의 연결성을 중심으로 확인했습니다.';
 
+  const customNotes=Array.from(new Set([
+    ...Object.values(tagsByArea).flat().filter(tag=>!polarity.positive.has(tag)&&!polarity.refinement.has(tag)),
+    ...(evidence.custom||[])
+  ]));
+  if(customNotes.length)evidenceText+=` 추가 관찰로 ${_joinWithComma(customNotes)}가 기록됐습니다.`;
   const scoreFlowText = high && low
     ? `${high}${_subjectParticle_(high)} 상대적으로 두드러졌고, ${low}${_topicParticle_(low)} 편차가 확인됐습니다.`
     : balance;

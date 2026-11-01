@@ -90,7 +90,7 @@ assert.match(kcrCommentCard.innerHTML, /SUMMARY/);
 assert.match(kcrCommentCard.innerHTML, /id="cupping-comment-input"/);
 assert.match(kcrCommentCard.innerHTML, /직접 작성한 코멘트/);
 assert.match(extractFunction(assessment, "kcrCommentReferenceHtml_"), /점수·강도·스마트태그/);
-assert.match(extractFunction(assessment, "kcrCommentReferenceHtml_"), /slice\(0, 2\)/);
+assert.doesNotMatch(extractFunction(assessment, "kcrCommentReferenceHtml_"), /slice\(0, 2\)/);
 const kcrSubmitSource = extractFunction(assessment, "cuppingSubmitAll");
 assert.match(kcrSubmitSource, /c\.overall, c\.noteOverall \|\| ''/);
 assert.match(kcrSubmitSource, /자동 생성 사용 안 함 · 직접 입력/);
@@ -105,7 +105,7 @@ assert.match(extractFunction(assessment, "loadTeamPanel"), /kcrCalibrationButton
 
 assert.doesNotMatch(assessment, /onclick="generateMobComment\(\)"/);
 assert.match(assessment, /MOB 전체 종합 코멘트 \(심사위원 직접 작성\)/);
-assert.match(extractFunction(assessment, "renderMobCommentReference"), /slice\(0, 2\)/);
+assert.doesNotMatch(extractFunction(assessment, "renderMobCommentReference"), /slice\(0, 2\)/);
 assert.match(extractFunction(assessment, "mobSmartTagGroupLabel_"), /주요 표현/);
 assert.match(extractFunction(assessment, "mobSmartTagGroupLabel_"), /보완 표현/);
 assert.match(assessment, /\.mob-smart-tag-group-label\{color:var\(--text-2\)\}/);

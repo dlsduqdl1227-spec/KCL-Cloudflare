@@ -62,12 +62,12 @@ vm.createContext(selectionContext);
 let pathSelection = selectionContext.smartTagTogglePathValue_([], "견과·코코아 계열");
 assert.deepEqual(Array.from(pathSelection), ["견과·코코아 계열"]);
 pathSelection = selectionContext.smartTagTogglePathValue_(pathSelection, "견과·코코아 계열 > 아몬드");
-assert.deepEqual(Array.from(pathSelection), ["견과·코코아 계열 > 아몬드"]);
+assert.deepEqual(Array.from(pathSelection), ["견과·코코아 계열", "견과·코코아 계열 > 아몬드"]);
 pathSelection = selectionContext.smartTagTogglePathValue_(
   ["향미 계열 > 견과·코코아 계열 > 아몬드"],
   "견과·코코아 계열",
 );
-assert.deepEqual(Array.from(pathSelection), ["견과·코코아 계열"]);
+assert.deepEqual(Array.from(pathSelection), ["견과·코코아 계열 > 아몬드", "견과·코코아 계열"]);
 
 let labelSelection = selectionContext.smartTagToggleLabelBranchValue_(
   [],
@@ -82,7 +82,7 @@ labelSelection = selectionContext.smartTagToggleLabelBranchValue_(
   [],
   ["견과·코코아 계열"],
 );
-assert.deepEqual(Array.from(labelSelection), [flavor["견과·코코아 계열"][0]]);
+assert.deepEqual(Array.from(labelSelection), ["견과·코코아 계열", flavor["견과·코코아 계열"][0]]);
 
 assert.match(assessment, /\.shared-sensory-smart-tags \.category-primary\{\s*display:grid/);
 assert.match(assessment, /\.shared-sensory-smart-tags \.category-secondary\.active\{display:grid\}/);
