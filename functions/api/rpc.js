@@ -5034,6 +5034,12 @@ async function submitScores(env, payload, signature, request = null) {
     delete onePayload.finalReview;
     delete onePayload.finalEvaluationKey;
     if (finalOfficialEvaluation_(x)) {
+      if (x.code === 'KBC' && x.round === '결선') {
+        const finalists=(await env.DB.prepare("SELECT final_cup_no FROM participants WHERE competition_code='KBC' AND COALESCE(final_cup_no,'')<>''").all()).results||[];
+        if(finalists.length&&!finalists.some(row=>participantEvaluationCompletionUnitKey_('KBC',row.final_cup_no)===participantEvaluationCompletionUnitKey_('KBC',x.unit))) {
+          return {success:false,message:'결선에 배정된 참가자 번호만 평가할 수 있습니다. 선수 선택 목록을 확인해주세요.'};
+        }
+      }
       const existing=(await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? AND unit=?').bind(x.code,x.round,x.unit).all()).results || [];
       const finalScope=finalSubmissionScope_(x.code,onePayload,x.role);
       if (existing.some(row=>scoreOwnedByActor_(row,auth.actor) && scoreEvaluationCategoryKey_(row.mode)===scoreEvaluationCategoryKey_(x.mode) && (kcacSplitFinal || finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope))) {

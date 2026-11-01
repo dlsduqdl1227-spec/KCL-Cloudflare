@@ -23,6 +23,16 @@ if(process.argv[1]?.endsWith('stage264-kbc-main-days.test.mjs')){
   let plan=await api.rpc('getKbcFinalistPlan',api.actor);
   assert.equal(plan.ready,true,plan.message);
   assert.deepEqual(plan.candidates.map(row=>row.mainNumber),['8','7','6','5','4','3']);
+  const forbidden=await(await api.handle({action:'getKbcFinalistPlan',args:[{}]})).json();assert.equal(forbidden.success,false);
+  await api.rpc('upsertParticipant',{competitionCode:'KBC',uniqueNo:'9',mainCupNo:'9',name:'아직 평가 전',extra:{roundSchedules:{본선:{day:'2'}}}},api.actor);
+  assert.equal((await api.rpc('getKbcFinalistPlan',api.actor)).ready,false,'do not promote after only part of the main field has been evaluated');
+  const ninth=api.db.prepare("SELECT id FROM participants WHERE main_cup_no='9'").get();await api.rpc('deleteParticipant',ninth.id,api.actor);
+  const tieRow=api.db.prepare("SELECT id,payload_json FROM scores WHERE unit='2' AND round='본선'").get();
+  const tied=JSON.parse(tieRow.payload_json);tied.rows[0].extraFields['Espresso Total']=16.5;
+  api.db.prepare('UPDATE scores SET payload_json=? WHERE id=?').run(JSON.stringify(tied),tieRow.id);
+  const tiePlan=await api.rpc('getKbcFinalistPlan',api.actor);assert.equal(tiePlan.ready,false);assert.match(tiePlan.message,/동점/);
+  api.db.prepare('UPDATE scores SET payload_json=? WHERE id=?').run(tieRow.payload_json,tieRow.id);
+  plan=await api.rpc('getKbcFinalistPlan',api.actor);
   const scores=JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all());
   const participants=api.db.prepare('SELECT * FROM participants ORDER BY id').all();
   api.db.prepare("UPDATE participants SET updated_at='concurrent' WHERE id=1").run();
@@ -31,6 +41,7 @@ if(process.argv[1]?.endsWith('stage264-kbc-main-days.test.mjs')){
   assert.equal(api.db.prepare("SELECT COUNT(*) n FROM participants WHERE final_cup_no<>''").get().n,0);
   plan=await api.rpc('getKbcFinalistPlan',api.actor);
   await api.rpc('assignKbcFinalists',{revision:plan.revision},api.actor);
+  assert.equal((await api.rpc('getKbcFinalistPlan',api.actor)).ready,false,'existing final assignments are preserved');
   assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all()),scores,'advancing never imports main scores into finals');
   const after=api.db.prepare('SELECT * FROM participants ORDER BY id').all();
   for(const row of after){const old=participants.find(p=>p.id===row.id);assert.equal(row.main_cup_no,old.main_cup_no);assert.deepEqual(JSON.parse(row.extra_json).roundSchedules.본선,JSON.parse(old.extra_json).roundSchedules.본선);}

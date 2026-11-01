@@ -29,7 +29,8 @@ assert.match(assertCanEvaluate, /code === 'KCAC'[\s\S]*isHeadRoleForCode_/);
 
 const startKcac = functionSource(assessment, 'startKcac');
 assert.match(startKcac, /setEvaluationPurpose_\('competition'\)/);
-assert.match(startKcac, /헤드 심사위원 공식평가 · 공식 점수 반영/);
+assert.match(startKcac, /헤드 심사위원 공식평가/);
+assert.match(startKcac, /공식 점수 반영/);
 assert.doesNotMatch(startKcac, /isActiveCalibrationMode_\(|evaluationPurposeDisplayLabel_\(/);
 
 const submitKcac = functionSource(assessment, 'kcacSubmitAll');
@@ -45,7 +46,8 @@ assert.match(submitScores, /initial\.code === 'KCAC'[\s\S]*!\/헤드\|head\/i\.t
 
 const aggregateRanking = functionSource(rpc, 'aggregateRankingGroup_');
 assert.match(aggregateRanking, /code === 'KCAC'[\s\S]*avgFinite_\(submissionAggs\.map\(x => x\.total\)\)/, 'KCAC preliminary ranking must average the submitted head evaluations');
-assert.match(aggregateRanking, /code === 'KCAC'[\s\S]*avgFinite_\(patternAggs\.map\(x => x\.patternTotal\)\)[\s\S]*avgFinite_\(sensoryAggs\.map\(x => x\.sensoryTotal\)\)/, 'KCAC final ranking must aggregate the head evaluation areas');
+assert.match(aggregateRanking, /code === 'KCAC'[\s\S]*combine\(patternAggs\.map\(x => x\.patternTotal\)\)[\s\S]*combine\(sensoryAggs\.map\(x => x\.sensoryTotal\)\)/, 'KCAC final ranking aggregates both head evaluation areas');
+assert.match(aggregateRanking, /fourHead \? values\.reduce\(\(a,b\)=>a\+b,0\) : avgFinite_\(values\)/, 'the configured four-head panel sums all four scores; legacy panels retain their averaging rule');
 
 assert.match(rpc, /KCAC:\s*\['예선','결선'\]/, 'KCAC must retain both preliminary and final rounds');
 

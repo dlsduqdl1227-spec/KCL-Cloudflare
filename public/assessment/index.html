@@ -3696,11 +3696,15 @@ function participantNumberMatches_(a, b) {
 }
 function participantAssignmentByNumber_(code, number) {
   var list = participantListForCode_(code);
+  // The active round's assignment is authoritative. Original registration/team
+  // numbers can overlap another finalist's new number after qualification.
   for (var i = 0; i < list.length; i++) {
-    if (participantNumberMatches_(list[i].number, number) ||
-        participantNumberMatches_(list[i].roundCupNo, number) ||
-        participantNumberMatches_(list[i].teamNo, number) ||
-        participantNumberMatches_(list[i].uniqueNo, number)) return participantCompletionForActiveArea_(code,list[i]);
+    var assignedNumber = list[i].number || list[i].roundCupNo;
+    if (participantNumberMatches_(assignedNumber, number)) return participantCompletionForActiveArea_(code,list[i]);
+  }
+  for (var j = 0; j < list.length; j++) {
+    if (!list[j].number && !list[j].roundCupNo &&
+        participantNumberMatches_(list[j].teamNo || list[j].uniqueNo, number)) return participantCompletionForActiveArea_(code,list[j]);
   }
   return null;
 }
@@ -3795,6 +3799,7 @@ function applyParticipantNumberInput_(code, numId, nameId) {
   if (!numEl) return;
   var a = participantAssignmentByNumber_(code, numEl.value);
   if (a) applyParticipantAssignmentToInputs_(a, null, nameId);
+  else if (nameId && document.getElementById(nameId)) document.getElementById(nameId).value = '';
   if (String(code || '').toUpperCase() === 'KCAC') onKcacParticipantSelected_();
   if (String(code || '').toUpperCase() === 'KBC') onKbcParticipantSelected_();
 }
@@ -3837,13 +3842,16 @@ function renderParticipantControl_(code, cfg) {
   sel.disabled = false;
   sel.innerHTML = '<option value="">' + escHtml(cfg.placeholder || '선수등록에서 선택') + '</option>' +
     list.map(function(a, i){
+      var outsideSelectedDay = false;
       if (code === 'KBC' && _selComp && _selComp.currentRound === '본선') {
         var day = document.getElementById('kbc-main-day').value;
         var isCurrent = numInput && participantNumberMatches_(a.number, numInput.value);
         if (day !== 'all' && String(a.operatingDay || '') !== day && !isCurrent) return '';
+        outsideSelectedDay = day !== 'all' && String(a.operatingDay || '') !== day && isCurrent;
       }
       a=participantCompletionForActiveArea_(code,a);
       var label = a.display || ((a.number || '-') + ' · ' + participantNameForAssignment_(a));
+      if (outsideSelectedDay) label = '현재 작성 중 · ' + label;
       if (a.evaluationCompleted && !/평가완료/.test(label)) label += ' · ✓ 평가완료';
       return '<option value="' + i + '">' + escHtml(label) + '</option>';
     }).join('');
@@ -15709,6 +15717,9 @@ function kbcSubmit() {
   var timeMs = timeRaw ? kbcParseTimeMsStrict_(timeRaw) : null;
   if (!num) { toast('참가자 번호를 입력해주세요', true); return; }
   var selectedAssignment = participantAssignmentByNumber_('KBC', num);
+  if (_selComp.currentRound === '결선' && participantListForCode_('KBC').length && !selectedAssignment) {
+    toast('결선에 배정된 참가자 번호를 선수 선택 목록에서 확인해주세요.', true); return;
+  }
   if (selectedAssignment && selectedAssignment.evaluationCompleted) {
     toast(finalRoundForCode_('KBC')?'이미 평가완료된 참가자입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.':'이미 제출한 참가자입니다. 수정이 필요하면 내 평가 검수에서 진행해주세요.', true);
     return;
@@ -19983,6 +19994,10 @@ function kclRestoreDraftForCode_(code, draft) {
       _kbcSubmitting = false;
       kclApplyFormValues_(draft.form);
       try { Object.keys(_kbcYN || {}).forEach(function(k){ setYN(k, _kbcYN[k]); }); } catch(e) {}
+      KBC_SERVICE.concat(KBC_ESPRESSO,KBC_SIGNATURE_SENSORY,KBC_MACHINE).forEach(function(attr){
+        if(kbcHasSmartTagData_(attr.tagGroup,attr.tagCategory))kbcRefreshInlineTagCategory_(attr.tagGroup,attr.tagCategory);
+      });
+      refreshKbcDayFilter_();
       if (typeof setKbcAutoCommentModeUi_ === 'function') setKbcAutoCommentModeUi_();
       if (typeof onKbcParticipantSelected_ === 'function') onKbcParticipantSelected_();
       if (typeof updateKbcTimeStatus_ === 'function') updateKbcTimeStatus_();
@@ -19998,6 +20013,9 @@ function kclRestoreDraftForCode_(code, draft) {
       if (typeof toggleMobSig === 'function') toggleMobSig();
       if (typeof updateMobTimeStatus_ === 'function') updateMobTimeStatus_();
       if (typeof renderMobSmartTags === 'function') renderMobSmartTags();
+      Object.keys(_mobTags || {}).forEach(function(group){
+        Object.keys(_mobTags[group] || {}).forEach(function(category){mobRefreshInlineTagCategory_(group,category);});
+      });
       if (typeof calcMobTotal === 'function') calcMobTotal();
       if (typeof applyMobScoreLocks_ === 'function') applyMobScoreLocks_();
     }
