@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:home-intro": "node tests/stage281-home-intro-browser.test.mjs",
     "test:app-layout": "node tests/stage280-app-layout-browser.test.mjs",
     "test:ktcc-finals": "node tests/stage279-ktcc-finals.test.mjs",
     "test:dark-contrast": "node tests/stage278-dark-contrast-browser.test.mjs",

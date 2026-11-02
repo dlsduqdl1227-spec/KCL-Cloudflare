@@ -21,6 +21,7 @@ async function check(page,label,root='body'){
 }
 try{
  const home=await qa.page();await home.goto(qa.origin+'/');
+ await home.waitForFunction(()=>!document.documentElement.classList.contains('kcl-home-intro'));
  assert.deepEqual(await home.locator('.home-actions a').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('href'))),['/assessment/','/debriefing/','/admin/']);
  assert.equal(await home.locator('.home-competitions li').count(),7);
  await check(home,'home');
