@@ -1,7 +1,7 @@
 import {createRpcFixture} from './rpc-fixture.mjs';
 export const debriefCodes=['KBC','KTCC','MOC','MOB','KCR','IKRC','KCAC'];
-export async function createAllDebriefFixture(){
-  const api=await createRpcFixture(),cases=[];
+export async function createAllDebriefFixture(options={}){
+  const api=await createRpcFixture(options),cases=[];
   for(const [index,code] of debriefCodes.entries()){
     const rounds=['KBC','MOC'].includes(code)?['예선','본선','결선']:['예선','결선'];
     const units=code==='IKRC'?['A-1','C-3']:rounds.map((_,i)=>String(177-i));

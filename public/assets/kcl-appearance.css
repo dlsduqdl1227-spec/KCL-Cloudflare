@@ -1,0 +1,17 @@
+/* Shared dark text tokens. Presentation only: no scoring, drafts or navigation changes. */
+@media screen{
+:root{
+ color-scheme:dark;
+ --muted:#aaa;
+ --muted-2:#999;
+ --text-2:#d1d1d6;
+ --text-3:#b2b2b7;
+}
+input::placeholder,textarea::placeholder{color:#a1a1a6;opacity:1}
+.quick-target-nav .cup-btn.active .cup-btn-state{color:#444}
+body .section-label,body .subtitle{color:var(--muted,#aaa)}
+body .foot,body .foot span{color:var(--text-3,#b2b2b7)}
+.rank-num.bronze{color:#111}
+.kcl-skip-link:focus{color:#111;background:#fff}
+}
+@media screen and (prefers-reduced-motion:reduce){html{scroll-behavior:auto!important}}

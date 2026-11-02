@@ -1,107 +1,107 @@
-/* Light management appearance. Evaluation screens keep their existing design. */
+/* Unified graphite/blue management appearance, matching the dark judging forms. */
 .registry-workspace,.admin-home-workspace,#pAdmin{
- --bg:#f5f5f7;--panel:#fff;--line:#d2d2d7;--text:#1d1d1f;--muted:#6e6e73;--text-2:#515154;--text-3:#6e6e73;
- color:#1d1d1f;color-scheme:light;
+ --bg:#101112;--panel:#1c1c1e;--line:#54545a;--text:#f5f5f7;--muted:#b2b2b7;--text-2:#d1d1d6;--text-3:#b2b2b7;
+ color:#f5f5f7;color-scheme:dark;
 }
-.registry-workspace,.admin-home-workspace,body:has(#pAdmin.active){background:#f5f5f7!important}
+.registry-workspace,.admin-home-workspace,body:has(#pAdmin.active){background:#101112!important}
 .registry-workspace [hidden],.admin-home-workspace [hidden],#pAdmin [hidden]{display:none!important}
-.registry-workspace h1.brand,.admin-home-workspace .top h1,#pAdmin .admin-console-inner>h2{color:#1d1d1f;font-weight:650;letter-spacing:-.04em}
-.workspace-eyebrow,.registry-workspace .sub,.registry-workspace .hint,.registry-workspace .status,.admin-home-workspace .sub{color:#6e6e73}
-.registry-workspace .card,.admin-home-workspace .panel,#pAdmin .admin-comp-card,#pAdmin .admin-mini-card{background:#fff;border-color:#e1e1e6;box-shadow:0 2px 6px #00000003;border-radius:20px;color:#1d1d1f}
-.registry-workspace .label{color:#1d1d1f;font-weight:600}
+.registry-workspace h1.brand,.admin-home-workspace .top h1,#pAdmin .admin-console-inner>h2{color:#f5f5f7;font-weight:650;letter-spacing:-.04em}
+.workspace-eyebrow,.registry-workspace .sub,.registry-workspace .hint,.registry-workspace .status,.admin-home-workspace .sub{color:#b2b2b7}
+.registry-workspace .card,.admin-home-workspace .panel,#pAdmin .admin-comp-card,#pAdmin .admin-mini-card{background:#1c1c1e;border-color:#3a3a3c;box-shadow:0 2px 6px #00000003;border-radius:20px;color:#f5f5f7}
+.registry-workspace .label{color:#f5f5f7;font-weight:600}
 .registry-workspace input,.registry-workspace select,.registry-workspace textarea,.admin-home-workspace input,#pAdmin input:not([type=checkbox]),#pAdmin select,#pAdmin textarea{
- background:#fff;color:#1d1d1f;border-color:#bcbcc2;border-radius:10px;font-size:16px!important;
+ background:#1c1c1e;color:#f5f5f7;border-color:#54545a;border-radius:10px;font-size:16px!important;
 }
-.registry-workspace input::placeholder,.registry-workspace textarea::placeholder,.admin-home-workspace input::placeholder{color:#77777d}
+.registry-workspace input::placeholder,.registry-workspace textarea::placeholder,.admin-home-workspace input::placeholder{color:#a1a1a6}
 .registry-workspace input[type=date]::-webkit-calendar-picker-indicator{filter:none}
 .registry-workspace .btn,.admin-home-workspace .login button{background:#0071e3;color:#fff;border-color:transparent;font-weight:600}
-.registry-workspace .btn.secondary,.registry-workspace .template-link{background:#f1f1f4;color:#1d1d1f;border-color:#e3e3e8;font-weight:550}
-.registry-workspace .btn.danger{background:#fff3f3;color:#b42323;border-color:#efc5c5}
-.registry-workspace .nav,.workspace-operations-nav{background:#e9e9ed;border:0;border-radius:12px;padding:4px}
-.registry-workspace .nav a,.workspace-operations-nav a{color:#515154;font-weight:550}
-.registry-workspace .nav a[aria-current],.workspace-operations-nav a[aria-current]{background:#fff;color:#0066cc;box-shadow:0 1px 3px #0000000d}
-.registry-workspace #registry-context{background:#fff;border-color:#e1e1e6}
-.registry-workspace #mainStatus{color:#6e6e73}.workspace-global-context{color:#515154;font-weight:600}
-.registry-workspace .workspace-tabs{gap:4px;padding:5px;border:0;border-radius:14px;background:#e9e9ed;top:8px}
-.registry-workspace .workspace-tabs .tab-btn{min-height:50px;border:0;border-radius:10px;color:#6e6e73;font-weight:550}
-.registry-workspace .workspace-tabs .tab-btn.active{background:#fff;color:#1d1d1f;box-shadow:0 1px 4px #0000000d}
-.workspace-tab-count{background:#e4e4e9;color:#515154}.tab-btn.active .workspace-tab-count{background:#eaf3ff;color:#0066cc}
-.workspace-list-guidance{color:#6e6e73}.workspace-feedback.success{background:#eaf3ff;color:#0055ab;border-color:#c7def8}
-.registry-workspace .msg.ok,.registry-workspace .registry-list-result{color:#0066cc}
-.registry-workspace .msg.err,.registry-workspace .registry-list-result.error{color:#b42323}
-.registry-workspace .registry-list-tools{border-color:#e5e5ea}
-.registry-workspace .registry-list-filters label,.registry-workspace .registry-selection-count,.registry-workspace .operator-select-all{color:#515154}
+.registry-workspace .btn.secondary,.registry-workspace .template-link{background:#2c2c2e;color:#f5f5f7;border-color:#444448;font-weight:550}
+.registry-workspace .btn.danger{background:#3b2327;color:#ffb4b4;border-color:#825057}
+.registry-workspace .nav,.workspace-operations-nav{background:#242426;border:0;border-radius:12px;padding:4px}
+.registry-workspace .nav a,.workspace-operations-nav a{color:#d1d1d6;font-weight:550}
+.registry-workspace .nav a[aria-current],.workspace-operations-nav a[aria-current]{background:#1c1c1e;color:#84bfff;box-shadow:0 1px 3px #0000000d}
+.registry-workspace #registry-context{background:#1c1c1e;border-color:#3a3a3c}
+.registry-workspace #mainStatus{color:#b2b2b7}.workspace-global-context{color:#d1d1d6;font-weight:600}
+.registry-workspace .workspace-tabs{gap:4px;padding:5px;border:0;border-radius:14px;background:#242426;top:8px}
+.registry-workspace .workspace-tabs .tab-btn{min-height:50px;border:0;border-radius:10px;color:#b2b2b7;font-weight:550}
+.registry-workspace .workspace-tabs .tab-btn.active{background:#1c1c1e;color:#f5f5f7;box-shadow:0 1px 4px #0000000d}
+.workspace-tab-count{background:#3a3a3c;color:#d1d1d6}.tab-btn.active .workspace-tab-count{background:#16324e;color:#84bfff}
+.workspace-list-guidance{color:#b2b2b7}.workspace-feedback.success{background:#16324e;color:#91c5ff;border-color:#375f83}
+.registry-workspace .msg.ok,.registry-workspace .registry-list-result{color:#84bfff}
+.registry-workspace .msg.err,.registry-workspace .registry-list-result.error{color:#ffb4b4}
+.registry-workspace .registry-list-tools{border-color:#3a3a3c}
+.registry-workspace .registry-list-filters label,.registry-workspace .registry-selection-count,.registry-workspace .operator-select-all{color:#d1d1d6}
 .registry-workspace .registry-list-tools input[type=checkbox],.registry-workspace .registry-managed-table input[type=checkbox]{accent-color:#0071e3;min-height:24px}
-.registry-workspace .table th{color:#6e6e73;border-color:#e5e5ea;font-weight:600}
-.registry-workspace .table td{color:#1d1d1f;border-bottom-color:#e5e5ea}
-.registry-workspace .table tr.registry-selected{background:#edf5ff}.registry-workspace .table .empty-value{color:#77777d}
-.registry-workspace .registry-quick-tools{background:transparent;border-color:#e5e5ea}
-.registry-workspace .registry-quick-tools summary{color:#6e6e73;font-size:13px;min-height:32px}
-.registry-workspace .bulk-date-tools,.registry-workspace .mode-note,.registry-workspace .schedule-editor{background:#f5f5f7;border-color:#e5e5ea;color:#515154}
-.registry-workspace #kbc-roster-tools [role=tab]{background:#f5f5f7;color:#515154;border-color:#e5e5ea}
-.registry-workspace #kbc-roster-tools [role=tab][aria-selected=true]{background:#eaf3ff;color:#0066cc;border-color:#b4d5f9}
-.registry-workspace .kbc-final-choice{background:#f5f5f7;border-color:#ddd;color:#1d1d1f}.registry-workspace .kbc-final-choice small{color:#6e6e73}
-.registry-workspace .kbc-final-choice:has(input:checked){background:#eaf3ff;border-color:#80b7ee}.registry-workspace .kbc-final-choice input{accent-color:#0071e3}
-.registry-workspace .edit-state,.registry-workspace .successbox{background:#eaf3ff;color:#0055ab;border-color:#c7def8}
-.registry-workspace .filebox,.registry-workspace .advanced-tools,.registry-workspace .schedule-builder,.registry-workspace .finalist-order-rows li{background:#f5f5f7;border-color:#e5e5ea;color:#1d1d1f}
-.registry-workspace .filebox input[type=file]{background:#fff}.registry-workspace .registry-import-content{border-color:#e5e5ea}
-.registry-workspace .import-tip,.registry-workspace .finalist-order-rows span,.registry-workspace .muted-mini{color:#6e6e73}
-.registry-workspace .workspace-dialog,.registry-workspace .registry-bulk-dialog{background:#fff;color:#1d1d1f;border-color:#d2d2d7;box-shadow:0 24px 100px #0003}
+.registry-workspace .table th{color:#b2b2b7;border-color:#3a3a3c;font-weight:600}
+.registry-workspace .table td{color:#f5f5f7;border-bottom-color:#3a3a3c}
+.registry-workspace .table tr.registry-selected{background:#17324d}.registry-workspace .table .empty-value{color:#a1a1a6}
+.registry-workspace .registry-quick-tools{background:transparent;border-color:#3a3a3c}
+.registry-workspace .registry-quick-tools summary{color:#b2b2b7;font-size:13px;min-height:32px}
+.registry-workspace .bulk-date-tools,.registry-workspace .mode-note,.registry-workspace .schedule-editor{background:#101112;border-color:#3a3a3c;color:#d1d1d6}
+.registry-workspace #kbc-roster-tools [role=tab]{background:#101112;color:#d1d1d6;border-color:#3a3a3c}
+.registry-workspace #kbc-roster-tools [role=tab][aria-selected=true]{background:#16324e;color:#84bfff;border-color:#3d6890}
+.registry-workspace .kbc-final-choice{background:#101112;border-color:#444448;color:#f5f5f7}.registry-workspace .kbc-final-choice small{color:#b2b2b7}
+.registry-workspace .kbc-final-choice:has(input:checked){background:#16324e;border-color:#6bb5ff}.registry-workspace .kbc-final-choice input{accent-color:#0071e3}
+.registry-workspace .edit-state,.registry-workspace .successbox{background:#16324e;color:#91c5ff;border-color:#375f83}
+.registry-workspace .filebox,.registry-workspace .advanced-tools,.registry-workspace .schedule-builder,.registry-workspace .finalist-order-rows li{background:#101112;border-color:#3a3a3c;color:#f5f5f7}
+.registry-workspace .filebox input[type=file]{background:#1c1c1e}.registry-workspace .registry-import-content{border-color:#3a3a3c}
+.registry-workspace .import-tip,.registry-workspace .finalist-order-rows span,.registry-workspace .muted-mini{color:#b2b2b7}
+.registry-workspace .workspace-dialog,.registry-workspace .registry-bulk-dialog{background:#1c1c1e;color:#f5f5f7;border-color:#54545a;box-shadow:0 24px 100px #0003}
 .workspace-dialog::backdrop,.registry-workspace .registry-bulk-dialog::backdrop{background:#0005;backdrop-filter:blur(6px)}
-.workspace-dialog>header,.registry-workspace .registry-bulk-dialog header,.workspace-dialog>footer,.registry-workspace .registry-bulk-dialog footer{background:#fafafa;border-color:#e5e5ea}
-.workspace-dialog h2,.registry-workspace .registry-bulk-dialog header h2{color:#1d1d1f;font-weight:600}
-.workspace-editor-card .field-label{color:#515154;font-weight:550}
+.workspace-dialog>header,.registry-workspace .registry-bulk-dialog header,.workspace-dialog>footer,.registry-workspace .registry-bulk-dialog footer{background:#202022;border-color:#3a3a3c}
+.workspace-dialog h2,.registry-workspace .registry-bulk-dialog header h2{color:#f5f5f7;font-weight:600}
+.workspace-editor-card .field-label{color:#d1d1d6;font-weight:550}
 .registry-workspace .workspace-editor-card{background:transparent;border:0;box-shadow:none}
-.registry-step-title{color:#1d1d1f;font-weight:600}
-.registry-workspace .registry-bulk-common{background:#f5f5f7;border-color:#e5e5ea;border-radius:12px}
-.registry-bulk-common>label:not(.registry-common-clear),.registry-common-clear{color:#515154}
+.registry-step-title{color:#f5f5f7;font-weight:600}
+.registry-workspace .registry-bulk-common{background:#101112;border-color:#3a3a3c;border-radius:12px}
+.registry-bulk-common>label:not(.registry-common-clear),.registry-common-clear{color:#d1d1d6}
 .registry-workspace .registry-common-clear input{accent-color:#0071e3}
-.registry-individual-fields{background:#fafafa;border-color:#e5e5ea}
-.registry-individual-fields>summary{color:#515154;font-weight:550}.registry-individual-fields>p{color:#6e6e73}
-.registry-workspace .registry-bulk-row{background:#fff;border-color:#dedee3;color:#1d1d1f}
-.registry-workspace .registry-bulk-row h3,.registry-workspace .registry-bulk-fields label{color:#515154}
-.registry-workspace .registry-bulk-feedback{color:#515154;background:transparent}.registry-workspace .registry-bulk-feedback.error{color:#b42323}
-.registry-workspace .danger-panel{background:#fff7f7;border-color:#e9c9c9;color:#8d2929}.registry-workspace .danger-panel .hint{color:#8d2929}
+.registry-individual-fields{background:#202022;border-color:#3a3a3c}
+.registry-individual-fields>summary{color:#d1d1d6;font-weight:550}.registry-individual-fields>p{color:#b2b2b7}
+.registry-workspace .registry-bulk-row{background:#1c1c1e;border-color:#444448;color:#f5f5f7}
+.registry-workspace .registry-bulk-row h3,.registry-workspace .registry-bulk-fields label{color:#d1d1d6}
+.registry-workspace .registry-bulk-feedback{color:#d1d1d6;background:transparent}.registry-workspace .registry-bulk-feedback.error{color:#ffb4b4}
+.registry-workspace .danger-panel{background:#2d2024;border-color:#825057;color:#ffb4b4}.registry-workspace .danger-panel .hint{color:#ffb4b4}
 .admin-home-workspace{display:block;padding:0!important}.admin-home-workspace .panel{padding:36px!important}
-.admin-home-workspace .badge{color:#6e6e73}.admin-home-workspace .dot{background:#0071e3;box-shadow:none}
-.admin-home-workspace .admin-card{background:#f5f5f7;border-color:#e5e5ea;color:#1d1d1f;border-radius:18px;gap:18px}
-.admin-home-workspace .admin-card.primary{background:#f1f6fe;border-color:#d9e6fa}
+.admin-home-workspace .badge{color:#b2b2b7}.admin-home-workspace .dot{background:#0071e3;box-shadow:none}
+.admin-home-workspace .admin-card{background:#101112;border-color:#3a3a3c;color:#f5f5f7;border-radius:18px;gap:18px}
+.admin-home-workspace .admin-card.primary{background:#182635;border-color:#3b556e}
 .admin-home-workspace .admin-card strong{font-weight:600}.admin-home-workspace .admin-card strong b{color:#0071e3}
-.admin-home-workspace .admin-card small,.admin-home-workspace .admin-card span{color:#6e6e73}
-.admin-home-workspace .admin-card:hover{border-color:#80b7ee}.admin-home-workspace .admin-system-details{border-color:#e5e5ea;background:transparent}
-.admin-system-details>summary{font-weight:550}.admin-system-details .statusline,.admin-home-workspace .foot{color:#6e6e73}
-.admin-home-workspace .home{background:#f1f1f4;border:0;color:#515154}.admin-home-workspace #welcome{color:#0066cc}
-.admin-home-workspace #adminMain>div>button{background:#f1f1f4!important;color:#515154!important;border:0!important;font-weight:550}
-.admin-home-workspace .smsrow button{background:#0071e3;color:#fff;font-weight:600}.admin-home-workspace .msg{color:#515154}.admin-home-workspace .msg.err{color:#b42323}
-#pAdmin.panel.active{background:#f5f5f7;color:#1d1d1f}
-#pAdmin #admin-sub{color:#6e6e73!important}#pAdmin #admin-permission-guide{color:#6e6e73}
-.workspace-operation-context{background:#fff;border-color:#e1e1e6;border-radius:18px}
-.workspace-operation-context label,.workspace-operation-context>span{color:#6e6e73}
-.workspace-operation-context select{background:#fff;color:#1d1d1f;border-color:#bcbcc2}
-#pAdmin.panel.active .admin-tabs{gap:4px;padding:4px;border:0;border-radius:12px;background:#e9e9ed}
-#pAdmin .admin-tabs button{background:transparent;border:0;color:#6e6e73;border-radius:9px;font-weight:550;min-height:48px}
-#pAdmin .admin-tabs button.active{background:#fff;color:#1d1d1f;box-shadow:0 1px 4px #0000000d}
-#pAdmin .admin-comp-actions button{background:#f1f1f4;color:#1d1d1f;border-color:#e5e5ea;font-weight:550}
+.admin-home-workspace .admin-card small,.admin-home-workspace .admin-card span{color:#b2b2b7}
+.admin-home-workspace .admin-card:hover{border-color:#6bb5ff}.admin-home-workspace .admin-system-details{border-color:#3a3a3c;background:transparent}
+.admin-system-details>summary{font-weight:550}.admin-system-details .statusline,.admin-home-workspace .foot{color:#b2b2b7}
+.admin-home-workspace .home{background:#2c2c2e;border:0;color:#d1d1d6}.admin-home-workspace #welcome{color:#84bfff}
+.admin-home-workspace #adminMain>div>button{background:#2c2c2e!important;color:#d1d1d6!important;border:0!important;font-weight:550}
+.admin-home-workspace .smsrow button{background:#0071e3;color:#fff;font-weight:600}.admin-home-workspace .msg{color:#d1d1d6}.admin-home-workspace .msg.err{color:#ffb4b4}
+#pAdmin.panel.active{background:#101112;color:#f5f5f7}
+#pAdmin #admin-sub{color:#b2b2b7!important}#pAdmin #admin-permission-guide{color:#b2b2b7}
+.workspace-operation-context{background:#1c1c1e;border-color:#3a3a3c;border-radius:18px}
+.workspace-operation-context label,.workspace-operation-context>span{color:#b2b2b7}
+.workspace-operation-context select{background:#1c1c1e;color:#f5f5f7;border-color:#54545a}
+#pAdmin.panel.active .admin-tabs{gap:4px;padding:4px;border:0;border-radius:12px;background:#242426}
+#pAdmin .admin-tabs button{background:transparent;border:0;color:#b2b2b7;border-radius:9px;font-weight:550;min-height:48px}
+#pAdmin .admin-tabs button.active{background:#1c1c1e;color:#f5f5f7;box-shadow:0 1px 4px #0000000d}
+#pAdmin .admin-comp-actions button{background:#2c2c2e;color:#f5f5f7;border-color:#3a3a3c;font-weight:550}
 #pAdmin .admin-comp-actions button.primary{background:#0071e3;border-color:#0071e3;color:#fff}
-#pAdmin .admin-comp-name{color:#1d1d1f;font-weight:600}#pAdmin .admin-card-logo{background:#29292b;border-radius:12px;padding:8px}
-#pAdmin .admin-comp-round,#pAdmin .admin-mini-sub,#pAdmin .admin-mini-title,#pAdmin label{color:#515154}
-#pAdmin .round-mode-control>span{color:#6e6e73}#pAdmin .admin-check-row input{accent-color:#0071e3}
-#pAdmin .role-mode-badge,#pAdmin .role-badge,#pAdmin .admin-status-tags span{background:#edf0f5;color:#515154;border:0}
-#pAdmin .workspace-operation-extras,#pAdmin .workspace-common-settings{border-color:#e5e5ea}
-#pAdmin .workspace-operation-extras summary,#pAdmin .workspace-common-settings summary{color:#515154;font-weight:550}
-#pAdmin .workspace-common-settings{background:#fff}#pAdmin .workspace-common-settings .login-security-card{background:#f5f5f7;border-color:#ddd;color:#1d1d1f}
-#pAdmin #server-health-card{background:#fff;border-color:#e1e1e6;color:#1d1d1f}
-#pAdmin .admin-section{color:#6e6e73}#pAdmin .admin-footer-actions button{background:#e9e9ed;color:#515154;border-color:#ddd;font-weight:550}
-.registry-workspace :focus-visible,.admin-home-workspace :focus-visible,#pAdmin :focus-visible{outline:3px solid #0071e366;outline-offset:3px}
+#pAdmin .admin-comp-name{color:#f5f5f7;font-weight:600}#pAdmin .admin-card-logo{background:#29292b;border-radius:12px;padding:8px}
+#pAdmin .admin-comp-round,#pAdmin .admin-mini-sub,#pAdmin .admin-mini-title,#pAdmin label{color:#d1d1d6}
+#pAdmin .round-mode-control>span{color:#b2b2b7}#pAdmin .admin-check-row input{accent-color:#0071e3}
+#pAdmin .role-mode-badge,#pAdmin .role-badge,#pAdmin .admin-status-tags span{background:#353538;color:#d1d1d6;border:0}
+#pAdmin .workspace-operation-extras,#pAdmin .workspace-common-settings{border-color:#3a3a3c}
+#pAdmin .workspace-operation-extras summary,#pAdmin .workspace-common-settings summary{color:#d1d1d6;font-weight:550}
+#pAdmin .workspace-common-settings{background:#1c1c1e}#pAdmin .workspace-common-settings .login-security-card{background:#101112;border-color:#444448;color:#f5f5f7}
+#pAdmin #server-health-card{background:#1c1c1e;border-color:#3a3a3c;color:#f5f5f7}
+#pAdmin .admin-section{color:#b2b2b7}#pAdmin .admin-footer-actions button{background:#242426;color:#d1d1d6;border-color:#444448;font-weight:550}
+.registry-workspace :focus-visible,.admin-home-workspace :focus-visible,#pAdmin :focus-visible{outline:3px solid #80bdff;outline-offset:3px}
 #registry-roster-views{margin-top:22px}
-.registry-phase-tabs,.registry-round-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;background:#f0f0f3;border:1px solid #e5e5ea;border-radius:12px}
-.registry-phase-tabs button,.registry-round-tabs button{min-height:46px;padding:10px;border:0;border-radius:8px;background:transparent;color:#6e6e73;font-size:15px;font-weight:550}
-.registry-phase-tabs button[aria-selected=true],.registry-round-tabs button[aria-selected=true]{background:#fff;color:#0066cc;box-shadow:0 1px 4px #0000000d}
-.registry-phase-tabs span,.registry-round-tabs span{font-size:12px;color:#6e6e73;margin-left:4px}
+.registry-phase-tabs,.registry-round-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;background:#242426;border:1px solid #3a3a3c;border-radius:12px}
+.registry-phase-tabs button,.registry-round-tabs button{min-height:46px;padding:10px;border:0;border-radius:8px;background:transparent;color:#b2b2b7;font-size:15px;font-weight:550}
+.registry-phase-tabs button[aria-selected=true],.registry-round-tabs button[aria-selected=true]{background:#1c1c1e;color:#84bfff;box-shadow:0 1px 4px #0000000d}
+.registry-phase-tabs span,.registry-round-tabs span{font-size:12px;color:#b2b2b7;margin-left:4px}
 .registry-round-tabs{grid-template-columns:repeat(2,minmax(0,1fr));background:transparent;border:0;padding:0;max-width:400px;margin-top:12px}
-.registry-round-tabs button[aria-selected=true]{background:#eaf3ff;box-shadow:none}.registry-round-tabs[hidden]{display:none}
+.registry-round-tabs button[aria-selected=true]{background:#16324e;box-shadow:none}.registry-round-tabs[hidden]{display:none}
 #registry-roster-view-note{margin:12px 0 0}
-.registry-roster-empty td{padding:32px 16px!important;text-align:center;color:#6e6e73!important;line-height:1.8}
+.registry-roster-empty td{padding:32px 16px!important;text-align:center;color:#b2b2b7!important;line-height:1.8}
 @media(min-width:701px) and (max-width:1100px){
  .registry-workspace .participant-table{min-width:0!important;width:100%;table-layout:fixed}
  .registry-workspace .participant-table th:first-child,.registry-workspace .participant-table td:first-child{width:42px}
@@ -115,9 +115,9 @@
 }
 @media(max-width:800px){.admin-home-workspace .panel{padding:24px 18px!important}}
 @media(max-width:700px){
- .workspace-utilities{border-top:1px solid #e5e5ea;padding-top:14px}
+ .workspace-utilities{border-top:1px solid #3a3a3c;padding-top:14px}
  .registry-workspace .workspace-tabs .tab-btn{font-size:14px;gap:7px;padding:10px 4px;min-height:48px}
- .registry-workspace .table tr{background:#fafafa;border-color:#e1e1e6}.registry-workspace .table td::before{color:#6e6e73!important}
- .registry-workspace .table tr.registry-selected{background:#edf5ff;border-color:#8fbdee}.registry-workspace .registry-roster-empty td::before{display:none}
+ .registry-workspace .table tr{background:#202022;border-color:#3a3a3c}.registry-workspace .table td::before{color:#b2b2b7!important}
+ .registry-workspace .table tr.registry-selected{background:#17324d;border-color:#5d9fd6}.registry-workspace .registry-roster-empty td::before{display:none}
  .registry-phase-tabs button{font-size:14px;padding:10px 3px}.registry-phase-tabs span{font-size:11px;margin-left:2px}
 }
