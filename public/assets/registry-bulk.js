@@ -1,14 +1,14 @@
 (function(){
   'use strict';
-  var specs={participants:{table:'partTable',source:function(){return participantRows;},check:'data-schedule-part',all:'participantSelectAll',label:'선수·팀'},operators:{table:'operatorTable',source:function(){return operatorRows.filter(operatorVisibleForSelectedComp);},check:'data-bulk-op',all:'operatorSelectAll',label:'심사위원·운영진'},admins:{table:'adminTable',source:function(){return operatorRows.filter(operatorIsAdminRow);},check:'data-bulk-admin',all:'adminSelectAll',label:'관리자'}};
+  var specs={participants:{table:'partTable',source:function(){return typeof registryRosterFilter_==='function'?registryRosterFilter_(selectedCompetitionCode_(),participantRows):participantRows;},check:'data-schedule-part',all:'participantSelectAll',label:'선수·팀'},operators:{table:'operatorTable',source:function(){return operatorRows.filter(operatorVisibleForSelectedComp);},check:'data-bulk-op',all:'operatorSelectAll',label:'심사위원·운영진'},admins:{table:'adminTable',source:function(){return operatorRows.filter(operatorIsAdminRow);},check:'data-bulk-admin',all:'adminSelectAll',label:'관리자'}};
   var states={},dialog=null,active=null,writing=false,sequence=0;
   function state(target){var code=target==='admins'?'ALL':selectedCompetitionCode_(),key=target+':'+code;return states[key]||(states[key]={selected:new Set(),query:'',date:'',team:''});}
   function request(action,args){return new Promise(function(resolve,reject){rpc(action,args,resolve,reject);});}
   function element(tag,text,className){var el=document.createElement(tag);if(text)el.textContent=text;if(className)el.className=className;return el;}
   function button(text,action,className){var el=element('button',text,className||'btn secondary small');el.type='button';el.onclick=action;return el;}
-  function round(){var cfg=configs.find(function(c){return c.code===selectedCompetitionCode_();});if(selectedCompetitionCode_()==='KBC'){if(kbcRosterView_==='1'||kbcRosterView_==='2')return '본선';if(kbcRosterView_==='final')return '결선';}return cfg&&cfg.currentRound||'예선';}
+  function round(){if(typeof registryRosterRound_==='function')return registryRosterRound_()||'예선';var cfg=configs.find(function(c){return c.code===selectedCompetitionCode_();});if(selectedCompetitionCode_()==='KBC'){if(kbcRosterView_==='1'||kbcRosterView_==='2')return '본선';if(kbcRosterView_==='final')return '결선';}return cfg&&cfg.currentRound||'예선';}
   function number(row,r){return r==='본선'?row.mainCupNo:r==='결선'?row.finalCupNo:row.prelimCupNo;}
-  function date(row,target){if(target==='participants'){var schedule=((row.extra||{}).roundSchedules||{})[round()];return schedule?String(schedule.date||''):participantPrelimDate_(row);}return row.effectiveDate||'';}
+  function date(row,target){if(target==='participants'){var r=round();if(r==='예선')return participantPrelimDate_(row);var schedule=((row.extra||{}).roundSchedules||{})[r];return schedule?String(schedule.date||''):'';}return row.effectiveDate||'';}
   function backupStorageKey(target){return 'KCL_REGISTRY_UNDO::'+target+'::'+(target==='admins'?'ALL':selectedCompetitionCode_());}
   function tools(target){return document.getElementById('registry-tools-'+target);}
   function result(target,text,error,backupKey){var area=tools(target).querySelector('.registry-list-result');area.textContent=text||'';area.classList.toggle('error',!!error);if(backupKey){var undo=button('방금 삭제 되돌리기',async function(){if(writing)return;writing=true;undo.disabled=true;try{var res=await request('restoreRegistryBatch',[backupKey,actor]);area.textContent=res.message||'';area.classList.toggle('error',!res.success);if(res.success){sessionStorage.removeItem(backupStorageKey(target));refresh(target);}else area.appendChild(undo);}catch(e){area.textContent='복원을 확인하지 못했습니다. 다시 시도해주세요.';area.appendChild(undo);}finally{writing=false;undo.disabled=false;}});area.appendChild(undo);}}
@@ -55,7 +55,7 @@
     var allBox=document.getElementById(spec.all);allBox.checked=!!visible&&st.selected.size===visible;allBox.indeterminate=st.selected.size>0&&st.selected.size<visible;
     box.querySelector('.registry-selection-count').textContent='선택 '+st.selected.size+'건 · 표시 '+visible+'건';
     box.querySelectorAll('[data-registry-action]').forEach(function(b){b.disabled=!st.selected.size||writing;});
-    document.dispatchEvent(new CustomEvent('registry:list-updated',{detail:{target:target,total:source.length,visible:visible,selected:st.selected.size}}));
+    document.dispatchEvent(new CustomEvent('registry:list-updated',{detail:{target:target,total:target==='participants'?participantRows.length:source.length,visible:visible,selected:st.selected.size}}));
     if(!visible&&source.length){var empty=table.insertRow(),cell=empty.insertCell();empty.className='registry-no-results';cell.colSpan=header?header.cells.length:8;cell.textContent='검색 조건에 맞는 명단이 없습니다.';}
     if(observer)observer.observe(table,{childList:true,subtree:true});
   }
@@ -77,6 +77,7 @@
     var header=element('header'),title=element('h2',(operation==='delete'?'선택 삭제':'일괄 수정')+' · '+spec.label+' '+selected.length+'건');title.id='registry-bulk-title';header.appendChild(title);header.appendChild(button('닫기',close));dialog.appendChild(header);
     var body=element('div','','registry-bulk-body'),note=element('p',operation==='delete'?'평가 점수·코멘트는 삭제하지 않습니다. 평가 기록에 연결된 선수와 보호 대상은 유지하며, 삭제한 명단은 되돌릴 수 있습니다.':'선택한 행만 수정합니다. 변경하지 않은 항목과 평가 점수·코멘트는 그대로 유지됩니다.');body.appendChild(note);
     var r=active.round,fields=target==='participants'?[['name',active.code==='KTCC'?'팀명':'선수명'],['affiliation',active.code==='KTCC'?'팀원':'소속'],['phone','연락처'],['number',r+' 번호'],['date',r+' 날짜','date'],['station',r+' 스테이션'],['team',r+' 심사조']]:target==='operators'?[['name','이름'],['affiliation','소속'],['phone','연락처'],['accountType','계정 유형','type'],['role','역할'],['team','조·스테이션'],['date','심사 적용일','date']]:[['name','관리자 이름'],['affiliation','소속'],['phone','연락처']];
+    if(target==='participants'&&typeof registryRosterRound_==='function'&&!registryRosterRound_()){fields=fields.filter(function(field){return ['name','affiliation','phone'].includes(field[0]);});note.textContent='전체 선수에서는 이름·소속·연락처만 수정합니다. 번호와 일정은 예선 또는 본·결선 탭에서 수정하세요.';}
     if(target==='participants')fields=fields.filter(function(field){if(active.code==='KCR'&&field[0]==='date')return false;if(field[0]==='team')return active.code==='MOB';if(field[0]==='station')return ['KBC','MOB','MOC','IKRC'].includes(active.code);return true;}).map(function(field){return active.code==='IKRC'&&field[0]==='station'?['station','로스팅 위치']:field;});
     if(operation==='edit'){
       body.appendChild(element('div','1. 바꿀 항목과 내용을 선택하세요','registry-step-title'));
@@ -128,5 +129,6 @@
   },true);
   document.addEventListener('click',function(event){var remove=event.target.closest('[data-del-part],[data-del-op]');if(!remove)return;var target=remove.closest('#partTable')?'participants':remove.closest('#adminTable')?'admins':'operators';event.preventDefault();event.stopImmediatePropagation();open(target,'delete',Number(remove.dataset.delPart||remove.dataset.delOp));},true);
   document.getElementById('comp').addEventListener('change',function(){close();Object.keys(specs).forEach(function(target){var st=state(target);st.selected.clear();st.query='';st.date='';st.team='';var box=tools(target);box.querySelector('input[type=search]').value='';result(target,'');});});
+  document.addEventListener('registry:roster-view-changed',function(){var st=state('participants');st.selected.clear();st.query='';var box=tools('participants');if(box){box.querySelector('input[type=search]').value='';result('participants','');}});
   Object.keys(specs).forEach(mount);
 })();

@@ -12,6 +12,7 @@ try{
  await api.rpc('upsertOperatorAccount',{accountType:'ADMIN',name:'선택 관리자',phone:'01085000009'},api.actor);
  const page=await qa.page(390,950);await page.goto(qa.origin+'/registry/');
  await page.evaluate(a=>{actor=a;document.getElementById('loginCard').classList.add('hidden');document.getElementById('main').classList.remove('hidden');loadRegistry();},api.actor);
+ await page.locator('[data-roster-phase=finals]').click();await page.locator('#kbc-roster-day1').click();
  await page.waitForFunction(()=>document.querySelectorAll('#partTable [data-schedule-part]').length===10);
  const toolbar=page.locator('#registry-tools-participants');
  await page.locator('#partTable [data-schedule-part]').nth(0).check();await page.locator('#partTable [data-schedule-part]').nth(1).check();

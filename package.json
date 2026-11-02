@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:registry-rounds": "node tests/stage277-registry-rounds-browser.test.mjs",
     "test:management-workspace": "node tests/stage276-management-workspace-browser.test.mjs",
     "test:ikrc-seed-final": "node tests/stage273-ikrc-seed-final.test.mjs && node tests/stage274-ikrc-seed-browser.test.mjs",
     "test:registry-batch": "node tests/stage271-registry-batch.test.mjs && node tests/stage272-registry-batch-browser.test.mjs",

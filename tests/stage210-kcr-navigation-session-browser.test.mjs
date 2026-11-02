@@ -82,7 +82,7 @@ try {
   await page.evaluate(actor=>localStorage.setItem('kclAdminActor',JSON.stringify(actor)),api.actor);
   await page.goto(qa.origin+'/registry/');
   await page.selectOption('#comp','KCR');
-  await page.waitForFunction(()=>document.getElementById('partCount').textContent.includes('KCR 등록 4건'));
+  await page.waitForFunction(()=>document.getElementById('partCount').textContent.includes('KCR · 예선 4명'));
   assert.equal(await page.locator('#mDate').isVisible(),false);
   assert.equal(await page.locator('#bulkParticipantDate').isVisible(),false);
   assert.equal(await page.locator('#opTeam').isVisible(),false);

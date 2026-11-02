@@ -52,6 +52,7 @@ try {
   assert.deepEqual(page.qaErrors,[]);
   await page.goto(qa.origin+'/registry/');
   await page.evaluate(a=>{actor=a;document.getElementById('loginCard').classList.add('hidden');document.getElementById('main').classList.remove('hidden');loadRegistry();},api.actor);
+  await page.locator('[data-roster-phase=finals]').click();await page.locator('#kbc-roster-day1').click();
   await page.waitForFunction(()=>document.querySelectorAll('#partTable [data-edit-part]').length===10);
   assert.match(await page.locator('#partTable').innerText(),/김다정/);
   assert.equal(await page.locator('#participant-bulk-prelim-tools').isVisible(),false);
@@ -63,14 +64,14 @@ try {
   await page.locator('#kbc-roster-day2').click();
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),10);
   assert.match(await page.locator('#partTable').innerText(),/최준호/);
-  await page.locator('#kbc-roster-all').click();
+  await page.locator('[data-roster-phase=prelim]').click();
   await page.getByText('예선 날짜 빠른변경',{exact:true}).click();
   assert.equal(await page.locator('#participant-bulk-prelim-tools').isVisible(),true);
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),21);
-  await page.locator('#kbc-roster-final').click();
+  await page.locator('[data-roster-phase=finals]').click();await page.locator('[data-roster-round="결선"]').click();
   await page.waitForFunction(()=>document.querySelectorAll('#kbc-final-choices input').length===20);
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),0);
-  await page.locator('#kbc-roster-day1').click();
+  await page.locator('[data-roster-round="본선"]').click();await page.locator('#kbc-roster-day1').click();
   await page.screenshot({path:'tmp/stage267-qa/kbc-roster-mobile.png'});
   assert.equal((await inspectPage(page)).pageOverflow,false);assert.deepEqual(page.qaErrors,[]);
   await page.setViewportSize({width:1440,height:1000});

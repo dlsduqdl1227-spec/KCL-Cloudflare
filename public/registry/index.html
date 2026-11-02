@@ -72,8 +72,10 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
 <script defer src="/assets/kcl-ui.js?v=276"></script>
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
 <link rel="stylesheet" href="/assets/registry-bulk.css?v=271">
-<script defer src="/assets/registry-bulk.js?v=276"></script>
-<link rel="stylesheet" href="/assets/admin-workspace.css?v=276">
+<script defer src="/assets/registry-rounds.js?v=277"></script>
+<script defer src="/assets/registry-bulk.js?v=277"></script>
+<link rel="stylesheet" href="/assets/admin-workspace.css?v=277">
+<link rel="stylesheet" href="/assets/admin-appearance.css?v=277">
 <script defer src="/assets/registry-workspace.js?v=276b"></script>
 </head>
 <body class="registry-workspace">
@@ -240,7 +242,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
             <button type="button" class="btn secondary small" role="tab" id="kbc-roster-day1" onclick="setKbcRosterView_('1')">본선 1일차</button>
             <button type="button" class="btn secondary small" role="tab" id="kbc-roster-day2" onclick="setKbcRosterView_('2')">본선 2일차</button>
             <button type="button" class="btn secondary small" role="tab" id="kbc-roster-final" onclick="setKbcRosterView_('final')">결선</button>
-            <button type="button" class="btn secondary small" role="tab" id="kbc-roster-all" onclick="setKbcRosterView_('all')">전체 선수</button>
+            <button type="button" class="btn secondary small" role="tab" id="kbc-roster-all" onclick="setKbcRosterView_('main')">본선 전체</button>
           </div>
           <div id="kbc-final-roster" class="hint" role="status"></div>
           <details><summary>2026 본선 시간표 반영</summary>
@@ -889,9 +891,10 @@ function participantNaturalCompare_(left,right){left=String(left==null?'':left).
 function participantSortLabel_(mode){return ({'number-asc':'참가번호 낮은 순','number-desc':'참가번호 높은 순','schedule':'예선 일정 순','name':'선수명 가나다 순','registered':'등록 순'})[mode]||'참가번호 낮은 순';}
 function sortParticipantRowsForRegistry_(code,rows,mode){code=String(code||'').toUpperCase();mode=String(mode||'number-asc');return (rows||[]).slice().sort(function(a,b){var aCode=String(a.competitionCode||code||'').toUpperCase(),bCode=String(b.competitionCode||code||'').toUpperCase();if(aCode!==bCode)return participantNaturalCompare_(aCode,bCode);var cmp=0;if(mode==='registered')cmp=Number(a.rowIndex||0)-Number(b.rowIndex||0);else if(mode==='name')cmp=participantNaturalCompare_(a.name||a.teamName,b.name||b.teamName);else if(mode==='schedule'){cmp=participantNaturalCompare_(participantPrelimDate_(a),participantPrelimDate_(b));if(!cmp)cmp=participantOperatingDaySort_(a)-participantOperatingDaySort_(b);if(!cmp)cmp=participantNaturalCompare_(a.performanceOrder||(a.extra||{})['경연순서'],b.performanceOrder||(b.extra||{})['경연순서']);}else{var aNo=participantPrimaryNumber_(aCode,a),bNo=participantPrimaryNumber_(bCode,b);cmp=participantNaturalCompare_(aNo,bNo);if(mode==='number-desc'&&String(aNo||'').trim()&&String(bNo||'').trim())cmp=-cmp;}if(!cmp)cmp=participantNaturalCompare_(participantPrimaryNumber_(aCode,a),participantPrimaryNumber_(bCode,b));if(!cmp)cmp=Number(a.rowIndex||0)-Number(b.rowIndex||0);return cmp;});}
 function participantSelectedIds_(){var selected={};Array.prototype.forEach.call(document.querySelectorAll('#partTable [data-schedule-part]:checked'),function(input){selected[String(input.getAttribute('data-schedule-part'))]=true;});return selected;}
-var kbcRosterView_=new URLSearchParams(location.search).get('kbcView')==='final'?'final':'1', kbcRosterPlanRequest_=0, kbcFinalSelection_=null, kbcFinalSaving_=false;
+var kbcRosterView_=new URLSearchParams(location.search).get('kbcView')==='final'?'final':'prelim', kbcRosterPlanRequest_=0, kbcFinalSelection_=null, kbcFinalSaving_=false;
 function setKbcRosterView_(view){kbcRosterView_=view;renderParticipantList_('KBC',{});if(view==='final')loadKbcFinalRoster_();}
 function kbcRosterRows_(rows){
+  if(typeof registryRosterRows_==='function')return rows;
   if(kbcRosterView_==='all')return rows;
   var round=kbcRosterView_==='final'?'결선':'본선',numberKey=round==='결선'?'finalCupNo':'mainCupNo';
   return rows.filter(function(row){var schedule=((row.extra||{}).roundSchedules||{})[round]||{};return !!row[numberKey]&&(round==='결선'||String(schedule.day||'').replace(/일차$/,'')===kbcRosterView_);}).sort(function(a,b){
@@ -901,7 +904,9 @@ function kbcRosterRows_(rows){
 }
 function renderParticipantList_(code,selected){
   var table=document.getElementById('partTable');if(!table)return;
+  if(typeof registryRosterPrepare_==='function')registryRosterPrepare_(code);
   var rows=sortParticipantRowsForRegistry_(code,participantRows,participantSortMode);
+  if(typeof registryRosterRows_==='function')rows=registryRosterRows_(code,rows);
   if(code==='KBC'){
     rows=kbcRosterRows_(rows);
     [['1','day1'],['2','day2'],['final','final'],['all','all']].forEach(function(pair){document.getElementById('kbc-roster-'+pair[1]).setAttribute('aria-selected',String(kbcRosterView_===pair[0]));});
@@ -913,6 +918,7 @@ function renderParticipantList_(code,selected){
   if(selected)Array.prototype.forEach.call(table.querySelectorAll('[data-schedule-part]'),function(input){input.checked=!!selected[String(input.getAttribute('data-schedule-part'))];});
   var count=document.getElementById('partCount');
   if(count){count.textContent=code==='KBC'?(kbcRosterView_==='all'?'전체 선수':kbcRosterView_==='final'?'결선 진출자':'본선 '+kbcRosterView_+'일차 진출자')+' '+rows.length+'명':code+' 등록 '+participantRows.length+'건 · '+participantSortLabel_(participantSortMode);if(code==='KCR'){var pending=participantRows.filter(function(r){return (r.extra||{}).kcrPrelimPending===true;}).length;if(pending)count.textContent+=' · 예선 배정 '+(participantRows.length-pending)+'명 · 대기 '+pending+'명';}}
+  if(typeof registryRosterRender_==='function')registryRosterRender_(code,rows);
 }
 function loadKbcTimetablePlan_(){
   var area=document.getElementById('kbc-timetable-plan');area.textContent='등록 선수와 대조하는 중...';
@@ -969,7 +975,21 @@ function saveKbcFinalSelection_(){
   rpc('setKbcFinalistSelection',[{participantIds:ids,revision:kbcFinalSelection_.revision},actor],finish,function(){finish(null);});
 }
 function applyParticipantSort_(){var select=document.getElementById('participantSortMode');participantSortMode=(select&&select.value)||'number-asc';var code=document.getElementById('comp').value||'ALL';var selected=participantSelectedIds_();renderParticipantList_(code,selected);var all=document.getElementById('participantSelectAll');if(all)all.checked=false;}
-function participantListHtml_(code,rows){code=String(code||'').toUpperCase();rows=rows||[];var ktcc=code==='KTCC';var nameLabel=ktcc?'팀명':'선수명';var affiliationLabel=ktcc?'팀원':'소속';var numberLabel=ktcc?'팀번호':'참가번호';var header=participantTableHeader_([[nameLabel,'cell-name'],[affiliationLabel,'cell-affiliation'],[numberLabel,'cell-number'],['연락처','cell-phone'],[code==='KBC'?'라운드·일정':'예선 일정','cell-schedule'],['관리','cell-actions']]);var body=rows.map(function(r){var ex=r.extra||{};var rowCode=String(r.competitionCode||code).toUpperCase();var isTeam=rowCode==='KTCC';var rowNameLabel=isTeam?'팀명':'선수명';var rowAffiliationLabel=isTeam?'팀원':'소속';var rowNumberLabel=isTeam?'팀번호':'참가번호';var name=isTeam?(r.teamName||r.name):(r.name||'');var affiliation=isTeam?ktccTeamMemberLabel_(r):(r.affiliation||ex['팀장 소속']||ex['팀원1소속']||'');var phone=r.phone||ex['팀장 휴대전화']||ex['팀원1연락처']||'';return '<tr>'+participantSelectCell_(r)+participantTextCell_(rowNameLabel,name,'cell-name')+participantTextCell_(rowAffiliationLabel,affiliation,'cell-affiliation')+participantTextCell_(rowNumberLabel,rowCode==='KCR'&&ex.kcrPrelimPending===true?'예선 배정 대기':participantPrimaryNumber_(rowCode,r),'cell-number mono')+participantTextCell_('연락처',phone,'cell-phone mono')+participantTextCell_(code==='KBC'?'라운드·일정':'예선 일정',code==='KBC'?kbcParticipantRoundText_(r):participantPrelimDate_(r),'cell-schedule mono')+participantActionHtml_(r)+'</tr>';}).join('');return header+body;
+function participantListHtml_(code,rows){
+  code=String(code||'').toUpperCase();rows=rows||[];
+  var ktcc=code==='KTCC',nameLabel=ktcc?'팀명':'선수명',affiliationLabel=ktcc?'팀원':'소속';
+  var round=typeof registryRosterRound_==='function'?registryRosterRound_():'예선';
+  var numberLabel=round==='예선'?(ktcc?'팀번호':'참가번호'):round?round+' 번호':'라운드 번호';
+  var scheduleLabel=round==='예선'?'예선 일정':'일정·회차';
+  var header=participantTableHeader_([[nameLabel,'cell-name'],[affiliationLabel,'cell-affiliation'],[numberLabel,'cell-number'],['연락처','cell-phone'],[scheduleLabel,'cell-schedule'],['관리','cell-actions']]);
+  var body=rows.map(function(r){
+    var ex=r.extra||{},rowCode=String(r.competitionCode||code).toUpperCase(),isTeam=rowCode==='KTCC';
+    var name=isTeam?(r.teamName||r.name):(r.name||''),affiliation=isTeam?ktccTeamMemberLabel_(r):(r.affiliation||ex['팀장 소속']||ex['팀원1소속']||''),phone=r.phone||ex['팀장 휴대전화']||ex['팀원1연락처']||'';
+    var no=typeof registryRosterNumber_==='function'?registryRosterNumber_(r):participantPrimaryNumber_(rowCode,r);
+    if(rowCode==='KCR'&&ex.kcrPrelimPending===true&&!round&&no==='미배정')no='예선 배정 대기';
+    var date=typeof registryRosterSchedule_==='function'?registryRosterSchedule_(r):participantPrelimDate_(r);
+    return '<tr>'+participantSelectCell_(r)+participantTextCell_(isTeam?'팀명':'선수명',name,'cell-name')+participantTextCell_(isTeam?'팀원':'소속',affiliation,'cell-affiliation')+participantTextCell_(numberLabel,no,'cell-number mono')+participantTextCell_('연락처',phone,'cell-phone mono')+participantTextCell_(scheduleLabel,date,'cell-schedule mono')+participantActionHtml_(r)+'</tr>';
+  }).join('');return header+body;
 }
 function kbcParticipantRoundText_(r){
   var schedules=(r.extra||{}).roundSchedules||{}, main=schedules.본선||{}, final=schedules.결선||{};

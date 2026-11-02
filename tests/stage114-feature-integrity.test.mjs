@@ -78,7 +78,7 @@ assert.match(
   /onclick="window\.location\.href='\/registry\/'">등록·권한 관리<\/button>/,
   "The operations console must link directly to the single registry manager",
 );
-assert.match(registry, /KCL 등록·권한 관리/);
+assert.match(registry, /<title>KCL 명단 관리<\/title>/);
 
 for (const retiredMarker of [
   "admin-account-list",

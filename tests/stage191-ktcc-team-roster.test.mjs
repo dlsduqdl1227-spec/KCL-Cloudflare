@@ -60,7 +60,9 @@ assert.equal(ctx.ktccMemberSummaryFromRow_({ affiliation: '이전 팀원' }, { '
 assert.match(rpc, /const displayAff = hideIdentity \? '' : \(code === 'KTCC' \? ktccMemberSummaryFromRow_/);
 assert.match(rpc, /code === 'KTCC' \? '팀원 ' : ''/);
 assert.match(registry, /code==='KTCC'\?'팀원 이름':'소속'/);
-assert.match(registry, /var nameLabel=ktcc\?'팀명':'선수명';var affiliationLabel=ktcc\?'팀원':'소속';var numberLabel=ktcc\?'팀번호':'참가번호'/);
+assert.match(registry, /nameLabel=ktcc\?'팀명':'선수명'/);
+assert.match(registry, /affiliationLabel=ktcc\?'팀원':'소속'/);
+assert.match(registry, /round==='예선'\?\(ktcc\?'팀번호':'참가번호'\)/);
 assert.match(registry, /function ktccTeamMembers_/);
 assert.match(assessment, /팀번호를 선택하면 팀명과 팀원 이름이 함께 표시됩니다/);
 assert.match(pkg.scripts.posttest, /stage191-ktcc-team-roster\.test\.mjs/);
