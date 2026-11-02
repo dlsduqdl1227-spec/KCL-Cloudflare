@@ -1,0 +1,17 @@
+#ktcc-advance-manager[hidden]{display:none!important}
+.ktcc-final-field{display:block;color:var(--text-2);font-size:13px;margin:8px 0}
+.ktcc-final-note{font-size:13px;line-height:1.7;color:var(--text-3);margin:6px 0 14px}
+#ktcc-decision-dialog{color-scheme:dark;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);margin:auto;padding:0;border:1px solid #54545a;border-radius:18px;background:#1c1c1e;color:#f5f5f7;overflow:auto}
+#ktcc-decision-dialog::backdrop{background:#000a;backdrop-filter:blur(4px)}
+#ktcc-decision-dialog header,#ktcc-decision-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px;border-bottom:1px solid #3a3a3c}
+#ktcc-decision-dialog h2{font-size:20px;margin:0;text-align:left}
+#ktcc-decision-dialog .ktcc-decision-content{padding:20px}
+#ktcc-decision-dialog [data-decision-team]{font-size:22px;font-weight:700;margin-bottom:8px}
+#ktcc-decision-dialog label{display:block;margin:12px 0 8px;font-size:14px}
+#ktcc-decision-dialog button{min-height:44px;padding:10px 14px;border-radius:9px;border:1px solid #54545a;background:#2c2c2e;color:#f5f5f7;font-size:14px;font-weight:600}
+#ktcc-decision-dialog [data-decision-save]{background:#0071e3;border-color:#0071e3;color:#fff}
+#ktcc-decision-dialog footer{border-top:1px solid #3a3a3c;border-bottom:0;justify-content:flex-end}
+#ktcc-decision-dialog button:disabled{opacity:.45}
+#ktcc-decision-dialog :focus-visible{outline:2px solid #80bdff;outline-offset:3px}
+#ktcc-decision-dialog [data-decision-message]{font-size:13px;color:#d1d1d6;line-height:1.7}
+@media(max-width:600px){#ktcc-decision-dialog footer button{flex:1}}

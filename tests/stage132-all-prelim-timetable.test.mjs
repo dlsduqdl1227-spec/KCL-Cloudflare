@@ -9,8 +9,9 @@ const registry = fs.readFileSync(path.join(root, "public", "registry", "index.ht
 
 assert.match(rpc, /const scheduleLabel = code==='KBC'/);
 assert.match(rpc, /competitionDate \|\| operatingDay/);
-// Final rounds may prepend the editable performance order; the date label remains.
-assert.match(rpc, /display: [^\n]*\(scheduleLabel \? \(scheduleLabel \+ ' · '\) : ''\)/);
+// KTCC finals show team names only. All other assignment labels retain the date.
+assert.match(rpc, /display: code==='KTCC'&&currentRound!=='예선'/);
+assert.match(rpc, /: [^\n]*\(scheduleLabel \? \(scheduleLabel \+ ' · '\) : ''\)/);
 assert.match(registry, /function participantScheduleText_\(r\)/);
 assert.match(registry, /ex\['운영일차'\]/);
 assert.match(registry, /ex\['경연순서'\]/);

@@ -55,7 +55,8 @@ function renderFinalEvaluationList_(list,code){
 function renderFinalEvaluationRows_(visible,code,wrap){
   var manager=reviewManageScopeForCode_(code);
   wrap.innerHTML='';
-  buildGroupedReviewItems_(visible,code).forEach(function(item){
+  // A team's quarter-final and later matches are separate submissions and decisions.
+  (code==='KTCC'?visible:buildGroupedReviewItems_(visible,code)).forEach(function(item){
     var group=finalCorrectionItems_(item),pending=group.filter(function(x){return x.status==='반려';});
     var row=document.createElement('div');row.className='review-item review-actual';
     var title=code==='KCR'?'컵 '+(item.unit||item['컵번호']||'')+'번':reviewGroupTitle_(item,code),judge=item['심사위원명']||item.judgeName||'';
@@ -66,6 +67,7 @@ function renderFinalEvaluationRows_(visible,code,wrap){
       openFinalCorrection_(target);
     };
     var button=row.querySelector('.final-return-btn');if(button)button.onclick=function(){returnFinalEvaluationUi_(group.filter(function(x){return x.status!=='반려';}),button);};
+    if(code==='KTCC'&&typeof ktccAddFinalDecisionAction_==='function')ktccAddFinalDecisionAction_(row,item);
     wrap.appendChild(row);
   });
 }

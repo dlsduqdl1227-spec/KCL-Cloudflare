@@ -55,7 +55,7 @@ const duplicateStaticIds = staticIds.filter((id, index) => staticIds.indexOf(id)
 assert.deepEqual(duplicateStaticIds, [], "Static HTML IDs must be unique");
 
 const functionNames = Array.from(
-  (assessment + '\n' + fs.readFileSync(path.join(root,'public/assets/operational-health.js'),'utf8')).matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm),
+  (assessment + '\n' + ['operational-health.js','ktcc-finals.js'].map(file=>fs.readFileSync(path.join(root,'public/assets',file),'utf8')).join('\n')).matchAll(/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm),
   (match) => match[1],
 );
 const duplicateFunctions = functionNames.filter((name, index) => functionNames.indexOf(name) !== index);

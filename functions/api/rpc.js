@@ -608,6 +608,9 @@ async function dispatch(action, args, env, request) {
   const handlers = {
     ping: async () => ({ success: true, message: 'KCL Cloudflare API 연결 성공', now: nowIso() }),
     getConfig: () => getConfig(env),
+    getKtccFinalTeams: () => getKtccFinalTeams_(env, args[0]),
+    getKtccFinalDecision: () => getKtccFinalDecision_(env, args[0], args[1]),
+    setKtccFinalDecision: () => setKtccFinalDecision_(env, args[0], args[1]),
     getKcrStationEvaluationState: () => getKcrStationEvaluationState(env, args[0]),
     judgeLogin: () => judgeLogin(env, args[0], args[1], args[2], request),
     adminLogin: () => adminLogin(env, args[0], args[1], args[2], request),
@@ -712,6 +715,63 @@ async function dispatch(action, args, env, request) {
 async function getConfig(env) {
   const rows = await env.DB.prepare('SELECT * FROM competitions ORDER BY id').all();
   return { success: true, configs: (rows.results || []).map(rowToConfig) };
+}
+async function getKtccFinalTeams_(env, actorArg) {
+  const auth=await requireActorForCode_(env,actorArg,'KTCC','KTCC 팀 목록 조회 권한이 없습니다.');
+  if(!auth.ok)return auth.res;
+  const rows=(await env.DB.prepare("SELECT * FROM participants WHERE competition_code='KTCC' AND COALESCE(final_cup_no,'')<>'' ORDER BY id").all()).results||[];
+  return {success:true,teams:rows.map(row=>({id:Number(row.id),number:safeStr(row.final_cup_no),name:safeStr(row.team_name||row.name),members:ktccMemberSummaryFromRow_(row,parseJson(row.extra_json,{}))}))};
+}
+async function ktccFinalDecisionContext_(env, request, actorArg) {
+  const auth=await requireActorForCode_(env,actorArg,'KTCC','KTCC 진출 판정 권한이 없습니다.');
+  if(!auth.ok)return {error:auth.res};
+  if(!hasManageAccess(auth.actor,'KTCC'))return {error:{success:false,message:'진출 판정은 KTCC 팀장·관리자만 변경할 수 있습니다.'}};
+  const ref=parseReviewRowRef_(request&&request.rowIndex),row=ref.id?await env.DB.prepare("SELECT * FROM scores WHERE id=? AND competition_code='KTCC'").bind(ref.id).first():null;
+  if(!row||!finalOfficialEvaluation_(row))return {error:{success:false,message:'KTCC 결선 공식 평가를 찾지 못했습니다.'}};
+  const payload=parseJson(row.payload_json,{}),index=Number(ref.payloadRowIndex)||0;
+  if(!Array.isArray(payload.rows)||!payload.rows[index])return {error:{success:false,message:'판정할 팀의 평가 행을 찾지 못했습니다.'}};
+  return {row,payload,index,extra:extractExtraSingleRow_(payload,'KTCC',index),revision:await finalEvaluationRevision_(row)};
+}
+function ktccFinalDecisionResponse_(context) {
+  return {success:true,rowIndex:context.payload.rows.length>1?context.row.id+':'+context.index:context.row.id,revision:context.revision,teamName:safeStr(context.extra['팀명']||context.row.participant_name),stage:safeStr(context.extra['토너먼트 단계']),opponent:safeStr(context.extra['상대팀']),result:safeStr(context.extra['진출판정']),total:context.row.total_score,endTime:safeStr(context.extra['종료시간'])};
+}
+async function getKtccFinalDecision_(env, request, actorArg) {
+  const context=await ktccFinalDecisionContext_(env,request,actorArg);
+  return context.error||ktccFinalDecisionResponse_(context);
+}
+async function setKtccFinalDecision_(env, request, actorArg) {
+  const context=await ktccFinalDecisionContext_(env,request,actorArg);
+  if(context.error)return context.error;
+  if(!request||!Object.prototype.hasOwnProperty.call(request,'result'))return {success:false,message:'저장할 진출 판정을 선택해주세요.'};
+  const result=safeStr(request.result);
+  if(!['','진출','탈락','순위결정'].includes(result))return {success:false,message:'올바른 진출 판정을 선택해주세요.'};
+  if(!request.revision||request.revision!==context.revision)return {success:false,stale:true,message:'평가 또는 판정이 변경되었습니다. 다시 열어 최신 기록을 확인해주세요.'};
+  const payload=context.payload,row=payload.rows[context.index],old=context.row;
+  if(!result&&payload.rows.length>1&&safeStr(payload.extraFields&&payload.extraFields['진출판정'])){
+    // Preserve inherited legacy decisions before clearing this row's shared fallback.
+    const decisions=payload.rows.map((entry,i)=>safeStr(extractExtraSingleRow_(payload,'KTCC',i)['진출판정']));
+    payload.rows.forEach((entry,i)=>{if(i!==context.index)entry.extraFields={...(entry.extraFields||{}),'진출판정':decisions[i]};});
+    payload.extraFields={...(payload.extraFields||{}),'진출판정':''};
+  }
+  row.extraFields={...(row.extraFields||{}),'진출판정':result};
+  const col=dataHeadersForCompetition_('KTCC').indexOf('진출판정');
+  if(Array.isArray(row.data)&&row.data.length>col&&col>=0)row.data[col]=result;
+  if(payload.rows.length===1)payload.extraFields={...(payload.extraFields||{}),'진출판정':result};
+  const serialized=JSON.stringify(payload);
+  const saved=await env.DB.prepare("UPDATE scores SET payload_json=? WHERE id=? AND competition_code='KTCC' AND payload_json=? AND review_status IS ? AND total_score IS ?")
+    .bind(serialized,old.id,old.payload_json,old.review_status,old.total_score).run();
+  if(!Number(saved.meta&&saved.meta.changes))return {success:false,stale:true,message:'다른 수정이 먼저 저장되었습니다. 다시 열어 확인해주세요.'};
+  context.row={...old,payload_json:serialized};context.extra={...context.extra,'진출판정':result};context.revision=await finalEvaluationRevision_(context.row);
+  return {...ktccFinalDecisionResponse_(context),message:'진출 판정을 저장했습니다. 평가 점수·시간은 그대로 유지됩니다.'};
+}
+async function ktccOpponentError_(env, payload, rowIndex) {
+  const extra=extractExtraSingleRow_(payload,'KTCC',rowIndex),id=Number(extra['상대팀ID']),name=safeStr(extra['상대팀']);
+  if(!id&&!name)return '';
+  const teams=(await env.DB.prepare("SELECT id,name,team_name,final_cup_no FROM participants WHERE competition_code='KTCC' AND COALESCE(final_cup_no,'')<>''").all()).results||[];
+  const target=teams.filter(row=>id?Number(row.id)===id:safeStr(row.team_name||row.name)===name);
+  if(target.length!==1||safeStr(target[0].team_name||target[0].name)!==name)return '상대팀 목록이 변경되었습니다. 결선팀 목록에서 상대팀을 다시 선택해주세요. 입력 내용은 유지됩니다.';
+  if(safeStr(target[0].final_cup_no)===safeStr(extra['팀번호']))return '평가 대상 팀을 상대팀으로 선택할 수 없습니다.';
+  return '';
 }
 async function kcrOwnCompletionRows_(env, actor, round) {
   const identity = operatorIdentityKey_(actor.name || actor.judgeName || actor.operatorName || '', normalizePhone(actor.phone));
@@ -3405,7 +3465,9 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       evaluationCompleted,
       completedEvaluationScopes:Array.from(completedEvaluationScopes.get(completedUnitKey)||[]),
       evaluationCompletedAt: evaluationCompleted ? completedOfficialUnits.get(completedUnitKey) : '',
-      display: (currentRound !== '예선' && !hideIdentity && performanceOrder<Number.MAX_SAFE_INTEGER ? ('경연 '+performanceOrder+' · ') : '') + (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? (' · ' + (code === 'KTCC' ? '팀원 ' : '') + displayAff) : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
+      display: code==='KTCC'&&currentRound!=='예선'
+        ? (displayName||'팀명 미입력')+(displayAff?' · 팀원 '+displayAff:'')+(evaluationCompleted?' · ✓ 평가완료':'')
+        : (currentRound !== '예선' && !hideIdentity && performanceOrder<Number.MAX_SAFE_INTEGER ? ('경연 '+performanceOrder+' · ') : '') + (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? (' · ' + (code === 'KTCC' ? '팀원 ' : '') + displayAff) : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
     };
     if (code === 'IKRC' && hideIdentity) {
       return {
@@ -3789,7 +3851,8 @@ function finalSubmissionScope_(code,payload,role) {
   }
   if(code==='KTCC'){
     const extra=extractExtraSingleRow_(payload,code,0);
-    return JSON.stringify([safeStr(extra['토너먼트 단계']),safeStr(extra['매치번호'])]);
+    // Hidden legacy match numbers must not allow the same team/stage to be resubmitted.
+    return JSON.stringify([safeStr(extra['토너먼트 단계'])]);
   }
   return reviewRoleCategoryServer_(role);
 }
@@ -5088,6 +5151,9 @@ async function submitScores(env, payload, signature, request = null) {
   const actorTeamMap = auth.actor && auth.actor.teamMap && typeof auth.actor.teamMap === 'object' ? auth.actor.teamMap : {};
   const actorRole = safeStr(actorRoleMap[initial.code] || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   const actorTeam = Object.prototype.hasOwnProperty.call(actorRoleMap,initial.code) ? safeStr(actorTeamMap[initial.code]) : actorTeamForCompetition_(auth.actor,initial.code);
+  if(initial.code==='KTCC'&&!hasManageAccess(auth.actor,'KTCC')&&(Array.isArray(basePayload.rows)?basePayload.rows:[]).some((row,i)=>safeStr(extractExtraSingleRow_(basePayload,'KTCC',i)['진출판정']))) {
+    return {success:false,message:'진출 판정은 KTCC 팀장·관리자만 변경할 수 있습니다. 평가 내용은 유지됩니다.'};
+  }
   const requestedEvaluationCategory = scoreEvaluationCategoryKey_(basePayload.mode || basePayload.evalMode || initial.mode);
   if (initial.code === 'KBC' && requestedEvaluationCategory !== 'competition') {
     return { success:false, message:'KBC는 별도 켈리브레이션 없이 공식 대회평가만 저장합니다. 대회평가 화면에서 다시 제출해주세요.' };
@@ -5125,6 +5191,7 @@ async function submitScores(env, payload, signature, request = null) {
     ? normalizeRoundForCompetition_('KCR', initial.round || (cfg && cfg.current_round) || '예선')
     : safeStr(initial.round || (cfg && cfg.current_round) || '예선');
   if (initial.code === 'KCR') basePayload.round = submitRound;
+  if(initial.code==='KTCC'&&submitRound!=='예선')for(let i=0;i<rows.length;i++){const error=await ktccOpponentError_(env,basePayload,i);if(error)return {success:false,message:error};}
   if (initial.code === 'KBC' && submitRound === '본선') {
     const registered = (await env.DB.prepare("SELECT * FROM participants WHERE competition_code='KBC' AND COALESCE(main_cup_no,'')<>''").all()).results || [];
     if (registered.length && (safeStr(basePayload.operatingDay) || kbcMainDay_(parseJson(cfg && cfg.option_settings, {}).kbcMainDay) || registered.some(p=>participantScheduleForRound_(p,'본선').day))) {
@@ -5772,6 +5839,10 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
     ? (managerStation ? rawAll.filter(row => ikrcScoreBelongsToStationServer_(row, managerStation)) : rawAll)
     : rawAll.filter(r => reviewScoreVisibleToActor_(r, actor, code, false));
   const headers = mergeHeaders(code, rawForHeaders.length ? rawForHeaders : [current]); const updateObj = updates || {};
+  if(code==='KTCC'&&!hasManageAccess(actor,'KTCC')){
+    const existing=extractExtraSingleRow_(parseJson(current.payload_json,{}),code,payloadRowIndex);
+    if(Object.keys(updateObj).some(col=>safeStr(headers[Number(col)]).replace(/\s/g,'')==='진출판정'&&safeStr(updateObj[col])!==safeStr(existing['진출판정'])))return {success:false,message:'진출 판정은 KTCC 팀장·관리자만 변경할 수 있습니다.'};
+  }
   const payload = parseJson(current.payload_json, {});
   if (!Array.isArray(payload.rows)) payload.rows = [{}];
   if (!payload.rows.length) payload.rows.push({});
@@ -5805,6 +5876,7 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
     row0.extraFields[header] = value;
     if ((code !== 'KCAC' && code !== 'IKRC') || payload.rows.length <= 1) payload.extraFields[header] = value;
   });
+  if(code==='KTCC'&&current.round!=='예선'&&Object.keys(updateObj).some(col=>/^(상대팀|상대팀ID)$/.test(headers[Number(col)]||''))){const error=await ktccOpponentError_(env,payload,targetRowIndex);if(error)return {success:false,message:error};}
   if (kcacCombinedCommentValue !== null) {
     payload.overallComment = kcacCombinedCommentValue;
     const commentIdx = dataHeaders.indexOf('종합코멘트');
@@ -7536,7 +7608,6 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       g.endTimeDisplay = latest['종료시간'] || latest['경기시간'] || '';
       g.tournamentSummary = [
         latest['토너먼트 단계'] || '',
-        latest['매치번호'] ? ('매치 ' + latest['매치번호']) : '',
         latest['상대팀'] ? ('상대 ' + latest['상대팀']) : '',
         latest['진출판정'] || ''
       ].filter(Boolean).join(' · ');
