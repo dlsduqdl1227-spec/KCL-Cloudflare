@@ -27,7 +27,7 @@ try {
     for(const n of [8,1])await api.rpc('upsertParticipant',{competitionCode:code,name:'QA 선수 '+n,teamName:'QA 팀 '+n,affiliation:'QA 소속',phone:'0101234000'+n,uniqueNo:String(n),teamNo:String(n),prelimCupNo:String(n),mainCupNo:String(n),finalCupNo:String(n),competitionDate:'2026-10-01'},api.actor);
     await api.rpc('updateCompetitionAdminSettings',{code,currentRound:'예선',isActive:true,debriefing:false},api.actor);
   }
-  for(const width of [360,768,1440]){
+  for(const width of (process.env.KCL_QA_REGISTRY_ONLY?[]:[360,768,1440])){
     for(const route of ['/','/admin/','/registry/','/assessment/','/debriefing/','/camera/']){
       const page=await qa.page(width);
       await page.goto(qa.origin+route,{waitUntil:'load'});
@@ -142,7 +142,7 @@ try {
   await registry.evaluate(()=>{document.getElementById('comp').value='KBC';document.getElementById('selectiveScore').value='0';deleteSelectedScoreReset();});
   assert.equal(await registry.evaluate(()=>qaPending.some(x=>x.action==='deleteSelectedScoreData')),false,'stale destructive targets are blocked');
   await registry.evaluate(()=>{
-    document.getElementById('comp').value='MOB';updateManualParticipantFields();
+    document.getElementById('comp').value='MOB';updateManualParticipantFields();RegistryWorkspace.openEditor('participants',true);
     document.getElementById('mName').value='저장할 선수';document.getElementById('mNo').value='12';saveOneParticipant();saveOneParticipant();
   });
   assert.equal(await registry.evaluate(()=>qaPending.filter(x=>x.action==='upsertParticipant').length),1,'repeated save sends one request');

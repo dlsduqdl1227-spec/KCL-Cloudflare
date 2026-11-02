@@ -11,16 +11,17 @@ try {
     const page=await qa.page(width);
     for(const route of ['assessment','admin','registry','debriefing','camera']){
       await page.goto(qa.origin+'/'+route+'/');
-      const nav=page.locator('.global-nav-buttons');await nav.waitFor();
-      assert.equal(await nav.locator('button').count(),2);
-      const box=await nav.boundingBox();assert.equal(Math.round(box.x),8);assert.equal(Math.round(box.y),8);
-      assert.equal(await nav.locator('button').first().innerText(),'← 뒤로가기');
+      const management=['registry','admin'].includes(route);
+      const nav=page.locator(route==='registry'?'nav[aria-label="운영센터 이동"]':route==='admin'?'.top .home':'.global-nav-buttons');await nav.waitFor();
+      if(management){if(route==='registry')assert.equal(await nav.locator('a').count(),4);else assert.equal(await nav.getAttribute('href'),'/');assert.equal(await page.locator('.global-nav-buttons').count(),0);}
+      else{assert.equal(await nav.locator('button').count(),2);const box=await nav.boundingBox();assert.equal(Math.round(box.x),8);assert.equal(Math.round(box.y),8);assert.equal(await nav.locator('button').first().innerText(),'← 뒤로가기');}
       assert.equal((await inspectPage(page)).pageOverflow,false,route+' '+width);
     }
     await page.goto(qa.origin+'/assessment/');
     for(const [actor,panel] of [[api.actor,'pAdmin'],[lead,'pTeam'],[judges[0],'pSelect'],[judges[1],'pSelect']]){
       await page.evaluate(actor=>{stopRegistryLiveSync_();_judge=actor;if(isAdminRole())loadAdminPanel();else if(isTeamLeaderRole())loadTeamPanel();else loadSelectPanel();},actor);
       const entry=page.locator('#'+panel+' [data-act=kcr-cal-station],#'+panel+' [data-kcr-mode=cal-station]');
+      if(panel==='pAdmin'){await page.locator('#admin-workspace-competition option[value=KCR]').waitFor({state:'attached'});await page.locator('#admin-workspace-competition').selectOption('KCR');await page.locator('#admin-comp-list [data-workspace-competition=KCR] .workspace-operation-extras summary').click();}
       await entry.waitFor();assert.equal(await entry.count(),1);assert.equal(await entry.innerText(),'켈리브레이션');
       assert.equal(await page.locator('[data-act=kcr-cal-all],[data-kcr-mode=cal-all]').count(),0);
       await entry.click();
@@ -35,7 +36,8 @@ try {
     await page.waitForFunction(()=>document.querySelectorAll('#kcr-station-grid button').length===2);
     assert.ok(!(await page.locator('#kcr-station-grid').innerText()).includes('스테이션 1'));
     await page.evaluate(actor=>{_judge=actor;loadAdminPanel();},api.actor);
-    await page.waitForSelector('#admin-comp-list [data-act=station-settings]');
+    await page.locator('#admin-workspace-competition option[value=KCR]').waitFor({state:'attached'});await page.locator('#admin-workspace-competition').selectOption('KCR');await page.locator('#admin-comp-list [data-workspace-competition=KCR] .workspace-operation-extras summary').click();
+    await page.waitForSelector('#admin-comp-list [data-workspace-competition=KCR] [data-act=station-settings]');
     const stationCard=page.locator('#admin-comp-list .admin-comp-card').filter({has:page.locator('[data-act=kcr-cal-station]')});
     // Render the real station editor at every size; add defaults must be competition-only.
     await page.evaluate(()=>{
@@ -95,7 +97,10 @@ try {
   assert.equal(saved.extra.custom,'보존');
   assert.equal((await inspectPage(page)).pageOverflow,false);
   await page.selectOption('#comp','MOB');
+  await page.locator('[data-registry-create=participants]').click();
   assert.equal(await page.locator('#mDate').isVisible(),true);
+  await page.locator('#registry-editor-dialog .workspace-close').click();
+  await page.locator('.registry-quick-tools').filter({has:page.locator('#bulkParticipantDateButton')}).locator('summary').click();
   assert.equal(await page.locator('#bulkParticipantDateButton').isVisible(),true);
   assert.deepEqual(page.qaErrors,[]);await page.close();
   console.log('Stage210 real login/home/reload/logout and KCR-only date UI with historic data preservation passed.');

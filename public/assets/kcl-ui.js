@@ -22,6 +22,7 @@
   };
   function installCommonNavigation() {
     if (location.pathname === '/' || location.pathname === '/index.html') return;
+    if (document.body.classList.contains('registry-workspace') || document.body.classList.contains('admin-home-workspace')) return;
     var nav = document.querySelector('.global-nav-buttons');
     if (!nav) {
       nav = document.createElement('nav');

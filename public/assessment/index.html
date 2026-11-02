@@ -2004,6 +2004,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/final-evaluation-workflow.js?v=261"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=258">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
+<link rel="stylesheet" href="/assets/admin-workspace.css?v=276">
+<script defer src="/assets/operations-workspace.js?v=276"></script>
 <link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
 <script defer src="/assets/kcr-viewport.js?v=228"></script>
 <link rel="stylesheet" href="/assets/station-manager.css?v=246">
@@ -2106,7 +2108,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <!-- 3: 관리자 -->
 <div id="pAdmin" class="panel">
   <div class="admin-console-inner">
-    <h2>통합 운영관리</h2>
+    <h2>대회 운영</h2>
     <p style="text-align:center;color:var(--text-3);margin-bottom:18px;font-size:14px" id="admin-sub"></p>
     <div class="review-edit-help" id="admin-permission-guide">
       대회 실행·검수·순위·스테이션·켈리브레이션을 통합 관리합니다. 선수와 사용자 권한은 등록·권한 관리에서 처리합니다.
@@ -6144,6 +6146,7 @@ function adminRenderRunCards_() {
     }
     var div = document.createElement('div');
     div.className = 'admin-comp-card';
+    div.dataset.workspaceCompetition=code;
     div.innerHTML =
       '<div class="admin-card-top">' + compLogoHtml(c.code, 'admin-card-logo') + '<div class="comp-card-text">' +
         '<div class="admin-comp-name">' + escHtml(c.name || c.code) + '</div>' +
@@ -6200,6 +6203,7 @@ function adminRenderConfigList_() {
     var div = document.createElement('div');
     div.className = 'admin-mini-card';
     div.id = 'admin-config-card-' + code;
+    div.dataset.workspaceCompetition=code;
     div.innerHTML = '<div class="admin-mini-title">' + escHtml(c.name || code) + ' <span class="role-mode-badge">' + escHtml(code) + '</span></div>' +
       '<div class="admin-mini-sub">데이터 키: ' + escHtml(c.code || '-') + ' · 디브리핑: ' + (c.debriefing ? '오픈' : '닫힘') + '</div>' +
       '<div class="admin-form-grid">' +

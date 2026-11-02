@@ -19,7 +19,7 @@ try{
  await page.locator('#participantSortMode').selectOption('number-desc');assert.equal(await page.locator('#partTable input:checked').count(),2);
  await page.evaluate(()=>loadParticipants());await page.waitForFunction(()=>document.querySelectorAll('#partTable input:checked').length===2);
  await toolbar.getByRole('button',{name:'선택 수정',exact:true}).click();
- await page.getByRole('textbox',{name:'공통 입력값',exact:true}).fill('일괄 소속');await page.getByRole('button',{name:'선택 행에 일괄 입력'}).click();
+ await page.getByRole('textbox',{name:'공통 입력값',exact:true}).fill('일괄 소속');await page.getByRole('button',{name:'전체에 적용',exact:true}).click();
  await page.locator('#registry-bulk-preview').click();await page.waitForFunction(()=>!document.getElementById('registry-bulk-apply').disabled);
  await page.locator('#registry-bulk-apply').click();await page.waitForFunction(()=>!document.getElementById('registry-bulk-dialog').open);
  await page.waitForFunction(()=>participantRows.filter(r=>r.affiliation==='일괄 소속').length===2);
@@ -36,7 +36,7 @@ try{
  assert.equal(await page.locator('#operatorTable tr:not([hidden]) [data-bulk-op]').count(),1);
  await page.locator('#operatorSelectAll').check();assert.equal(await page.locator('#operatorTable input:checked').count(),1);
  assert.equal((await inspectPage(page)).pageOverflow,false);await page.screenshot({path:'tmp/stage272-qa/judges-mobile.png'});
- await ops.getByRole('button',{name:'선택 수정',exact:true}).click();await page.getByRole('combobox',{name:'공통 수정 항목',exact:true}).selectOption('team');await page.getByRole('textbox',{name:'공통 입력값',exact:true}).fill('C조');await page.getByRole('button',{name:'선택 행에 일괄 입력'}).click();await page.locator('#registry-bulk-preview').click();await page.waitForFunction(()=>!document.getElementById('registry-bulk-apply').disabled);await page.locator('#registry-bulk-apply').click();await page.waitForFunction(()=>operatorRows.some(r=>r.teamGroup==='C조'));
+ await ops.getByRole('button',{name:'선택 수정',exact:true}).click();await page.getByRole('combobox',{name:'공통 수정 항목',exact:true}).selectOption('team');await page.getByRole('textbox',{name:'공통 입력값',exact:true}).fill('C조');await page.getByRole('button',{name:'전체에 적용',exact:true}).click();await page.locator('#registry-bulk-preview').click();await page.waitForFunction(()=>!document.getElementById('registry-bulk-apply').disabled);await page.locator('#registry-bulk-apply').click();await page.waitForFunction(()=>operatorRows.some(r=>r.teamGroup==='C조'));
  await page.locator('#tabbtn-admins').click();await page.waitForFunction(()=>document.querySelectorAll('#adminTable [data-bulk-admin]').length===2);
  assert.equal((await inspectPage(page)).pageOverflow,false);
  await page.locator('#adminSelectAll').check();await page.locator('#registry-tools-admins').getByRole('button',{name:'선택 삭제',exact:true}).click();await page.locator('#registry-bulk-preview').click();await page.locator('#registry-delete-ack').waitFor();assert.match(await page.locator('#registry-bulk-feedback').innerText(),/로그인한 관리자 보호/);

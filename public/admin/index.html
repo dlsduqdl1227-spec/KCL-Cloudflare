@@ -34,16 +34,17 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
 @media(max-width:900px){html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}}
 </style>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
-<script defer src="/assets/kcl-ui.js?v=213"></script>
+<script defer src="/assets/kcl-ui.js?v=276"></script>
+<link rel="stylesheet" href="/assets/admin-workspace.css?v=276">
 </head>
-<body>
+<body class="admin-home-workspace">
 <main class="wrap">
   <section class="panel">
     <div class="top">
       <div>
-        <div class="badge"><i class="dot"></i>KCL ADMIN CENTER</div>
-        <h1>KCL 관리자</h1>
-        <p class="sub">전체 관리자 인증 후 대회 운영과 등록·권한, 선수 디브리핑 확인을 관리합니다. 대회팀장과 심사위원은 첫 화면의 ‘평가 / 대회팀장 / 심사위원’ 메뉴에서 로그인합니다.</p>
+        <div class="badge"><i class="dot"></i>KCL 운영센터</div>
+        <h1>무엇을 관리할까요?</h1>
+        <p class="sub">명단 등록부터 대회 운영, 선수에게 공개할 결과 확인까지.</p>
       </div>
       <a class="home" href="/">전체 홈</a>
     </div>
@@ -61,22 +62,22 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
     <div id="adminMain" class="hidden">
       <div class="msg ok" id="welcome"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button type="button" onclick="logoutAdmin()" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.18)">다시 로그인 / 권한 새로고침</button>
+        <button type="button" onclick="logoutAdmin()" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.18)">로그아웃</button>
       </div>
       <div class="cards admin-card-grid-clean">
-        <a class="admin-card primary" href="/assessment/?admin=1"><strong>통합 운영관리</strong><span>대회 오픈/마감, 평가 입력, 검수/수정, 순위, 디브리핑 공개를 한 콘솔에서 관리</span></a>
-        <a class="admin-card" href="/registry/"><strong>등록·권한 관리</strong><span>선수·심사위원·관리자 검색, 선택 명단 일괄 수정·삭제, 날짜·조 배정 관리</span></a>
-        <a class="admin-card" href="/debriefing/?from=admin&amp;preview=1"><strong>전체 디브리핑 미리보기</strong><span>전체 대회와 선수·팀을 선택해 연락처 인증 없이 선수 공개 예정 화면을 확인</span></a>
+        <a class="admin-card primary" href="/registry/"><small>01 · 참가자와 사용자</small><strong>명단 관리 <b aria-hidden="true">→</b></strong><span>선수·심사위원·관리자를 등록하고<br>선택한 명단을 함께 수정하세요.</span></a>
+        <a class="admin-card" href="/assessment/?admin=1"><small>02 · 경기 진행과 결과</small><strong>대회 운영 <b aria-hidden="true">→</b></strong><span>대회 오픈, 스테이션, 평가 확인과<br>실시간 순위를 관리하세요.</span></a>
+        <a class="admin-card" href="/debriefing/?from=admin&amp;preview=1"><small>03 · 선수 공개 화면</small><strong>디브리핑 확인 <b aria-hidden="true">→</b></strong><span>선수가 보게 될 점수와 코멘트를<br>공개 전에 미리 확인하세요.</span></a>
       </div>
-      <div class="smsbox">
-        <h3>시스템 상태</h3>
+      <details class="smsbox admin-system-details">
+        <summary>연결 상태·문자 발송 점검</summary>
         <div class="statusline" id="systemStatus">로그인 후 시스템 상태를 확인합니다.</div>
         <div class="smsrow">
           <input id="testPhone" placeholder="테스트 받을 번호" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
           <button onclick="sendTestSms()">SMS 테스트</button>
         </div>
-      </div>
-      <div class="foot">관리자 아이디/비밀번호/시크릿 코드 인증 후 이 브라우저에 임시 권한 토큰이 저장되어 통합 운영관리와 등록·권한 관리로 이어집니다.</div>
+      </details>
+      <div class="foot">명단 관리, 대회 운영, 디브리핑 확인을 이 운영센터에서 이용할 수 있습니다.</div>
     </div>
   </section>
 </main>

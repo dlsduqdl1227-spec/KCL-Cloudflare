@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>KCL 등록·권한 관리</title>
+<title>KCL 명단 관리</title>
 <meta name="description" content="KCL 대회별 선수·팀, 심사위원, 관리자 등록과 일정을 관리합니다.">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#050505">
@@ -69,20 +69,22 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
 @media(max-width:520px){#kbc-roster-tools [role="tablist"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
-<script defer src="/assets/kcl-ui.js?v=213"></script>
+<script defer src="/assets/kcl-ui.js?v=276"></script>
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
 <link rel="stylesheet" href="/assets/registry-bulk.css?v=271">
-<script defer src="/assets/registry-bulk.js?v=271"></script>
+<script defer src="/assets/registry-bulk.js?v=276"></script>
+<link rel="stylesheet" href="/assets/admin-workspace.css?v=276">
+<script defer src="/assets/registry-workspace.js?v=276"></script>
 </head>
-<body>
+<body class="registry-workspace">
 <div class="wrap">
   <div class="top">
     <div>
-      <div class="brand">KCL 등록·권한 관리</div>
-      <div class="sub">대회를 선택하고 선수·심사위원·관리자를 관리하세요. 목록에서 여러 명을 선택해 함께 수정하거나 삭제할 수 있습니다.</div>
-      <div class="logo-strip"><span class="logo-chip">KBC</span><span class="logo-chip">KTCC</span><span class="logo-chip">MOC</span><span class="logo-chip">MOB</span><span class="logo-chip">KCR</span><span class="logo-chip">IKRC</span><span class="logo-chip">KCAC</span></div>
+      <div class="workspace-eyebrow">KCL 운영센터</div>
+      <h1 class="brand">명단 관리</h1>
+      <div class="sub">대회를 고르고, 관리할 명단을 선택하세요.</div>
     </div>
-    <div class="nav"><a href="/admin/">관리자 홈</a><a href="/assessment/?admin=1">통합 운영관리</a><a href="/debriefing/?from=admin">선수 디브리핑</a><a href="/">전체 홈</a></div>
+    <nav class="nav" aria-label="운영센터 이동"><a href="/admin/">운영센터 홈</a><a href="/registry/" aria-current="page">명단 관리</a><a href="/assessment/?admin=1">대회 운영</a><a href="/debriefing/?from=admin&amp;preview=1">디브리핑 확인</a></nav>
   </div>
 
   <div class="card" id="loginCard">
@@ -97,11 +99,11 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
   </div>
 
   <div id="main" class="hidden">
-    <div class="card compact-card">
+    <div class="card compact-card" id="registry-context">
       <div class="section-title">
         <div>
           <div class="label">대회 선택</div>
-          <div class="hint">작업할 대회를 선택한 뒤 필요한 등록 탭으로 이동하세요.</div>
+          <div class="hint">아래에서 선택한 대회의 명단만 표시합니다.</div>
         </div>
         <div class="status" id="mainStatus"></div>
       </div>
