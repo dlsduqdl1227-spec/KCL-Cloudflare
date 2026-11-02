@@ -10,10 +10,10 @@ try{
  const page=await qa.page(390,950);await page.goto(qa.origin+'/assessment/');
  await page.evaluate(a=>{_judge=a;loadAdminPanel();},api.actor);
  await page.locator('#admin-cfg-round-KBC').waitFor({state:'attached'});
- assert.deepEqual(await page.locator('#admin-cfg-round-KBC option').allTextContents(),['예선','본선','결선']);
+ assert.deepEqual(await page.locator('#admin-cfg-round-KBC-stage option').allTextContents(),['예선','본선 1일차','본선 2일차','결선']);
  assert.equal(await page.locator('#admin-cfg-round-KBC-group').count(),0);
  await page.evaluate(a=>{hideOverlay();_judge=a;_selComp={code:'KBC',name:'KBC',currentRound:'본선',isActive:true};startKbc();},api.actor);
- await page.waitForFunction(()=>document.querySelectorAll('#kbc-participant-select option').length===9);
+ await page.waitForFunction(()=>document.querySelectorAll('#kbc-participant-select option').length===5);
  assert.equal(await page.locator('#kbc-main-day-wrap').isVisible(),true);
  await page.locator('#kbc-main-day').selectOption('1');
  assert.equal(await page.locator('#kbc-participant-select option').count(),5);
@@ -30,7 +30,7 @@ try{
  assert.equal(await page.locator('#ranking-list .rank-row').count(),8);
  assert.match(await page.locator('#ranking-list').innerText(),/본선 1일차/);
  assert.match(await page.locator('#ranking-list').innerText(),/본선 2일차/);
- await page.getByRole('button',{name:'상위 6명 결선 배정 확인',exact:true}).click();
+ await page.getByRole('button',{name:'진출 예상 명단 새로고침',exact:true}).click();
  await page.waitForFunction(()=>document.querySelectorAll('#kbc-finalist-plan li').length===6);
  const scores=JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all());
  const assigned=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='assignKbcFinalists');

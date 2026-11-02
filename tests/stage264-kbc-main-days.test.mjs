@@ -6,7 +6,7 @@ export async function seedKbcMain(api){
   for(let i=1;i<=8;i++)await api.rpc('upsertParticipant',{competitionCode:'KBC',uniqueNo:String(i),mainCupNo:String(i),name:'본선 선수 '+i,phone:'0108800000'+i,extra:{roundSchedules:{본선:{day:i<=4?'1':'2',date:i<=4?'2026-11-01':'2026-11-02'}},memo:'보존'}},api.actor);
   for(let i=1;i<=8;i++){
     const total=30+i;
-    await api.rpc('submitScores',{competitionCode:'KBC',round:'본선',judgeToken:api.actor.judgeToken,judgeName:api.actor.name,mode:'대회평가',role:'헤드 심사위원',rows:[{extraFields:{'참가자번호':String(i),'선수명':'본선 선수 '+i,'총점':total,'종합코멘트':'본선 의견 '+i,'Espresso Total':total/2}}]});
+    await api.rpc('submitScores',{competitionCode:'KBC',round:'본선',operatingDay:i<=4?'1':'2',judgeToken:api.actor.judgeToken,judgeName:api.actor.name,mode:'대회평가',role:'헤드 심사위원',rows:[{extraFields:{'참가자번호':String(i),'선수명':'본선 선수 '+i,'총점':total,'종합코멘트':'본선 의견 '+i,'Espresso Total':total/2}}]});
   }
 }
 if(process.argv[1]?.endsWith('stage264-kbc-main-days.test.mjs')){
@@ -47,7 +47,7 @@ if(process.argv[1]?.endsWith('stage264-kbc-main-days.test.mjs')){
   for(const row of after){const old=participants.find(p=>p.id===row.id);assert.equal(row.main_cup_no,old.main_cup_no);assert.deepEqual(JSON.parse(row.extra_json).roundSchedules.본선,JSON.parse(old.extra_json).roundSchedules.본선);}
   await api.rpc('updateCompetitionAdminSettings',{code:'KBC',currentRound:'결선'},api.actor);
   const final=await api.rpc('getParticipantAssignments','KBC',api.actor);
-  assert.deepEqual(final.assignments.map(p=>p.name),['본선 선수 8','본선 선수 7','본선 선수 6','본선 선수 5','본선 선수 4','본선 선수 3']);
+  assert.deepEqual(final.assignments.map(p=>p.name),['본선 선수 3','본선 선수 4','본선 선수 5','본선 선수 6','본선 선수 7','본선 선수 8']);
   assert.ok(final.assignments.every(p=>p.operatingDay==='1'));
   assert.equal((await api.rpc('getRanking','KBC',api.actor,'결선')).ranking.length,0);
   await api.rpc('submitScores',{competitionCode:'KBC',round:'결선',judgeToken:api.actor.judgeToken,judgeName:api.actor.name,mode:'대회평가',role:'헤드 심사위원',rows:[{extraFields:{'참가자번호':'1','총점':22,'종합코멘트':'독립적인 결선 의견'}}]});

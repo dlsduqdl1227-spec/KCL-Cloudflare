@@ -2562,7 +2562,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div class="section-label">참가자 번호</div>
     <div id="kbc-main-day-wrap" class="review-edit-help" hidden>
       <label for="kbc-main-day">본선 일차</label>
-      <select id="kbc-main-day" onchange="refreshKbcDayFilter_()"><option value="all">전체 본선 (1·2일차)</option><option value="1">본선 1일차</option><option value="2">본선 2일차</option><option value="">일차 미지정</option></select>
+      <select id="kbc-main-day" onchange="refreshKbcDayFilter_()"><option value="1">본선 1일차</option><option value="2">본선 2일차</option></select>
       <div>날짜별 선수 목록을 확인하세요. 점수는 양일 통합 본선 순위에 반영되며, 상위 6명이 결선에 진출합니다.</div>
     </div>
     <div class="participant-refresh-row"><select id="kbc-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KBC','kbc-participant-select','kbc-num','kbc-name')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="KBC" onclick="refreshEvaluationList_('KBC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
@@ -3807,6 +3807,9 @@ function onKbcParticipantSelected_() {
   var num = document.getElementById('kbc-num');
   var badge = document.getElementById('kbc-participant-complete');
   var assignment = num ? participantAssignmentByNumber_('KBC', num.value) : null;
+  if (!_kbcSwitchingDraft && num && String(num.value || '') !== _kbcDraftUnit) {
+    kbcSwitchDraft_(document.getElementById('kbc-main-day').value, String(num.value || ''), assignment);
+  }
   if (badge) badge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
 }
 function renderParticipantControl_(code, cfg) {
@@ -3842,16 +3845,12 @@ function renderParticipantControl_(code, cfg) {
   sel.disabled = false;
   sel.innerHTML = '<option value="">' + escHtml(cfg.placeholder || '선수등록에서 선택') + '</option>' +
     list.map(function(a, i){
-      var outsideSelectedDay = false;
       if (code === 'KBC' && _selComp && _selComp.currentRound === '본선') {
         var day = document.getElementById('kbc-main-day').value;
-        var isCurrent = numInput && participantNumberMatches_(a.number, numInput.value);
-        if (day !== 'all' && String(a.operatingDay || '') !== day && !isCurrent) return '';
-        outsideSelectedDay = day !== 'all' && String(a.operatingDay || '') !== day && isCurrent;
+        if (String(a.operatingDay || '') !== day) return '';
       }
       a=participantCompletionForActiveArea_(code,a);
       var label = a.display || ((a.number || '-') + ' · ' + participantNameForAssignment_(a));
-      if (outsideSelectedDay) label = '현재 작성 중 · ' + label;
       if (a.evaluationCompleted && !/평가완료/.test(label)) label += ' · ✓ 평가완료';
       return '<option value="' + i + '">' + escHtml(label) + '</option>';
     }).join('');
@@ -3918,6 +3917,7 @@ function loadParticipantAssignmentsForCode_(code) {
       setParticipantRefreshState_(code, false);
       if (code === 'KCAC') onKcacParticipantSelected_();
       if (code === 'KBC') onKbcParticipantSelected_();
+      if (code === 'KBC' && document.getElementById('evalKbc').classList.contains('active')) kclMaybeRestoreDraftForActiveEval_();
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
       if (code === 'KCR' && _selComp && _selComp.code === 'KCR') renderKcrStationChoices_();
@@ -4678,6 +4678,10 @@ function configSelectableOptionsHtml_(cfg, prefix) {
 }
 function configSelectableOptionsPayload_(code, prefix, cfg) {
   code = String(code || '').toUpperCase();
+  if (code === 'KBC') {
+    var stage = document.getElementById(prefix + '-round-KBC-stage');
+    return {kbcMainDay:stage && /^본선:[12]$/.test(stage.value) ? stage.value.split(':')[1] : (competitionOptionSettings_(cfg).kbcMainDay || '1')};
+  }
   if (code === 'MOB') {
     var mobDateEl = document.getElementById(prefix + '-mob-participant-date-' + code);
     if (!mobDateEl) return null;
@@ -5821,14 +5825,21 @@ function adminRoundOptionsHtml_(code, selected) {
 }
 // Shared score-sheet names are presentation only. Canonical rounds remain separate.
 function usesSharedFinalRules_(code) { return ['MOC'].indexOf(String(code || '').toUpperCase()) >= 0; }
-function competitionRoundLabel_(code, round) {
+function competitionRoundLabel_(code, round, options) {
   var r = normalizeRoundForCompetition_(code, round);
+  if(String(code||'').toUpperCase()==='KBC'&&r==='본선'&&options)return '본선 '+(options.kbcMainDay==='2'?'2':'1')+'일차';
   return usesSharedFinalRules_(code) && r === '본선' ? '결선 · 본선 경기' : (r || '-');
 }
-function competitionRoundControlHtml_(prefix, code, selected) {
+function competitionRoundControlHtml_(prefix, code, selected, options) {
   code = String(code || '').toUpperCase();
   selected = normalizeRoundForCompetition_(code, selected);
   var id = prefix + '-round-' + code;
+  if (code === 'KBC') {
+    var selectedStage = selected === '본선' ? '본선:' + ((options || {}).kbcMainDay === '2' ? '2' : '1') : selected;
+    return '<label class="round-mode-control"><span>평가 구분</span><select id="' + id + '-stage" onchange="document.getElementById(\'' + id + '\').value=this.value.split(\':\')[0]">' +
+      [['예선','예선'],['본선:1','본선 1일차'],['본선:2','본선 2일차'],['결선','결선']].map(function(pair){return '<option value="'+pair[0]+'"'+(pair[0]===selectedStage?' selected':'')+'>'+pair[1]+'</option>';}).join('') +
+      '</select><input type="hidden" id="'+id+'" value="'+escHtml(selected)+'"></label>';
+  }
   if (!usesSharedFinalRules_(code)) return '<label class="round-mode-control"><span>평가 구분</span><select id="' + id + '">' + adminRoundOptionsHtml_(code, selected) + '</select></label>';
   var shared = selected === '본선' || selected === '결선';
   var stage = shared ? selected : '본선';
@@ -6127,7 +6138,7 @@ function adminRenderRunCards_() {
     div.innerHTML =
       '<div class="admin-card-top">' + compLogoHtml(c.code, 'admin-card-logo') + '<div class="comp-card-text">' +
         '<div class="admin-comp-name">' + escHtml(c.name || c.code) + '</div>' +
-        '<div class="admin-comp-round">현재 라운드: ' + escHtml(competitionRoundLabel_(c.code, c.currentRound)) + '</div>' +
+        '<div class="admin-comp-round">현재 라운드: ' + escHtml(competitionRoundLabel_(c.code, c.currentRound, c.optionSettings)) + '</div>' +
         '<div style="margin-top:6px"><span class="role-mode-badge">' + (c.isActive ? '대회 오픈' : '대회 닫힘') + '</span><span class="role-mode-badge">' + (c.debriefing ? '디브리핑 오픈' : '디브리핑 닫힘') + '</span></div>' +
       '</div></div>' +
       '<div class="admin-comp-actions">' +
@@ -6183,7 +6194,7 @@ function adminRenderConfigList_() {
     div.innerHTML = '<div class="admin-mini-title">' + escHtml(c.name || code) + ' <span class="role-mode-badge">' + escHtml(code) + '</span></div>' +
       '<div class="admin-mini-sub">데이터 키: ' + escHtml(c.code || '-') + ' · 디브리핑: ' + (c.debriefing ? '오픈' : '닫힘') + '</div>' +
       '<div class="admin-form-grid">' +
-        competitionRoundControlHtml_('admin-cfg', code, c.currentRound || '') +
+        competitionRoundControlHtml_('admin-cfg', code, c.currentRound || '', c.optionSettings) +
         '<label class="round-mode-control"><span>대회명</span><input type="text" id="admin-cfg-name-' + code + '" value="' + escHtml(c.name || '') + '" placeholder="대회명"></label>' +
       '</div>' +
       '<div class="admin-check-row">' +
@@ -6213,6 +6224,7 @@ function adminSaveCompetitionConfig(cfg) {
   var optionSettings = configSelectableOptionsPayload_(code, 'admin-cfg', cfg);
   if (optionSettings === false) return;
   if (optionSettings) payload.optionSettings = Object.assign({}, cfg.optionSettings || {}, optionSettings);
+  if(code==='KBC'&&cfg.currentRound==='본선'&&payload.currentRound==='결선'&&!confirm('본선 1·2일차의 모든 심사 입력을 마감했나요? 현재 상위 6명을 결선에 자동 배정하며 본선 점수는 이월하지 않습니다.'))return;
   showOverlay();
   google.script.run.withSuccessHandler(function(res){
     hideOverlay(); toast((res && res.message) || (res && res.success ? '저장 완료' : '저장 실패'), !(res && res.success));
@@ -6279,6 +6291,7 @@ function teamSaveCompetitionConfig(cfg) {
   var optionSettings = configSelectableOptionsPayload_(code, 'team-cfg', cfg);
   if (optionSettings === false) return;
   if (optionSettings) payload.optionSettings = Object.assign({}, cfg.optionSettings || {}, optionSettings);
+  if(code==='KBC'&&cfg.currentRound==='본선'&&payload.currentRound==='결선'&&!confirm('본선 1·2일차의 모든 심사 입력을 마감했나요? 현재 상위 6명을 결선에 자동 배정하며 본선 점수는 이월하지 않습니다.'))return;
   showOverlay();
   google.script.run.withSuccessHandler(function(res){
     hideOverlay();
@@ -6321,7 +6334,7 @@ function loadTeamPanel() {
             judgeCard.innerHTML =
               '<div class="admin-card-top">' + compLogoHtml(c.code, 'admin-card-logo') + '<div class="comp-card-text">' +
                 '<div class="admin-comp-name">' + escHtml(c.name || c.code) + '</div>' +
-                '<div class="admin-comp-round">현재 라운드: ' + escHtml(competitionRoundLabel_(c.code, c.currentRound)) + '</div>' +
+                '<div class="admin-comp-round">현재 라운드: ' + escHtml(competitionRoundLabel_(c.code, c.currentRound, c.optionSettings)) + '</div>' +
                 '<div style="margin-top:6px">' + compTeamBadgeHtml(cardCode) + '</div>' +
               '</div></div>' +
               '<div class="review-edit-help" style="margin:10px 0">' + escHtml(roleTextForCode_(cardCode) || '심사위원') + ' 전용 메뉴입니다.</div>' +
@@ -6361,12 +6374,12 @@ function loadTeamPanel() {
           div.innerHTML =
             '<div class="admin-card-top">' + compLogoHtml(c.code, 'admin-card-logo') + '<div class="comp-card-text">' +
               '<div class="admin-comp-name">' + escHtml(c.name) + '</div>' +
-              '<div class="admin-comp-round">현재 라운드: ' + escHtml(competitionRoundLabel_(c.code, c.currentRound)) + '</div>' +
+              '<div class="admin-comp-round">현재 라운드: ' + escHtml(competitionRoundLabel_(c.code, c.currentRound, c.optionSettings)) + '</div>' +
               '<div style="margin-top:6px">' + compTeamBadgeHtml(c.code) + '<span class="role-mode-badge">' + (c.isActive ? '대회 오픈' : '대회 닫힘') + '</span><span class="role-mode-badge">' + (c.debriefing ? '디브리핑 오픈' : '디브리핑 닫힘') + '</span></div>' +
             '</div></div>' +
             '<div class="review-edit-help" style="margin:10px 0">담당 팀장은 이 대회의 진행 라운드와 공개 상태를 직접 저장할 수 있습니다.</div>' +
             '<div class="admin-form-grid" style="margin-bottom:10px">' +
-              competitionRoundControlHtml_('team-cfg', c.code, c.currentRound || '') +
+              competitionRoundControlHtml_('team-cfg', c.code, c.currentRound || '', c.optionSettings) +
               '<div class="admin-check-row wide">' +
                 '<label><input type="checkbox" id="team-cfg-active-' + String(c.code).toUpperCase() + '" ' + (c.isActive ? 'checked' : '') + '> 대회 오픈</label>' +
                 '<label><input type="checkbox" id="team-cfg-debrief-' + String(c.code).toUpperCase() + '" ' + (c.debriefing ? 'checked' : '') + '> 디브리핑 오픈</label>' +
@@ -6477,7 +6490,7 @@ function renderCompList() {
         compLogoHtml(c.code, 'comp-card-logo') +
         '<div class="comp-card-text">' +
           '<div class="comp-name">' + escHtml(c.name) + '</div>' +
-          '<div class="comp-round">현재 라운드 <span class="round-tag">' + escHtml(competitionRoundLabel_(c.code, c.currentRound)) + '</span></div>' +
+          '<div class="comp-round">현재 라운드 <span class="round-tag">' + escHtml(competitionRoundLabel_(c.code, c.currentRound, c.optionSettings)) + '</span></div>' +
           '<div style="margin-top:6px">' + compTeamBadgeHtml(c.code) + '</div>' +
         '</div>' +
       '</div>' +
@@ -11138,8 +11151,9 @@ function renderKbcFinalistEntry_(res) {
   if (old) old.remove();
   if (!res || res.compCode !== 'KBC' || res.selectedRound !== '본선') return;
   var box = document.createElement('section'); box.id = 'kbc-finalist-entry'; box.className = 'review-readonly-block';
-  box.innerHTML = '<strong>본선 1·2일차 통합 순위 · 결선 6명</strong><p>양일 평가와 검수를 마친 뒤 진출자를 확인하세요. 결선은 1일차로 진행하며 본선 점수를 이월하지 않습니다.</p><button type="button" class="btn-outline" onclick="loadKbcFinalistPlan_()">상위 6명 결선 배정 확인</button><div id="kbc-finalist-plan" role="status"></div>';
+  box.innerHTML = '<strong>본선 1·2일차 통합 순위 · 결선 6명</strong><p>진행 중에는 진출 예상 명단입니다. 본선 마감 후 결선을 선택하면 상위 6명을 자동 배정하며, 기존 결선 배정은 유지합니다.</p><button type="button" class="btn-outline" onclick="loadKbcFinalistPlan_()">진출 예상 명단 새로고침</button><div id="kbc-finalist-plan" role="status"></div>';
   document.getElementById('ranking-list').before(box);
+  loadKbcFinalistPlan_();
 }
 function loadKbcFinalistPlan_() {
   var request = ++_kbcFinalistPlanRequest, area = document.getElementById('kbc-finalist-plan');
@@ -11152,7 +11166,7 @@ function loadKbcFinalistPlan_() {
     var info = document.createElement('p'); info.textContent = res.message || ''; area.appendChild(info);
     if (!res.success) return;
     var list = document.createElement('ol'); list.style.paddingLeft='22px'; list.style.lineHeight='1.7';
-    (res.candidates || []).forEach(function(item) { var row=document.createElement('li'); row.textContent=item.name+' · 본선 '+item.mainNumber+'번 · '+item.score+'점 → 결선 '+item.finalNumber+'번'; list.appendChild(row); });
+    (res.candidates || []).forEach(function(item) { var row=document.createElement('li'); row.textContent='본선 '+item.rank+'위 · '+item.name+' · '+item.score+'점 → 결선 '+item.finalNumber+'번'+(res.assignedFinalists&&res.assignedFinalists.length?' (현재 본선 순위)':' 예정'); list.appendChild(row); });
     area.appendChild(list);
     if (res.ready) {
       var save=document.createElement('button'); save.type='button'; save.className='btn'; save.textContent='확인한 6명을 결선에 배정';
@@ -15554,16 +15568,63 @@ function clearKbcGeneratedComment() {
   if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
   toast('KBC AI 자동 코멘트 사용을 해제했습니다. 종합 의견을 직접 작성할 수 있습니다.');
 }
+var _kbcDraftDay = '1', _kbcDraftUnit = '', _kbcDraftName = '', _kbcSwitchingDraft = false;
+function kbcLastDraftUnitKey_(day) { return 'KCL_KBC_LAST_UNIT::'+kclDraftRound_()+'::'+kclDraftActor_('KBC')+'::'+day; }
+function kbcResetEntryFields_() {
+  cancelKbcCommentGeneration_();
+  _kbcTags=kbcCreateTagState_();_kbcOpenSmartTagBranches={};_kbcYN={};
+  _kbcClientSubmissionId='';_kbcClientSubmissionUnit='';_kbcSubmitting=false;
+  kbcVisibleItems_().forEach(function(attr){
+    var score=document.getElementById(attr.id),comment=document.getElementById(kbcCommentId_(attr.id));
+    if(score)score.value='3.0';if(comment)comment.value='';
+    if(kbcHasSmartTagData_(attr.tagGroup,attr.tagCategory))kbcRefreshInlineTagCategory_(attr.tagGroup,attr.tagCategory);
+  });
+  setVal_('kbc-comment','');setVal_('kbc-end-time','');setVal_('kbc-time-penalty','');
+  _kbcGeneratedComment='';_kbcCommentEdited=true;_kbcAutoCommentEnabled=false;
+  var area=document.getElementById('kbc-comment-gen');if(area){area.innerHTML='';area.classList.remove('active');}
+  resetEvaluationDisqualification_('KBC');setCommentWarning('kbc-comment-warning','',true);
+  setKbcAutoCommentModeUi_();updateKbcTimeStatus_();calcKbcTotal();
+}
+function kbcSwitchDraft_(day, unit, assignment) {
+  if (_kbcSubmitting || _kbcSwitchingDraft) return;
+  _kbcSwitchingDraft=true;
+  try {
+    clearTimeout(_kclDraftSaveTimer);
+    _kclDraftApplying=false;
+    // The DOM number/day has already changed; the draft writer uses the previous
+    // identity until its complete form has been saved.
+    if (_kbcDraftUnit) kclSaveActiveEvalDraftNow_(true);
+    _kbcDraftDay=day==='2'?'2':'1';_kbcDraftUnit=unit||'';
+    _kbcDraftName=assignment?participantNameForAssignment_(assignment):'';
+    kbcResetEntryFields_();
+    setVal_('kbc-num',_kbcDraftUnit);setVal_('kbc-name',_kbcDraftName);
+    setVal_('kbc-main-day',_kbcDraftDay);
+    var draft=null;try{draft=JSON.parse(localStorage.getItem(kclDraftKey_('KBC'))||'null');}catch(e){}
+    if(draft&&draft.form&&String((draft.form['kbc-num']||{}).value||'')===_kbcDraftUnit) kclRestoreDraftForCode_('KBC',draft);
+    _kclDraftPrompted[kclDraftKey_('KBC')]=true;
+    if(_kbcDraftUnit)try{localStorage.setItem(kbcLastDraftUnitKey_(_kbcDraftDay),_kbcDraftUnit);}catch(e){}
+  } finally {_kbcSwitchingDraft=false;}
+}
 function refreshKbcDayFilter_() {
+  var day=document.getElementById('kbc-main-day').value;
+  if(_selComp&&_selComp.currentRound==='본선'&&day!==_kbcDraftDay){
+    var unit='';try{unit=localStorage.getItem(kbcLastDraftUnitKey_(day))||'';}catch(e){}
+    var assignment=participantAssignmentByNumber_('KBC',unit);
+    if(!assignment||String(assignment.operatingDay)!==day){unit='';assignment=null;}
+    kbcSwitchDraft_(day,unit,assignment);
+  }
   renderParticipantControl_('KBC', {selectId:'kbc-participant-select',helpId:'kbc-participant-help',numId:'kbc-num',nameId:'kbc-name',placeholder:'선수등록에서 참가자 선택'});
+  if(_selComp&&_selComp.currentRound==='본선')document.getElementById('kbc-round-badge').textContent='본선 '+day+'일차';
 }
 function startKbc() {
   // KBC는 공유 평가목적 상태가 이전 화면에서 남아 있어도 항상 공식 대회평가로 시작합니다.
   setEvaluationPurpose_('competition');
   cancelKbcCommentGeneration_();
-  document.getElementById('kbc-round-badge').textContent = _selComp.currentRound === '결선' ? '결선 · 1일차' : _selComp.currentRound;
+  document.getElementById('kbc-round-badge').textContent = _selComp.currentRound;
   document.getElementById('kbc-main-day-wrap').hidden = _selComp.currentRound !== '본선';
-  document.getElementById('kbc-main-day').value = 'all';
+  _kbcDraftDay=competitionOptionSettings_(_selComp).kbcMainDay==='2'?'2':'1';
+  _kbcDraftUnit='';_kbcDraftName='';_kbcSwitchingDraft=false;
+  document.getElementById('kbc-main-day').value = _kbcDraftDay;
   document.getElementById('kbc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + roleText() + ' · ' + evaluationPurposeDisplayLabel_() + evaluationTeamContextText_() + (isActiveCalibrationMode_() ? ' · 공식 점수·순위 제외' : ' · 공식 점수 반영');
   var isMain = kbcIsMainRound_();
   _kbcTags = kbcCreateTagState_();
@@ -15591,6 +15652,7 @@ function startKbc() {
   calcKbcTotal();
   setKbcAutoCommentModeUi_();
   showEval('evalKbc');
+  refreshKbcDayFilter_();
   renderEvaluationDisqualification_('KBC', 'evalKbc', 'button[onclick="kbcSubmit()"]');
 }
 
@@ -15717,6 +15779,9 @@ function kbcSubmit() {
   var timeMs = timeRaw ? kbcParseTimeMsStrict_(timeRaw) : null;
   if (!num) { toast('참가자 번호를 입력해주세요', true); return; }
   var selectedAssignment = participantAssignmentByNumber_('KBC', num);
+  if (_selComp.currentRound === '본선' && (!selectedAssignment || String(selectedAssignment.operatingDay || '') !== document.getElementById('kbc-main-day').value)) {
+    toast('선택한 본선 일차에 배정된 선수를 선택해주세요. 입력 내용은 유지됩니다.',true);return;
+  }
   if (_selComp.currentRound === '결선' && participantListForCode_('KBC').length && !selectedAssignment) {
     toast('결선에 배정된 참가자 번호를 선수 선택 목록에서 확인해주세요.', true); return;
   }
@@ -15809,6 +15874,7 @@ function kbcSubmit() {
     })
     .submitScores({
       competitionCode: 'KBC',
+      operatingDay:_selComp.currentRound==='본선'?document.getElementById('kbc-main-day').value:'',
       clientSubmissionId: _kbcClientSubmissionId,
       judgeName: _judge.name,
       judgeToken: _judge.judgeToken || '',
@@ -19822,6 +19888,7 @@ function kclDraftContextKey_(code) {
   var station = '';
   if (code === 'KCR' && typeof _cupping !== 'undefined' && _cupping && _cupping.station) station = _cupping.station.id || _cupping.station.prefix || '';
   if (code === 'IKRC' && typeof _ikrcStation !== 'undefined' && _ikrcStation) station = _ikrcStation.id || _ikrcStation.prefix || '';
+  if (code === 'KBC') station = 'day'+_kbcDraftDay+'_player'+(_kbcDraftUnit||'unselected');
   // 결선 패턴/센서리는 서로 다른 평가표입니다. 같은 헤드가 화면을 바꿔도 임시저장을 섞지 않습니다.
   if (code === 'KCAC' && typeof _kcac !== 'undefined' && _kcac && _kcac.jars && _kcac.jars[0] && _kcac.jars[0].type !== 'qual') station = _kcac.jars[0].type + (_kcac.finalArea ? '_' + _kcac.finalArea : '');
   return [type, scope, station].filter(Boolean).join('_') || 'competition';
@@ -19894,6 +19961,12 @@ function kclSaveActiveEvalDraftNow_(silent) {
       form: kclCollectFormValues_(root),
       state: kclBuildDraftState_(code)
     };
+    if(code==='KBC'){
+      if(!_kbcDraftUnit)return;
+      draft.form['kbc-num']={value:_kbcDraftUnit};draft.form['kbc-name']={value:_kbcDraftName};
+      draft.form['kbc-main-day']={value:_kbcDraftDay};
+      localStorage.setItem(kbcLastDraftUnitKey_(_kbcDraftDay),_kbcDraftUnit);
+    }
     localStorage.setItem(key, JSON.stringify(draft));
     if (!silent) kclDraftStatus_('자동 임시저장 완료');
   } catch(e) {
@@ -19986,6 +20059,9 @@ function kclRestoreDraftForCode_(code, draft) {
       if (typeof updateKcacFinal === 'function') updateKcacFinal();
     }
     if (code === 'KBC') {
+      _kbcDraftDay=String((draft.form['kbc-main-day']||{}).value||_kbcDraftDay)==='2'?'2':'1';
+      _kbcDraftUnit=String((draft.form['kbc-num']||{}).value||'');
+      _kbcDraftName=String((draft.form['kbc-name']||{}).value||'');
       if (draft.state.kbcYN) _kbcYN = draft.state.kbcYN;
       if (draft.state.kbcTags) _kbcTags = draft.state.kbcTags;
       if (draft.state.kbcCommentMeta) { _kbcGeneratedComment = draft.state.kbcCommentMeta.generated || ''; _kbcCommentEdited = !!draft.state.kbcCommentMeta.edited; _kbcAutoCommentEnabled = draft.state.kbcCommentMeta.autoEnabled !== undefined ? !!draft.state.kbcCommentMeta.autoEnabled : !!_kbcGeneratedComment; }
@@ -20060,25 +20136,50 @@ function kclRestoreDraftForCode_(code, draft) {
   } catch(e) {
     toast('임시저장 복원 중 오류가 발생했습니다: ' + (e && e.message ? e.message : e), true);
   } finally {
-    setTimeout(function(){ _kclDraftApplying = false; if (restored) kclSaveActiveEvalDraftNow_(true); }, 250);
+    if(code==='KBC'){
+      _kclDraftApplying=false;
+      if(restored)kclSaveActiveEvalDraftNow_(true);
+    }else setTimeout(function(){ _kclDraftApplying = false; if (restored) kclSaveActiveEvalDraftNow_(true); }, 250);
   }
 }
 function kclMaybeRestoreDraftForActiveEval_() {
   if (_kclDraftApplying) return;
   var code = kclActiveEvalCode_();
+  var previousKbcUnit=_kbcDraftUnit;
+  if(code==='KBC'&&participantStateForCode_('KBC').loading)return;
+  if(code==='KBC'&&!_kbcDraftUnit){
+    var last='';try{last=localStorage.getItem(kbcLastDraftUnitKey_(_kbcDraftDay))||'';}catch(e){}
+    if(last)_kbcDraftUnit=last;
+    else {
+      // Preserve pre-upgrade drafts. Migrate only a uniquely registered player
+      // belonging to this day; keep the old key untouched as a recovery copy.
+      try {
+        var newKey=kclDraftKey_('KBC'),legacyKey=newKey.replace(/day[12]_playerunselected/,'');
+        legacyKey=legacyKey.replace('competition_::','competition::');
+        var legacy=JSON.parse(localStorage.getItem(legacyKey)||'null');
+        var oldNumber=legacy&&legacy.form&&String((legacy.form['kbc-num']||{}).value||'');
+        var oldAssignment=oldNumber&&participantAssignmentByNumber_('KBC',oldNumber);
+        if(oldAssignment&&(_selComp.currentRound!=='본선'||String(oldAssignment.operatingDay)===_kbcDraftDay)){
+          _kbcDraftUnit=oldNumber;_kbcDraftName=participantNameForAssignment_(oldAssignment);
+          legacy.form['kbc-main-day']={value:_kbcDraftDay};localStorage.setItem(kclDraftKey_('KBC'),JSON.stringify(legacy));
+        }
+      } catch(e){}
+    }
+  }
   // A delayed entry prompt must not replace the state while its submission is in flight.
   if (code === 'KCR' && _kcrSubmitting) return;
   var key = kclDraftKey_(code);
   if (!code || !key || _kclDraftPrompted[key]) return;
   var raw = null, draft = null;
   try { raw = localStorage.getItem(key); if (raw) draft = JSON.parse(raw); } catch(e) { draft = null; }
-  if (!draft || !draft.updatedAt) return;
+  if (!draft || !draft.updatedAt) {if(code==='KBC')_kbcDraftUnit=previousKbcUnit;return;}
   _kclDraftPrompted[key] = true;
   var when = '';
   try { when = new Date(draft.updatedAt).toLocaleString('ko-KR'); } catch(e) { when = draft.updatedAt; }
   var ok = confirm('이전에 작성 중이던 ' + code + ' 평가 임시저장이 있습니다.\n저장시각: ' + when + '\n\n이어서 작성하시겠습니까?\n\n[확인] 이어서 작성 / [취소] 새로 작성');
   if (ok) kclRestoreDraftForCode_(code, draft);
   else {
+    if(code==='KBC')_kbcDraftUnit=previousKbcUnit;
     if (confirm('이 임시저장을 삭제하고 새 평가를 시작할까요?')) {
       try { localStorage.removeItem(key); } catch(e) {}
       kclDraftStatus_('기존 임시저장 삭제 완료');

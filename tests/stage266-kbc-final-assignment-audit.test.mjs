@@ -18,15 +18,15 @@ try{
    oldMain8:participantAssignmentByNumber_('KBC','8')
  }));
  assert.equal(actual.final6.number,'6','the active-round number wins over another player’s original participant number');
- assert.equal(actual.final6.name,'본선 선수 3');
+ assert.equal(actual.final6.name,'본선 선수 8');
  assert.equal(actual.final6.evaluationCompleted,false,'another finalist’s completion cannot block this participant');
- assert.equal(actual.final3.name,'본선 선수 6');assert.equal(actual.final3.evaluationCompleted,true);
+ assert.equal(actual.final3.name,'본선 선수 5');assert.equal(actual.final3.evaluationCompleted,true);
  assert.equal(actual.oldMain8,null,'an old main number cannot masquerade as a final number');
  await page.locator('#kbc-num').fill('6');
- assert.equal(await page.locator('#kbc-name').inputValue(),'본선 선수 3');
+ assert.equal(await page.locator('#kbc-name').inputValue(),'본선 선수 8');
  assert.equal(await page.locator('#kbc-participant-complete').isVisible(),false);
  await page.locator('#kbc-num').fill('3');
- assert.equal(await page.locator('#kbc-name').inputValue(),'본선 선수 6');
+ assert.equal(await page.locator('#kbc-name').inputValue(),'본선 선수 5');
  assert.equal(await page.locator('#kbc-participant-complete').isVisible(),true);
  await page.locator('#kbc-num').fill('8');
  assert.equal(await page.locator('#kbc-name').inputValue(),'','an unassigned final number cannot retain the previously selected player name');

@@ -54,6 +54,11 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
 @media(max-width:900px){.schedule-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-row{grid-template-columns:1fr auto}.schedule-row-meta.schedule-times{grid-column:1/-1}.schedule-assignment-tools,.admin-form-simple{grid-template-columns:1fr}.registry-import-panel>summary{padding:14px}.registry-import-content{padding:0 14px 14px}}
 @media(max-width:560px){.schedule-form-grid{grid-template-columns:1fr}.schedule-row{display:block}.schedule-row>*+*{margin-top:7px}.schedule-row-actions{margin-top:10px}.schedule-row-actions .btn{width:auto}.schedule-assignment-tools .btn{width:100%}.participant-list-controls{width:100%;justify-content:flex-start}.participant-sort-select{flex:1 1 170px}.participant-list-controls .btn{flex:0 0 auto}}
 
+#kbc-roster-tools [role="tablist"]{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+#kbc-roster-tools [role="tab"]{width:100%;min-height:44px;margin:0;white-space:normal}
+#kbc-roster-tools [role="tab"][aria-selected="true"]{background:#fff;color:#111;border-color:#fff}
+#kbc-timetable-plan ol,#kbc-final-roster ol{padding-left:22px;line-height:1.8;overflow-wrap:anywhere}
+@media(max-width:520px){#kbc-roster-tools [role="tablist"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
@@ -175,8 +180,13 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
             <label class="form-field"><span class="field-label">본선 번호</span><input id="mMainNo" placeholder="진출 선수만 입력"></label>
             <label class="form-field"><span class="field-label">본선 일차</span><select id="mMainDay"><option value="">미지정</option><option value="1">본선 1일차</option><option value="2">본선 2일차</option></select></label>
             <label class="form-field date-field"><span class="field-label">본선 일정</span><input id="mMainDate" type="date" onclick="openDatePicker_(this)"></label>
+            <label class="form-field"><span class="field-label">본선 무대</span><input id="mMainStation" placeholder="A / B"></label>
+            <label class="form-field"><span class="field-label">본선 준비시간</span><input id="mMainPrep" placeholder="11:00~11:15"></label>
+            <label class="form-field"><span class="field-label">본선 시연시간</span><input id="mMainPerformance" placeholder="11:15~11:25"></label>
             <label class="form-field"><span class="field-label">결선 번호</span><input id="mFinalNo" placeholder="진출 선수만 입력"></label>
             <label class="form-field date-field"><span class="field-label">결선 일정</span><input id="mFinalDate" type="date" onclick="openDatePicker_(this)"></label>
+            <label class="form-field"><span class="field-label">결선 준비시간</span><input id="mFinalPrep" placeholder="10:30~10:45"></label>
+            <label class="form-field"><span class="field-label">결선 시연시간</span><input id="mFinalPerformance" placeholder="10:45~10:55"></label>
           </div>
         </details>
         <div class="edit-state hidden" id="participantEditState"></div>
@@ -213,7 +223,21 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
             <label class="operator-select-all"><input id="participantSelectAll" type="checkbox" onchange="toggleAllVisibleParticipants_(this.checked)">전체 선택</label>
           </div>
         </div>
-        <div class="schedule-assignment-tools">
+        <section id="kbc-roster-tools" class="hidden" aria-label="KBC 진출 선수">
+          <div class="btnrow" role="tablist" aria-label="KBC 선수 구분">
+            <button type="button" class="btn secondary small" role="tab" id="kbc-roster-day1" onclick="setKbcRosterView_('1')">본선 1일차</button>
+            <button type="button" class="btn secondary small" role="tab" id="kbc-roster-day2" onclick="setKbcRosterView_('2')">본선 2일차</button>
+            <button type="button" class="btn secondary small" role="tab" id="kbc-roster-final" onclick="setKbcRosterView_('final')">결선</button>
+            <button type="button" class="btn secondary small" role="tab" id="kbc-roster-all" onclick="setKbcRosterView_('all')">전체 선수</button>
+          </div>
+          <div id="kbc-final-roster" class="hint" role="status"></div>
+          <details><summary>2026 본선 시간표 반영</summary>
+            <p class="hint">11/12·11/13 각 10명. 선수명·본선 번호를 확인하고 날짜·무대·시간만 반영합니다.</p>
+            <button type="button" class="btn secondary small" id="kbc-timetable-preview" onclick="loadKbcTimetablePlan_()">시간표 대조</button>
+            <div id="kbc-timetable-plan" class="hint" role="status"></div>
+          </details>
+        </section>
+        <div class="schedule-assignment-tools" id="participant-bulk-prelim-tools">
           <label class="form-field date-field"><span class="field-label">선택 선수 예선 일정</span><input id="bulkParticipantDate" type="date" title="선택 선수 예선 일정" onclick="openDatePicker_(this)"></label>
           <button class="btn secondary small" onclick="loadParticipants()">새로고침</button>
           <button class="btn small" id="bulkParticipantDateButton" onclick="bulkUpdateParticipantPrelimDate_()">선택 선수 일정 일괄 변경</button>
@@ -765,6 +789,9 @@ function updateManualParticipantFields(){var code=((document.getElementById('com
   if(isKcr&&sort.value==='schedule'){sort.value='number-asc';participantSortMode='number-asc';}
   var help=document.getElementById('manualFieldHelp'); if(help)help.textContent='결선 진출자는 아래 배정을 펼쳐 번호와 일정을 입력하세요. 본선 경기가 별도인 대회는 경기별로 배정하며 기존 평가 기록은 유지됩니다.';
   setFieldVisible_('mMainDay',code==='KBC');
+  ['mMainStation','mMainPrep','mMainPerformance','mFinalPrep','mFinalPerformance'].forEach(function(id){setFieldVisible_(id,code==='KBC');});
+  if(!editingParticipantId)['mMainStation','mMainPrep','mMainPerformance','mFinalPrep','mFinalPerformance'].forEach(function(id){var field=document.getElementById(id);if(field)field.value='';});
+  setHidden_('kbc-roster-tools',code!=='KBC');
   document.querySelector('#participantFinalsFields summary').textContent=code==='KBC'?'본선·결선 배정 (본선 1·2일차 / 결선 1일차)':'결선 배정 (선택)';
   setFieldVisible_('mMainNo',code==='KBC'||code==='MOC');setFieldVisible_('mMainDate',code==='KBC'||code==='MOC');
   var opTeam=document.getElementById('opTeam'); var opHelp=document.getElementById('operatorTeamHelp');
@@ -778,7 +805,7 @@ function updateManualParticipantFields(){var code=((document.getElementById('com
   if(isKcr&&opHelp)opHelp.textContent='평가할 스테이션을 선택하면 헤드·심사위원 점수가 해당 스테이션에 저장됩니다.';
   syncOperatorRoleOptions();
 }
-function participantFormSnapshot_(){return JSON.stringify([editingParticipantId||'',selectedCompetitionCode_()].concat(['mNo','mName','mPhone','mAff','mDate','mMainNo','mMainDay','mMainDate','mFinalNo','mFinalDate'].map(function(id){return document.getElementById(id).value;})));}
+function participantFormSnapshot_(){return JSON.stringify([editingParticipantId||'',selectedCompetitionCode_()].concat(['mNo','mName','mPhone','mAff','mDate','mMainNo','mMainDay','mMainDate','mMainStation','mMainPrep','mMainPerformance','mFinalNo','mFinalDate','mFinalPrep','mFinalPerformance'].map(function(id){var field=document.getElementById(id);return field?field.value:'';})));}
 function saveOneParticipant(){var code=document.getElementById('comp').value;var no=document.getElementById('mNo').value;var original=editingParticipantOriginal||{};var a=no||original.prelimCupNo||original.cupNo||original.sampleNo||original.teamNo||'';var b=document.getElementById('mFinalNo').value.trim();var main=document.getElementById('mMainNo').value.trim();var competitionDate=document.getElementById('mDate').value||'';var payload={rowIndex:editingParticipantId||'',competitionCode:code,name:document.getElementById('mName').value,phone:document.getElementById('mPhone').value,affiliation:document.getElementById('mAff').value,uniqueNo:no||original.uniqueNo||'',cupNo:'',sampleNo:'',teamNo:'',teamName:'',competitionDate:competitionDate,extra:Object.assign({},original.extra||{})};
   if(code==='KCR'){payload.prelimCupNo=a;payload.finalCupNo=b;}
   else if(code==='KCAC'){payload.prelimCupNo=a;payload.finalCupNo=b;}
@@ -791,6 +818,7 @@ function saveOneParticipant(){var code=document.getElementById('comp').value;var
   if(code==='KBC'){
     payload.extra.roundSchedules.본선.day=document.getElementById('mMainDay').value;
     payload.extra.roundSchedules.결선.day='1';
+    [['본선','station','mMainStation'],['본선','preparationTime','mMainPrep'],['본선','performanceTime','mMainPerformance'],['결선','preparationTime','mFinalPrep'],['결선','performanceTime','mFinalPerformance']].forEach(function(item){var field=document.getElementById(item[2]);if(field)payload.extra.roundSchedules[item[0]][item[1]]=field.value.trim();});
   }
   // 예선 기본정보 수정이 별도로 저장한 본·결선 일정/번호를 덮어쓰지 않도록 합니다.
   if(code==='KCR'){delete payload.competitionDate;}
@@ -827,13 +855,64 @@ function participantNaturalCompare_(left,right){left=String(left==null?'':left).
 function participantSortLabel_(mode){return ({'number-asc':'참가번호 낮은 순','number-desc':'참가번호 높은 순','schedule':'예선 일정 순','name':'선수명 가나다 순','registered':'등록 순'})[mode]||'참가번호 낮은 순';}
 function sortParticipantRowsForRegistry_(code,rows,mode){code=String(code||'').toUpperCase();mode=String(mode||'number-asc');return (rows||[]).slice().sort(function(a,b){var aCode=String(a.competitionCode||code||'').toUpperCase(),bCode=String(b.competitionCode||code||'').toUpperCase();if(aCode!==bCode)return participantNaturalCompare_(aCode,bCode);var cmp=0;if(mode==='registered')cmp=Number(a.rowIndex||0)-Number(b.rowIndex||0);else if(mode==='name')cmp=participantNaturalCompare_(a.name||a.teamName,b.name||b.teamName);else if(mode==='schedule'){cmp=participantNaturalCompare_(participantPrelimDate_(a),participantPrelimDate_(b));if(!cmp)cmp=participantOperatingDaySort_(a)-participantOperatingDaySort_(b);if(!cmp)cmp=participantNaturalCompare_(a.performanceOrder||(a.extra||{})['경연순서'],b.performanceOrder||(b.extra||{})['경연순서']);}else{var aNo=participantPrimaryNumber_(aCode,a),bNo=participantPrimaryNumber_(bCode,b);cmp=participantNaturalCompare_(aNo,bNo);if(mode==='number-desc'&&String(aNo||'').trim()&&String(bNo||'').trim())cmp=-cmp;}if(!cmp)cmp=participantNaturalCompare_(participantPrimaryNumber_(aCode,a),participantPrimaryNumber_(bCode,b));if(!cmp)cmp=Number(a.rowIndex||0)-Number(b.rowIndex||0);return cmp;});}
 function participantSelectedIds_(){var selected={};Array.prototype.forEach.call(document.querySelectorAll('#partTable [data-schedule-part]:checked'),function(input){selected[String(input.getAttribute('data-schedule-part'))]=true;});return selected;}
-function renderParticipantList_(code,selected){var table=document.getElementById('partTable');if(!table)return;var rows=sortParticipantRowsForRegistry_(code,participantRows,participantSortMode);table.setAttribute('data-competition',code);table.innerHTML=participantListHtml_(code,rows);bindParticipantActionButtons(table);if(selected)Array.prototype.forEach.call(table.querySelectorAll('[data-schedule-part]'),function(input){input.checked=!!selected[String(input.getAttribute('data-schedule-part'))];});var count=document.getElementById('partCount');if(count){count.textContent=code+' 등록 '+participantRows.length+'건 · '+participantSortLabel_(participantSortMode);if(code==='KCR'){var pending=participantRows.filter(function(r){return (r.extra||{}).kcrPrelimPending===true;}).length;if(pending)count.textContent+=' · 예선 배정 '+(participantRows.length-pending)+'명 · 대기 '+pending+'명';}}}
+var kbcRosterView_='1', kbcRosterPlanRequest_=0;
+function setKbcRosterView_(view){kbcRosterView_=view;renderParticipantList_('KBC',{});if(view==='final')loadKbcFinalRoster_();}
+function kbcRosterRows_(rows){
+  if(kbcRosterView_==='all')return rows;
+  var round=kbcRosterView_==='final'?'결선':'본선',numberKey=round==='결선'?'finalCupNo':'mainCupNo';
+  return rows.filter(function(row){var schedule=((row.extra||{}).roundSchedules||{})[round]||{};return !!row[numberKey]&&(round==='결선'||String(schedule.day||'').replace(/일차$/,'')===kbcRosterView_);}).sort(function(a,b){
+    var x=((a.extra||{}).roundSchedules||{})[round]||{},y=((b.extra||{}).roundSchedules||{})[round]||{};
+    return Number(x.order||a[numberKey])-Number(y.order||b[numberKey]);
+  }).map(function(row){return Object.assign({},row,{prelimCupNo:row[numberKey]});});
+}
+function renderParticipantList_(code,selected){
+  var table=document.getElementById('partTable');if(!table)return;
+  var rows=sortParticipantRowsForRegistry_(code,participantRows,participantSortMode);
+  if(code==='KBC'){
+    rows=kbcRosterRows_(rows);
+    [['1','day1'],['2','day2'],['final','final'],['all','all']].forEach(function(pair){document.getElementById('kbc-roster-'+pair[1]).setAttribute('aria-selected',String(kbcRosterView_===pair[0]));});
+    if(kbcRosterView_!=='final')document.getElementById('kbc-final-roster').textContent='';
+  }
+  setHidden_('participant-bulk-prelim-tools',code==='KBC'&&kbcRosterView_!=='all');
+  setHidden_('bulkParticipantDateHelp',code==='KCR'||(code==='KBC'&&kbcRosterView_!=='all'));
+  table.setAttribute('data-competition',code);table.innerHTML=participantListHtml_(code,rows);bindParticipantActionButtons(table);
+  if(selected)Array.prototype.forEach.call(table.querySelectorAll('[data-schedule-part]'),function(input){input.checked=!!selected[String(input.getAttribute('data-schedule-part'))];});
+  var count=document.getElementById('partCount');
+  if(count){count.textContent=code==='KBC'?(kbcRosterView_==='all'?'전체 선수':kbcRosterView_==='final'?'결선 진출자':'본선 '+kbcRosterView_+'일차 진출자')+' '+rows.length+'명':code+' 등록 '+participantRows.length+'건 · '+participantSortLabel_(participantSortMode);if(code==='KCR'){var pending=participantRows.filter(function(r){return (r.extra||{}).kcrPrelimPending===true;}).length;if(pending)count.textContent+=' · 예선 배정 '+(participantRows.length-pending)+'명 · 대기 '+pending+'명';}}
+}
+function loadKbcTimetablePlan_(){
+  var area=document.getElementById('kbc-timetable-plan');area.textContent='등록 선수와 대조하는 중...';
+  rpc('getKbcMainTimetablePlan',[actor],function(res){
+    if(selectedCompetitionCode_()!=='KBC')return;
+    area.textContent=res.message||'';if(!res.success)return;
+    var list=document.createElement('ol');
+    (res.entries||[]).forEach(function(item){var li=document.createElement('li');li.textContent=item.schedule.date+' · '+item.schedule.day+'일차 '+item.schedule.dayOrder+'번째 · 본선 '+item.number+'번 '+item.name+' · '+item.schedule.station+' · 준비 '+item.schedule.preparationTime+' / 시연 '+item.schedule.performanceTime;list.appendChild(li);});area.appendChild(list);
+    if(res.ready){var button=document.createElement('button');button.type='button';button.className='btn';button.id='kbc-timetable-apply';button.textContent='확인한 20명 시간표 반영';button.onclick=function(){
+      if(!confirm('대조한 20명의 본선 날짜·순서·무대·시간을 반영할까요? 예선, 연락처, 점수와 코멘트는 변경하지 않습니다.'))return;
+      button.disabled=true;rpc('applyKbcMainTimetable',[{revision:res.revision},actor],function(result){area.textContent=result.message||'';if(result.success){loadParticipants();}else loadKbcTimetablePlan_();},function(err){area.textContent=err.message||'저장 상태를 다시 확인해주세요.';button.disabled=false;});
+    };area.appendChild(button);}
+  });
+}
+function loadKbcFinalRoster_(){
+  var request=++kbcRosterPlanRequest_,area=document.getElementById('kbc-final-roster');area.textContent='본선 통합 순위를 확인하는 중...';
+  rpc('getKbcFinalistPlan',[actor],function(res){
+    if(request!==kbcRosterPlanRequest_||selectedCompetitionCode_()!=='KBC'||kbcRosterView_!=='final')return;
+    area.textContent=res.message||'';if(!res.success)return;
+    if((res.assignedFinalists||[]).length){area.textContent='결선 배정 '+res.assignedFinalists.length+'명 · 기존 배정 유지';return;}
+    var title=document.createElement('p');title.textContent='결선 진출 예상 · 본선 평가 '+res.evaluatedParticipantCount+'/'+res.mainParticipantCount+'명';area.appendChild(title);
+    var list=document.createElement('ol');(res.candidates||[]).slice().sort(function(a,b){return Number(a.finalNumber)-Number(b.finalNumber);}).forEach(function(item){var li=document.createElement('li');li.textContent='결선 '+item.finalNumber+'번 예정 · '+item.name+' · 본선 '+item.rank+'위 ('+item.score+'점)';list.appendChild(li);});area.appendChild(list);
+    if(res.ready){var button=document.createElement('button');button.type='button';button.className='btn';button.textContent='본선 마감 · 상위 6명 결선 배정';button.onclick=function(){if(!confirm('양일 본선 입력이 모두 끝났나요? 현재 상위 6명을 역순으로 결선에 배정합니다.'))return;button.disabled=true;rpc('assignKbcFinalists',[{revision:res.revision},actor],function(result){area.textContent=result.message||'';if(result.success){loadParticipants();loadKbcFinalRoster_();}else button.disabled=false;});};area.appendChild(button);}
+  });
+}
 function applyParticipantSort_(){var select=document.getElementById('participantSortMode');participantSortMode=(select&&select.value)||'number-asc';var code=document.getElementById('comp').value||'ALL';var selected=participantSelectedIds_();renderParticipantList_(code,selected);var all=document.getElementById('participantSelectAll');if(all)all.checked=false;}
 function participantListHtml_(code,rows){code=String(code||'').toUpperCase();rows=rows||[];var ktcc=code==='KTCC';var nameLabel=ktcc?'팀명':'선수명';var affiliationLabel=ktcc?'팀원':'소속';var numberLabel=ktcc?'팀번호':'참가번호';var header=participantTableHeader_([[nameLabel,'cell-name'],[affiliationLabel,'cell-affiliation'],[numberLabel,'cell-number'],['연락처','cell-phone'],[code==='KBC'?'라운드·일정':'예선 일정','cell-schedule'],['관리','cell-actions']]);var body=rows.map(function(r){var ex=r.extra||{};var rowCode=String(r.competitionCode||code).toUpperCase();var isTeam=rowCode==='KTCC';var rowNameLabel=isTeam?'팀명':'선수명';var rowAffiliationLabel=isTeam?'팀원':'소속';var rowNumberLabel=isTeam?'팀번호':'참가번호';var name=isTeam?(r.teamName||r.name):(r.name||'');var affiliation=isTeam?ktccTeamMemberLabel_(r):(r.affiliation||ex['팀장 소속']||ex['팀원1소속']||'');var phone=r.phone||ex['팀장 휴대전화']||ex['팀원1연락처']||'';return '<tr>'+participantSelectCell_(r)+participantTextCell_(rowNameLabel,name,'cell-name')+participantTextCell_(rowAffiliationLabel,affiliation,'cell-affiliation')+participantTextCell_(rowNumberLabel,rowCode==='KCR'&&ex.kcrPrelimPending===true?'예선 배정 대기':participantPrimaryNumber_(rowCode,r),'cell-number mono')+participantTextCell_('연락처',phone,'cell-phone mono')+participantTextCell_(code==='KBC'?'라운드·일정':'예선 일정',code==='KBC'?kbcParticipantRoundText_(r):participantPrelimDate_(r),'cell-schedule mono')+participantActionHtml_(r)+'</tr>';}).join('');return header+body;
 }
 function kbcParticipantRoundText_(r){
   var schedules=(r.extra||{}).roundSchedules||{}, main=schedules.본선||{}, final=schedules.결선||{};
-  return [participantPrelimDate_(r)?'예선 '+participantPrelimDate_(r):'',r.mainCupNo?'본선 '+(main.day?main.day+'일차':'일차 미지정')+' · '+r.mainCupNo+'번'+(main.date?' · '+main.date:''):'',r.finalCupNo?'결선 1일차 · '+r.finalCupNo+'번'+(final.date?' · '+final.date:''):''].filter(Boolean).join(' / ');
+  function label(round,schedule,number){return round+' · '+number+'번'+(schedule.date?' · '+schedule.date:'')+(schedule.station?' · '+schedule.station:'')+(schedule.preparationTime?' · 준비 '+schedule.preparationTime:'')+(schedule.performanceTime?' · 시연 '+schedule.performanceTime:'');}
+  if(kbcRosterView_==='1'||kbcRosterView_==='2')return label('본선 '+kbcRosterView_+'일차',main,r.mainCupNo);
+  if(kbcRosterView_==='final')return label('결선',final,r.finalCupNo);
+  return [participantPrelimDate_(r)?'예선 '+participantPrelimDate_(r):'',r.mainCupNo?label('본선 '+(main.day?main.day+'일차':'일차 미지정'),main,r.mainCupNo):'',r.finalCupNo?label('결선',final,r.finalCupNo):''].filter(Boolean).join(' / ');
 }
 function bindParticipantActionButtons(table){if(!table)return;
   Array.prototype.forEach.call(table.querySelectorAll('[data-edit-part]'),function(btn){btn.onclick=function(){editParticipant(Number(this.getAttribute('data-edit-part')));};});
@@ -877,6 +956,7 @@ function loadParticipantFinalsFields_(r){
   var ex=r.extra||{}, schedules=ex.roundSchedules||{};
   document.getElementById('mMainNo').value=r.mainCupNo||'';
   document.getElementById('mMainDay').value=String((schedules.본선||{}).day||'').replace(/일차$/,'');
+  [['본선','station','mMainStation'],['본선','preparationTime','mMainPrep'],['본선','performanceTime','mMainPerformance'],['결선','preparationTime','mFinalPrep'],['결선','performanceTime','mFinalPerformance']].forEach(function(item){var field=document.getElementById(item[2]);if(field)field.value=(schedules[item[0]]||{})[item[1]]||'';});
   document.getElementById('mFinalNo').value=r.finalCupNo||'';
   [['본선','mMainDate'],['결선','mFinalDate']].forEach(function(pair){
     var schedule=schedules[pair[0]];

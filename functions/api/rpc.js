@@ -659,6 +659,8 @@ async function dispatch(action, args, env, request) {
     deleteReviewRow: () => deleteReviewRow(env, args[0], args[1], args[3] || args[2]),
     getKbcFinalistPlan: () => getKbcFinalistPlan(env, args[0]),
     assignKbcFinalists: () => assignKbcFinalists(env, args[0], args[1]),
+    getKbcMainTimetablePlan: () => getKbcMainTimetablePlan(env, args[0]),
+    applyKbcMainTimetable: () => applyKbcMainTimetable(env, args[0], args[1]),
     getRanking: () => getRanking(env, args[0], args[1], args[2]),
     getRankingDetail: () => getRankingDetail(env, args[0], args[1], args[2], args[3]),
     getAdminDebriefPreviewOptions: () => getAdminDebriefPreviewOptions(env, args[0], args[1]),
@@ -1614,6 +1616,23 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
   }
   const currentOptions = parseJson(current.option_settings, {});
   const nextOptions = Object.assign({}, currentOptions, payload.optionSettings && typeof payload.optionSettings === 'object' ? payload.optionSettings : {});
+  if (code === 'KBC') {
+    const rawDay = safeStr(nextOptions.kbcMainDay);
+    if (rawDay && !kbcMainDay_(rawDay)) return {success:false,message:'본선 1일차 또는 본선 2일차를 선택해주세요.'};
+    if (rawDay) nextOptions.kbcMainDay = kbcMainDay_(rawDay);
+    // Advancing the operating round is the explicit end-of-main action. Never
+    // mutate assignments from a ranking GET or while main judging is incomplete.
+    if (nextRound === '결선' && current.current_round === '본선') {
+      const assigned = await env.DB.prepare("SELECT COUNT(*) n FROM participants WHERE competition_code='KBC' AND COALESCE(final_cup_no,'')<>''").first();
+      const mains = await env.DB.prepare("SELECT COUNT(*) n FROM participants WHERE competition_code='KBC' AND COALESCE(main_cup_no,'')<>''").first();
+      if (!Number(assigned && assigned.n) && Number(mains && mains.n)) {
+        const plan = await getKbcFinalistPlan(env, actorArg);
+        if (!plan.success || !plan.ready) return {success:false,message:plan.message || '본선 결과를 확인한 뒤 결선으로 전환해주세요.'};
+        const promoted = await assignKbcFinalists(env, {revision:plan.revision}, actorArg);
+        if (!promoted.success) return promoted;
+      }
+    }
+  }
   let ikrcStationChanged = false;
   let preservedIkrcScoreCount = 0;
   let kcrStationChanged = false;
@@ -4869,6 +4888,24 @@ async function submitScores(env, payload, signature, request = null) {
     ? normalizeRoundForCompetition_('KCR', initial.round || (cfg && cfg.current_round) || '예선')
     : safeStr(initial.round || (cfg && cfg.current_round) || '예선');
   if (initial.code === 'KCR') basePayload.round = submitRound;
+  if (initial.code === 'KBC' && submitRound === '본선') {
+    const registered = (await env.DB.prepare("SELECT * FROM participants WHERE competition_code='KBC' AND COALESCE(main_cup_no,'')<>''").all()).results || [];
+    if (registered.length && (safeStr(basePayload.operatingDay) || kbcMainDay_(parseJson(cfg && cfg.option_settings, {}).kbcMainDay) || registered.some(p=>participantScheduleForRound_(p,'본선').day))) {
+      const configuredDay = kbcMainDay_(parseJson(cfg && cfg.option_settings, {}).kbcMainDay);
+      const declaredDay = kbcMainDay_(basePayload.operatingDay);
+      const selectedDay = declaredDay || configuredDay;
+      if (!selectedDay) return {success:false,message:'본선 일차를 선택해주세요. 입력 내용은 유지됩니다.'};
+      if (!hasManageAccess(auth.actor, 'KBC') && configuredDay && selectedDay !== configuredDay) return {success:false,message:'현재 운영 중인 본선 일차가 변경되었습니다. 입력 내용은 유지되며 운영팀장에게 확인해주세요.'};
+      for (let index=0; index<rows.length; index++) {
+        const item = extractExtraSingleRow_(basePayload, 'KBC', index);
+        const unit = participantEvaluationCompletionUnitKey_('KBC', itemNumber_(item) || (index===0 ? initial.unit : ''));
+        const matches = registered.filter(p => participantEvaluationCompletionUnitKey_('KBC',p.main_cup_no)===unit);
+        if (matches.length!==1 || participantScheduleForRound_(matches[0],'본선').day!==selectedDay) return {success:false,message:'선택한 본선 일차에 배정된 선수만 제출할 수 있습니다. 점수와 코멘트는 유지됩니다.'};
+        rows[index].extraFields = {...(rows[index].extraFields || {}),'본선일차':selectedDay};
+      }
+      basePayload.operatingDay = selectedDay;
+    }
+  }
   let kcacSplitFinal = false;
   if (initial.code === 'KCAC' && roundName_(submitRound) === '결선') {
     const panelMode=parseJson(cfg && cfg.option_settings,{}).kcacFinalPanelMode;
@@ -7288,6 +7325,79 @@ async function getRanking(env, competitionCode, actorArg, requestedRound) {
   });
   return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : code, currentRound: data.cfg ? data.cfg.current_round : '', selectedRound, unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking, tieBreakRule: tieRuleLabel_(code, selectedRound || (data.cfg ? data.cfg.current_round : '')) };
 }
+const KBC_MAIN_TIMETABLE_2026_ = {
+  days:[
+    {day:'1',date:'2026-11-12',names:['김다정','여재혁','우희영','김시율','윤여원','주위림','한소영','권순우','박재성','한윤호']},
+    {day:'2',date:'2026-11-13',names:['최준호','고경민','임찬호','조세윤','최수빈','박수민','조민준','이주용','여상원','이영찬']}
+  ],
+  arrivals:['10:30','10:43','10:56','11:09','11:22','13:45','13:58','14:11','14:24','14:37'],
+  finalDate:'2026-11-14'
+};
+function kbcTimeOffset_(time, minutes) {
+  const parts=String(time).split(':').map(Number), total=parts[0]*60+parts[1]+minutes;
+  return String(Math.floor(total/60)).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
+}
+function kbcTimetableSlot_(arrival, day, date, order, station='') {
+  return {day,date,order,dayOrder:order,station,backroomTime:arrival,
+    preparationTime:kbcTimeOffset_(arrival,30)+'~'+kbcTimeOffset_(arrival,45),
+    performanceTime:kbcTimeOffset_(arrival,45)+'~'+kbcTimeOffset_(arrival,55),
+    interviewTime:kbcTimeOffset_(arrival,55)+'~'+kbcTimeOffset_(arrival,58),
+    cleanupTime:kbcTimeOffset_(arrival,58)+'~'+kbcTimeOffset_(arrival,63),
+    reentryTime:kbcTimeOffset_(arrival,63)+'~'+kbcTimeOffset_(arrival,73),
+    endTime:kbcTimeOffset_(arrival,73)};
+}
+async function kbcMainTimetableContext_(env, actorArg) {
+  const auth=await requireManageActorForCode_(env,actorArg,'KBC');
+  if(!auth.ok)return auth.res;
+  const participants=(await env.DB.prepare("SELECT * FROM participants WHERE competition_code='KBC' ORDER BY id").all()).results||[];
+  const scores=(await env.DB.prepare("SELECT id,unit FROM scores WHERE competition_code='KBC' AND round='본선' ORDER BY id").all()).results||[];
+  const entries=[], errors=[], seen=new Set();
+  KBC_MAIN_TIMETABLE_2026_.days.forEach((day,d)=>day.names.forEach((name,i)=>{
+    const number=String(d*10+i+1), matches=participants.filter(p=>normalizePersonName_(p.name)===normalizePersonName_(name));
+    if(matches.length!==1){errors.push(name+': 등록 선수가 없거나 이름이 중복됩니다.');return;}
+    const p=matches[0];
+    if(seen.has(p.id)){errors.push(name+': 같은 선수의 중복 배정입니다.');return;}seen.add(p.id);
+    if(scores.length && safeStr(p.main_cup_no)!==number){errors.push(name+': 본선 평가가 있어 번호를 자동 변경할 수 없습니다.');return;}
+    if(participants.some(other=>other.id!==p.id&&safeStr(other.main_cup_no)===number)){errors.push(name+': 본선 번호 '+number+'번이 다른 선수와 중복됩니다.');return;}
+    const schedule=kbcTimetableSlot_(KBC_MAIN_TIMETABLE_2026_.arrivals[i],day.day,day.date,i+1,i%2?'B':'A');
+    schedule.order=d*10+i+1;
+    entries.push({participantId:p.id,name:p.name,affiliation:p.affiliation,number,schedule});
+  }));
+  if(participants.some(p=>safeStr(p.main_cup_no)&&!seen.has(p.id)))errors.push('시간표에 없는 본선 배정 선수가 있습니다. 명단을 확인해주세요.');
+  return {success:true,ready:entries.length===20&&!errors.length,entries,errors,
+    revision:await sha256Hex_(JSON.stringify({participants,scores})),participants,scores,
+    message:errors.length?errors.join('\n'):'본선 1일차 11/12 10명 · 2일차 11/13 10명. 기존 연락처·예선·점수는 유지합니다.'};
+}
+async function getKbcMainTimetablePlan(env, actorArg) {
+  const {participants,scores,...result}=await kbcMainTimetableContext_(env,actorArg);return result;
+}
+async function applyKbcMainTimetable(env, payload, actorArg) {
+  const context=await kbcMainTimetableContext_(env,actorArg);
+  if(!context.success||!context.ready)return {success:false,message:context.message};
+  if(!payload||context.revision!==payload.revision)return {success:false,message:'선수 정보가 변경됐습니다. 시간표 확인을 다시 눌러주세요.'};
+  const stamp=nowIso();
+  const changes=context.entries.map(entry=>{
+    const p=context.participants.find(row=>row.id===entry.participantId),extra=parseJson(p.extra_json,{});
+    // Keep the complete previous schedule in the same participant record. No
+    // preliminary fields, identity, contacts, scores or comments are rewritten.
+    if(extra.kbcMainTimetableSource!=='2026-11-02-confirmed')extra.kbcMainTimetablePrevious={mainCupNo:p.main_cup_no||'',schedule:extra.roundSchedules&&extra.roundSchedules.본선||null};
+    extra.roundSchedules={...extra.roundSchedules,본선:{...(extra.roundSchedules&&extra.roundSchedules.본선||{}),...entry.schedule}};
+    extra.kbcMainTimetableSource='2026-11-02-confirmed';
+    return {id:p.id,number:entry.number,extra:JSON.stringify(extra)};
+  });
+  const result=await env.DB.prepare(`WITH original AS (SELECT value FROM json_each(?)),
+    plan AS (SELECT json_extract(value,'$.id') id,json_extract(value,'$.number') number,json_extract(value,'$.extra') extra FROM json_each(?)),
+    safe AS (SELECT 1 WHERE (SELECT COUNT(*) FROM participants WHERE competition_code='KBC')=(SELECT COUNT(*) FROM original)
+      AND NOT EXISTS(SELECT 1 FROM original o LEFT JOIN participants r ON r.id=json_extract(o.value,'$.id')
+        WHERE r.id IS NULL OR r.competition_code<>'KBC' OR r.updated_at IS NOT json_extract(o.value,'$.updated_at')
+        OR r.extra_json IS NOT json_extract(o.value,'$.extra_json') OR r.main_cup_no IS NOT json_extract(o.value,'$.main_cup_no'))
+      AND (SELECT COUNT(*) FROM scores WHERE competition_code='KBC' AND round='본선')=?)
+    UPDATE participants SET main_cup_no=(SELECT number FROM plan WHERE id=participants.id),extra_json=(SELECT extra FROM plan WHERE id=participants.id),updated_at=?
+    WHERE competition_code='KBC' AND id IN(SELECT id FROM plan) AND EXISTS(SELECT 1 FROM safe)`)
+    .bind(JSON.stringify(context.participants),JSON.stringify(changes),context.scores.length,stamp).run();
+  if(Number(result.meta&&result.meta.changes)!==20)return {success:false,message:'동시에 변경된 선수 정보가 있습니다. 시간표 확인을 다시 눌러주세요.'};
+  return {success:true,message:'본선 1·2일차 20명의 날짜·순서·무대·시간을 반영했습니다. 예선과 평가 기록은 유지했습니다.'};
+}
 async function kbcFinalistContext_(env, actorArg) {
   const auth=await requireManageActorForCode_(env,actorArg,'KBC','결선 배정은 관리자 또는 KBC 대회팀장만 가능합니다.');
   if(!auth.ok)return auth.res;
@@ -7301,18 +7411,19 @@ async function kbcFinalistContext_(env, actorArg) {
   const candidates=eligible.slice(0,6).map((row,index)=>{
     const matches=mains.filter(p=>key(p.main_cup_no)===key(row.unit));
     const participant=matches.length===1?matches[0]:null;
-    return {participantId:participant?participant.id:null,name:participant?participant.name:row.playerNameSummary,mainNumber:row.unit,finalNumber:String(index+1),rank:index+1,score:row.score,day:participant?participantScheduleForRound_(participant,'본선').day:''};
+    return {participantId:participant?participant.id:null,name:participant?participant.name:row.playerNameSummary,affiliation:participant?participant.affiliation:'',mainNumber:row.unit,finalNumber:String(6-index),rank:index+1,score:row.score,day:participant?participantScheduleForRound_(participant,'본선').day:''};
   });
   let message='본선 통합 순위 상위 6명입니다. 명단과 결선 번호를 확인한 뒤 배정하세요.';
   let ready=true;
   if(eligible.length<6){ready=false;message='결선 진출 가능한 본선 평가가 6명 이상 필요합니다.';}
   else if(mains.some(p=>!ranking.some(row=>key(row.unit)===key(p.main_cup_no)))){ready=false;message='아직 평가가 없는 본선 선수가 있습니다. 1·2일차 평가를 모두 마친 뒤 배정하세요.';}
+  else if(scores.some(row=>row.round==='본선'&&returnedEvaluation_(row))){ready=false;message='반려된 본선 평가가 있습니다. 수정 제출 후 결선을 배정해주세요.';}
   else if(candidates.some(row=>!row.participantId)||new Set(candidates.map(row=>row.participantId)).size!==6){ready=false;message='본선 번호와 선수등록 연결이 중복되거나 누락되었습니다. 선수등록을 확인하세요.';}
   else if(eligible[6]&&eligible[5].score===eligible[6].score&&compareTie_('KBC',eligible[5],eligible[6],'본선')===0){ready=false;message='6위 경계에서 총점과 에스프레소 점수가 같습니다. 동점 판정을 완료한 뒤 배정하세요.';}
   else if(scores.some(row=>row.round==='결선')){ready=false;message='결선 평가가 이미 시작되었습니다. 기존 결선 배정과 점수를 유지합니다.';}
   else if(participants.some(row=>safeStr(row.final_cup_no))){ready=false;message='기존 결선 배정이 있습니다. 선수등록에서 배정된 명단을 확인하세요.';}
   const revision=await sha256Hex_(JSON.stringify({participants,scores}));
-  return {success:true,ready,message,candidates,revision,participants,scores};
+  return {success:true,ready,message,candidates,revision,participants,scores,mainParticipantCount:mains.length,evaluatedParticipantCount:ranking.length,assignedFinalists:participants.filter(p=>safeStr(p.final_cup_no)).map(p=>({name:p.name,affiliation:p.affiliation,number:p.final_cup_no,schedule:parseJson(p.extra_json,{}).roundSchedules?.결선||{}})).sort((a,b)=>Number(a.number)-Number(b.number))};
 }
 async function getKbcFinalistPlan(env, actorArg) {
   const result=await kbcFinalistContext_(env,actorArg);
@@ -7326,7 +7437,9 @@ async function assignKbcFinalists(env, payload, actorArg) {
   if(!context.ready)return {success:false,message:context.message};
   const changes=context.candidates.map(candidate=>{
     const participant=context.participants.find(row=>row.id===candidate.participantId),extra=parseJson(participant.extra_json,{});
-    extra.roundSchedules={...extra.roundSchedules,결선:{...(extra.roundSchedules&&extra.roundSchedules.결선||{}),day:'1',order:candidate.rank}};
+    const order=Number(candidate.finalNumber);
+    const slot=kbcTimetableSlot_(kbcTimeOffset_('10:00',(order-1)*13),'1',KBC_MAIN_TIMETABLE_2026_.finalDate,order);
+    extra.roundSchedules={...extra.roundSchedules,결선:{...(extra.roundSchedules&&extra.roundSchedules.결선||{}),...slot}};
     extra.kbcFinalQualification={sourceRound:'본선',rank:candidate.rank,score:candidate.score,assignedAt:nowIso()};
     return {id:candidate.participantId,number:candidate.finalNumber,extra:JSON.stringify(extra)};
   });
@@ -7348,7 +7461,7 @@ async function assignKbcFinalists(env, payload, actorArg) {
     WHERE competition_code='KBC' AND id IN(SELECT id FROM plan) AND EXISTS(SELECT 1 FROM safe)`)
     .bind(JSON.stringify(context.participants),JSON.stringify(context.scores),JSON.stringify(changes),nowIso()).run();
   if(Number(result.meta&&result.meta.changes)!==6)return {success:false,message:'동시에 변경된 기록이 있습니다. 진출자 명단을 다시 확인하세요.'};
-  return {success:true,message:'상위 6명을 결선 1일차에 배정했습니다. 운영관리에서 결선을 선택하면 새 점수로 평가할 수 있습니다.'};
+  return {success:true,message:'상위 6명을 6위부터 역순으로 11/14 결선에 배정했습니다. 본선 점수는 이월하지 않습니다.'};
 }
 async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const code = safeStr(competitionCode).toUpperCase(); const targetUnit = safeStr(unit); const targetRound = rankingRoundScope_(round);

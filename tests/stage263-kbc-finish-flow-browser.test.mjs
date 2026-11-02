@@ -11,6 +11,7 @@ try {
     await page.evaluate(()=>{
       _judge={name:'로컬 검수',type:'ADMIN',accountType:'ADMIN',role:'관리자',judgeToken:'local-only',access:'ALL'};
       refreshParticipantAssignmentsForActiveComp_=()=>{};
+      Object.assign(participantStateForCode_('KBC'),{loaded:true,list:[{number:'9',name:'로컬 선수',operatingDay:'1'}]});
       kclMaybeRestoreDraftForActiveEval_=()=>{};
       window.qaComments=[];window.qaSubmissions=[];
       function runner(success,failure){return new Proxy({},{get(_,key){
