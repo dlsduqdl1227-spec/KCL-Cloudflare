@@ -27,6 +27,7 @@ try {
   const assignments=await api.rpc('getParticipantAssignments','KBC',api.actor);
   assert.equal(assignments.assignments.length,20);
   assert.deepEqual(assignments.assignments.map(a=>a.operatingDay),Array(10).fill('1').concat(Array(10).fill('2')));
+  assert.deepEqual(assignments.assignments.map(a=>a.performanceOrder),[1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10]);
   const payload=(unit,day)=>({competitionCode:'KBC',round:'본선',operatingDay:day,judgeToken:api.actor.judgeToken,mode:'대회평가',rows:[{extraFields:{'참가자번호':String(unit),'총점':10+unit,'Espresso Total':unit,'종합코멘트':'원본 의견 '+unit}}]});
   assert.equal((await(await api.handle({action:'submitScores',args:[payload(11,'1')]})).json()).success,false);
   assert.equal((await(await api.handle({action:'submitScores',args:[payload(999,'1')]})).json()).success,false);

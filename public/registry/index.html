@@ -864,7 +864,7 @@ function kbcRosterRows_(rows){
   return rows.filter(function(row){var schedule=((row.extra||{}).roundSchedules||{})[round]||{};return !!row[numberKey]&&(round==='결선'||String(schedule.day||'').replace(/일차$/,'')===kbcRosterView_);}).sort(function(a,b){
     var x=((a.extra||{}).roundSchedules||{})[round]||{},y=((b.extra||{}).roundSchedules||{})[round]||{};
     return Number(x.order||a[numberKey])-Number(y.order||b[numberKey]);
-  }).map(function(row){return Object.assign({},row,{prelimCupNo:row[numberKey]});});
+  }).map(function(row,index){return Object.assign({},row,{prelimCupNo:row[numberKey],kbcDisplayOrder:index+1});});
 }
 function renderParticipantList_(code,selected){
   var table=document.getElementById('partTable');if(!table)return;
@@ -911,7 +911,7 @@ function participantListHtml_(code,rows){code=String(code||'').toUpperCase();row
 function kbcParticipantRoundText_(r){
   var schedules=(r.extra||{}).roundSchedules||{}, main=schedules.본선||{}, final=schedules.결선||{};
   function label(round,schedule,number){return round+' · '+number+'번'+(schedule.date?' · '+schedule.date:'')+(schedule.station?' · '+schedule.station:'')+(schedule.preparationTime?' · 준비 '+schedule.preparationTime:'')+(schedule.performanceTime?' · 시연 '+schedule.performanceTime:'');}
-  if(kbcRosterView_==='1'||kbcRosterView_==='2')return label('본선 '+kbcRosterView_+'일차',main,r.mainCupNo);
+  if(kbcRosterView_==='1'||kbcRosterView_==='2')return label('본선 '+kbcRosterView_+'일차 · '+(r.kbcDisplayOrder||main.dayOrder||'-')+'번째',main,r.mainCupNo);
   if(kbcRosterView_==='final')return label('결선',final,r.finalCupNo);
   return [participantPrelimDate_(r)?'예선 '+participantPrelimDate_(r):'',r.mainCupNo?label('본선 '+(main.day?main.day+'일차':'일차 미지정'),main,r.mainCupNo):'',r.finalCupNo?label('결선',final,r.finalCupNo):''].filter(Boolean).join(' / ');
 }

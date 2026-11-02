@@ -3142,6 +3142,9 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     const prefix = policy.numberLabel || (code === 'KTCC' ? '팀번호' : '참가자번호');
     const completedUnitKey = participantEvaluationCompletionUnitKey_(code, number);
     const evaluationCompleted = !!(completedUnitKey && completedOfficialUnits.has(completedUnitKey));
+    const performanceOrder = code==='KBC' && currentRound==='본선'
+      ? sourceRows.filter(p=>participantScheduleForRound_(p,'본선').day===operatingDay).findIndex(p=>p.id===r.id)+1
+      : participantRoundOrder_(r,code,currentRound);
     const assignment = {
       rowIndex: r.id,
       competitionCode: code,
@@ -3164,11 +3167,11 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       competitionDate,
       operatingDay,
       scheduleTeam,
-      performanceOrder: currentRound === '예선' ? '' : participantRoundOrder_(r,code,currentRound),
+      performanceOrder: currentRound === '예선' ? '' : performanceOrder,
       evaluationCompleted,
       completedEvaluationScopes:Array.from(completedEvaluationScopes.get(completedUnitKey)||[]),
       evaluationCompletedAt: evaluationCompleted ? completedOfficialUnits.get(completedUnitKey) : '',
-      display: (currentRound !== '예선' && !hideIdentity && participantRoundOrder_(r,code,currentRound)<Number.MAX_SAFE_INTEGER ? ('경연 '+participantRoundOrder_(r,code,currentRound)+' · ') : '') + (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? (' · ' + (code === 'KTCC' ? '팀원 ' : '') + displayAff) : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
+      display: (currentRound !== '예선' && !hideIdentity && performanceOrder<Number.MAX_SAFE_INTEGER ? ('경연 '+performanceOrder+' · ') : '') + (scheduleLabel ? (scheduleLabel + ' · ') : '') + (scheduleTeam ? (scheduleTeam + ' · ') : '') + (number ? (prefix + ' ' + number) : (prefix + ' 미지정')) + (displayName ? ' · ' + displayName : '') + (displayAff ? (' · ' + (code === 'KTCC' ? '팀원 ' : '') + displayAff) : '') + (hideIdentity ? ' · 블라인드' : '') + (evaluationCompleted ? ' · ✓ 평가완료' : '')
     };
     if (code === 'IKRC' && hideIdentity) {
       return {
