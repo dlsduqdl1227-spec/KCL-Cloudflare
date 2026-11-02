@@ -54,6 +54,7 @@ try {
   await page.evaluate(a=>{actor=a;document.getElementById('loginCard').classList.add('hidden');document.getElementById('main').classList.remove('hidden');loadRegistry();},api.actor);
   await page.waitForFunction(()=>document.querySelectorAll('#partTable [data-edit-part]').length===10);
   assert.match(await page.locator('#partTable').innerText(),/김다정/);
+  assert.equal(await page.locator('#participant-bulk-prelim-tools').isVisible(),false);
   assert.doesNotMatch(await page.locator('#partTable').innerText(),/최준호|예선만 참가/);
   await page.locator('#partTable [data-edit-part]').first().click();
   assert.equal(await page.locator('#mNo').inputValue(),'100','round-specific table numbers must not overwrite original participant IDs');
@@ -63,6 +64,7 @@ try {
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),10);
   assert.match(await page.locator('#partTable').innerText(),/최준호/);
   await page.locator('#kbc-roster-all').click();
+  assert.equal(await page.locator('#participant-bulk-prelim-tools').isVisible(),true);
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),21);
   await page.locator('#kbc-roster-final').click();
   await page.waitForFunction(()=>document.getElementById('kbc-final-roster').textContent.includes('본선 평가 0/20명'));
