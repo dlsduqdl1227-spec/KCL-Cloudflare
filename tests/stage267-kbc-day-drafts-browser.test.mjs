@@ -67,7 +67,7 @@ try {
   assert.equal(await page.locator('#participant-bulk-prelim-tools').isVisible(),true);
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),21);
   await page.locator('#kbc-roster-final').click();
-  await page.waitForFunction(()=>document.getElementById('kbc-final-roster').textContent.includes('본선 평가 0/20명'));
+  await page.waitForFunction(()=>document.querySelectorAll('#kbc-final-choices input').length===20);
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),0);
   await page.locator('#kbc-roster-day1').click();
   await page.screenshot({path:'tmp/stage267-qa/kbc-roster-mobile.png'});

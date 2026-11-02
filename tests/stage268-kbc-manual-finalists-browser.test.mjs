@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {createRpcFixture} from './helpers/rpc-fixture.mjs';
+import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {seedKbcTimetable} from './helpers/kbc-timetable-fixture.mjs';
+const api=await createRpcFixture(),qa=await createBrowserFixture({apiHandler:api.handle});
+fs.mkdirSync('tmp/stage268-qa',{recursive:true});
+try{
+ await seedKbcTimetable(api);
+ const page=await qa.page(390,950);await page.goto(qa.origin+'/registry/?kbcView=final');
+ await page.evaluate(a=>{actor=a;document.getElementById('loginCard').classList.add('hidden');document.getElementById('main').classList.remove('hidden');loadRegistry();},api.actor);
+ await page.waitForFunction(()=>document.querySelectorAll('#kbc-final-choices input').length===20);
+ assert.doesNotMatch(await page.locator('#kbc-final-choices').innerText(),/예선만 참가/);
+ const choice=()=>page.locator('#kbc-final-choices input');
+ async function choose(index,checked){const response=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='setKbcFinalistSelection');await choice().nth(index).setChecked(checked);assert.equal((await(await response).json()).success,true);await page.waitForFunction(()=>!kbcFinalSaving_);}
+ await choose(0,true);await choose(1,true);
+ assert.equal(api.db.prepare("SELECT COUNT(*) n FROM participants WHERE final_cup_no<>''").get().n,2);
+ assert.match(await page.locator('#kbc-final-save-status').innerText(),/즉시 반영/);
+ assert.equal((await inspectPage(page)).pageOverflow,false);
+ await page.screenshot({path:'tmp/stage268-qa/manual-finals-mobile.png'});
+ await api.rpc('updateCompetitionAdminSettings',{code:'KBC',currentRound:'결선'},api.actor);
+ const judge=await qa.page(390,950);await judge.goto(qa.origin+'/assessment/');
+ await judge.evaluate(a=>{_judge=a;_selComp={code:'KBC',name:'KBC',currentRound:'결선',isActive:true};startKbc();},api.actor);
+ await judge.waitForFunction(()=>participantListForCode_('KBC').length===2);
+ await judge.locator('#kbc-participant-select').selectOption('0');
+ await judge.locator('#kbc-comment').fill('원래 선수의 의견 보존');
+ await judge.evaluate(()=>{document.getElementById('kbc-presentation').value='4.2';kclSaveActiveEvalDraftNow_(true);});
+ const oldKey=await judge.evaluate(()=>kclDraftKey_('KBC'));
+ await choose(0,false);await choose(2,true);
+ const changed=await api.rpc('getParticipantAssignments','KBC',api.actor);
+ await judge.evaluate(res=>applyLiveParticipantAssignments_('KBC',{...res,participantChanged:true}),changed);
+ assert.equal(await judge.locator('#kbc-comment').inputValue(),'원래 선수의 의견 보존','live roster changes never erase in-progress content');
+ await judge.locator('#kbc-participant-select').selectOption('0');
+ assert.equal(await judge.locator('#kbc-name').inputValue(),'우희영');
+ assert.equal(await judge.locator('#kbc-comment').inputValue(),'','reused final number must not inherit another entrant comment');
+ assert.equal(await judge.locator('#kbc-presentation').inputValue(),'3');
+ assert.notEqual(await judge.evaluate(()=>kclDraftKey_('KBC')),oldKey);
+ assert.equal(await judge.evaluate(key=>JSON.parse(localStorage.getItem(key)).form['kbc-comment'].value,oldKey),'원래 선수의 의견 보존');
+ await judge.locator('#kbc-comment').fill('새 선수 독립 의견');await judge.evaluate(()=>kclSaveActiveEvalDraftNow_(true));
+ await judge.reload();await judge.evaluate(a=>{_judge=a;_selComp={code:'KBC',name:'KBC',currentRound:'결선',isActive:true};startKbc();},api.actor);
+ await judge.waitForFunction(()=>document.getElementById('kbc-comment').value==='새 선수 독립 의견');
+ await page.setViewportSize({width:1440,height:1000});assert.equal((await inspectPage(page)).pageOverflow,false);
+ assert.deepEqual(page.qaErrors,[]);assert.deepEqual(judge.qaErrors,[]);
+ console.log('Stage268 browser: mobile/main-only checkboxes save immediately, direct final tab, live judge list changes preserve drafts, reused numbers isolate entrant comments/scores and reload works.');
+}finally{await qa.close();api.close();}

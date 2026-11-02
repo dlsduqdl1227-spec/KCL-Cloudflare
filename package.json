@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:kbc-manual-finalists": "node tests/stage268-kbc-manual-finalists.test.mjs && node tests/stage268-kbc-manual-finalists-browser.test.mjs",
+    "test:bulk-judge-assignments": "node tests/stage269-bulk-operator-assignments.test.mjs && node tests/stage269-bulk-operator-browser.test.mjs",
     "test:kbc-timetable": "node tests/stage267-kbc-timetable-isolation.test.mjs && node tests/stage267-kbc-day-drafts-browser.test.mjs",
     "test:final-audit": "node tests/stage266-kbc-final-assignment-audit.test.mjs && node tests/stage261-kcac-four-head-panel.test.mjs && node tests/stage261-kcac-panel-browser.test.mjs",
     "test:kbc-main-days": "node tests/stage264-kbc-main-days.test.mjs && node tests/stage264-kbc-main-days-browser.test.mjs",

@@ -59,6 +59,13 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
 #kbc-roster-tools [role="tab"][aria-selected="true"]{background:#fff;color:#111;border-color:#fff}
 #participant-bulk-prelim-tools.hidden{display:none!important}
 #kbc-timetable-plan ol,#kbc-final-roster ol{padding-left:22px;line-height:1.8;overflow-wrap:anywhere}
+#kbc-final-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.kbc-final-choice{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #444;border-radius:10px;min-height:64px;cursor:pointer;color:#eee}
+.kbc-final-choice:has(input:checked){border-color:#79d8b3;background:#13251e}
+.kbc-final-choice input{width:24px;height:24px;flex:none;accent-color:#79d8b3}
+.kbc-final-choice span{min-width:0;overflow-wrap:anywhere;line-height:1.6}
+.kbc-final-choice small{display:block;color:#aaa}
+@media(max-width:600px){#kbc-final-choices{grid-template-columns:1fr}}
 @media(max-width:520px){#kbc-roster-tools [role="tablist"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
@@ -292,9 +299,13 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
         </div>
         <div class="bulk-date-tools">
           <label class="operator-select-all"><input id="operatorSelectAll" type="checkbox" onchange="toggleAllVisibleOperators_(this.checked)">현재 목록 전체 선택</label>
-          <label class="form-field date-field"><span class="field-label">일괄 심사 적용일</span><input id="bulkOperatorDate" type="date" title="선택 계정에 추가할 심사 적용일" onclick="openDatePicker_(this)"></label>
-          <button class="btn secondary small" onclick="applyBulkOperatorDate_()">선택 계정 날짜 저장</button>
+          <label class="form-field date-field"><span class="field-label">변경할 심사 적용일</span><input id="bulkOperatorDate" type="date" title="선택 계정의 심사 적용일" onclick="openDatePicker_(this)"></label>
+          <button class="btn small" onclick="prepareBulkOperatorUpdate_('date')">선택 계정 날짜 변경</button>
+          <button class="btn secondary small" onclick="prepareBulkOperatorUpdate_('clearTeam')">선택 계정 조 배정 해제</button>
         </div>
+        <div id="bulkOperatorConfirm" class="mode-note hidden" role="status"></div>
+        <div id="bulkOperatorResult" class="msg" aria-live="polite"></div>
+        <details class="muted-mini"><summary>기존 날짜를 유지하고 다른 날짜 권한 추가</summary><button class="btn secondary small" onclick="applyBulkOperatorDate_()">선택 계정 날짜 권한 추가</button></details>
         <div class="operator-table-wrap"><table class="table operator-table" id="operatorTable"></table></div>
       </div>
     </section>
@@ -702,6 +713,24 @@ function applyMobSchedulePreset(){
     if(res&&res.success)loadOperators();
   });
 }
+var bulkOperatorSaving_=false;
+function prepareBulkOperatorUpdate_(operation){
+  if(bulkOperatorSaving_)return;
+  var code=selectedCompetitionCode_(),date=document.getElementById('bulkOperatorDate').value;
+  var ids=Array.from(document.querySelectorAll('#operatorTable [data-bulk-op]:checked')).map(function(el){return Number(el.dataset.bulkOp);});
+  if(!ids.length){msg('bulkOperatorResult','변경할 심사위원을 체크해주세요.',true);return;}
+  if(operation==='date'&&!date){msg('bulkOperatorResult','변경할 날짜를 선택해주세요.',true);return;}
+  var expected=operatorRows.filter(function(row){return ids.includes(Number(row.rowIndex));}).map(function(row){return {rowIndex:row.rowIndex,access:row.access,role:row.role,teamGroup:row.teamGroup,effectiveDate:row.effectiveDate};});
+  var area=document.getElementById('bulkOperatorConfirm');area.textContent=code+' 선택 '+ids.length+'건의 '+(operation==='date'?'심사 날짜를 '+date+'로 변경합니다. 기존 날짜 권한이 이동합니다.':'조 배정만 해제합니다. 계정과 역할은 유지됩니다.')+' 다른 대회 권한과 기존 평가 기록은 유지됩니다.';setHidden_('bulkOperatorConfirm',false);
+  var yes=document.createElement('button');yes.className='btn small';yes.type='button';yes.textContent='변경 적용';yes.onclick=function(){
+    if(bulkOperatorSaving_)return;bulkOperatorSaving_=true;yes.disabled=true;cancel.disabled=true;
+    msg('bulkOperatorResult','저장 중...');
+    function finish(res){bulkOperatorSaving_=false;setHidden_('bulkOperatorConfirm',true);msg('bulkOperatorResult',res&&res.message||'저장을 확인하지 못했습니다. 목록을 새로고침해 확인해주세요.',!(res&&res.success),!!(res&&res.success));loadOperators();}
+    rpc('bulkUpdateOperatorAssignments',[{competitionCode:code,operation:operation,effectiveDate:date,rowIndexes:ids,expected:expected},actor],finish,function(){finish(null);});
+  };
+  var cancel=document.createElement('button');cancel.className='btn secondary small';cancel.type='button';cancel.textContent='취소';cancel.onclick=function(){setHidden_('bulkOperatorConfirm',true);};
+  var actions=document.createElement('div');actions.className='btnrow';actions.appendChild(yes);actions.appendChild(cancel);area.appendChild(actions);
+}
 var operatorListRequest_ = 0;
 function loadOperators(){var request=++operatorListRequest_;rpc('listOperators',['ALL',actor],function(res){if(request!==operatorListRequest_)return;if(!res||!res.success||!Array.isArray(res.operators)){alert((res&&res.message)||'권한 목록 조회 실패. 기존 목록은 유지됩니다.');return;}operatorRows=res.operators;renderOperatorTables();})}
 function bindOperatorActionButtons(table){if(!table)return;
@@ -711,7 +740,7 @@ function bindOperatorActionButtons(table){if(!table)return;
 }
 function renderOperatorTables(){renderSelectedOperatorsTable();renderAdminTable();}
 function renderSelectedOperatorsTable(){var code=(document.getElementById('comp')&&document.getElementById('comp').value)||'';var rows=(operatorRows||[]).filter(operatorVisibleForSelectedComp);var el=document.getElementById('operatorCount');if(el)el.textContent=code+' 심사위원·운영진 '+rows.length+'건';var html='<tr><th>선택</th><th>순서</th><th>유형</th><th>이름</th><th>소속</th><th>연락처</th><th>역할/팀</th><th>적용일</th><th>관리</th></tr>';html+=rows.map(function(r,i){var date=r.effectiveDate||'';var identity=String(r.name||'').trim().toLowerCase()+'|'+String(r.phone||'').replace(/\D/g,'');if(identity==='|')identity='row:'+String(r.rowIndex);var select='<input class="operator-select" type="checkbox" data-bulk-op="'+Number(r.rowIndex)+'" data-op-identity="'+escAttr(identity)+'" data-op-date="'+escAttr(date)+'" aria-label="'+escAttr((r.name||'계정')+' 선택')+'">';var roleTeam=[roleLabelForRow(r),r.teamGroup].filter(Boolean).join(' / ');var dateHtml=esc(date||'상시');var actions='<button class="btn secondary small" data-copy-date-op="'+Number(r.rowIndex)+'">날짜복제</button><button class="btn secondary small" data-edit-op="'+Number(r.rowIndex)+'">수정</button><button class="btn danger small" data-del-op="'+Number(r.rowIndex)+'" data-del-name="'+escAttr(r.name||'계정')+'">삭제</button>';return '<tr><td>'+select+'</td><td>'+(i+1)+'</td><td>'+esc(String(r.accountType||r.type||''))+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>'+esc(roleTeam)+'</td><td>'+dateHtml+'</td><td><div class="table-actions">'+actions+'</div></td></tr>';}).join('');var table=document.getElementById('operatorTable');if(table){table.innerHTML=html;bindOperatorActionButtons(table);}var all=document.getElementById('operatorSelectAll');if(all)all.checked=false;}
-function toggleAllVisibleOperators_(checked){var inputs=Array.prototype.slice.call(document.querySelectorAll('#operatorTable [data-bulk-op]'));inputs.forEach(function(input){input.checked=false;});if(!checked)return;var selected={};inputs.sort(function(a,b){return (a.getAttribute('data-op-date')?'1':'0').localeCompare(b.getAttribute('data-op-date')?'1':'0');}).forEach(function(input){var key=input.getAttribute('data-op-identity')||input.getAttribute('data-bulk-op');if(selected[key])return;selected[key]=true;input.checked=true;});}
+function toggleAllVisibleOperators_(checked){var selected={};document.querySelectorAll('#operatorTable [data-bulk-op]').forEach(function(input){var key=input.getAttribute('data-bulk-op');input.checked=!!checked&&!selected[key];selected[key]=true;});}
 function applyBulkOperatorDate_(){var code=String((document.getElementById('comp')||{}).value||'').toUpperCase();var date=(document.getElementById('bulkOperatorDate')||{}).value||'';var ids=Array.prototype.map.call(document.querySelectorAll('#operatorTable [data-bulk-op]:checked'),function(input){return Number(input.getAttribute('data-bulk-op'));}).filter(Boolean);if(!date){alert('심사 적용일을 먼저 선택해주세요.');return;}if(!ids.length){alert('날짜를 적용할 계정을 한 명 이상 체크해주세요.');return;}if(!confirm(code+' 선택 계정 '+ids.length+'명에 '+date+' 심사 권한을 저장할까요?\n기존 권한은 유지되고 선택 날짜 권한이 추가됩니다.'))return;msg('opManualMsg','날짜별 심사 권한을 저장하는 중입니다...');rpc('bulkApplyOperatorEffectiveDate',[{competitionCode:code,effectiveDate:date,rowIndexes:ids},actor],function(res){msg('opManualMsg',res.message||'완료',!res.success,res.success);if(res.success)loadOperators();});}
 function renderAdminTable(){var rows=(operatorRows||[]).filter(operatorIsAdminRow);var count=document.getElementById('adminCount');if(count)count.textContent='전체 관리자 '+rows.length+'명';var html='<tr><th>순서</th><th>이름</th><th>소속</th><th>연락처</th><th>권한</th><th>관리</th></tr>';html+=rows.map(function(r,i){return '<tr><td>'+(i+1)+'</td><td>'+esc(r.name)+'</td><td>'+esc(r.affiliation)+'</td><td>'+esc(r.phone)+'</td><td>전체 대회</td><td><div class="table-actions"><button class="btn secondary small" data-edit-admin="'+Number(r.rowIndex)+'">수정</button><button class="btn danger small" data-del-op="'+Number(r.rowIndex)+'" data-del-name="'+escAttr(r.name||'관리자')+'">삭제</button></div></td></tr>';}).join('');var table=document.getElementById('adminTable');if(!table)return;table.innerHTML=html;Array.prototype.forEach.call(table.querySelectorAll('[data-edit-admin]'),function(btn){btn.onclick=function(){editAdmin(Number(this.getAttribute('data-edit-admin')));};});Array.prototype.forEach.call(table.querySelectorAll('[data-del-op]'),function(btn){btn.onclick=function(){deleteOperator(Number(this.getAttribute('data-del-op')),this.getAttribute('data-del-name')||'관리자');};});}
 function ensureOperatorRoleOption_(value){var role=document.getElementById('opRole');if(!role)return;if(value && !Array.prototype.some.call(role.options,function(o){return o.value===value;})){var opt=document.createElement('option');opt.value=value;opt.textContent=value;role.appendChild(opt);}}
@@ -856,7 +885,7 @@ function participantNaturalCompare_(left,right){left=String(left==null?'':left).
 function participantSortLabel_(mode){return ({'number-asc':'참가번호 낮은 순','number-desc':'참가번호 높은 순','schedule':'예선 일정 순','name':'선수명 가나다 순','registered':'등록 순'})[mode]||'참가번호 낮은 순';}
 function sortParticipantRowsForRegistry_(code,rows,mode){code=String(code||'').toUpperCase();mode=String(mode||'number-asc');return (rows||[]).slice().sort(function(a,b){var aCode=String(a.competitionCode||code||'').toUpperCase(),bCode=String(b.competitionCode||code||'').toUpperCase();if(aCode!==bCode)return participantNaturalCompare_(aCode,bCode);var cmp=0;if(mode==='registered')cmp=Number(a.rowIndex||0)-Number(b.rowIndex||0);else if(mode==='name')cmp=participantNaturalCompare_(a.name||a.teamName,b.name||b.teamName);else if(mode==='schedule'){cmp=participantNaturalCompare_(participantPrelimDate_(a),participantPrelimDate_(b));if(!cmp)cmp=participantOperatingDaySort_(a)-participantOperatingDaySort_(b);if(!cmp)cmp=participantNaturalCompare_(a.performanceOrder||(a.extra||{})['경연순서'],b.performanceOrder||(b.extra||{})['경연순서']);}else{var aNo=participantPrimaryNumber_(aCode,a),bNo=participantPrimaryNumber_(bCode,b);cmp=participantNaturalCompare_(aNo,bNo);if(mode==='number-desc'&&String(aNo||'').trim()&&String(bNo||'').trim())cmp=-cmp;}if(!cmp)cmp=participantNaturalCompare_(participantPrimaryNumber_(aCode,a),participantPrimaryNumber_(bCode,b));if(!cmp)cmp=Number(a.rowIndex||0)-Number(b.rowIndex||0);return cmp;});}
 function participantSelectedIds_(){var selected={};Array.prototype.forEach.call(document.querySelectorAll('#partTable [data-schedule-part]:checked'),function(input){selected[String(input.getAttribute('data-schedule-part'))]=true;});return selected;}
-var kbcRosterView_='1', kbcRosterPlanRequest_=0;
+var kbcRosterView_=new URLSearchParams(location.search).get('kbcView')==='final'?'final':'1', kbcRosterPlanRequest_=0, kbcFinalSelection_=null, kbcFinalSaving_=false;
 function setKbcRosterView_(view){kbcRosterView_=view;renderParticipantList_('KBC',{});if(view==='final')loadKbcFinalRoster_();}
 function kbcRosterRows_(rows){
   if(kbcRosterView_==='all')return rows;
@@ -895,15 +924,45 @@ function loadKbcTimetablePlan_(){
   });
 }
 function loadKbcFinalRoster_(){
-  var request=++kbcRosterPlanRequest_,area=document.getElementById('kbc-final-roster');area.textContent='본선 통합 순위를 확인하는 중...';
-  rpc('getKbcFinalistPlan',[actor],function(res){
+  if(kbcFinalSaving_)return;
+  var request=++kbcRosterPlanRequest_,area=document.getElementById('kbc-final-roster');area.textContent='본선 선수 명단을 불러오는 중...';
+  rpc('getKbcFinalistSelection',[actor],function(res){
     if(request!==kbcRosterPlanRequest_||selectedCompetitionCode_()!=='KBC'||kbcRosterView_!=='final')return;
-    area.textContent=res.message||'';if(!res.success)return;
-    if((res.assignedFinalists||[]).length){area.textContent='결선 배정 '+res.assignedFinalists.length+'명 · 기존 배정 유지';return;}
-    var title=document.createElement('p');title.textContent='결선 진출 예상 · 본선 평가 '+res.evaluatedParticipantCount+'/'+res.mainParticipantCount+'명';area.appendChild(title);
-    var list=document.createElement('ol');(res.candidates||[]).slice().sort(function(a,b){return Number(a.finalNumber)-Number(b.finalNumber);}).forEach(function(item){var li=document.createElement('li');li.textContent='결선 '+item.finalNumber+'번 예정 · '+item.name+' · 본선 '+item.rank+'위 ('+item.score+'점)';list.appendChild(li);});area.appendChild(list);
-    if(res.ready){var button=document.createElement('button');button.type='button';button.className='btn';button.textContent='본선 마감 · 상위 6명 결선 배정';button.onclick=function(){if(!confirm('양일 본선 입력이 모두 끝났나요? 현재 상위 6명을 역순으로 결선에 배정합니다.'))return;button.disabled=true;rpc('assignKbcFinalists',[{revision:res.revision},actor],function(result){area.textContent=result.message||'';if(result.success){loadParticipants();loadKbcFinalRoster_();}else button.disabled=false;});};area.appendChild(button);}
-  });
+    renderKbcFinalSelection_(res);
+  },function(){area.textContent='명단을 불러오지 못했습니다. 결선 탭을 다시 눌러주세요. 기존 배정은 유지됩니다.';});
+}
+function renderKbcFinalSelection_(res){
+  var area=document.getElementById('kbc-final-roster');area.textContent=!res.success||!res.ready?(res.message||''):'';if(!res.success)return;
+  kbcFinalSelection_=res;
+  var title=document.createElement('h3');title.textContent='본선 선수에서 결선 진출자 선택 · '+res.selectedCount+'/6명';area.appendChild(title);
+  var status=document.createElement('p');status.id='kbc-final-save-status';status.setAttribute('aria-live','polite');status.textContent='체크·해제하면 바로 저장됩니다.';area.appendChild(status);
+  var list=document.createElement('div');list.id='kbc-final-choices';
+  (res.choices||[]).forEach(function(item){
+    var label=document.createElement('label');label.className='kbc-final-choice';
+    var check=document.createElement('input');check.type='checkbox';check.dataset.finalParticipant=String(item.participantId);check.checked=!!item.finalNumber;check.disabled=!res.ready||item.locked;
+    var text=document.createElement('span');text.textContent='본선 '+item.mainNumber+'번 · '+item.name;
+    var detail=document.createElement('small');detail.textContent=[item.affiliation,item.finalNumber?'결선 '+item.finalNumber+'번':'미선택',item.locked?'평가 기록 있음 · 배정 유지':''].filter(Boolean).join(' · ');text.appendChild(detail);
+    check.onchange=function(){saveKbcFinalSelection_();};label.appendChild(check);label.appendChild(text);list.appendChild(label);
+  });area.appendChild(list);
+}
+function saveKbcFinalSelection_(){
+  if(kbcFinalSaving_||!kbcFinalSelection_)return;
+  var ids=Array.from(document.querySelectorAll('#kbc-final-choices input:checked')).map(function(el){return Number(el.dataset.finalParticipant);});
+  if(ids.length>6){renderKbcFinalSelection_(kbcFinalSelection_);document.getElementById('kbc-final-save-status').textContent='최대 6명까지 선택할 수 있습니다.';return;}
+  kbcFinalSaving_=true;
+  document.querySelectorAll('#kbc-final-choices input').forEach(function(el){el.disabled=true;});
+  document.getElementById('kbc-final-save-status').textContent='저장 중...';
+  function finish(res){
+    kbcFinalSaving_=false;
+    if(res&&res.success){
+      if(selectedCompetitionCode_()==='KBC'&&kbcRosterView_==='final'){renderKbcFinalSelection_(res);document.getElementById('kbc-final-save-status').textContent=res.message;}
+      loadParticipants();
+    }else{
+      msg('manualMsg',res&&res.message||'저장을 확인하지 못했습니다. 최신 명단을 다시 불러옵니다.',true);
+      if(selectedCompetitionCode_()==='KBC'&&kbcRosterView_==='final')loadKbcFinalRoster_();
+    }
+  }
+  rpc('setKbcFinalistSelection',[{participantIds:ids,revision:kbcFinalSelection_.revision},actor],finish,function(){finish(null);});
 }
 function applyParticipantSort_(){var select=document.getElementById('participantSortMode');participantSortMode=(select&&select.value)||'number-asc';var code=document.getElementById('comp').value||'ALL';var selected=participantSelectedIds_();renderParticipantList_(code,selected);var all=document.getElementById('participantSelectAll');if(all)all.checked=false;}
 function participantListHtml_(code,rows){code=String(code||'').toUpperCase();rows=rows||[];var ktcc=code==='KTCC';var nameLabel=ktcc?'팀명':'선수명';var affiliationLabel=ktcc?'팀원':'소속';var numberLabel=ktcc?'팀번호':'참가번호';var header=participantTableHeader_([[nameLabel,'cell-name'],[affiliationLabel,'cell-affiliation'],[numberLabel,'cell-number'],['연락처','cell-phone'],[code==='KBC'?'라운드·일정':'예선 일정','cell-schedule'],['관리','cell-actions']]);var body=rows.map(function(r){var ex=r.extra||{};var rowCode=String(r.competitionCode||code).toUpperCase();var isTeam=rowCode==='KTCC';var rowNameLabel=isTeam?'팀명':'선수명';var rowAffiliationLabel=isTeam?'팀원':'소속';var rowNumberLabel=isTeam?'팀번호':'참가번호';var name=isTeam?(r.teamName||r.name):(r.name||'');var affiliation=isTeam?ktccTeamMemberLabel_(r):(r.affiliation||ex['팀장 소속']||ex['팀원1소속']||'');var phone=r.phone||ex['팀장 휴대전화']||ex['팀원1연락처']||'';return '<tr>'+participantSelectCell_(r)+participantTextCell_(rowNameLabel,name,'cell-name')+participantTextCell_(rowAffiliationLabel,affiliation,'cell-affiliation')+participantTextCell_(rowNumberLabel,rowCode==='KCR'&&ex.kcrPrelimPending===true?'예선 배정 대기':participantPrimaryNumber_(rowCode,r),'cell-number mono')+participantTextCell_('연락처',phone,'cell-phone mono')+participantTextCell_(code==='KBC'?'라운드·일정':'예선 일정',code==='KBC'?kbcParticipantRoundText_(r):participantPrelimDate_(r),'cell-schedule mono')+participantActionHtml_(r)+'</tr>';}).join('');return header+body;
@@ -950,6 +1009,7 @@ function loadParticipants(){
     participantSortMode=(select&&select.value)||'number-asc';
     renderParticipantList_(code,{});
     if(table)table.setAttribute('aria-busy','false');
+    if(code==='KBC'&&kbcRosterView_==='final'&&!kbcFinalSaving_&&!kbcFinalSelection_)loadKbcFinalRoster_();
     var all=document.getElementById('participantSelectAll');if(all)all.checked=false;
   },function(err){failed((err&&err.message)||'서버 연결을 확인한 후 새로고침해주세요.');});
 }

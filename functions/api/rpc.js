@@ -636,6 +636,7 @@ async function dispatch(action, args, env, request) {
     importOperators: () => importOperators(env, args[0], args[1]),
     applyOperatorDateSchedule: () => applyOperatorDateSchedule(env, args[0], args[1]),
     bulkApplyOperatorEffectiveDate: () => bulkApplyOperatorEffectiveDate(env, args[0], args[1]),
+    bulkUpdateOperatorAssignments: () => bulkUpdateOperatorAssignments(env, args[0], args[1]),
     saveRegistrySchedule: () => saveRegistrySchedule(env, args[0], args[1]),
     deleteRegistrySchedule: () => deleteRegistrySchedule(env, args[0], args[1]),
     assignRegistrySchedule: () => assignRegistrySchedule(env, args[0], args[1]),
@@ -659,6 +660,8 @@ async function dispatch(action, args, env, request) {
     deleteReviewRow: () => deleteReviewRow(env, args[0], args[1], args[3] || args[2]),
     getKbcFinalistPlan: () => getKbcFinalistPlan(env, args[0]),
     assignKbcFinalists: () => assignKbcFinalists(env, args[0], args[1]),
+    getKbcFinalistSelection: () => getKbcFinalistSelection(env, args[0]),
+    setKbcFinalistSelection: () => setKbcFinalistSelection(env, args[0], args[1]),
     getKbcMainTimetablePlan: () => getKbcMainTimetablePlan(env, args[0]),
     applyKbcMainTimetable: () => applyKbcMainTimetable(env, args[0], args[1]),
     getRanking: () => getRanking(env, args[0], args[1], args[2]),
@@ -1617,19 +1620,16 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
   const currentOptions = parseJson(current.option_settings, {});
   const nextOptions = Object.assign({}, currentOptions, payload.optionSettings && typeof payload.optionSettings === 'object' ? payload.optionSettings : {});
   if (code === 'KBC') {
+    if(currentOptions.kbcFinalSelectionMode==='manual')nextOptions.kbcFinalSelectionMode='manual';
     const rawDay = safeStr(nextOptions.kbcMainDay);
     if (rawDay && !kbcMainDay_(rawDay)) return {success:false,message:'본선 1일차 또는 본선 2일차를 선택해주세요.'};
     if (rawDay) nextOptions.kbcMainDay = kbcMainDay_(rawDay);
-    // Advancing the operating round is the explicit end-of-main action. Never
-    // mutate assignments from a ranking GET or while main judging is incomplete.
+    // Choosing a round must never choose or overwrite the finalist roster.
     if (nextRound === '결선' && current.current_round === '본선') {
       const assigned = await env.DB.prepare("SELECT COUNT(*) n FROM participants WHERE competition_code='KBC' AND COALESCE(final_cup_no,'')<>''").first();
       const mains = await env.DB.prepare("SELECT COUNT(*) n FROM participants WHERE competition_code='KBC' AND COALESCE(main_cup_no,'')<>''").first();
       if (!Number(assigned && assigned.n) && Number(mains && mains.n)) {
-        const plan = await getKbcFinalistPlan(env, actorArg);
-        if (!plan.success || !plan.ready) return {success:false,message:plan.message || '본선 결과를 확인한 뒤 결선으로 전환해주세요.'};
-        const promoted = await assignKbcFinalists(env, {revision:plan.revision}, actorArg);
-        if (!promoted.success) return promoted;
+        return {success:false,message:'선수등록의 결선 탭에서 본선 선수 중 결선 진출자를 먼저 선택해주세요.'};
       }
     }
   }
@@ -1698,6 +1698,11 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
   };
 }
 
+function actorTeamForCompetition_(actor, code) {
+  const map=actor&&actor.teamMap||{};
+  if(Object.prototype.hasOwnProperty.call(map,code)||Object.prototype.hasOwnProperty.call(actor&&actor.roleMap||{},code))return safeStr(map[code]);
+  return safeStr(actor&&(actor.teamGroup||actor.team));
+}
 function registryScheduleText_(value, maxLength = 80) {
   return safeStr(value).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 }
@@ -2782,6 +2787,63 @@ async function bulkApplyOperatorEffectiveDate(env, payload, actorArg) {
     updated
   };
 }
+async function bulkUpdateOperatorAssignments(env, payload, actorArg) {
+  const code=safeStr(payload&&payload.competitionCode).toUpperCase();
+  const auth=await requireManageActorForCode_(env,actorArg,code);
+  if(!auth.ok)return auth.res;
+  if(!COMPETITION_CODES.includes(code))return {success:false,message:'대회를 선택해주세요.'};
+  const operation=safeStr(payload&&payload.operation);
+  const date=normalizeEffectiveDate_(payload&&payload.effectiveDate);
+  if(!['date','clearTeam'].includes(operation)||(operation==='date'&&!date))return {success:false,message:'변경할 심사 날짜 또는 조 배정 해제를 확인해주세요.'};
+  const ids=Array.isArray(payload.rowIndexes)?payload.rowIndexes.map(Number):[];
+  if(!ids.length||ids.length>200||new Set(ids).size!==ids.length||ids.some(id=>!Number.isInteger(id)||id<=0))return {success:false,message:'변경할 계정을 1~200개 선택해주세요.'};
+  const rows=(await env.DB.prepare('SELECT * FROM operators ORDER BY id').all()).results||[];
+  const selected=rows.filter(row=>ids.includes(row.id));
+  if(selected.length!==ids.length||selected.some(row=>operatorIsAdminRow_(row)||!(accessCodes_(row.access).includes(code)||accessCodes_(row.access).includes('ALL'))))return {success:false,message:'다른 대회 계정 또는 관리자 계정은 변경할 수 없습니다. 목록을 다시 확인해주세요.'};
+  const expected=Array.isArray(payload.expected)?payload.expected:[];
+  if(selected.some(row=>{const old=expected.find(e=>Number(e.rowIndex)===row.id);return !old||safeStr(old.access)!==safeStr(row.access)||safeStr(old.role)!==safeStr(row.role)||safeStr(old.teamGroup)!==safeStr(row.team_group)||safeStr(old.effectiveDate)!==safeStr(row.effective_date);}))return {success:false,stale:true,message:'선택한 권한이 다른 화면에서 변경됐습니다. 목록을 새로고침한 뒤 다시 선택해주세요.'};
+  const targets=new Set(),updates=[],inserts=[],stamp=nowIso();
+  for(const row of selected){
+    const targetDate=operation==='date'?date:safeStr(row.effective_date);
+    const key=operatorIdentityKey_(row.name,row.phone)+'|'+targetDate;
+    if(targets.has(key)||rows.some(other=>other.id!==row.id&&operatorIdentityKey_(other.name,other.phone)===operatorIdentityKey_(row.name,row.phone)&&safeStr(other.effective_date)===targetDate&&(accessCodes_(other.access).includes(code)||accessCodes_(other.access).includes('ALL'))))return {success:false,message:(row.name||'선택 계정')+'의 해당 날짜 권한이 중복됩니다. 날짜별 역할을 확인하고 한 행씩 선택해주세요.'};
+    targets.add(key);
+    const team=operation==='clearTeam'?'':safeStr(row.team_group);
+    if(targetDate===safeStr(row.effective_date)&&team===safeStr(row.team_group))continue;
+    const access=accessCodes_(row.access),remaining=(access.includes('ALL')?COMPETITION_CODES:access).filter(c=>c!==code);
+    if(remaining.length){
+      // Shared accounts are split only for this competition; other competitions
+      // keep their dates, roles and teams, and historical scores are untouched.
+      updates.push({id:row.id,access:normalizeAccess_(remaining.join(',')),team:safeStr(row.team_group),date:safeStr(row.effective_date)});
+      inserts.push({...row,access:code,team_group:team,effective_date:targetDate});
+    }else updates.push({id:row.id,access:code,team,date:targetDate});
+  }
+  if(!updates.length)return {success:true,message:'이미 선택한 설정으로 저장되어 있습니다.',applied:0};
+  const guardToken='BULK_OPERATOR_GUARD:'+crypto.randomUUID();
+  const statements=[env.DB.prepare(`WITH snapshot AS (SELECT value FROM json_each(?))
+    INSERT INTO sessions(token,kind,payload_json,expires_at,created_at)
+    SELECT ?,CASE WHEN (SELECT COUNT(*) FROM operators)=(SELECT COUNT(*) FROM snapshot)
+      AND NOT EXISTS(SELECT 1 FROM snapshot s LEFT JOIN operators o ON o.id=json_extract(s.value,'$.id') WHERE o.id IS NULL
+      OR o.access IS NOT json_extract(s.value,'$.access') OR o.team_group IS NOT json_extract(s.value,'$.team_group')
+      OR o.effective_date IS NOT json_extract(s.value,'$.effective_date') OR o.updated_at IS NOT json_extract(s.value,'$.updated_at')
+      OR o.name IS NOT json_extract(s.value,'$.name') OR o.phone IS NOT json_extract(s.value,'$.phone')
+      OR o.role IS NOT json_extract(s.value,'$.role') OR o.account_type IS NOT json_extract(s.value,'$.account_type'))
+      THEN 'BULK_OPERATOR_GUARD' ELSE NULL END,'{}',?,?`).bind(JSON.stringify(rows),guardToken,stamp,stamp),
+    env.DB.prepare(`WITH plan AS(SELECT value FROM json_each(?)) UPDATE operators SET
+      access=(SELECT json_extract(value,'$.access') FROM plan WHERE json_extract(value,'$.id')=operators.id),
+      team_group=(SELECT json_extract(value,'$.team') FROM plan WHERE json_extract(value,'$.id')=operators.id),
+      effective_date=(SELECT json_extract(value,'$.date') FROM plan WHERE json_extract(value,'$.id')=operators.id),updated_at=?
+      WHERE id IN(SELECT json_extract(value,'$.id') FROM plan)`).bind(JSON.stringify(updates),stamp)];
+  if(inserts.length)statements.push(env.DB.prepare(`INSERT INTO operators(account_type,name,affiliation,phone,access,team_group,role,effective_date,created_at,updated_at)
+    SELECT json_extract(value,'$.account_type'),json_extract(value,'$.name'),json_extract(value,'$.affiliation'),json_extract(value,'$.phone'),
+    json_extract(value,'$.access'),json_extract(value,'$.team_group'),json_extract(value,'$.role'),json_extract(value,'$.effective_date'),?,? FROM json_each(?)`).bind(stamp,stamp,JSON.stringify(inserts)));
+  statements.push(env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(guardToken));
+  try{await env.DB.batch(statements);}catch(error){
+    if(/NOT NULL constraint failed: sessions.kind/i.test(String(error&&error.message||error)))return {success:false,stale:true,message:'동시에 변경된 권한이 있어 저장하지 않았습니다. 목록을 새로고침해주세요.'};
+    throw error;
+  }
+  return {success:true,applied:updates.length,message:code+' 선택 '+updates.length+'건 '+(operation==='date'?date+' 심사 날짜 변경':'조 배정 해제')+' 완료 · 기존 평가 기록 유지'};
+}
 function getRegistrationTemplates() {
   // 웹 화면의 CSV 예시는 대회별 정리 양식을 기준으로 제공합니다.
   // 구버전 공통 양식도 alias로 계속 읽을 수 있습니다.
@@ -3117,7 +3179,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const mobPermissionDate = normalizeEffectiveDate_(actor && actor.permissionDate) || koreaDateKey_();
   const mobActiveParticipantDate = code === 'MOB' ? mobActiveParticipantDateFromConfig_(cfg) : '';
   const mobParticipantScopeDate = mobActiveParticipantDate || (mobDatedPermission ? mobPermissionDate : '');
-  const mobActorTeam = safeStr(actor && actor.teamMap && actor.teamMap.MOB || actor && (actor.teamGroup || actor.team));
+  const mobActorTeam = actorTeamForCompetition_(actor,'MOB');
   const scopedRows = code !== 'MOB' || mobManager ? sourceRows : sourceRows.filter(r => {
     const schedule = participantScheduleForRound_(r, currentRound);
     const participantDate = schedule.date;
@@ -4853,7 +4915,7 @@ async function submitScores(env, payload, signature, request = null) {
   const actorRoleMap = auth.actor && auth.actor.roleMap && typeof auth.actor.roleMap === 'object' ? auth.actor.roleMap : {};
   const actorTeamMap = auth.actor && auth.actor.teamMap && typeof auth.actor.teamMap === 'object' ? auth.actor.teamMap : {};
   const actorRole = safeStr(actorRoleMap[initial.code] || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
-  const actorTeam = safeStr(actorTeamMap[initial.code] || (auth.actor && (auth.actor.teamGroup || auth.actor.team)));
+  const actorTeam = Object.prototype.hasOwnProperty.call(actorRoleMap,initial.code) ? safeStr(actorTeamMap[initial.code]) : actorTeamForCompetition_(auth.actor,initial.code);
   const requestedEvaluationCategory = scoreEvaluationCategoryKey_(basePayload.mode || basePayload.evalMode || initial.mode);
   if (initial.code === 'KBC' && requestedEvaluationCategory !== 'competition') {
     return { success:false, message:'KBC는 별도 켈리브레이션 없이 공식 대회평가만 저장합니다. 대회평가 화면에서 다시 제출해주세요.' };
@@ -5075,10 +5137,13 @@ async function submitScores(env, payload, signature, request = null) {
     delete onePayload.finalEvaluationKey;
     if (finalOfficialEvaluation_(x)) {
       if (x.code === 'KBC' && x.round === '결선') {
-        const finalists=(await env.DB.prepare("SELECT final_cup_no FROM participants WHERE competition_code='KBC' AND COALESCE(final_cup_no,'')<>''").all()).results||[];
-        if(finalists.length&&!finalists.some(row=>participantEvaluationCompletionUnitKey_('KBC',row.final_cup_no)===participantEvaluationCompletionUnitKey_('KBC',x.unit))) {
+        const finalists=(await env.DB.prepare("SELECT id,final_cup_no FROM participants WHERE competition_code='KBC' AND COALESCE(final_cup_no,'')<>''").all()).results||[];
+        const manualSelection=parseJson(cfg&&cfg.option_settings,{}).kbcFinalSelectionMode==='manual';
+        const owner=finalists.find(row=>participantEvaluationCompletionUnitKey_('KBC',row.final_cup_no)===participantEvaluationCompletionUnitKey_('KBC',x.unit));
+        if((finalists.length||manualSelection)&&!owner) {
           return {success:false,message:'결선에 배정된 참가자 번호만 평가할 수 있습니다. 선수 선택 목록을 확인해주세요.'};
         }
+        if(manualSelection&&(!owner||Number(basePayload.participantId)!==Number(owner.id)))return {success:false,message:'결선 선수 배정이 변경되었습니다. 작성 내용은 유지됩니다. 선수 목록을 새로고침해 본인 평가 대상을 확인해주세요.'};
       }
       const existing=(await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? AND unit=?').bind(x.code,x.round,x.unit).all()).results || [];
       const finalScope=finalSubmissionScope_(x.code,onePayload,x.role);
@@ -5199,9 +5264,13 @@ async function submitScores(env, payload, signature, request = null) {
     const ikrcOfficialHead = x.code === 'IKRC' && !isCalibrationMode_(x.mode) && isHeadRole_(x.role);
     const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (finalOfficialEvaluation_(x) || ikrcOfficialHead ? '검수완료' : '미검수');
     const insertVerb = !finalOfficialEvaluation_(x) && x.code !== 'KCR' && safeStr(onePayload.clientSubmissionId) ? 'INSERT OR IGNORE' : 'INSERT';
+    // Validate the selected entrant again inside the atomic insert. A roster
+    // change while this request is in flight must never reuse another player's number.
+    const guardKbcFinal = x.code === 'KBC' && x.round === '결선' && finalOfficialEvaluation_(x) && Number(basePayload.participantId)>0;
+    const codeValue = guardKbcFinal ? "CASE WHEN EXISTS(SELECT 1 FROM participants WHERE competition_code='KBC' AND id=? AND final_cup_no=?) THEN ? ELSE NULL END" : '?';
     const insertStatement = env.DB.prepare(`${insertVerb} INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(nowIso(), x.code, x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
+      VALUES (?, ${codeValue}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(nowIso(), ...(guardKbcFinal ? [Number(basePayload.participantId),safeStr(x.unit),x.code] : [x.code]), x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
     if (finalOfficialEvaluation_(x) || x.code === 'IKRC' || x.code === 'KCR' || receiptInfo.token) atomicInsertStatements.push(insertStatement);
     else {
       await insertStatement.run();
@@ -5225,6 +5294,9 @@ async function submitScores(env, payload, signature, request = null) {
     try {
       await env.DB.batch(batchStatements);
     } catch (error) {
+      if (initial.code === 'KBC' && /NOT NULL constraint failed: scores.competition_code/i.test(String(error && error.message || error))) {
+        return {success:false,stale:true,message:'결선 선수 배정이 변경되어 저장하지 않았습니다. 작성 내용은 유지됩니다. 선수 목록을 새로고침해 확인해주세요.'};
+      }
       if (finalOfficialEvaluation_({round:submitRound,mode:initial.mode}) && /UNIQUE constraint|idx_scores_final_evaluation_key/i.test(String(error && error.message || error))) {
         return {success:false,duplicate:true,message:'이미 저장된 본·결선 평가입니다. 중복 저장하지 않았습니다. 수정이 필요하면 반려를 요청해주세요.'};
       }
@@ -7427,6 +7499,73 @@ async function kbcFinalistContext_(env, actorArg) {
   else if(participants.some(row=>safeStr(row.final_cup_no))){ready=false;message='기존 결선 배정이 있습니다. 선수등록에서 배정된 명단을 확인하세요.';}
   const revision=await sha256Hex_(JSON.stringify({participants,scores}));
   return {success:true,ready,message,candidates,revision,participants,scores,mainParticipantCount:mains.length,evaluatedParticipantCount:ranking.length,assignedFinalists:participants.filter(p=>safeStr(p.final_cup_no)).map(p=>({name:p.name,affiliation:p.affiliation,number:p.final_cup_no,schedule:parseJson(p.extra_json,{}).roundSchedules?.결선||{}})).sort((a,b)=>Number(a.number)-Number(b.number))};
+}
+async function kbcFinalistSelectionContext_(env, actorArg) {
+  const auth=await requireManageActorForCode_(env,actorArg,'KBC');
+  if(!auth.ok)return auth.res;
+  const participants=(await env.DB.prepare("SELECT * FROM participants WHERE competition_code='KBC' ORDER BY id").all()).results||[];
+  const scores=(await env.DB.prepare("SELECT id,unit,mode FROM scores WHERE competition_code='KBC' AND round='결선' ORDER BY id").all()).results||[];
+  const config=await env.DB.prepare("SELECT option_settings FROM competitions WHERE code='KBC'").first();
+  const assigned=participants.filter(p=>safeStr(p.final_cup_no));
+  const protectedUnits=new Set(scores.filter(s=>scoreEvaluationCategoryKey_(s.mode)==='competition').map(s=>participantEvaluationCompletionUnitKey_('KBC',s.unit)));
+  const mains=sortRoundParticipants_(participants.filter(p=>safeStr(p.main_cup_no)),'KBC','본선');
+  const malformed=assigned.some(p=>!safeStr(p.main_cup_no)||!/^([1-6])$/.test(safeStr(p.final_cup_no)))||new Set(assigned.map(p=>p.final_cup_no)).size!==assigned.length;
+  return {success:true,revision:await sha256Hex_(JSON.stringify({participants,scores,config})),participants,scores,config,
+    ready:!malformed,message:malformed?'기존 결선 번호가 중복되거나 본선 명단과 연결되지 않습니다. 등록 정보를 먼저 확인해주세요.':'본선 명단에서 체크하면 결선에 바로 저장됩니다. 최대 6명이며 결선 평가 기록이 있는 선수는 유지됩니다.',
+    selectedCount:assigned.length,choices:mains.map(p=>({participantId:p.id,name:p.name,affiliation:p.affiliation,
+      mainNumber:p.main_cup_no,day:participantScheduleForRound_(p,'본선').day,
+      finalNumber:safeStr(p.final_cup_no),locked:!!safeStr(p.final_cup_no)&&protectedUnits.has(participantEvaluationCompletionUnitKey_('KBC',p.final_cup_no))}))};
+}
+async function getKbcFinalistSelection(env, actorArg) {
+  const {participants,scores,config,...result}=await kbcFinalistSelectionContext_(env,actorArg);return result;
+}
+async function setKbcFinalistSelection(env, payload, actorArg) {
+  const context=await kbcFinalistSelectionContext_(env,actorArg);
+  if(!context.success)return context;
+  if(!context.ready)return {success:false,message:context.message};
+  if(!payload||context.revision!==payload.revision)return {success:false,stale:true,message:'다른 화면에서 명단 또는 평가가 변경됐습니다. 최신 명단을 불러온 뒤 다시 선택해주세요.'};
+  const ids=Array.isArray(payload.participantIds)?payload.participantIds.map(Number):null;
+  if(!ids||ids.length>6||new Set(ids).size!==ids.length||ids.some(id=>!Number.isInteger(id)||!context.choices.some(p=>p.participantId===id)))return {success:false,message:'본선 선수 중 최대 6명을 중복 없이 선택해주세요.'};
+  if(context.choices.some(p=>p.locked&&!ids.includes(p.participantId)))return {success:false,message:'결선 평가 기록이 있는 선수는 제외하거나 다른 선수로 교체할 수 없습니다. 기존 기록은 유지됩니다.'};
+  const used=new Set(context.choices.filter(p=>ids.includes(p.participantId)&&p.finalNumber).map(p=>p.finalNumber));
+  const numbers=new Map();
+  ids.forEach(id=>{const previous=context.choices.find(p=>p.participantId===id).finalNumber;let number=previous;if(!number){number=['1','2','3','4','5','6'].find(n=>!used.has(n));used.add(number);}numbers.set(id,number);});
+  const stamp=nowIso(), changes=[];
+  for(const p of context.participants){
+    const number=numbers.get(p.id)||'';
+    if(safeStr(p.final_cup_no)===number)continue;
+    const extra=parseJson(p.extra_json,{});
+    extra.kbcFinalSelectionPrevious={number:p.final_cup_no||'',changedAt:stamp};
+    if(number){
+      const order=Number(number),slot=kbcTimetableSlot_(kbcTimeOffset_('10:00',(order-1)*13),'1',KBC_MAIN_TIMETABLE_2026_.finalDate,order);
+      extra.roundSchedules={...extra.roundSchedules,결선:{...(extra.roundSchedules&&extra.roundSchedules.결선||{}),...slot}};
+      extra.kbcFinalQualification={sourceRound:'본선',method:'manual',selectedAt:stamp};
+    }
+    changes.push({id:p.id,number,extra:JSON.stringify(extra)});
+  }
+  if(!changes.length)return {success:true,message:'선택한 명단이 이미 반영되어 있습니다.',...(await getKbcFinalistSelection(env,actorArg))};
+  const update=env.DB.prepare(`WITH p AS (SELECT value FROM json_each(?)), s AS (SELECT value FROM json_each(?)),
+    plan AS (SELECT json_extract(value,'$.id') id,json_extract(value,'$.number') number,json_extract(value,'$.extra') extra FROM json_each(?)),
+    safe AS (SELECT 1 WHERE
+      (SELECT COUNT(*) FROM participants WHERE competition_code='KBC')=(SELECT COUNT(*) FROM p)
+      AND NOT EXISTS(SELECT 1 FROM p LEFT JOIN participants r ON r.id=json_extract(p.value,'$.id') WHERE r.id IS NULL
+        OR r.competition_code<>'KBC' OR r.updated_at IS NOT json_extract(p.value,'$.updated_at') OR r.extra_json IS NOT json_extract(p.value,'$.extra_json')
+        OR r.main_cup_no IS NOT json_extract(p.value,'$.main_cup_no') OR r.final_cup_no IS NOT json_extract(p.value,'$.final_cup_no'))
+      AND (SELECT COUNT(*) FROM scores WHERE competition_code='KBC' AND round='결선')=(SELECT COUNT(*) FROM s)
+      AND NOT EXISTS(SELECT 1 FROM s LEFT JOIN scores r ON r.id=json_extract(s.value,'$.id') WHERE r.id IS NULL OR r.competition_code<>'KBC'
+        OR r.round<>'결선' OR r.unit IS NOT json_extract(s.value,'$.unit') OR r.mode IS NOT json_extract(s.value,'$.mode')))
+    UPDATE participants SET final_cup_no=(SELECT number FROM plan WHERE id=participants.id),extra_json=(SELECT extra FROM plan WHERE id=participants.id),updated_at=?
+    WHERE competition_code='KBC' AND id IN(SELECT id FROM plan) AND EXISTS(SELECT 1 FROM safe)`)
+    .bind(JSON.stringify(context.participants),JSON.stringify(context.scores),JSON.stringify(changes),stamp);
+  // The marker and assignment are committed together. Even a stale selection
+  // may only tighten identity checks, never relax them or modify saved scores.
+  const results=await env.DB.batch([
+    env.DB.prepare("UPDATE competitions SET option_settings=json_set(COALESCE(option_settings,'{}'),'$.kbcFinalSelectionMode','manual'),updated_at=? WHERE code='KBC'").bind(stamp),update
+  ]);
+  const result=results[1];
+  if(Number(result.meta&&result.meta.changes)!==changes.length)return {success:false,stale:true,message:'동시에 변경된 명단 또는 평가가 있습니다. 새로고침 후 다시 선택해주세요.'};
+  const fresh=await getKbcFinalistSelection(env,actorArg);
+  return {...fresh,message:'결선 '+ids.length+'명 즉시 반영 완료'};
 }
 async function getKbcFinalistPlan(env, actorArg) {
   const result=await kbcFinalistContext_(env,actorArg);

@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {createRpcFixture} from './helpers/rpc-fixture.mjs';
+let race=null;
+const api=await createRpcFixture({beforeBatch:async()=>{if(race){const f=race;race=null;f();}}});
+try{
+ const add=async(name,phone,access,teamGroup,effectiveDate='')=>api.rpc('upsertOperatorAccount',{accountType:'JUDGE',name,phone,access,teamGroup,effectiveDate,role:'센서리 심사위원'},api.actor);
+ await add('공통 심사','01088880001','KBC,MOB','A조');await add('본선 심사','01088880002','KBC','B조','2026-11-12');
+ let rows=(await api.rpc('listOperators','ALL',api.actor)).operators;
+ const shared=rows.find(r=>r.name==='공통 심사'),one=rows.find(r=>r.name==='본선 심사');
+ const scores=JSON.stringify(api.db.prepare('SELECT * FROM scores').all());
+ const call=async(operation,selected,date='')=>api.rpc('bulkUpdateOperatorAssignments',{competitionCode:'KBC',operation,effectiveDate:date,rowIndexes:selected.map(r=>r.rowIndex),expected:selected},api.actor);
+ const reject=async payload=>(await(await api.handle({action:'bulkUpdateOperatorAssignments',args:[payload,api.actor]})).json());
+ await call('date',[shared,one],'2026-11-13');
+ rows=(await api.rpc('listOperators','ALL',api.actor)).operators;
+ const unchanged=rows.find(r=>r.rowIndex===shared.rowIndex);assert.equal(unchanged.access,'MOB');assert.equal(unchanged.effectiveDate,'');assert.equal(unchanged.teamGroup,'A조');
+ const kbc=rows.filter(r=>r.access==='KBC');assert.equal(kbc.length,2);assert.ok(kbc.every(r=>r.effectiveDate==='2026-11-13'));
+ await call('clearTeam',kbc);rows=(await api.rpc('listOperators','ALL',api.actor)).operators;
+ assert.ok(rows.filter(r=>r.access==='KBC').every(r=>r.teamGroup===''));assert.equal(rows.find(r=>r.access==='MOB').teamGroup,'A조');
+ assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores').all()),scores);
+ assert.equal((await reject({competitionCode:'KBC',operation:'date',effectiveDate:'2026-11-14',rowIndexes:[one.rowIndex],expected:[one]})).stale,true);
+ const fresh=rows.find(r=>r.name==='본선 심사');
+ await add('본선 심사','01088880002','KBC','C조','2026-11-14');
+ assert.equal((await reject({competitionCode:'KBC',operation:'date',effectiveDate:'2026-11-14',rowIndexes:[fresh.rowIndex],expected:[fresh]})).success,false,'do not overwrite existing target-date role');
+ const before=JSON.stringify(api.db.prepare('SELECT * FROM operators').all());
+ race=()=>api.db.prepare("UPDATE operators SET team_group='현장 변경' WHERE id=?").run(fresh.rowIndex);
+ const raced=await reject({competitionCode:'KBC',operation:'clearTeam',rowIndexes:[rows.find(r=>r.access==='MOB').rowIndex],expected:[rows.find(r=>r.access==='MOB')]});
+ assert.equal(raced.success,false,'cross-competition selection rejected');race=null;
+ const kbcShared=rows.find(r=>r.name==='공통 심사'&&r.access==='KBC');
+ race=()=>api.db.prepare("UPDATE operators SET team_group='현장 변경' WHERE id=?").run(fresh.rowIndex);
+ const result=await reject({competitionCode:'KBC',operation:'date',effectiveDate:'2026-11-15',rowIndexes:[kbcShared.rowIndex],expected:[kbcShared]});
+ assert.equal(result.stale,true);assert.equal(api.db.prepare('SELECT effective_date FROM operators WHERE id=?').get(kbcShared.rowIndex).effective_date,'2026-11-13');
+ assert.equal(api.db.prepare("SELECT COUNT(*) n FROM sessions WHERE kind='BULK_OPERATOR_GUARD'").get().n,0);
+ console.log('Stage269: bulk date move, team-only release, shared-account competition isolation, unchanged scores/roles, stale and duplicate-date guards, atomic rollback passed.');
+}finally{api.close();}

@@ -33,9 +33,9 @@ try{
  await page.getByRole('button',{name:'진출 예상 명단 새로고침',exact:true}).click();
  await page.waitForFunction(()=>document.querySelectorAll('#kbc-finalist-plan li').length===6);
  const scores=JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all());
- const assigned=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='assignKbcFinalists');
- await page.getByRole('button',{name:'확인한 6명을 결선에 배정',exact:true}).click();
- assert.equal((await(await assigned).json()).success,true);
+ assert.equal(await page.getByRole('link',{name:'결선 진출자 선택',exact:true}).count(),1);
+ const selection=await api.rpc('getKbcFinalistSelection',api.actor);
+ await api.rpc('setKbcFinalistSelection',{revision:selection.revision,participantIds:selection.choices.slice(2).map(p=>p.participantId)},api.actor);
  assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all()),scores);
  assert.equal(api.db.prepare("SELECT COUNT(*) n FROM participants WHERE final_cup_no<>''").get().n,6);
  await page.screenshot({path:'tmp/stage264-qa/kbc-combined-rank-mobile.png'});

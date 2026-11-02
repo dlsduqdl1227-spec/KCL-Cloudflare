@@ -39,6 +39,9 @@ try {
   assert.equal(mainRanking.ranking.length,20);assert.equal(mainRanking.ranking[0].unit,'20');
   assert.equal((await api.rpc('getRanking','KBC',api.actor,'결선')).ranking.length,0);
   assert.equal((await api.rpc('getKbcFinalistPlan',api.actor)).ready,true);
+  const selection=await api.rpc('getKbcFinalistSelection',api.actor);
+  const ids=selection.choices.filter(p=>Number(p.mainNumber)>=15).map(p=>p.participantId);
+  await api.rpc('setKbcFinalistSelection',{revision:selection.revision,participantIds:ids},api.actor);
   await api.rpc('updateCompetitionAdminSettings',{code:'KBC',currentRound:'결선'},api.actor);
   const finals=await api.rpc('getParticipantAssignments','KBC',api.actor);
   assert.deepEqual(finals.assignments.map(a=>a.name),kbcMainNames.slice(14));
@@ -50,5 +53,5 @@ try {
   assert.equal(JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all()),scoreSnapshot);
   assert.equal((await api.rpc('getKbcFinalistPlan',api.actor)).assignedFinalists.length,6);
   assert.equal((await api.rpc('getKbcFinalistPlan',api.actor)).ready,false);
-  console.log('Stage267: exact PPT timetable, all 20 identities, atomic stale protection, contacts/preliminary preservation, wrong-day guard, combined main ranking and automatic reverse six-person independent final passed.');
+  console.log('Stage267: exact PPT timetable, preserved identities, stale protection, wrong-day guard, combined main ranking and manually selected independent final passed.');
 } finally {api.close();}

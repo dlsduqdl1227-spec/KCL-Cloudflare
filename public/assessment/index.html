@@ -3807,7 +3807,7 @@ function onKbcParticipantSelected_() {
   var num = document.getElementById('kbc-num');
   var badge = document.getElementById('kbc-participant-complete');
   var assignment = num ? participantAssignmentByNumber_('KBC', num.value) : null;
-  if (!_kbcSwitchingDraft && num && String(num.value || '') !== _kbcDraftUnit) {
+  if (!_kbcSwitchingDraft && num && (String(num.value || '') !== _kbcDraftUnit || (_selComp&&_selComp.currentRound==='결선'&&assignment&&String(assignment.rowIndex||'')!==_kbcDraftParticipantId))) {
     kbcSwitchDraft_(document.getElementById('kbc-main-day').value, String(num.value || ''), assignment);
   }
   if (badge) badge.style.display = assignment && assignment.evaluationCompleted ? 'inline-flex' : 'none';
@@ -5251,7 +5251,7 @@ function isStaffRoleForCode_(code) { return hasRoleWordForCode_(code, '운영') 
 function isAdminRole() { return (_judge && (String(_judge.type || '').toUpperCase() === 'ADMIN' || String(_judge.accountType || '').toUpperCase() === 'ADMIN')) || roleText() === '관리자'; }
 function judgeTeamText(code) {
   var c = String(code || (_selComp && _selComp.code) || '').toUpperCase();
-  if (_judge && _judge.teamMap && c && _judge.teamMap[c]) return normalizeTeamLabel_(_judge.teamMap[c]);
+  if (_judge && c && (Object.prototype.hasOwnProperty.call(_judge.teamMap||{},c)||Object.prototype.hasOwnProperty.call(_judge.roleMap||{},c))) return normalizeTeamLabel_((_judge.teamMap&&_judge.teamMap[c])||'');
   return normalizeTeamLabel_((_judge && (_judge.teamGroup || _judge.judgeTeam || _judge.teamNo)) || '');
 }
 function judgeTeamForSubmit() { return judgeTeamText() || String((_judge && _judge.affiliation) || ''); }
@@ -6224,7 +6224,7 @@ function adminSaveCompetitionConfig(cfg) {
   var optionSettings = configSelectableOptionsPayload_(code, 'admin-cfg', cfg);
   if (optionSettings === false) return;
   if (optionSettings) payload.optionSettings = Object.assign({}, cfg.optionSettings || {}, optionSettings);
-  if(code==='KBC'&&cfg.currentRound==='본선'&&payload.currentRound==='결선'&&!confirm('본선 1·2일차의 모든 심사 입력을 마감했나요? 현재 상위 6명을 결선에 자동 배정하며 본선 점수는 이월하지 않습니다.'))return;
+  if(code==='KBC'&&cfg.currentRound==='본선'&&payload.currentRound==='결선'&&!confirm('선수등록에서 선택한 결선 명단으로 전환할까요? 본선 기록은 그대로 보존됩니다.'))return;
   showOverlay();
   google.script.run.withSuccessHandler(function(res){
     hideOverlay(); toast((res && res.message) || (res && res.success ? '저장 완료' : '저장 실패'), !(res && res.success));
@@ -6291,7 +6291,7 @@ function teamSaveCompetitionConfig(cfg) {
   var optionSettings = configSelectableOptionsPayload_(code, 'team-cfg', cfg);
   if (optionSettings === false) return;
   if (optionSettings) payload.optionSettings = Object.assign({}, cfg.optionSettings || {}, optionSettings);
-  if(code==='KBC'&&cfg.currentRound==='본선'&&payload.currentRound==='결선'&&!confirm('본선 1·2일차의 모든 심사 입력을 마감했나요? 현재 상위 6명을 결선에 자동 배정하며 본선 점수는 이월하지 않습니다.'))return;
+  if(code==='KBC'&&cfg.currentRound==='본선'&&payload.currentRound==='결선'&&!confirm('선수등록에서 선택한 결선 명단으로 전환할까요? 본선 기록은 그대로 보존됩니다.'))return;
   showOverlay();
   google.script.run.withSuccessHandler(function(res){
     hideOverlay();
@@ -11151,7 +11151,7 @@ function renderKbcFinalistEntry_(res) {
   if (old) old.remove();
   if (!res || res.compCode !== 'KBC' || res.selectedRound !== '본선') return;
   var box = document.createElement('section'); box.id = 'kbc-finalist-entry'; box.className = 'review-readonly-block';
-  box.innerHTML = '<strong>본선 1·2일차 통합 순위 · 결선 6명</strong><p>진행 중에는 진출 예상 명단입니다. 본선 마감 후 결선을 선택하면 상위 6명을 자동 배정하며, 기존 결선 배정은 유지합니다.</p><button type="button" class="btn-outline" onclick="loadKbcFinalistPlan_()">진출 예상 명단 새로고침</button><div id="kbc-finalist-plan" role="status"></div>';
+  box.innerHTML = '<strong>본선 1·2일차 통합 순위 · 결선 6명</strong><p>순위는 참고용입니다. 결선 진출자는 본선 명단에서 직접 선택하면 즉시 반영됩니다.</p><a class="btn" href="/registry/?kbcView=final" target="_blank" rel="noopener">결선 진출자 선택</a><button type="button" class="btn-outline" onclick="loadKbcFinalistPlan_()">진출 예상 명단 새로고침</button><div id="kbc-finalist-plan" role="status"></div>';
   document.getElementById('ranking-list').before(box);
   loadKbcFinalistPlan_();
 }
@@ -11163,22 +11163,11 @@ function loadKbcFinalistPlan_() {
   google.script.run.withSuccessHandler(function(res) {
     if (!current()) return;
     area.textContent = '';
-    var info = document.createElement('p'); info.textContent = res.message || ''; area.appendChild(info);
+    var info = document.createElement('p'); info.textContent = res.success ? '현재 결선 배정 '+(res.assignedFinalists||[]).length+'명 · 아래 순위는 참고용입니다.' : (res.message || ''); area.appendChild(info);
     if (!res.success) return;
     var list = document.createElement('ol'); list.style.paddingLeft='22px'; list.style.lineHeight='1.7';
-    (res.candidates || []).forEach(function(item) { var row=document.createElement('li'); row.textContent='본선 '+item.rank+'위 · '+item.name+' · '+item.score+'점 → 결선 '+item.finalNumber+'번'+(res.assignedFinalists&&res.assignedFinalists.length?' (현재 본선 순위)':' 예정'); list.appendChild(row); });
+    (res.candidates || []).forEach(function(item) { var row=document.createElement('li'); row.textContent='본선 '+item.rank+'위 · '+item.name+' · '+item.score+'점'; list.appendChild(row); });
     area.appendChild(list);
-    if (res.ready) {
-      var save=document.createElement('button'); save.type='button'; save.className='btn'; save.textContent='확인한 6명을 결선에 배정';
-      save.onclick=function(){
-        if (!confirm('위 6명을 표시된 결선 번호로 배정할까요? 본선 기록은 보존하고 결선 점수는 새로 시작합니다.')) return;
-        save.disabled=true;
-        google.script.run.withSuccessHandler(function(result){if(current()){info.textContent=result.message||'';if(result.success)save.remove();else save.disabled=false;}})
-          .withFailureHandler(function(){if(current()){info.textContent='저장 확인이 지연됩니다. 배정 확인을 다시 눌러 현재 상태를 확인하세요.';save.disabled=false;}})
-          .assignKbcFinalists({revision:res.revision},_judge);
-      };
-      area.appendChild(save);
-    }
   }).withFailureHandler(function(){if(current())area.textContent='진출자 확인에 실패했습니다. 다시 시도해주세요.';}).getKbcFinalistPlan(_judge);
 }
 function renderRanking(res) {
@@ -15568,7 +15557,7 @@ function clearKbcGeneratedComment() {
   if (typeof kclSaveActiveEvalDraftNow_ === 'function') kclSaveActiveEvalDraftNow_(true);
   toast('KBC AI 자동 코멘트 사용을 해제했습니다. 종합 의견을 직접 작성할 수 있습니다.');
 }
-var _kbcDraftDay = '1', _kbcDraftUnit = '', _kbcDraftName = '', _kbcSwitchingDraft = false;
+var _kbcDraftDay = '1', _kbcDraftUnit = '', _kbcDraftName = '', _kbcDraftParticipantId = '', _kbcSwitchingDraft = false;
 function kbcLastDraftUnitKey_(day) { return 'KCL_KBC_LAST_UNIT::'+kclDraftRound_()+'::'+kclDraftActor_('KBC')+'::'+day; }
 function kbcResetEntryFields_() {
   cancelKbcCommentGeneration_();
@@ -15595,15 +15584,35 @@ function kbcSwitchDraft_(day, unit, assignment) {
     // identity until its complete form has been saved.
     if (_kbcDraftUnit) kclSaveActiveEvalDraftNow_(true);
     _kbcDraftDay=day==='2'?'2':'1';_kbcDraftUnit=unit||'';
+    _kbcDraftParticipantId=String(assignment&&assignment.rowIndex||'');
     _kbcDraftName=assignment?participantNameForAssignment_(assignment):'';
     kbcResetEntryFields_();
     setVal_('kbc-num',_kbcDraftUnit);setVal_('kbc-name',_kbcDraftName);
     setVal_('kbc-main-day',_kbcDraftDay);
-    var draft=null;try{draft=JSON.parse(localStorage.getItem(kclDraftKey_('KBC'))||'null');}catch(e){}
-    if(draft&&draft.form&&String((draft.form['kbc-num']||{}).value||'')===_kbcDraftUnit) kclRestoreDraftForCode_('KBC',draft);
+    var draft=kbcReadDraft_();
+    if(draft&&draft.form&&String((draft.form['kbc-num']||{}).value||'')===_kbcDraftUnit&&kbcDraftMatchesEntrant_(draft,assignment)) kclRestoreDraftForCode_('KBC',draft);
     _kclDraftPrompted[kclDraftKey_('KBC')]=true;
     if(_kbcDraftUnit)try{localStorage.setItem(kbcLastDraftUnitKey_(_kbcDraftDay),_kbcDraftUnit);}catch(e){}
   } finally {_kbcSwitchingDraft=false;}
+}
+function kbcDraftMatchesEntrant_(draft,assignment){
+  if(!_selComp||_selComp.currentRound!=='결선')return true;
+  if(!assignment)return false;
+  var id=String(draft.state&&draft.state.kbcParticipantId||'');
+  return id? id===String(assignment.rowIndex||'') : String((draft.form['kbc-name']||{}).value||'')===participantNameForAssignment_(assignment);
+}
+function kbcReadDraft_(){
+  try{
+    var key=kclDraftKey_('KBC'),draft=JSON.parse(localStorage.getItem(key)||'null');
+    if(!draft&&_selComp&&_selComp.currentRound==='결선'&&_kbcDraftParticipantId){
+      var legacy=JSON.parse(localStorage.getItem(key.replace(/_entrant[0-9]+/,''))||'null');
+      if(legacy&&kbcDraftMatchesEntrant_(legacy,participantAssignmentByNumber_('KBC',_kbcDraftUnit))){
+        legacy.state=legacy.state||{};legacy.state.kbcParticipantId=_kbcDraftParticipantId;
+        localStorage.setItem(key,JSON.stringify(legacy));draft=legacy;
+      }
+    }
+    return draft;
+  }catch(e){return null;}
 }
 function refreshKbcDayFilter_() {
   var day=document.getElementById('kbc-main-day').value;
@@ -15623,7 +15632,7 @@ function startKbc() {
   document.getElementById('kbc-round-badge').textContent = _selComp.currentRound;
   document.getElementById('kbc-main-day-wrap').hidden = _selComp.currentRound !== '본선';
   _kbcDraftDay=competitionOptionSettings_(_selComp).kbcMainDay==='2'?'2':'1';
-  _kbcDraftUnit='';_kbcDraftName='';_kbcSwitchingDraft=false;
+  _kbcDraftUnit='';_kbcDraftName='';_kbcDraftParticipantId='';_kbcSwitchingDraft=false;
   document.getElementById('kbc-main-day').value = _kbcDraftDay;
   document.getElementById('kbc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + roleText() + ' · ' + evaluationPurposeDisplayLabel_() + evaluationTeamContextText_() + (isActiveCalibrationMode_() ? ' · 공식 점수·순위 제외' : ' · 공식 점수 반영');
   var isMain = kbcIsMainRound_();
@@ -15785,6 +15794,9 @@ function kbcSubmit() {
   if (_selComp.currentRound === '결선' && participantListForCode_('KBC').length && !selectedAssignment) {
     toast('결선에 배정된 참가자 번호를 선수 선택 목록에서 확인해주세요.', true); return;
   }
+  if (_selComp.currentRound === '결선' && selectedAssignment && String(selectedAssignment.rowIndex||'') !== _kbcDraftParticipantId) {
+    toast('결선 선수 배정이 변경되었습니다. 입력 내용은 유지됩니다. 선수 선택 목록을 다시 확인해주세요.',true);return;
+  }
   if (selectedAssignment && selectedAssignment.evaluationCompleted) {
     toast(finalRoundForCode_('KBC')?'이미 평가완료된 참가자입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청해주세요.':'이미 제출한 참가자입니다. 수정이 필요하면 내 평가 검수에서 진행해주세요.', true);
     return;
@@ -15874,6 +15886,7 @@ function kbcSubmit() {
     })
     .submitScores({
       competitionCode: 'KBC',
+      participantId: _selComp.currentRound==='결선'?Number(_kbcDraftParticipantId)||null:null,
       operatingDay:_selComp.currentRound==='본선'?document.getElementById('kbc-main-day').value:'',
       clientSubmissionId: _kbcClientSubmissionId,
       judgeName: _judge.name,
@@ -19889,6 +19902,7 @@ function kclDraftContextKey_(code) {
   if (code === 'KCR' && typeof _cupping !== 'undefined' && _cupping && _cupping.station) station = _cupping.station.id || _cupping.station.prefix || '';
   if (code === 'IKRC' && typeof _ikrcStation !== 'undefined' && _ikrcStation) station = _ikrcStation.id || _ikrcStation.prefix || '';
   if (code === 'KBC') station = 'day'+_kbcDraftDay+'_player'+(_kbcDraftUnit||'unselected');
+  if (code === 'KBC' && _selComp && _selComp.currentRound === '결선' && _kbcDraftParticipantId) station += '_entrant'+_kbcDraftParticipantId;
   // 결선 패턴/센서리는 서로 다른 평가표입니다. 같은 헤드가 화면을 바꿔도 임시저장을 섞지 않습니다.
   if (code === 'KCAC' && typeof _kcac !== 'undefined' && _kcac && _kcac.jars && _kcac.jars[0] && _kcac.jars[0].type !== 'qual') station = _kcac.jars[0].type + (_kcac.finalArea ? '_' + _kcac.finalArea : '');
   return [type, scope, station].filter(Boolean).join('_') || 'competition';
@@ -19965,6 +19979,7 @@ function kclSaveActiveEvalDraftNow_(silent) {
       if(!_kbcDraftUnit)return;
       draft.form['kbc-num']={value:_kbcDraftUnit};draft.form['kbc-name']={value:_kbcDraftName};
       draft.form['kbc-main-day']={value:_kbcDraftDay};
+      draft.state.kbcParticipantId=_kbcDraftParticipantId;
       localStorage.setItem(kbcLastDraftUnitKey_(_kbcDraftDay),_kbcDraftUnit);
     }
     localStorage.setItem(key, JSON.stringify(draft));
@@ -20062,6 +20077,7 @@ function kclRestoreDraftForCode_(code, draft) {
       _kbcDraftDay=String((draft.form['kbc-main-day']||{}).value||_kbcDraftDay)==='2'?'2':'1';
       _kbcDraftUnit=String((draft.form['kbc-num']||{}).value||'');
       _kbcDraftName=String((draft.form['kbc-name']||{}).value||'');
+      _kbcDraftParticipantId=String(draft.state.kbcParticipantId||'');
       if (draft.state.kbcYN) _kbcYN = draft.state.kbcYN;
       if (draft.state.kbcTags) _kbcTags = draft.state.kbcTags;
       if (draft.state.kbcCommentMeta) { _kbcGeneratedComment = draft.state.kbcCommentMeta.generated || ''; _kbcCommentEdited = !!draft.state.kbcCommentMeta.edited; _kbcAutoCommentEnabled = draft.state.kbcCommentMeta.autoEnabled !== undefined ? !!draft.state.kbcCommentMeta.autoEnabled : !!_kbcGeneratedComment; }
@@ -20146,21 +20162,23 @@ function kclMaybeRestoreDraftForActiveEval_() {
   if (_kclDraftApplying) return;
   var code = kclActiveEvalCode_();
   var previousKbcUnit=_kbcDraftUnit;
+  var previousKbcId=_kbcDraftParticipantId;
   if(code==='KBC'&&participantStateForCode_('KBC').loading)return;
   if(code==='KBC'&&!_kbcDraftUnit){
     var last='';try{last=localStorage.getItem(kbcLastDraftUnitKey_(_kbcDraftDay))||'';}catch(e){}
-    if(last)_kbcDraftUnit=last;
+    if(last){_kbcDraftUnit=last;var lastAssignment=participantAssignmentByNumber_('KBC',last);_kbcDraftParticipantId=String(lastAssignment&&lastAssignment.rowIndex||'');}
     else {
       // Preserve pre-upgrade drafts. Migrate only a uniquely registered player
       // belonging to this day; keep the old key untouched as a recovery copy.
       try {
-        var newKey=kclDraftKey_('KBC'),legacyKey=newKey.replace(/day[12]_playerunselected/,'');
+        var newKey=kclDraftKey_('KBC'),legacyKey=newKey.replace(/_entrant[0-9]+/,'').replace(/day[12]_playerunselected/,'');
         legacyKey=legacyKey.replace('competition_::','competition::');
         var legacy=JSON.parse(localStorage.getItem(legacyKey)||'null');
         var oldNumber=legacy&&legacy.form&&String((legacy.form['kbc-num']||{}).value||'');
         var oldAssignment=oldNumber&&participantAssignmentByNumber_('KBC',oldNumber);
-        if(oldAssignment&&(_selComp.currentRound!=='본선'||String(oldAssignment.operatingDay)===_kbcDraftDay)){
+        if(oldAssignment&&kbcDraftMatchesEntrant_(legacy,oldAssignment)&&(_selComp.currentRound!=='본선'||String(oldAssignment.operatingDay)===_kbcDraftDay)){
           _kbcDraftUnit=oldNumber;_kbcDraftName=participantNameForAssignment_(oldAssignment);
+          _kbcDraftParticipantId=String(oldAssignment.rowIndex||'');legacy.state=legacy.state||{};legacy.state.kbcParticipantId=_kbcDraftParticipantId;
           legacy.form['kbc-main-day']={value:_kbcDraftDay};localStorage.setItem(kclDraftKey_('KBC'),JSON.stringify(legacy));
         }
       } catch(e){}
@@ -20171,15 +20189,16 @@ function kclMaybeRestoreDraftForActiveEval_() {
   var key = kclDraftKey_(code);
   if (!code || !key || _kclDraftPrompted[key]) return;
   var raw = null, draft = null;
-  try { raw = localStorage.getItem(key); if (raw) draft = JSON.parse(raw); } catch(e) { draft = null; }
-  if (!draft || !draft.updatedAt) {if(code==='KBC')_kbcDraftUnit=previousKbcUnit;return;}
+  try { if(code==='KBC')draft=kbcReadDraft_();else{raw = localStorage.getItem(key); if (raw) draft = JSON.parse(raw);} } catch(e) { draft = null; }
+  if (code==='KBC'&&draft&&!kbcDraftMatchesEntrant_(draft,participantAssignmentByNumber_('KBC',_kbcDraftUnit)))draft=null;
+  if (!draft || !draft.updatedAt) {if(code==='KBC'){_kbcDraftUnit=previousKbcUnit;_kbcDraftParticipantId=previousKbcId;}return;}
   _kclDraftPrompted[key] = true;
   var when = '';
   try { when = new Date(draft.updatedAt).toLocaleString('ko-KR'); } catch(e) { when = draft.updatedAt; }
   var ok = confirm('이전에 작성 중이던 ' + code + ' 평가 임시저장이 있습니다.\n저장시각: ' + when + '\n\n이어서 작성하시겠습니까?\n\n[확인] 이어서 작성 / [취소] 새로 작성');
   if (ok) kclRestoreDraftForCode_(code, draft);
   else {
-    if(code==='KBC')_kbcDraftUnit=previousKbcUnit;
+    if(code==='KBC'){_kbcDraftUnit=previousKbcUnit;_kbcDraftParticipantId=previousKbcId;}
     if (confirm('이 임시저장을 삭제하고 새 평가를 시작할까요?')) {
       try { localStorage.removeItem(key); } catch(e) {}
       kclDraftStatus_('기존 임시저장 삭제 완료');
