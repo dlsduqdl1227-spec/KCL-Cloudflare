@@ -1,0 +1,47 @@
+/* Registry-only controls. Evaluation screens and scoring styles are unchanged. */
+.registry-list-tools{display:grid;gap:12px;margin:14px 0;padding:14px;border:1px solid #383838;border-radius:14px;background:#0c0c0c}
+.registry-list-filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.registry-list-filters label{display:grid;gap:6px;min-width:140px;flex:1;font-size:12px;color:#bbb}
+.registry-list-filters input,.registry-list-filters select{min-height:44px;font-size:16px;padding:10px 12px}
+.registry-list-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.registry-list-actions .btn{width:auto;min-height:44px;padding:10px 14px}
+.registry-list-actions .operator-select-all{min-height:44px;white-space:normal;margin-right:auto;font-size:13px}
+.registry-list-tools input[type=checkbox],.registry-managed-table input[type=checkbox]{width:24px;height:24px;min-height:24px;padding:0;margin:0;accent-color:#74deb1;cursor:pointer}
+.registry-selection-count{font-size:13px;font-weight:800;color:#91e5be}
+.registry-list-result{font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.registry-list-result:empty{display:none}.registry-list-result.error{color:#ff9898}
+.registry-list-result button{margin:8px 0 0 10px}
+.registry-quick-tools{border:1px solid #303030;border-radius:12px;padding:12px;margin:12px 0}.registry-quick-tools>summary{cursor:pointer;font-size:13px;font-weight:800;color:#ccc;min-height:24px}.registry-quick-tools[hidden]{display:none!important}
+.registry-list-tools{scroll-margin-top:130px}
+.tab-section .section-title+.participant-core-grid,.tab-section .section-title+.operator-form-grid,.tab-section .section-title+.admin-form-simple{margin-top:16px}
+.registry-managed-table tr[hidden]{display:none!important}.registry-managed-table tr.registry-selected{background:#13221b}
+.registry-managed-table tr.registry-no-results td{padding:24px;text-align:center;color:#bbb}
+.registry-bulk-dialog{width:min(1000px,calc(100vw - 24px));max-height:calc(100dvh - 24px);padding:0;border:1px solid #555;border-radius:18px;background:#111;color:#fff;box-shadow:0 20px 100px #0008;overflow:auto}
+.registry-bulk-dialog::backdrop{background:#000b;backdrop-filter:blur(3px)}
+.registry-bulk-dialog header,.registry-bulk-dialog footer{position:sticky;z-index:2;background:#161616;padding:16px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.registry-bulk-dialog header{top:0;border-bottom:1px solid #333;justify-content:space-between}.registry-bulk-dialog footer{bottom:0;border-top:1px solid #333;justify-content:flex-end}
+.registry-bulk-dialog h2{font-size:19px;margin:0}.registry-bulk-body{padding:18px 20px}.registry-bulk-dialog p{font-size:13px;color:#ccc;line-height:1.7;margin:0 0 14px}
+.registry-bulk-dialog header>.btn{width:auto;min-width:60px;padding:10px 12px}
+.registry-bulk-common{display:flex;gap:8px;flex-wrap:wrap;padding:12px;background:#202020;border-radius:12px;margin-bottom:14px}
+.registry-bulk-common select,.registry-bulk-common input{width:auto;flex:1 1 160px;min-height:44px;font-size:16px}
+.registry-bulk-rows{display:grid;gap:12px}.registry-bulk-row{padding:14px;border:1px solid #3b3b3b;border-radius:12px;min-width:0}
+.registry-bulk-row h3{font-size:14px;margin:0 0 12px;line-height:1.5}.registry-bulk-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.registry-bulk-fields label{display:grid;gap:6px;font-size:12px;color:#bbb;min-width:0}.registry-bulk-fields input,.registry-bulk-fields select{min-height:44px;font-size:16px;padding:10px 12px}
+.registry-bulk-feedback{margin:14px 0;line-height:1.7;font-size:13px;overflow-wrap:anywhere}.registry-bulk-feedback:empty{display:none}.registry-bulk-feedback ul{padding-left:22px;margin:6px 0}.registry-bulk-feedback.error{color:#ff9898}
+.registry-delete-ack{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid #845345;border-radius:10px;margin-top:12px;font-size:14px;line-height:1.6}.registry-delete-ack input{width:24px;height:24px;margin:0;flex:none}
+.registry-bulk-dialog .btn{min-height:44px}.registry-bulk-dialog .btn:disabled,.registry-list-tools .btn:disabled{opacity:.45;cursor:not-allowed}
+.registry-list-tools :focus-visible,.registry-bulk-dialog :focus-visible{outline:2px solid #91d5ff;outline-offset:3px}
+@media(max-width:700px){
+ .tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.tabs .tab-btn{min-width:0;white-space:normal;min-height:46px;padding:10px 4px;font-size:14px}
+ .operator-table-wrap,.admin-table-wrap{overflow:visible}.registry-managed-table.operator-table,.registry-managed-table.admin-table{display:block;min-width:0;width:100%}.registry-managed-table tbody{display:block}
+ .registry-managed-table.operator-table tr:first-child,.registry-managed-table.admin-table tr:first-child{display:none}
+ .registry-managed-table.operator-table tr,.registry-managed-table.admin-table tr{display:grid;gap:0;margin:12px 0;padding:12px;border:1px solid #333;border-radius:14px;background:#0c0c0c}
+ .registry-managed-table.operator-table td,.registry-managed-table.admin-table td{display:grid;grid-template-columns:80px minmax(0,1fr);gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #252525;min-width:0;line-height:1.5;overflow-wrap:anywhere}
+ .registry-managed-table.operator-table td:before,.registry-managed-table.admin-table td:before{content:attr(data-label);color:#aaa;font-size:12px}.registry-managed-table td[data-label="연락처"]{white-space:nowrap}
+ .registry-managed-table td[data-label="순서"]{display:none!important}.registry-managed-table .table-actions{justify-content:flex-start;flex-wrap:wrap}.registry-managed-table .table-actions .btn{width:auto;min-height:44px;padding:10px 12px}
+ .registry-managed-table.operator-table tr.registry-selected,.registry-managed-table.admin-table tr.registry-selected{background:#102019;border-color:#74deb1}
+ .registry-list-actions{display:grid;grid-template-columns:1fr 1fr}.registry-list-actions .operator-select-all{grid-column:1/-1}.registry-list-actions .btn{width:100%}
+ .registry-bulk-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.registry-bulk-body{padding:14px}.registry-bulk-dialog header,.registry-bulk-dialog footer{padding:12px 14px}.registry-bulk-dialog footer .btn{flex:1}
+ .registry-bulk-common .btn{width:100%}
+}
+@media(max-width:390px){.registry-bulk-fields{grid-template-columns:1fr}}

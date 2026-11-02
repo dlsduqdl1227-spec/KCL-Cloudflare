@@ -637,6 +637,10 @@ async function dispatch(action, args, env, request) {
     applyOperatorDateSchedule: () => applyOperatorDateSchedule(env, args[0], args[1]),
     bulkApplyOperatorEffectiveDate: () => bulkApplyOperatorEffectiveDate(env, args[0], args[1]),
     bulkUpdateOperatorAssignments: () => bulkUpdateOperatorAssignments(env, args[0], args[1]),
+    previewRegistryBatch: () => previewRegistryBatch(env, args[0], args[1]),
+    applyRegistryBatch: () => applyRegistryBatch(env, args[0], args[1]),
+    restoreRegistryBatch: () => restoreRegistryBatch(env, args[0], args[1]),
+    getRegistryTrash: () => getRegistryTrash(env, args[0], args[1]),
     saveRegistrySchedule: () => saveRegistrySchedule(env, args[0], args[1]),
     deleteRegistrySchedule: () => deleteRegistrySchedule(env, args[0], args[1]),
     assignRegistrySchedule: () => assignRegistrySchedule(env, args[0], args[1]),
@@ -1951,6 +1955,7 @@ async function deleteOperatorAccount(env, rowIndex, actorArg) {
 }
 function operatorRowOut_(r) {
   return {
+    registryVersion:registryRowVersion_(r),
     rowIndex: r.id,
     accountType: r.account_type,
     type: r.account_type,
@@ -1974,7 +1979,7 @@ async function listOperators(env, competitionCode, actorArg) {
     rows = rows.filter(r => {
       if (operatorIsAdminRow_(r)) return true;
       const codes = accessCodes_(r.access || '');
-      return codes.includes(code);
+      return codes.includes(code) || codes.includes('ALL');
     });
   }
   return { success: true, operators: rows.map(operatorRowOut_) };
@@ -2383,6 +2388,7 @@ function sortParticipantRowsForCompetition_(rows, competitionCode) {
 function participantRowOut_(r) {
   const ex = parseJson(r.extra_json, {});
   return {
+    registryVersion:registryRowVersion_(r),
     rowIndex: r.id,
     competitionCode: r.competition_code,
     name: r.name || '', affiliation: r.competition_code === 'KTCC' ? ktccMemberSummaryFromRow_(r, ex) : (r.affiliation || ''), phone: r.phone || '',
@@ -2753,7 +2759,7 @@ async function bulkApplyOperatorEffectiveDate(env, payload, actorArg) {
   for (const row of sourceRows) {
     if (operatorIsAdminRow_(row)) return { success:false, message:'관리자 계정에는 심사 적용일을 지정할 수 없습니다.' };
     const rowCodes = accessCodes_(row.access || '');
-    if (!rowCodes.includes(code)) return { success:false, message:'선택한 계정 중 현재 대회와 다른 권한이 포함되어 있습니다.' };
+    if (!rowCodes.includes(code) && !rowCodes.includes('ALL')) return { success:false, message:'선택한 계정 중 현재 대회와 다른 권한이 포함되어 있습니다.' };
     const identityKey = operatorIdentityKey_(row.name, row.phone);
     if (identityKey && selectedIdentityKeys.has(identityKey)) return { success:false, message:`${row.name || '동일 계정'}의 서로 다른 날짜 역할이 동시에 선택되었습니다. 적용할 역할 한 행만 체크해주세요.` };
     if (identityKey) selectedIdentityKeys.add(identityKey);
@@ -2806,7 +2812,7 @@ async function bulkUpdateOperatorAssignments(env, payload, actorArg) {
   for(const row of selected){
     const targetDate=operation==='date'?date:safeStr(row.effective_date);
     const key=operatorIdentityKey_(row.name,row.phone)+'|'+targetDate;
-    if(targets.has(key)||rows.some(other=>other.id!==row.id&&operatorIdentityKey_(other.name,other.phone)===operatorIdentityKey_(row.name,row.phone)&&safeStr(other.effective_date)===targetDate&&(accessCodes_(other.access).includes(code)||accessCodes_(other.access).includes('ALL'))))return {success:false,message:(row.name||'선택 계정')+'의 해당 날짜 권한이 중복됩니다. 날짜별 역할을 확인하고 한 행씩 선택해주세요.'};
+    if(operation==='date'&&targetDate!==safeStr(row.effective_date)&&(targets.has(key)||rows.some(other=>other.id!==row.id&&operatorIdentityKey_(other.name,other.phone)===operatorIdentityKey_(row.name,row.phone)&&safeStr(other.effective_date)===targetDate&&(accessCodes_(other.access).includes(code)||accessCodes_(other.access).includes('ALL')))))return {success:false,message:(row.name||'선택 계정')+'의 해당 날짜 권한이 중복됩니다. 날짜별 역할을 확인하고 한 행씩 선택해주세요.'};
     targets.add(key);
     const team=operation==='clearTeam'?'':safeStr(row.team_group);
     if(targetDate===safeStr(row.effective_date)&&team===safeStr(row.team_group))continue;
@@ -2843,6 +2849,167 @@ async function bulkUpdateOperatorAssignments(env, payload, actorArg) {
     throw error;
   }
   return {success:true,applied:updates.length,message:code+' 선택 '+updates.length+'건 '+(operation==='date'?date+' 심사 날짜 변경':'조 배정 해제')+' 완료 · 기존 평가 기록 유지'};
+}
+function registryRowVersion_(row) {
+  return safeStr(row.updated_at)+':'+_commentHash_(JSON.stringify(row));
+}
+function registryBatchIsSelf_(actor,row) {
+  return operatorIdentityKey_(actor.name,actor.phone)===operatorIdentityKey_(row.name,row.phone);
+}
+function registryParticipantHasScores_(row,scores) {
+  return scores.some(score=>{
+    if(Number(score.participant_id)===Number(row.id))return true;
+    const round=normalizeRoundForCompetition_(row.competition_code,score.round);
+    const number=participantRoundNumber_(row,row.competition_code,round);
+    return number&&participantEvaluationCompletionUnitKey_(row.competition_code,number)===participantEvaluationCompletionUnitKey_(row.competition_code,score.unit);
+  });
+}
+async function registryBatchContext_(env,payload,actorArg) {
+  const actor=await getActor(env,actorArg),target=safeStr(payload&&payload.target),operation=safeStr(payload&&payload.operation);
+  const code=target==='admins'?'ALL':safeStr(payload&&payload.competitionCode).toUpperCase();
+  if(!actor||!['participants','operators','admins'].includes(target)||!['edit','delete'].includes(operation))return {success:false,message:'명단 작업과 로그인 상태를 확인해주세요.'};
+  if(target==='admins'?!hasAdmin(actor):!COMPETITION_CODES.includes(code)||!hasManageAccess(actor,code))return {success:false,message:'선택한 명단을 관리할 권한이 없습니다.'};
+  const entries=Array.isArray(payload.entries)?payload.entries:[],ids=entries.map(e=>Number(e.rowIndex));
+  if(!ids.length||ids.length>300||new Set(ids).size!==ids.length||ids.some(id=>!Number.isInteger(id)||id<=0))return {success:false,message:'명단을 1~300건 선택해주세요.'};
+  const table=target==='participants'?'participants':'operators';
+  const rows=(await env.DB.prepare(table==='participants'?'SELECT * FROM participants WHERE competition_code=? ORDER BY id':'SELECT * FROM operators ORDER BY id').bind(...(table==='participants'?[code]:[])).all()).results||[];
+  const selected=rows.filter(row=>ids.includes(Number(row.id)));
+  if(selected.length!==ids.length||selected.some(row=>target==='admins'?!operatorIsAdminRow_(row):target==='operators'&&(operatorIsAdminRow_(row)||!accessCodes_(row.access).some(c=>c===code||c==='ALL'))))return {success:false,stale:true,message:'다른 대회 명단이 포함되었거나 삭제된 행이 있습니다. 현재 목록을 새로고침해주세요.'};
+  if(selected.some(row=>entries.find(e=>Number(e.rowIndex)===Number(row.id)).version!==registryRowVersion_(row)))return {success:false,stale:true,message:'명단이 다른 화면에서 변경되었습니다. 최신 목록을 불러온 뒤 다시 선택해주세요.'};
+  const cfg=target==='participants'?await env.DB.prepare('SELECT current_round FROM competitions WHERE code=?').bind(code).first():null;
+  const round=target==='participants'?normalizeRoundForCompetition_(code,payload.round||cfg&&cfg.current_round||'예선'):'';
+  if(target==='participants'&&!(COMPETITION_ROUNDS[code]||[]).includes(round))return {success:false,message:'수정할 경기 회차를 확인해주세요.'};
+  const scores=target==='participants'?(await env.DB.prepare("SELECT id,unit,round,json_extract(payload_json,'$.participantId') participant_id FROM scores WHERE competition_code=? ORDER BY id").bind(code).all()).results||[]:[];
+  const stamp=nowIso(),mutations=[],blocked=[],errors=[],summary=[];
+  const numberColumn=round==='예선'?'prelim_cup_no':round==='본선'?'main_cup_no':'final_cup_no';
+  for(const row of selected){
+    const entry=entries.find(e=>Number(e.rowIndex)===Number(row.id)),updates=entry.updates||{},after={...row,updated_at:stamp};
+    if(operation==='delete'){
+      let reason='';
+      if(target==='participants'&&registryParticipantHasScores_(row,scores))reason='평가 기록 연결 유지';
+      if(target==='admins'&&registryBatchIsSelf_(actor,row))reason='현재 로그인한 관리자 보호';
+      if(reason){blocked.push({rowIndex:row.id,name:row.name,reason});continue;}
+      if(target==='operators'){
+        const original=accessCodes_(row.access),remaining=(original.includes('ALL')?COMPETITION_CODES:original).filter(c=>c!==code);
+        if(remaining.length){after.access=normalizeAccess_(remaining.join(','));mutations.push({before:row,after});}
+        else mutations.push({before:row,after:null});
+      }else mutations.push({before:row,after:null});
+      summary.push({rowIndex:row.id,name:row.name,description:target==='operators'?code+' 권한만 삭제':'명단에서 삭제'});continue;
+    }
+    const allowed=target==='participants'?['name','affiliation','phone','number','date','station','team']:target==='operators'?['name','affiliation','phone','role','accountType','team','date']:['name','affiliation','phone'];
+    if(Object.keys(updates).some(key=>!allowed.includes(key))){errors.push({name:row.name,message:'지원하지 않는 수정 항목입니다.'});continue;}
+    for(const key of ['name','affiliation','phone'])if(Object.prototype.hasOwnProperty.call(updates,key))after[key]=key==='phone'?normalizePhone(updates[key]):registryScheduleText_(updates[key],key==='affiliation'?200:80);
+    if(!safeStr(after.name)||target!=='participants'&&!normalizePhone(after.phone))errors.push({name:row.name,message:'이름과 로그인 연락처를 확인해주세요.'});
+    if(target==='participants'){
+      if(Object.prototype.hasOwnProperty.call(updates,'number')){
+        const number=registryScheduleText_(updates.number,60);
+        if(number!==safeStr(row[numberColumn])&&registryParticipantHasScores_(row,scores))errors.push({name:row.name,message:'평가 기록이 있는 선수의 번호는 일괄 변경할 수 없습니다.'});
+        after[numberColumn]=number;
+        if(code==='KTCC'&&round==='예선')after.team_no=number;
+      }
+      if(code==='KTCC'&&Object.prototype.hasOwnProperty.call(updates,'name'))after.team_name=after.name;
+      const extra=parseJson(row.extra_json,{}),schedule={...extra.roundSchedules&&extra.roundSchedules[round]};
+      if(code==='KCR'&&round==='예선'&&Object.prototype.hasOwnProperty.call(updates,'number'))extra.kcrPrelimPending=!safeStr(after.prelim_cup_no);
+      if(code==='KTCC'&&Object.prototype.hasOwnProperty.call(updates,'affiliation')){
+        const members=ktccMemberNames_({},after.affiliation);
+        if(!members.length)errors.push({name:row.name,message:'팀원 이름을 입력해주세요.'});
+        extra['팀원 이름']=members;after.affiliation=members.join(', ');
+      }
+      if(Object.prototype.hasOwnProperty.call(updates,'date')){
+        const date=normalizeEffectiveDate_(updates.date);if(safeStr(updates.date)&&!date)errors.push({name:row.name,message:'올바른 경기 날짜를 선택해주세요.'});
+        schedule.date=date;if(round==='예선'){extra['대회일']=date;extra['예선일']=date;extra.competitionDate=date;}
+      }
+      if(Object.prototype.hasOwnProperty.call(updates,'station'))schedule.station=registryScheduleText_(updates.station,60);
+      if(Object.prototype.hasOwnProperty.call(updates,'team'))schedule.team=registryScheduleText_(updates.team,60);
+      if(['date','station','team'].some(key=>Object.prototype.hasOwnProperty.call(updates,key)))extra.roundSchedules={...extra.roundSchedules,[round]:schedule};
+      after.extra_json=JSON.stringify(extra);
+    }else if(target==='operators'){
+      if(Object.prototype.hasOwnProperty.call(updates,'date')){after.effective_date=normalizeEffectiveDate_(updates.date);if(safeStr(updates.date)&&!after.effective_date)errors.push({name:row.name,message:'올바른 심사 날짜를 선택해주세요.'});}
+      if(Object.prototype.hasOwnProperty.call(updates,'team'))after.team_group=registryScheduleText_(updates.team,60);
+      if(Object.prototype.hasOwnProperty.call(updates,'role'))after.role=registryScheduleText_(updates.role,80);
+      if(Object.prototype.hasOwnProperty.call(updates,'accountType'))after.account_type=safeStr(updates.accountType);
+      if(after.account_type!==row.account_type){if(after.account_type==='TEAMLEAD')after.role='대회팀장';else if(after.account_type==='STAFF')after.role='운영진';else if(after.account_type==='JUDGE'&&/팀장|운영진/.test(after.role))after.role='센서리 심사위원';}
+      if(!['JUDGE','TEAMLEAD','STAFF'].includes(after.account_type)||operatorIsAdminRow_(after)||/관리자|총괄|admin/i.test(after.role))errors.push({name:row.name,message:'관리자 권한은 관리자 탭에서만 변경할 수 있습니다.'});
+    }
+    const changed=Object.keys(after).filter(key=>key!=='updated_at'&&after[key]!==row[key]);
+    if(!changed.length)continue;
+    if(target==='operators'){
+      const original=accessCodes_(row.access),remaining=(original.includes('ALL')?COMPETITION_CODES:original).filter(c=>c!==code);
+      if(remaining.length){mutations.push({before:row,after:{...row,access:normalizeAccess_(remaining.join(',')),updated_at:stamp}});mutations.push({before:null,after:{...after,id:null,access:code,created_at:stamp}});}
+      else mutations.push({before:row,after});
+    }else mutations.push({before:row,after});
+    summary.push({rowIndex:row.id,name:row.name,description:'수정 항목 '+Object.keys(updates).length+'개'});
+  }
+  const deletedIds=new Set(mutations.filter(m=>m.before&&!m.after).map(m=>m.before.id));
+  if(target==='admins'&&rows.filter(operatorIsAdminRow_).every(row=>deletedIds.has(row.id)))errors.push({name:'관리자',message:'최소 한 명의 관리자는 유지해야 합니다.'});
+  const proposal=rows.filter(row=>!mutations.some(m=>m.before&&m.before.id===row.id)).concat(mutations.filter(m=>m.after).map(m=>m.after));
+  for(const mutation of mutations.filter(m=>m.after)){
+    const after=mutation.after,before=mutation.before;
+    if(target==='participants'&&before&&after[numberColumn]!==before[numberColumn]&&safeStr(after[numberColumn])&&proposal.some(other=>other!==after&&participantEvaluationCompletionUnitKey_(code,other[numberColumn])===participantEvaluationCompletionUnitKey_(code,after[numberColumn])))errors.push({name:after.name,message:round+' 번호 '+after[numberColumn]+'가 중복됩니다.'});
+    if(target!=='participants'){
+      const identityChanged=!before||['name','phone','access','effective_date'].some(key=>after[key]!==before[key]);
+      if(identityChanged&&proposal.some(other=>other!==after&&operatorIdentityKey_(other.name,other.phone)===operatorIdentityKey_(after.name,after.phone)&&safeStr(other.effective_date)===safeStr(after.effective_date)&&accessCodes_(other.access).some(c=>accessCodes_(after.access).includes(c)||c==='ALL'||after.access==='ALL')))errors.push({name:after.name,message:'동일한 이름·연락처의 해당 날짜 권한이 이미 있습니다. 기존 행을 선택해 수정해주세요.'});
+    }
+  }
+  const revision=await sha256Hex_(JSON.stringify({target,code,operation,round,entries,rows,scores}));
+  return {success:true,target,code,operation,round,actor,table,rows,scores,mutations,summary,blocked,errors,revision,ready:!!mutations.length&&!errors.length,
+    message:errors.length?'수정이 필요한 항목을 확인해주세요.':mutations.length?summary.length+'건 '+(operation==='delete'?'삭제':'수정')+' 예정'+(blocked.length?' · 보호 '+blocked.length+'건 유지':''):'변경할 내용이 없습니다.'};
+}
+async function previewRegistryBatch(env,payload,actorArg) {
+  const {actor,table,rows,scores,mutations,...result}=await registryBatchContext_(env,payload,actorArg);return result;
+}
+function registryBatchGuard_(env,context,token) {
+  const columns=context.table==='participants'?['id','competition_code','name','affiliation','phone','unique_no','prelim_cup_no','main_cup_no','final_cup_no','cup_no','sample_no','team_name','team_no','extra_json','updated_at']:['id','account_type','name','affiliation','phone','access','team_group','role','effective_date','updated_at'];
+  const scope=context.table==='participants'?"competition_code='"+context.code+"'":'1=1';
+  const scoreFields=context.scores[0]?['unit','round'].filter(key=>Object.prototype.hasOwnProperty.call(context.scores[0],key)):[];
+  const scoreGuard=context.table==='participants'?`AND (SELECT COUNT(*) FROM scores WHERE competition_code='${context.code}')=${context.scores.length} AND NOT EXISTS(SELECT 1 FROM score_original s LEFT JOIN scores r ON r.id=json_extract(s.value,'$.id') WHERE r.id IS NULL ${scoreFields.length?' OR '+scoreFields.map(key=>`r.${key} IS NOT json_extract(s.value,'$.${key}')`).join(' OR '):''})`:'';
+  return env.DB.prepare(`WITH original AS(SELECT value FROM json_each(?)),score_original AS(SELECT value FROM json_each(?)) INSERT INTO sessions(token,kind,payload_json,expires_at,created_at)
+    SELECT ?,CASE WHEN (SELECT COUNT(*) FROM ${context.table} WHERE ${scope})=(SELECT COUNT(*) FROM original)
+    AND NOT EXISTS(SELECT 1 FROM original o LEFT JOIN ${context.table} r ON r.id=json_extract(o.value,'$.id') WHERE r.id IS NULL OR ${columns.map(key=>`r.${key} IS NOT json_extract(o.value,'$.${key}')`).join(' OR ')}) ${scoreGuard}
+    THEN 'REGISTRY_BATCH_GUARD' ELSE NULL END,'{}',?,?`).bind(JSON.stringify(context.rows),JSON.stringify(context.scores),token,nowIso(),nowIso());
+}
+function registryMutationStatements_(env,table,mutations) {
+  const columns=table==='participants'?['competition_code','name','affiliation','phone','unique_no','prelim_cup_no','main_cup_no','final_cup_no','cup_no','sample_no','team_name','team_no','extra_json','created_at','updated_at']:['account_type','name','affiliation','phone','access','team_group','role','effective_date','created_at','updated_at'];
+  return mutations.map(m=>!m.after?env.DB.prepare(`DELETE FROM ${table} WHERE id=?`).bind(m.before.id):m.before?
+    env.DB.prepare(`UPDATE ${table} SET ${columns.map(k=>k+'=?').join(',')} WHERE id=?`).bind(...columns.map(k=>m.after[k]??null),m.before.id):
+    env.DB.prepare(`INSERT INTO ${table} (${m.after.id?'id,':''}${columns.join(',')}) VALUES (${[...(m.after.id?[m.after.id]:[]),...columns].map(()=>'?').join(',')})`).bind(...(m.after.id?[m.after.id]:[]),...columns.map(k=>m.after[k]??null)));
+}
+async function applyRegistryBatch(env,payload,actorArg) {
+  const context=await registryBatchContext_(env,payload,actorArg);
+  if(!context.success)return context;
+  if(!payload.revision||payload.revision!==context.revision)return {success:false,stale:true,message:'미리보기 이후 명단이 변경되었습니다. 다시 확인해주세요. 입력한 수정 내용은 유지됩니다.'};
+  if(!context.ready)return {success:false,message:context.message,errors:context.errors,blocked:context.blocked};
+  const token='registry-batch:'+crypto.randomUUID(),statements=[registryBatchGuard_(env,context,token),...registryMutationStatements_(env,context.table,context.mutations)];
+  const backupKey=context.operation==='delete'?'registry_batch_trash:'+crypto.randomUUID():'';
+  if(backupKey)statements.push(env.DB.prepare('INSERT INTO system_settings(setting_key,setting_value,updated_at,updated_by) VALUES(?,?,?,?)').bind(backupKey,JSON.stringify({target:context.target,code:context.code,table:context.table,mutations:context.mutations,actor:operatorIdentityKey_(context.actor.name,context.actor.phone)}),nowIso(),safeStr(context.actor.name)));
+  statements.push(env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(token));
+  try{await env.DB.batch(statements);}catch(error){if(/NOT NULL constraint failed: sessions.kind/.test(String(error&&error.message||error)))return {success:false,stale:true,message:'동시 변경이 감지되어 전체 작업을 취소했습니다. 목록을 새로고침해주세요.'};throw error;}
+  return {success:true,applied:context.summary.length,blocked:context.blocked,backupKey,message:context.summary.length+'건 '+(context.operation==='delete'?'선택 삭제':'일괄 수정')+' 완료'+(context.blocked.length?' · 보호 '+context.blocked.length+'건 유지':'')+' · 평가 점수·코멘트 유지'};
+}
+async function getRegistryTrash(env,payload,actorArg) {
+  const actor=await getActor(env,actorArg),target=safeStr(payload&&payload.target),code=target==='admins'?'ALL':safeStr(payload&&payload.competitionCode).toUpperCase();
+  if(!['participants','operators','admins'].includes(target)||!actor||(target==='admins'?!hasAdmin(actor):!COMPETITION_CODES.includes(code)||!hasManageAccess(actor,code)))return {success:false,message:'삭제 내역 조회 권한이 없습니다.'};
+  const rows=(await env.DB.prepare("SELECT setting_key,setting_value,updated_at,updated_by FROM system_settings WHERE setting_key LIKE 'registry_batch_trash:%' ORDER BY updated_at DESC LIMIT 100").all()).results||[];
+  return {success:true,items:rows.map(row=>{const backup=parseJson(row.setting_value,{});if(backup.target!==target||backup.code!==code)return null;return {backupKey:row.setting_key,deletedAt:row.updated_at,deletedBy:row.updated_by,count:(backup.mutations||[]).length,names:(backup.mutations||[]).map(m=>m.before&&m.before.name||'')};}).filter(Boolean).slice(0,20)};
+}
+async function restoreRegistryBatch(env,backupKey,actorArg) {
+  const actor=await getActor(env,actorArg);
+  if(!actor||!safeStr(backupKey).startsWith('registry_batch_trash:'))return {success:false,message:'복원할 삭제 내역을 확인해주세요.'};
+  const stored=await env.DB.prepare('SELECT setting_value FROM system_settings WHERE setting_key=?').bind(backupKey).first(),backup=parseJson(stored&&stored.setting_value,null);
+  if(!backup)return {success:false,message:'이미 복원되었거나 삭제 내역을 찾을 수 없습니다.'};
+  if(backup.target==='admins'?!hasAdmin(actor):!hasManageAccess(actor,backup.code))return {success:false,message:'해당 삭제 내역을 복원할 권한이 없습니다.'};
+  const table=backup.target==='participants'?'participants':'operators',code=backup.code;
+  const rows=(await env.DB.prepare(table==='participants'?'SELECT * FROM participants WHERE competition_code=? ORDER BY id':'SELECT * FROM operators ORDER BY id').bind(...(table==='participants'?[code]:[])).all()).results||[];
+  const mutations=[];
+  for(const m of backup.mutations){const current=rows.find(r=>r.id===m.before.id);
+    if(m.after?(!current||registryRowVersion_(current)!==registryRowVersion_(m.after)):!!current)return {success:false,message:'삭제 이후 같은 계정이 변경되었거나 다시 등록되었습니다. 현재 명단을 확인해주세요.'};
+    if(rows.some(row=>row.id!==m.before.id&&(table==='participants'?['prelim_cup_no','main_cup_no','final_cup_no'].some(key=>safeStr(m.before[key])&&participantEvaluationCompletionUnitKey_(code,row[key])===participantEvaluationCompletionUnitKey_(code,m.before[key])):operatorIdentityKey_(row.name,row.phone)===operatorIdentityKey_(m.before.name,m.before.phone)&&safeStr(row.effective_date)===safeStr(m.before.effective_date)&&accessCodes_(row.access).some(c=>accessCodes_(m.before.access).includes(c)||c==='ALL'||m.before.access==='ALL'))))return {success:false,message:'복원할 번호 또는 계정이 현재 명단과 중복됩니다. 먼저 현재 등록을 확인해주세요.'};
+    mutations.push({before:current||null,after:m.before});
+  }
+  const scores=table==='participants'?(await env.DB.prepare('SELECT id FROM scores WHERE competition_code=?').bind(code).all()).results||[]:[];
+  const token='registry-restore:'+crypto.randomUUID();
+  try{await env.DB.batch([registryBatchGuard_(env,{table,code,rows,scores},token),...registryMutationStatements_(env,table,mutations),env.DB.prepare('DELETE FROM system_settings WHERE setting_key=?').bind(backupKey),env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(token)]);}catch(error){if(/NOT NULL constraint failed: sessions.kind/.test(String(error&&error.message||error)))return {success:false,message:'명단이 변경되어 복원하지 않았습니다. 새로고침 후 다시 시도해주세요.'};throw error;}
+  return {success:true,message:mutations.length+'건 복원 완료 · 기존 평가 기록 유지'};
 }
 function getRegistrationTemplates() {
   // 웹 화면의 CSV 예시는 대회별 정리 양식을 기준으로 제공합니다.

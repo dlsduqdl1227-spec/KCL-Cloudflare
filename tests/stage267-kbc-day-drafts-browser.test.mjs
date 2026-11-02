@@ -64,6 +64,7 @@ try {
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),10);
   assert.match(await page.locator('#partTable').innerText(),/최준호/);
   await page.locator('#kbc-roster-all').click();
+  await page.getByText('예선 날짜 빠른변경',{exact:true}).click();
   assert.equal(await page.locator('#participant-bulk-prelim-tools').isVisible(),true);
   assert.equal(await page.locator('#partTable [data-edit-part]').count(),21);
   await page.locator('#kbc-roster-final').click();

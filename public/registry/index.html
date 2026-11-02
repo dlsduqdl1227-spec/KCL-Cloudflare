@@ -71,13 +71,15 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
+<link rel="stylesheet" href="/assets/registry-bulk.css?v=271">
+<script defer src="/assets/registry-bulk.js?v=271"></script>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
     <div>
       <div class="brand">KCL 등록·권한 관리</div>
-      <div class="sub">선수·팀 등록과 운영진·심사위원·대회팀장·관리자 권한을 한 화면에서 관리합니다. 블라인드 번호와 디브리핑 인증 정보도 함께 D1에 저장합니다.</div>
+      <div class="sub">대회를 선택하고 선수·심사위원·관리자를 관리하세요. 목록에서 여러 명을 선택해 함께 수정하거나 삭제할 수 있습니다.</div>
       <div class="logo-strip"><span class="logo-chip">KBC</span><span class="logo-chip">KTCC</span><span class="logo-chip">MOC</span><span class="logo-chip">MOB</span><span class="logo-chip">KCR</span><span class="logo-chip">IKRC</span><span class="logo-chip">KCAC</span></div>
     </div>
     <div class="nav"><a href="/admin/">관리자 홈</a><a href="/assessment/?admin=1">통합 운영관리</a><a href="/debriefing/?from=admin">선수 디브리핑</a><a href="/">전체 홈</a></div>
@@ -263,7 +265,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
         <div class="section-title">
           <div>
             <div class="label" id="operatorFormLabel">심사위원·운영진 관리</div>
-            <div class="hint">심사위원·헤드·대회팀장·운영진을 등록합니다. 공통 적용일은 저장된 일정에 체크 배정하고, 예외적인 날짜만 직접 입력하세요.</div>
+            <div class="hint">계정 추가·개별 수정은 여기에서, 검색·일괄 수정·선택 삭제는 아래 목록에서 진행하세요.</div>
           </div>
         </div>
         <div class="operator-form-grid">
@@ -654,7 +656,7 @@ function previewFileToCsv(fileInputId,targetTextareaId,kind,mode){
 
 function accessCodesText(v){var s=String(v||'').toUpperCase().trim();if(!s)return [];if(s==='ALL')return ['ALL'];return s.split(',').map(function(x){return x.trim().toUpperCase();}).filter(Boolean);}
 function operatorIsAdminRow(r){var t=String((r&&(r.accountType||r.type))||'').toUpperCase();var role=String((r&&r.role)||'');return t==='ADMIN'||/관리자|admin|총괄/i.test(role);}
-function operatorVisibleForSelectedComp(r){var code=(document.getElementById('comp').value||'').toUpperCase();if(operatorIsAdminRow(r))return false;var codes=accessCodesText(r&&r.access);return code && codes.indexOf(code)>=0;}
+function operatorVisibleForSelectedComp(r){var code=(document.getElementById('comp').value||'').toUpperCase();if(operatorIsAdminRow(r))return false;var codes=accessCodesText(r&&r.access);return code && (codes.indexOf(code)>=0||codes.indexOf('ALL')>=0);}
 function roleLabelForRow(r){var t=String((r&&(r.accountType||r.type))||'').toUpperCase();if(operatorIsAdminRow(r))return '관리자';if(t==='TEAMLEAD')return '팀장';if(t==='STAFF')return '운영진';return r.role||'심사위원';}
 function syncOperatorRoleOptions(){
   var type=(document.getElementById('opType')&&document.getElementById('opType').value)||'JUDGE';

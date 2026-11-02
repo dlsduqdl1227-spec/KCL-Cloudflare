@@ -8,6 +8,7 @@ try{
  await page.evaluate(a=>{actor=a;document.getElementById('loginCard').classList.add('hidden');document.getElementById('main').classList.remove('hidden');loadRegistry();},api.actor);
  await page.waitForFunction(()=>operatorRows.length>=2);
  await page.locator('#tabbtn-operators').click();
+ await page.getByText('날짜·조 빠른변경',{exact:true}).click();
  await page.locator('#operatorSelectAll').check();await page.locator('#bulkOperatorDate').fill('2026-11-13');
  await page.getByRole('button',{name:'선택 계정 날짜 변경',exact:true}).click();
  assert.match(await page.locator('#bulkOperatorConfirm').innerText(),/2건/);
