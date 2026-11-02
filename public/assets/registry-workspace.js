@@ -34,6 +34,8 @@
   spec.card.querySelectorAll('.btnrow').forEach(function(row){if(!row.children.length)row.remove();});
   var create=document.querySelector('[data-registry-create="'+target+'"]');if(create)create.textContent=target==='participants'?'선수·팀 추가':target==='operators'?'심사위원 추가':'관리자 추가';
  });
+ var legacyPreset=document.getElementById('mobSchedulePresetBtn');
+ if(legacyPreset){var legacyRow=legacyPreset.parentElement,legacyTools=el('details','','registry-individual-fields');legacyTools.appendChild(el('summary','지난 MOB 예선 설정'));legacyTools.appendChild(el('p','지난 예선의 날짜별 권한을 설정하는 도구입니다. 현재 상시 권한 운영에는 사용하지 마세요.'));legacyRow.before(legacyTools);legacyTools.appendChild(legacyPreset);if(!legacyRow.children.length)legacyRow.remove();var syncLegacyVisibility=function(){legacyTools.hidden=legacyPreset.classList.contains('hidden');};new MutationObserver(syncLegacyVisibility).observe(legacyPreset,{attributes:true,attributeFilter:['class']});syncLegacyVisibility();}
  var originalCopyOperator=window.copyOperatorForDate;
  window.copyOperatorForDate=function(){showEditor('operators',false);var res=originalCopyOperator.apply(this,arguments);document.getElementById('registry-editor-dialog-title').textContent=selectedCompetitionCode_()+' · 날짜별 권한 추가';baseline=snapshot();syncEditorFooter();return res;};
  window.RegistryWorkspace={openEditor:showEditor};
