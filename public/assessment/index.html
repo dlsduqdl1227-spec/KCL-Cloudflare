@@ -5412,6 +5412,8 @@ function updateSelectReviewButton_() {
   var evalBtn = document.getElementById('btn-eval');
   var seedVoteBtn = document.getElementById('btn-ikrc-seed-vote');
   var code = _selComp && _selComp.code;
+  var selectedIdentity=document.getElementById('sel-sub');
+  if(selectedIdentity)selectedIdentity.innerHTML=escHtml((_judge&&_judge.name)||'')+' '+(code ? compTeamBadgeHtml(code)+'<span class="role-mode-badge">선택 대회 · '+escHtml(code)+'</span>' : '<span class="role-mode-badge">평가할 대회를 선택하세요</span>');
   var resultCode = String(code || '').toUpperCase();
   var isKcrMenu = resultCode === 'KCR';
   var isIkrcMenu = resultCode === 'IKRC';

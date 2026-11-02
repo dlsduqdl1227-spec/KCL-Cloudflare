@@ -953,7 +953,11 @@ async function judgeLogin(env, name, phone, securityCode = '', request = null) {
   }
   const rows = await env.DB.prepare('SELECT * FROM operators WHERE phone=? ORDER BY id').bind(phone).all();
   const list = operatorRowsForLogin_(rows.results || [], name, phone);
-  if (!list.length) return { success: false, message: '등록된 정보를 찾을 수 없습니다. 이름과 연락처를 확인해주세요.' };
+  if (!list.length) {
+    const registered=(rows.results || []).some(row=>normalizePersonName_(row.name)===normalizePersonName_(name));
+    if(registered)return {success:false,errorCode:'PERMISSION_DATE_INACTIVE',message:'등록된 계정이지만 현재 심사 적용일이 아닙니다. 관리자에게 적용일을 상시 또는 오늘 날짜로 확인해달라고 요청해주세요.'};
+    return { success: false, message: '등록된 정보를 찾을 수 없습니다. 이름과 연락처를 확인해주세요.' };
+  }
 
   const admin = list.find(x => operatorIsAdminRow_(x));
   const primary = admin || bestOperatorRow_(list);
