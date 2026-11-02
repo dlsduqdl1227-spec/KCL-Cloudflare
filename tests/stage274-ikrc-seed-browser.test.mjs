@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {createRpcFixture} from './helpers/rpc-fixture.mjs';
+import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {seedIkrcFinal} from './helpers/ikrc-final-fixture.mjs';
+const api=await createRpcFixture(),qa=await createBrowserFixture({apiHandler:api.handle});
+fs.mkdirSync('tmp/stage274-qa',{recursive:true});
+try{
+ await seedIkrcFinal(api);
+ const page=await qa.page(390,850);
+ await page.goto(qa.origin+'/assessment/');
+ await page.evaluate(actor=>{_judge=actor;_selComp={code:'IKRC',currentRound:'결선'};openIkrcSeedToCup_(_selComp);},api.actor);
+ await page.locator('#ikrc-seed-match-a option').nth(12).waitFor({state:'attached'});
+ assert.equal(await page.locator('#ikrc-seed-list .review-item').count(),12);
+ assert.doesNotMatch(await page.locator('#ikrc-seed-list').innerText(),/[AB]-[1-6]|참가자번호/);
+ assert.match(await page.locator('#ikrc-seed-match-a').innerText(),/로스터스 12/);
+ await page.locator('#ikrc-seed-match-no').fill('1경기');
+ await page.locator('#ikrc-seed-match-a').selectOption('0');await page.locator('#ikrc-seed-match-b').selectOption('6');
+ await page.locator('#ikrc-seed-match-save').click();
+ await page.locator('#ikrc-seed-match-list').getByRole('button',{name:'수정',exact:true}).waitFor();
+ await page.locator('#ikrc-seed-match-list').getByRole('button',{name:'수정',exact:true}).click();
+ await page.locator('#ikrc-seed-match-status').selectOption('마감');await page.locator('#ikrc-seed-match-memo').fill('결과 입력 대기');
+ await page.getByRole('button',{name:'매치 수정 저장',exact:true}).click();
+ await page.waitForFunction(()=>_ikrcSeedConsole.matches[0]?.status==='마감');
+ await page.locator('#ikrc-seed-list .review-item').first().click();
+ await page.locator('#ikrc-seed-bonus-buttons button').nth(3).click();
+ await page.locator('#ikrc-seed-memo').fill('선수별 결과');
+ await page.getByRole('button',{name:'결과 저장 / 수정',exact:true}).click();
+ await page.waitForFunction(()=>_ikrcSeedFinalists[0]?.seedSaved===true);
+ assert.match(await page.locator('#ikrc-seed-list .review-item').first().innerText(),/\+3점/);
+ await page.locator('#ikrc-seed-list .review-item').first().click();await page.locator('#ikrc-seed-result-delete').click();
+ await page.waitForFunction(()=>_ikrcSeedFinalists[0]?.seedSaved===false);
+ assert.match(await page.locator('#ikrc-seed-list .review-item').first().innerText(),/미입력/);
+ await page.locator('#ikrc-seed-match-list').getByRole('button',{name:'매치 삭제',exact:true}).click();
+ await page.waitForFunction(()=>_ikrcSeedConsole.matches.length===0);
+ for(const width of [360,390,768,1440]){await page.setViewportSize({width,height:900});const info=await inspectPage(page);assert.equal(info.pageOverflow,false,JSON.stringify(info));assert.deepEqual(info.brokenImages,[]);}
+ await page.setViewportSize({width:390,height:850});await page.screenshot({path:'tmp/stage274-qa/seed-mobile.png'});
+ const ranks={success:true,compCode:'IKRC',selectedRound:'결선',ranking:[{round:'결선',rank:1,unit:'B-2',roastingScore:70,avgScore:70,seedBonus:3,rankingScore:73,confirmedJudgeCount:6,totalCount:6,playerNameSummary:'결선 선수 1'}]};
+ await page.evaluate(res=>{showPanel('pRanking');renderRanking(res);},ranks);
+ assert.match(await page.locator('#ranking-list').innerText(),/로스팅 70.*Seed to Cup 3.*최종 73/);
+ assert.equal((await page.locator('.rank-score').innerText()).trim(),'73');
+ await page.screenshot({path:'tmp/stage274-qa/final-rank-mobile.png'});
+ assert.deepEqual(page.qaErrors,[]);assert.deepEqual(page.qaMissing,[]);
+ console.log('Stage274 browser: all 12 name/affiliation choices, match edit/status/delete, result save/delete, +0 distinction, final score breakdown, mobile/tablet/desktop and console passed.');
+}finally{await qa.close();api.close();}

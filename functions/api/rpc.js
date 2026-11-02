@@ -694,6 +694,7 @@ async function dispatch(action, args, env, request) {
     getIkrcSeedToCupConsole: () => getIkrcSeedToCupConsole(env, args[0]),
     saveIkrcSeedToCupMatch: () => saveIkrcSeedToCupMatch(env, args[0], args[1]),
     updateIkrcSeedToCupResult: () => updateIkrcSeedToCupResult(env, args[0], args[1], args[2], args[3]),
+    deleteIkrcSeedRecord: () => deleteIkrcSeedRecord(env, args[0], args[1]),
     getIkrcCalibrationScopeOptions: () => getIkrcCalibrationScopeOptions(env, args[0]),
     getIkrcCalibrationCupNumbers: () => getIkrcCalibrationCupNumbers(env, args[0], args[1]),
     getIkrcCalibrationResultsByCup: () => getIkrcCalibrationResultsByCup(env, args[0], args[1], args[2]),
@@ -6197,14 +6198,16 @@ function ikrcHeadCalibrationStations_(scoreRows, actor, stations, currentRound) 
 }
 function ikrcHeadOfficialStations_(scoreRows, actor, stations, currentRound) {
   const assigned = ikrcFindStationByAssignmentServer_(ikrcActorTeamServer_(actor), stations || []);
-  if (assigned) return [assigned];
-  return (stations || []).filter(station => (scoreRows || []).some(scoreRow => {
+  if (assigned && roundName_(currentRound,'')!=='결선') return [assigned];
+  const allowed = (stations || []).filter(station => (scoreRows || []).some(scoreRow => {
     if (!scoreOwnedByActor_(scoreRow, actor)) return false;
     if (isCalibrationMode_(ikrcScoreMode_(scoreRow))) return false;
     const scoreRound = ikrcScoreRound_(scoreRow);
     if (currentRound && scoreRound && scoreRound !== currentRound) return false;
     return ikrcScoreBelongsToStationServer_(scoreRow, station);
   }));
+  if(assigned&&!allowed.some(station=>station.id===assigned.id))allowed.unshift(assigned);
+  return allowed;
 }
 async function getIkrcCalibrationScopeOptions(env, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 심사 켈리브레이션 확인 권한이 없습니다. 다시 로그인해주세요.');
@@ -6228,6 +6231,7 @@ async function getIkrcCalibrationScopeOptions(env, actorArg) {
 }
 function ikrcSeedMatchToken_(matchNo) { return 'IKRC_SEED_MATCH:' + encodeURIComponent(safeStr(matchNo)); }
 function ikrcSeedResultToken_(targetType, targetValue) { return 'IKRC_SEED_RESULT:' + encodeURIComponent(safeStr(targetType) || 'participant') + ':' + encodeURIComponent(safeStr(targetValue)); }
+function ikrcSeedSavedAt_(old) { return new Date(Math.max(Date.now(),(Date.parse(old && old.savedAt)||0)+1)).toISOString(); }
 function ikrcSampleNoFromItem_(item) { return safeStr(item && (item['샘플번호'] || item.sampleNo || item.unit || item['컵번호'] || item['Cup No'])); }
 function ikrcParticipantNoFromItem_(item) { return safeStr(item && (item['참가자 번호'] || item['참가자번호'] || item.participantNo || item.uniqueNo || item['선수번호'])); }
 function ikrcScoreObjectFromItem_(item) {
@@ -6253,6 +6257,7 @@ function ikrcScoreObjectFromItem_(item) {
 }
 function ikrcSensoryBaseScoreFromItem_(item) {
   item = item || {};
+  if (toNumber(item.ikrcRoastingScore) !== null) return toNumber(item.ikrcRoastingScore);
   const flavor = firstNumberFromKeys_(item, ['Flavor(플레이버) ×3','Flavor(플레이버)','Flavor']);
   const clean = firstNumberFromKeys_(item, ['Clean Cup(클린컵) ×2','Clean Cup(클린컵)','Clean Cup']);
   const sweet = firstNumberFromKeys_(item, ['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness']);
@@ -6505,16 +6510,38 @@ async function finalizeIkrcStationEvaluation(env, requestedScope, actorArg) {
 }
 function ikrcSeedTargetKeysForItem_(item) {
   const keys = [];
+  if (item.ikrcSeedParticipantId) keys.push(ikrcSeedResultToken_('participantId', item.ikrcSeedParticipantId));
   const participantNo = ikrcParticipantNoFromItem_(item);
   const sampleNo = ikrcSampleNoFromItem_(item) || itemNumber_(item) || item.unit;
   if (participantNo) keys.push(ikrcSeedResultToken_('participant', participantNo));
   if (sampleNo) keys.push(ikrcSeedResultToken_('sample', sampleNo));
   return keys;
 }
-async function loadIkrcSeedResultMap_(env) {
+function ikrcSeedResolveParticipant_(participants, target) {
+  const type = safeStr(target && target.targetType), value = safeStr(target && target.targetValue);
+  const matches = (participants || []).filter(row => type === 'participantId'
+    ? String(row.id) === value
+    : (type === 'sample' || /-/.test(value)
+      ? participantKey_(ikrcBlindUnitFromRow_(row, '결선')) === participantKey_(value)
+      : safeStr(participantRoundNumber_(row, 'IKRC', '결선')) === value));
+  return value && matches.length === 1 ? matches[0] : null;
+}
+async function ikrcSeedParticipants_(env) {
+  const raw = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('IKRC').all();
+  return ikrcParticipantsForRound_(raw.results || [], '결선');
+}
+async function loadIkrcSeedResultMap_(env, participants=null) {
+  participants = participants || await ikrcSeedParticipants_(env);
   const raw = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('IKRC_SEED_RESULT').all();
   const map = new Map();
-  (raw.results || []).forEach(r => map.set(r.token, parseJson(r.payload_json, {})));
+  // Stable roster IDs decouple Seed to Cup from the roasting blind code. Read old
+  // code-based results without rewriting them; an explicit new result wins.
+  const records = (raw.results || []).map(r => ({...parseJson(r.payload_json, {}),token:r.token,rawJson:r.payload_json}));
+  records.sort((a,b) => Number(a.targetType === 'participantId') - Number(b.targetType === 'participantId') || safeStr(a.savedAt).localeCompare(safeStr(b.savedAt)));
+  records.forEach(record => {
+    const row = ikrcSeedResolveParticipant_(participants, record);
+    if (row) map.set(ikrcSeedResultToken_('participantId', row.id), record);
+  });
   return map;
 }
 function applyIkrcSeedBonusToItem_(item, seedMap) {
@@ -6527,13 +6554,14 @@ function applyIkrcSeedBonusToItem_(item, seedMap) {
   }
   if (!best) return item;
   const bonus = ikrcSeedBonusFromValue_(best.bonus);
+  const base = ikrcSensoryBaseScoreFromItem_(item) || 0;
+  item.ikrcRoastingScore = base;
   item['Seed to Cup 가산점'] = bonus;
   item['Seed to Cup 메모'] = safeStr(best.memo || '');
-  const base = ikrcSensoryBaseScoreFromItem_(item) || 0;
-  const finalScore = roundScoreValue_(base + bonus);
-  item['총점'] = finalScore;
-  item['최종점수'] = finalScore;
-  item.totalScore = finalScore;
+  // The bonus belongs to the entrant, never to each judge's score sheet.
+  item['총점'] = base;
+  item['최종점수'] = base;
+  item.totalScore = base;
   return item;
 }
 async function getIkrcSeedToCupConsole(env, actorArg) {
@@ -6543,29 +6571,31 @@ async function getIkrcSeedToCupConsole(env, actorArg) {
     return { success:false, message:'IKRC Seed to Cup은 관리자, 대회팀장 또는 운영진만 사용할 수 있습니다.' };
   }
   const cfg = await env.DB.prepare('SELECT current_round FROM competitions WHERE code=?').bind('IKRC').first();
-  const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id ASC').bind('IKRC').all();
+  const participants = await ikrcSeedParticipants_(env);
+  const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? ORDER BY id ASC').bind('IKRC', '결선').all();
   const headers = mergeHeaders('IKRC', rawRows.results || []);
   let rows = (rawRows.results || []).map(r => rowToReviewItem(r, 'IKRC', headers, cfg && cfg.current_round));
   rows = rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode));
-  const finalRows = rows.filter(item => roundName_(item.round || item['라운드']) === '결선');
-  if (finalRows.length) rows = finalRows;
-  const resultMap = await loadIkrcSeedResultMap_(env);
-  const by = new Map();
-  rows.forEach(item => {
-    const participantNo = ikrcParticipantNoFromItem_(item) || itemNumber_(item) || item.unit;
-    if (!participantNo) return;
-    const cur = by.get(participantNo) || { targetType:'participant', targetValue:participantNo, participantNo, playerName:item.participantName || item['선수명'] || '', affiliation:item.participantAffiliation || item['소속'] || '', sampleNos:[], sensoryRowCount:0, seedBonus:0, seedMemo:'' };
-    const sampleNo = ikrcSampleNoFromItem_(item);
-    if (sampleNo && !cur.sampleNos.includes(sampleNo)) cur.sampleNos.push(sampleNo);
-    cur.sensoryRowCount += 1;
-    const direct = resultMap.get(ikrcSeedResultToken_('participant', participantNo)) || (sampleNo ? resultMap.get(ikrcSeedResultToken_('sample', sampleNo)) : null);
-    if (direct) { cur.seedBonus = ikrcSeedBonusFromValue_(direct.bonus); cur.seedMemo = safeStr(direct.memo || ''); }
-    by.set(participantNo, cur);
+  rows = rows.filter(item => roundName_(item.round || item['라운드']) === '결선');
+  const resultMap = await loadIkrcSeedResultMap_(env, participants);
+  const finalists = sortRoundParticipants_(participants, 'IKRC', '결선').map(row => {
+    const unit = ikrcBlindUnitFromRow_(row, '결선');
+    const panel = ikrcOfficialPanelRows_(rows.filter(item => participantKey_(itemNumber_(item)) === participantKey_(unit)));
+    const direct = resultMap.get(ikrcSeedResultToken_('participantId', row.id));
+    return {targetType:'participantId',targetValue:String(row.id),participantNo:participantRoundNumber_(row,'IKRC','결선'),playerName:row.name,affiliation:participantIdentityFromRow_(row,'IKRC').affiliation,
+      sensoryRowCount:panel.liveRows.length,seedBonus:direct ? ikrcSeedBonusFromValue_(direct.bonus) : 0,seedMemo:direct && !direct.deleted ? safeStr(direct.memo) : '',seedSaved:!!direct && !direct.deleted,seedSavedAt:direct ? safeStr(direct.savedAt) : ''};
   });
   const matchRows = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('IKRC_SEED_MATCH').all();
-  const matches = (matchRows.results || []).map(r => parseJson(r.payload_json, {})).filter(Boolean).sort((a,b) => safeStr(a.matchNo).localeCompare(safeStr(b.matchNo), 'ko', {numeric:true}));
-  const results = Array.from(resultMap.values()).sort((a,b) => safeStr(a.targetValue).localeCompare(safeStr(b.targetValue), 'ko', {numeric:true}));
-  return { success:true, isManager:true, currentRound:safeStr(cfg && cfg.current_round), finalists:Array.from(by.values()).sort((a,b)=>safeStr(a.participantNo).localeCompare(safeStr(b.participantNo), 'ko', {numeric:true})), matches, results };
+  const matches = (matchRows.results || []).map(r => parseJson(r.payload_json, {})).filter(Boolean).map(match => {
+    const out = {...match};
+    for (const field of ['participantA','participantB']) {
+      const row = ikrcSeedResolveParticipant_(participants, match[field]);
+      out[field] = row ? {targetType:'participantId',targetValue:String(row.id),label:row.name+' · '+participantIdentityFromRow_(row,'IKRC').affiliation} : {...match[field],label:'선수 연결 확인 필요'};
+    }
+    return out;
+  }).sort((a,b) => safeStr(a.matchNo).localeCompare(safeStr(b.matchNo), 'ko', {numeric:true}));
+  const results = finalists.filter(item=>item.seedSaved).map(item=>({targetType:item.targetType,targetValue:item.targetValue,bonus:item.seedBonus,memo:item.seedMemo,savedAt:item.seedSavedAt}));
+  return { success:true, isManager:true, currentRound:safeStr(cfg && cfg.current_round), finalists, matches, results, panel:{headCount:1,sensoryCount:5,sharedAcrossStations:true} };
 }
 async function saveIkrcSeedToCupMatch(env, match, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC Seed to Cup 매치 저장 권한이 없습니다.');
@@ -6573,23 +6603,63 @@ async function saveIkrcSeedToCupMatch(env, match, actorArg) {
   if (!hasManageAccess(auth.actor, 'IKRC') && normalizeAccountType_(auth.actor.type || auth.actor.accountType || '', auth.actor.role || '') !== 'STAFF') return { success:false, message:'IKRC Seed to Cup 매치 저장은 관리자, 대회팀장 또는 운영진만 가능합니다.' };
   const m = match || {};
   const matchNo = safeStr(m.matchNo);
-  if (!matchNo) return { success:false, message:'매치번호가 없습니다.' };
-  const payload = { competitionCode:'IKRC', matchNo, participantA:m.participantA || {}, participantB:m.participantB || {}, memo:safeStr(m.memo), status:safeStr(m.status || '오픈'), savedAt:nowIso(), savedBy:safeStr(auth.actor && auth.actor.name) };
-  await env.DB.prepare('INSERT OR REPLACE INTO sessions (token, kind, payload_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(ikrcSeedMatchToken_(matchNo), 'IKRC_SEED_MATCH', JSON.stringify(payload), '2035-12-31T23:59:59.000Z', nowIso()).run();
+  if (!matchNo || matchNo.length>80) return { success:false, message:'매치번호를 80자 이내로 입력해주세요.' };
+  const participants = await ikrcSeedParticipants_(env);
+  const a=ikrcSeedResolveParticipant_(participants,m.participantA), b=ikrcSeedResolveParticipant_(participants,m.participantB);
+  if (!a || !b || a.id===b.id) return {success:false,message:'결선 진출자 중 서로 다른 선수 2명을 선택해주세요.'};
+  const old=await env.DB.prepare('SELECT payload_json FROM sessions WHERE token=? AND kind=?').bind(ikrcSeedMatchToken_(matchNo),'IKRC_SEED_MATCH').first();
+  if (old && (safeStr(m.originalMatchNo)!==matchNo || safeStr(m.expectedSavedAt)!==safeStr(parseJson(old.payload_json,{}).savedAt))) return {success:false,message:'이미 있거나 변경된 매치입니다. 목록을 새로고침한 뒤 수정해주세요.'};
+  if (!old && m.originalMatchNo) return {success:false,message:'삭제된 매치입니다. 목록을 새로고침해주세요.'};
+  const ref=row=>({targetType:'participantId',targetValue:String(row.id),label:row.name+' · '+participantIdentityFromRow_(row,'IKRC').affiliation});
+  const payload = { competitionCode:'IKRC', round:'결선', matchNo, participantA:ref(a), participantB:ref(b), memo:safeStr(m.memo), status:m.status==='마감'?'마감':'오픈', savedAt:ikrcSeedSavedAt_(old && parseJson(old.payload_json,{})), savedBy:safeStr(auth.actor && auth.actor.name) };
+  const write=await env.DB.prepare('INSERT OR REPLACE INTO sessions (token, kind, payload_json, expires_at, created_at) SELECT ?, ?, ?, ?, ? WHERE '+(old?'EXISTS(SELECT 1 FROM sessions WHERE token=? AND payload_json=?)':'NOT EXISTS(SELECT 1 FROM sessions WHERE token=?)'))
+    .bind(ikrcSeedMatchToken_(matchNo),'IKRC_SEED_MATCH',JSON.stringify(payload),'2035-12-31T23:59:59.000Z',nowIso(),ikrcSeedMatchToken_(matchNo),...(old?[old.payload_json]:[])).run();
+  if (!write.meta.changes) return {success:false,message:'다른 운영자가 매치를 변경했습니다. 새로고침해주세요.'};
   return { success:true, message:'Seed to Cup 매치를 저장했습니다.', match:payload };
 }
 async function updateIkrcSeedToCupResult(env, target, bonus, memo, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC Seed to Cup 결과 저장 권한이 없습니다.');
   if (!auth.ok) return auth.res;
   if (!hasManageAccess(auth.actor, 'IKRC') && normalizeAccountType_(auth.actor.type || auth.actor.accountType || '', auth.actor.role || '') !== 'STAFF') return { success:false, message:'IKRC Seed to Cup 결과 저장은 관리자, 대회팀장 또는 운영진만 가능합니다.' };
-  const targetType = safeStr(target && target.targetType) || 'participant';
-  const targetValue = safeStr(target && target.targetValue);
-  if (!targetValue) return { success:false, message:'저장할 참가자/샘플 번호가 없습니다.' };
-  const payload = { competitionCode:'IKRC', targetType, targetValue, bonus:ikrcSeedBonusFromValue_(bonus), memo:safeStr(memo), savedAt:nowIso(), savedBy:safeStr(auth.actor && auth.actor.name) };
-  await env.DB.prepare('INSERT OR REPLACE INTO sessions (token, kind, payload_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(ikrcSeedResultToken_(targetType, targetValue), 'IKRC_SEED_RESULT', JSON.stringify(payload), '2035-12-31T23:59:59.000Z', nowIso()).run();
+  const participants=await ikrcSeedParticipants_(env), row=ikrcSeedResolveParticipant_(participants,target);
+  if (!row || !/^[0-3]$/.test(safeStr(bonus))) return {success:false,message:'결선 선수와 +0·+1·+2·+3점 중 하나를 선택해주세요.'};
+  const resultMap=await loadIkrcSeedResultMap_(env,participants), old=resultMap.get(ikrcSeedResultToken_('participantId',row.id));
+  if (target.expectedSavedAt!==undefined && safeStr(target.expectedSavedAt)!==safeStr(old && old.savedAt)) return {success:false,message:'다른 운영자가 결과를 변경했습니다. 새로고침한 뒤 확인해주세요.'};
+  const targetType='participantId',targetValue=String(row.id);
+  const payload = { competitionCode:'IKRC', round:'결선', targetType, targetValue, bonus:Number(bonus), memo:safeStr(memo), savedAt:ikrcSeedSavedAt_(old), savedBy:safeStr(auth.actor && auth.actor.name) };
+  const saved=await writeIkrcSeedResult_(env,row.id,payload,old);
+  if (!saved) return {success:false,message:'결과가 변경되었습니다. 새로고침해주세요.'};
   return { success:true, message:'Seed to Cup 결과를 저장했습니다.', result:payload };
+}
+async function writeIkrcSeedResult_(env, id, payload, old) {
+  const token=ikrcSeedResultToken_('participantId',id), priorToken=old ? old.token : token;
+  const conditions=old?'EXISTS(SELECT 1 FROM sessions WHERE token=? AND payload_json=?)':'NOT EXISTS(SELECT 1 FROM sessions WHERE token=?)';
+  const result=await env.DB.prepare('INSERT OR REPLACE INTO sessions(token,kind,payload_json,expires_at,created_at) SELECT ?,?,?,?,? WHERE '+conditions+(old&&priorToken!==token?' AND NOT EXISTS(SELECT 1 FROM sessions WHERE token=?)':''))
+    .bind(token,'IKRC_SEED_RESULT',JSON.stringify(payload),'2035-12-31T23:59:59.000Z',nowIso(),priorToken,...(old?[old.rawJson]:[]),...(old&&priorToken!==token?[token]:[])).run();
+  return !!result.meta.changes;
+}
+async function deleteIkrcSeedRecord(env, request, actorArg) {
+  const auth=await requireActorForCode_(env,actorArg,'IKRC','Seed to Cup 관리 권한이 없습니다.');
+  if(!auth.ok)return auth.res;
+  if(!hasManageAccess(auth.actor,'IKRC')&&normalizeAccountType_(auth.actor.type||auth.actor.accountType||'',auth.actor.role||'')!=='STAFF')return {success:false,message:'Seed to Cup 삭제 권한이 없습니다.'};
+  const input=request||{};
+  if(input.kind==='result') {
+    const participants=await ikrcSeedParticipants_(env),row=ikrcSeedResolveParticipant_(participants,input);
+    const map=await loadIkrcSeedResultMap_(env,participants),old=row&&map.get(ikrcSeedResultToken_('participantId',row.id));
+    if(!old||old.deleted||safeStr(input.expectedSavedAt)!==safeStr(old.savedAt))return {success:false,message:'삭제할 결과가 없거나 변경되었습니다. 새로고침해주세요.'};
+    const payload={competitionCode:'IKRC',round:'결선',targetType:'participantId',targetValue:String(row.id),bonus:0,memo:'',deleted:true,previousResult:parseJson(old.rawJson,{}),savedAt:ikrcSeedSavedAt_(old),savedBy:safeStr(auth.actor.name)};
+    if(!await writeIkrcSeedResult_(env,row.id,payload,old))return {success:false,message:'결과가 변경되었습니다. 새로고침해주세요.'};
+    return {success:true,message:'Seed to Cup 결과를 삭제했습니다. 로스팅 점수는 유지됩니다.'};
+  }
+  if(input.kind!=='match')return {success:false,message:'삭제 대상을 확인해주세요.'};
+  const token=ikrcSeedMatchToken_(input.matchNo),old=await env.DB.prepare('SELECT payload_json FROM sessions WHERE token=? AND kind=?').bind(token,'IKRC_SEED_MATCH').first();
+  if(!old||safeStr(parseJson(old.payload_json,{}).savedAt)!==safeStr(input.expectedSavedAt))return {success:false,message:'매치가 없거나 변경되었습니다. 새로고침해주세요.'};
+  const archive='IKRC_SEED_MATCH_ARCHIVE:'+crypto.randomUUID();
+  const results=await env.DB.batch([
+    env.DB.prepare('INSERT INTO sessions(token,kind,payload_json,expires_at,created_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM sessions WHERE token=? AND payload_json=?)').bind(archive,'IKRC_SEED_MATCH_ARCHIVE',JSON.stringify({previousMatch:parseJson(old.payload_json,{}),deletedAt:nowIso(),deletedBy:safeStr(auth.actor.name)}),'2035-12-31T23:59:59.000Z',nowIso(),token,old.payload_json),
+    env.DB.prepare('DELETE FROM sessions WHERE token=? AND kind=? AND payload_json=?').bind(token,'IKRC_SEED_MATCH',old.payload_json)
+  ]);
+  return results[1].meta.changes ? {success:true,message:'매치를 삭제했습니다. 참가자별 가산점은 유지됩니다.'} : {success:false,message:'매치가 변경되었습니다. 새로고침해주세요.'};
 }
 
 function isCalibrationMode_(v) { return /켈리브레이션|캘리브레이션|calibration|calib/i.test(safeStr(v)); }
@@ -7247,10 +7317,11 @@ function aggregateRankingGroup_(code, g, round, options) {
       };
     }
     const sensoryAvg = avgRowsBy_(officialRows, ikrcSensoryBaseScoreFromItem_) || 0;
-    const score = avgRowsBy_(officialRows, rankingScoreFromItem_) || 0;
+    const seedBonus = roundName_(round,'')==='결선' ? Math.max(0,...officialRows.map(item=>ikrcSeedBonusFromExtra_(item))) : 0;
+    const score = roundName_(round,'')==='결선' ? roundScoreValue_(sensoryAvg + seedBonus) : (avgRowsBy_(officialRows, rankingScoreFromItem_) || 0);
     const liveBasis = '현재 제출 평균';
     return {
-      score, total: score, sensoryAvg, basis: liveBasis + (roundName_(round, '') === '결선' && officialRows.some(item => firstNumberFromKeys_(item, ['Seed to Cup 가산점','Seed to Cup Bonus','SeedToCup Bonus','Seed to Cup(+3점)','Seed to Cup','시드투컵 가산점']) !== null) ? ' + Seed to Cup' : ''),
+      score, total: score, sensoryAvg, seedBonus, basis: liveBasis + (roundName_(round, '') === '결선' ? ' + Seed to Cup' : ''),
       panelComplete:panel.complete,
       reviewComplete:panel.reviewComplete,
       headCount:panel.headCount,
@@ -7395,7 +7466,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
   })) : null;
   const headers = mergeHeaders(code, raw, preparedKcrRows);
   const participantIdx = indexParticipantIdentities_(participantRows, code);
-  const ikrcSeedMap = code === 'IKRC' ? await loadIkrcSeedResultMap_(env) : null;
+  const ikrcSeedMap = code === 'IKRC' ? await loadIkrcSeedResultMap_(env, ikrcParticipantsForRound_(participantRows,'결선')) : null;
   const officialRankingOverrides = await loadOfficialRankingOverrideMap_(env, code);
   const ikrcFinalizedUnits = new Set();
   if (code === 'IKRC') {
@@ -7418,7 +7489,10 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     const round = roundName_(item.round || item['라운드'] || (cfg && cfg.current_round));
     const identity = lookupParticipantIdentity_(participantIdx, round, itemNumber_(item) || item.unit);
     item = enrichReviewItemWithParticipant_(item, identity, code);
-    if (code === 'IKRC') item = applyIkrcSeedBonusToItem_(item, ikrcSeedMap);
+    if (code === 'IKRC') {
+      if (identity) item.ikrcSeedParticipantId=String(identity.id);
+      item = applyIkrcSeedBonusToItem_(item, ikrcSeedMap);
+    }
     return item;
   })).filter(item => !selectedRound || roundName_(item.round || item['라운드'], '') === selectedRound);
   const groups = new Map();
@@ -7485,6 +7559,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     if (code === 'IKRC' && agg && Object.prototype.hasOwnProperty.call(agg, 'sensoryAvg')) g.ikrcSensoryAvg = roundScoreValue_(agg.sensoryAvg);
     if (code === 'IKRC' && agg) {
       g.ikrcPanelComplete = !!agg.panelComplete;
+      g.ikrcSeedBonus = Number(agg.seedBonus || 0);
       g.ikrcReviewComplete = !!agg.reviewComplete;
       g.ikrcHeadCount = Number(agg.headCount || 0);
       g.ikrcSensoryCount = Number(agg.sensoryCount || 0);
@@ -7525,6 +7600,8 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       playerNameSummary: g.name || '', nameSummary: g.name || '', playerAffiliationSummary: g.affiliation || '', teamNameSummary: g.teamName || '', teamSummary: g.team || '',
       totalScore: g.rankingScore, avgScore: code === 'IKRC' && g.ikrcSensoryAvg !== undefined ? g.ikrcSensoryAvg : g.rankingScore, score: g.rankingScore, rankingScore: g.rankingScore,
       calculatedScore:g.calculatedRankingScore,
+      roastingScore:code === 'IKRC' ? g.ikrcSensoryAvg : undefined,
+      seedBonus:code === 'IKRC' ? g.ikrcSeedBonus : undefined,
       officialResultOverride:!!g.officialResultOverride,
       officialRank:g.officialRankOverride || null,
       officialResultReason:g.officialResultReason || '',

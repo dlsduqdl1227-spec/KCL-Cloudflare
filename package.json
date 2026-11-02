@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:ikrc-seed-final": "node tests/stage273-ikrc-seed-final.test.mjs && node tests/stage274-ikrc-seed-browser.test.mjs",
     "test:registry-batch": "node tests/stage271-registry-batch.test.mjs && node tests/stage272-registry-batch-browser.test.mjs",
     "test:kbc-manual-finalists": "node tests/stage268-kbc-manual-finalists.test.mjs && node tests/stage268-kbc-manual-finalists-browser.test.mjs",
     "test:bulk-judge-assignments": "node tests/stage269-bulk-operator-assignments.test.mjs && node tests/stage269-bulk-operator-browser.test.mjs",

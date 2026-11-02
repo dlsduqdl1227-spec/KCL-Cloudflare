@@ -2777,17 +2777,23 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   <button class="btn" onclick="loadIkrcSeedToCupFinalists()">Seed to Cup 새로고침</button>
   <div id="ikrc-seed-match-tools" class="finals-container" style="display:none;margin-top:16px">
     <div class="section-label">Seed to Cup 매치 등록</div>
-    <input type="text" id="ikrc-seed-match-no" placeholder="매치번호 (예: 1경기)">
+    <label for="ikrc-seed-match-no">매치번호</label>
+    <input type="text" id="ikrc-seed-match-no" maxlength="80" placeholder="예: 1경기">
+    <label for="ikrc-seed-match-a">선수 A</label>
     <select id="ikrc-seed-match-a"></select>
+    <label for="ikrc-seed-match-b">선수 B</label>
     <select id="ikrc-seed-match-b"></select>
+    <label for="ikrc-seed-match-status">운영 상태</label>
+    <select id="ikrc-seed-match-status"><option value="오픈">오픈</option><option value="마감">마감</option></select>
     <textarea id="ikrc-seed-match-memo" placeholder="운영 메모"></textarea>
-    <button class="btn" onclick="saveIkrcSeedMatch_()">매치 저장 / 오픈</button>
+    <button class="btn" id="ikrc-seed-match-save" onclick="saveIkrcSeedMatch_()">매치 등록</button>
+    <button class="btn-outline" type="button" id="ikrc-seed-match-cancel" style="display:none" onclick="resetIkrcSeedMatchEditor_()">수정 취소</button>
   </div>
   <div id="ikrc-seed-match-list"></div>
   <div id="ikrc-seed-manual-tools" style="display:none">
     <div class="divider"></div>
     <div class="review-edit-help" style="margin-bottom:14px">
-      부전승 또는 예외 상황은 아래 수기 결과 입력을 사용하세요. 저장한 가산점은 결선 센서리 평균에 한 번만 합산됩니다.
+      선수별 결과를 선택해 저장하세요. 최종점수 = 로스팅평가 평균 + Seed to Cup 점수입니다.
     </div>
     <div id="ikrc-seed-list"></div>
     <div id="ikrc-seed-editor" class="finals-container" style="display:none;margin-top:16px">
@@ -2797,7 +2803,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="intensity-grid" id="ikrc-seed-bonus-buttons"></div>
       <div class="section-label" style="margin-top:16px">운영 메모</div>
       <textarea id="ikrc-seed-memo" placeholder="선택 결과, 부전승, 실격 등 운영 근거를 입력하세요"></textarea>
-      <button class="btn" onclick="saveIkrcSeedToCupResult_()">Seed to Cup 수기 결과 저장</button>
+      <button class="btn" onclick="saveIkrcSeedToCupResult_()">결과 저장 / 수정</button>
+      <button class="btn-danger" id="ikrc-seed-result-delete" onclick="deleteIkrcSeedResult_()">이 선수 결과 삭제</button>
     </div>
   </div>
   <div class="divider"></div>
@@ -11225,6 +11232,8 @@ function renderRanking(res) {
       var rankLabel = item.disqualified ? '실격' : item.rank;
       var scoreValue = isIkrcRank && item.avgScore != null ? item.avgScore : (item.rankingScore != null ? item.rankingScore : item.totalScore);
       var displayScoreBasis = isIkrcRank ? '심사위원 총평균' : item.scoreBasis;
+      var isIkrcFinalRank = isIkrcRank && round === '결선';
+      if (isIkrcFinalRank) {scoreValue=item.rankingScore;displayScoreBasis='로스팅 평균 + Seed to Cup';}
       var scoreLabel = item.disqualified ? 'DQ' : fmtRankingScore_(scoreValue || 0, 2, res.compCode, displayScoreBasis);
       var nameSummary = item.playerNameSummary || item.unitName || '';
       var affSummary = item.playerAffiliationSummary || item.affiliationSummary || '';
@@ -11248,6 +11257,7 @@ function renderRanking(res) {
           '<div class="rank-unit">' + escHtml(unitText) + '</div>' +
           '<div class="rank-meta">' + ktccMeta + ikrcMeta + (displayScoreBasis ? escHtml(displayScoreBasis) + ' 기준 · ' : '') + (item.teamSummary ? (isKtccRank ? '테이블 ' : '평가팀 ') + escHtml(item.teamSummary) + ' · ' : '') + reviewProgressMeta + tieText + dqText + '</div>' +
           (rankingCode === 'KBC' && item.round === '본선' ? '<div class="rank-meta">' + escHtml(item.operatingDay ? '본선 ' + item.operatingDay + '일차' : '본선 일차 미지정') + (Number(item.rank) <= 6 && !item.disqualified ? ' · 결선 진출 대상 (현재 순위)' : '') + '</div>' : '') +
+          (isIkrcFinalRank ? '<div class="rank-meta">로스팅 '+fmtAverageScore_(item.roastingScore == null ? item.avgScore : item.roastingScore,2)+' + Seed to Cup '+Number(item.seedBonus||0)+' = 최종 '+fmtAverageScore_(item.rankingScore,2)+'점</div>' : '') +
           '<div class="rank-detail-hint">눌러서 상세 점수 / 디브리핑 확인</div>' +
         '</div>' +
         '<div class="rank-score">' + scoreLabel + '</div>';
@@ -11329,6 +11339,8 @@ function finalReportRankingRows_(res, round) {
       '선수/팀명': r.playerNameSummary || r.nameSummary || r.teamNameSummary || '',
       '소속/팀': r.playerAffiliationSummary || r.affiliationSummary || r.teamNameSummary || r.teamSummary || '',
       '최종점수': r.rankingScore != null ? r.rankingScore : (r.totalScore != null ? r.totalScore : ''),
+      '로스팅 평균': r.roastingScore == null ? r.avgScore : r.roastingScore,
+      'Seed to Cup': r.seedBonus == null ? '' : r.seedBonus,
       '점수기준': r.scoreBasis || '',
       '검수': (r.reviewedCount || 0) + '/' + (r.totalCount || 0),
       '심사수': r.judgeCount || r.totalCount || '',
@@ -11343,7 +11355,7 @@ function finalReportScoreRows_(res, round) {
   return (res.approvedRows || []).filter(function(r){ return !round || r['라운드'] === round; });
 }
 function ikrcFinalRoundAoa_(res, round) {
-  var rankingHeaders = ['라운드','순위','식별번호','선수/팀명','소속/팀','최종점수','점수기준','검수','심사수','실격','실격사유','동점기준','동점항목'];
+  var rankingHeaders = ['라운드','순위','식별번호','선수/팀명','소속/팀','로스팅 평균','Seed to Cup','최종점수','점수기준','검수','심사수','실격','실격사유','동점기준','동점항목'];
   var scoreHeaders = ['제출ID','제출시간','라운드','식별번호','선수/팀명','소속/팀','심사위원명','팀/테이블','역할','모드','총점','검수상태','실격여부','실격사유','서명저장','이미지저장','이미지개수'].concat(res.headers || []);
   var rankingAoa = objectRowsToAoa_(finalReportRankingRows_(res, round), rankingHeaders);
   var scoreAoa = objectRowsToAoa_(finalReportScoreRows_(res, round), scoreHeaders);
@@ -11683,8 +11695,11 @@ function renderRankingDetail(res) {
   var isIkrcDetail = String(res.compCode || '').toUpperCase() === 'IKRC';
   var detailUsesAverageTotal = usesAverageScoreDisplay_(res.compCode, rankInfo && rankInfo.scoreBasis);
   var detailScoreValue = isIkrcDetail && rankInfo && rankInfo.avgScore != null ? rankInfo.avgScore : res.totalScore;
+  var isIkrcFinalDetail=isIkrcDetail && res.round==='결선';
+  if(isIkrcFinalDetail)detailScoreValue=rankInfo.rankingScore;
   var totalScore = detailScoreValue != null ? (detailUsesAverageTotal ? fmtAverageScore_(detailScoreValue, 2) : fmtScore(detailScoreValue,2)) : '-';
   var detailTotalLine = '<br>' + (isIkrcDetail ? '심사위원 총평균' : '총점') + ': ' + escHtml(totalScore);
+  if(isIkrcFinalDetail)detailTotalLine='<br>로스팅 평균: '+fmtAverageScore_(rankInfo.roastingScore == null ? rankInfo.avgScore : rankInfo.roastingScore,2)+' + Seed to Cup: '+Number(rankInfo.seedBonus||0)+' = 최종점수: '+escHtml(totalScore);
   var detailTitleText = String(res.compCode || '').toUpperCase() === 'KTCC'
     ? ('팀번호 ' + (res.unitDisplay || res.unit || '-') + (res.teamNameSummary ? ' · ' + res.teamNameSummary : ''))
     : ((res.unitLabel || '식별자') + ' ' + (res.unitDisplay || res.unit || '-') + (res.playerNameSummary ? ' · ' + res.playerNameSummary : ''));
@@ -17183,6 +17198,42 @@ var _ikrcSeedFinalists = [];
 var _ikrcSeedConsole = null;
 var _ikrcSeedSelectedIndex = -1;
 var _ikrcSeedSelectedBonus = 0;
+var _ikrcSeedEditingMatch = null;
+var _ikrcSeedBusy = false;
+function resetIkrcSeedMatchEditor_() {
+  _ikrcSeedEditingMatch=null;
+  ['ikrc-seed-match-no','ikrc-seed-match-a','ikrc-seed-match-b','ikrc-seed-match-memo'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('ikrc-seed-match-no').readOnly=false;
+  document.getElementById('ikrc-seed-match-status').value='오픈';
+  document.getElementById('ikrc-seed-match-save').textContent='매치 등록';
+  document.getElementById('ikrc-seed-match-cancel').style.display='none';
+}
+function editIkrcSeedMatch_(idx) {
+  var match=(_ikrcSeedConsole.matches||[])[idx];if(!match)return;
+  _ikrcSeedEditingMatch=match;
+  var number=document.getElementById('ikrc-seed-match-no');number.value=match.matchNo;number.readOnly=true;
+  ['a','b'].forEach(function(side){var ref=match[side==='a'?'participantA':'participantB'];var index=_ikrcSeedFinalists.findIndex(function(p){return p.targetType===ref.targetType&&p.targetValue===ref.targetValue;});document.getElementById('ikrc-seed-match-'+side).value=index>=0?String(index):'';});
+  document.getElementById('ikrc-seed-match-memo').value=match.memo||'';
+  document.getElementById('ikrc-seed-match-status').value=match.status==='마감'?'마감':'오픈';
+  document.getElementById('ikrc-seed-match-save').textContent='매치 수정 저장';
+  document.getElementById('ikrc-seed-match-cancel').style.display='block';
+  number.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function deleteIkrcSeedMatch_(idx) {
+  var match=(_ikrcSeedConsole.matches||[])[idx];if(!match||_ikrcSeedBusy)return;
+  if(!confirm(match.matchNo+' 매치를 삭제할까요? 선수별 Seed to Cup 점수와 로스팅평가는 삭제되지 않습니다.'))return;
+  mutateIkrcSeedDelete_({kind:'match',matchNo:match.matchNo,expectedSavedAt:match.savedAt});
+}
+function deleteIkrcSeedResult_() {
+  var item=_ikrcSeedFinalists[_ikrcSeedSelectedIndex];if(!item||!item.seedSaved||_ikrcSeedBusy)return;
+  if(!confirm(ikrcSeedFinalistLabel_(item)+'의 Seed to Cup 점수만 삭제할까요? 로스팅평가 점수와 코멘트는 유지됩니다.'))return;
+  mutateIkrcSeedDelete_({kind:'result',targetType:item.targetType,targetValue:item.targetValue,expectedSavedAt:item.seedSavedAt});
+}
+function mutateIkrcSeedDelete_(payload) {
+  _ikrcSeedBusy=true;showOverlay();
+  google.script.run.withSuccessHandler(function(res){_ikrcSeedBusy=false;hideOverlay();toast(res.message, !res.success);if(res.success)loadIkrcSeedToCupFinalists();})
+    .withFailureHandler(function(err){_ikrcSeedBusy=false;hideOverlay();toast('삭제 실패: '+(err.message||err),true);}).deleteIkrcSeedRecord(payload,adminActorPayload_());
+}
 
 function loadIkrcSeedToCupFinalists() {
   var sub = document.getElementById('ikrc-seed-sub');
@@ -17203,6 +17254,7 @@ function loadIkrcSeedToCupFinalists() {
       _ikrcSeedConsole = res;
       _ikrcSeedFinalists = res.finalists || [];
       renderIkrcSeedConsole_();
+      resetIkrcSeedMatchEditor_();
       renderIkrcSeedToCupFinalists_();
     })
     .withFailureHandler(function(err){
@@ -17221,7 +17273,7 @@ function renderIkrcSeedConsole_() {
   var manual = document.getElementById('ikrc-seed-manual-tools');
   if (tools) tools.style.display = manager ? 'block' : 'none';
   if (manual) manual.style.display = manager ? 'block' : 'none';
-  if (help) help.textContent = 'Seed to Cup은 관리자, IKRC 운영팀장 또는 운영진이 매치 운영 내용을 기록하고, 3표/+3점, 2표/+2점, 1표/+1점, 0표/+0점 기준으로 참가자별 가산점을 저장합니다. 심사위원·헤드 개별 투표 입력은 사용하지 않습니다.';
+  if (help) help.textContent = '결선 진출자 '+_ikrcSeedFinalists.length+'명 · 이름과 소속으로 선수를 선택하세요. 로스팅평가 제출 전에도 +3·+2·+1·+0점 결과를 저장할 수 있습니다.';
   if (manager) renderIkrcSeedMatchSelects_();
   renderIkrcSeedMatchList_();
 }
@@ -17246,10 +17298,10 @@ function renderIkrcSeedMatchList_() {
     wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">' + (manager ? '등록된 Seed to Cup 매치가 없습니다.' : '현재 오픈된 Seed to Cup 매치가 없습니다.') + '</p>';
     return;
   }
-  wrap.innerHTML = matches.map(function(m){
+  wrap.innerHTML = matches.map(function(m,idx){
     var closed = m.status === '마감';
     var voteText = closed ? '마감된 운영 매치' : '운영 매치 등록됨';
-    var buttons = '<div class="review-info-sub" style="margin-top:8px">가산점 반영은 아래 참가자별 수기 결과 저장에서 진행합니다.</div>';
+    var buttons = '<div class="review-info-sub" style="margin-top:8px">점수는 아래 선수별 결과에서 저장합니다.</div>' + (manager ? '<div style="display:flex;gap:10px;margin-top:12px"><button class="btn-outline" style="min-height:44px;flex:1" onclick="editIkrcSeedMatch_('+idx+')">수정</button><button class="btn-danger" style="min-height:44px;flex:1" onclick="deleteIkrcSeedMatch_('+idx+')">매치 삭제</button></div>' : '');
     return '<div class="finals-container" style="margin-top:14px">' +
       '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div class="review-info-name">' + escHtml(m.matchNo) + '</div><span class="role-mode-badge">' + escHtml(m.status || '오픈') + '</span></div>' +
       '<div class="review-info-sub" style="margin-top:8px">A · ' + escHtml(m.participantA.label || '-') + '</div>' +
@@ -17261,22 +17313,26 @@ function renderIkrcSeedMatchList_() {
 }
 
 function saveIkrcSeedMatch_() {
+  if(_ikrcSeedBusy)return;
   var aValue = val_('ikrc-seed-match-a');
   var bValue = val_('ikrc-seed-match-b');
   var a = aValue === '' ? null : _ikrcSeedFinalists[Number(aValue)];
   var b = bValue === '' ? null : _ikrcSeedFinalists[Number(bValue)];
   var matchNo = val_('ikrc-seed-match-no').trim();
   if (!matchNo || !a || !b || a.targetValue === b.targetValue) { toast('매치번호와 서로 다른 참가자 2명을 선택해주세요.', true); return; }
+  _ikrcSeedBusy=true;
   showOverlay();
   google.script.run
-    .withSuccessHandler(function(res){ hideOverlay(); toast((res && res.message) || '매치 저장 실패', !(res && res.success)); if (res && res.success) loadIkrcSeedToCupFinalists(); })
-    .withFailureHandler(function(err){ hideOverlay(); toast('매치 저장 오류: ' + ((err && err.message) || err || ''), true); })
+    .withSuccessHandler(function(res){ _ikrcSeedBusy=false;hideOverlay(); toast((res && res.message) || '매치 저장 실패', !(res && res.success)); if (res && res.success) loadIkrcSeedToCupFinalists(); })
+    .withFailureHandler(function(err){ _ikrcSeedBusy=false;hideOverlay(); toast('매치 저장 오류: ' + ((err && err.message) || err || ''), true); })
     .saveIkrcSeedToCupMatch({
       matchNo:matchNo,
       participantA:{targetType:a.targetType,targetValue:a.targetValue,label:ikrcSeedFinalistLabel_(a)},
       participantB:{targetType:b.targetType,targetValue:b.targetValue,label:ikrcSeedFinalistLabel_(b)},
       memo:val_('ikrc-seed-match-memo').trim(),
-      status:'오픈'
+      status:val_('ikrc-seed-match-status'),
+      originalMatchNo:_ikrcSeedEditingMatch ? _ikrcSeedEditingMatch.matchNo : '',
+      expectedSavedAt:_ikrcSeedEditingMatch ? _ikrcSeedEditingMatch.savedAt : ''
     }, adminActorPayload_());
 }
 
@@ -17290,27 +17346,24 @@ function finalizeIkrcSeedMatch_(matchNo) {
 
 function ikrcSeedFinalistLabel_(item) {
   if (!item) return '-';
-  var participant = item.participantNo ? ('참가자 ' + item.participantNo + '번') : '참가자번호 미입력';
-  var name = item.playerName ? (' · ' + item.playerName) : '';
-  var samples = item.sampleNos && item.sampleNos.length ? (' · Cup ' + item.sampleNos.join(', ')) : '';
-  return participant + name + samples;
+  return (item.playerName || '선수 연결 확인 필요') + (item.affiliation ? ' · '+item.affiliation : '');
 }
 
 function renderIkrcSeedToCupFinalists_() {
   var list = document.getElementById('ikrc-seed-list');
   if (!list) return;
   if (!_ikrcSeedFinalists.length) {
-    list.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">IKRC 결선 센서리 제출 데이터가 없습니다.</p>';
+    list.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">등록된 IKRC 결선 진출자가 없습니다. 등록·권한 관리에서 결선 진출자를 배정해주세요.</p>';
     return;
   }
   list.innerHTML = _ikrcSeedFinalists.map(function(item, idx){
     var memo = item.seedMemo ? (' · ' + item.seedMemo) : '';
-    return '<div class="review-item" onclick="selectIkrcSeedFinalist_(' + idx + ')">' +
+    return '<button type="button" class="review-item" style="width:100%;text-align:left;min-height:64px;color:inherit" onclick="selectIkrcSeedFinalist_(' + idx + ')">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">' +
       '<div><div class="review-info-name">' + escHtml(ikrcSeedFinalistLabel_(item)) + '</div>' +
       '<div class="review-info-sub">센서리 제출 ' + Number(item.sensoryRowCount || 0) + '건' + escHtml(memo) + '</div></div>' +
-      '<button class="review-status-btn status-' + (Number(item.seedBonus || 0) > 0 ? '검수완료' : '미검수') + '">+' + Number(item.seedBonus || 0) + '점</button>' +
-      '</div></div>';
+      '<span class="review-status-btn status-' + (item.seedSaved ? '검수완료' : '미검수') + '">' + (item.seedSaved ? '+'+Number(item.seedBonus || 0)+'점' : '미입력') + '</span>' +
+      '</div></button>';
   }).join('');
 }
 
@@ -17325,6 +17378,7 @@ function selectIkrcSeedFinalist_(idx) {
   if (selected) selected.textContent = ikrcSeedFinalistLabel_(item);
   var memo = document.getElementById('ikrc-seed-memo');
   if (memo) memo.value = item.seedMemo || '';
+  document.getElementById('ikrc-seed-result-delete').style.display=item.seedSaved?'block':'none';
   renderIkrcSeedBonusButtons_();
   if (editor && editor.scrollIntoView) editor.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -17344,24 +17398,29 @@ function setIkrcSeedBonus_(score) {
 }
 
 function saveIkrcSeedToCupResult_() {
+  if(_ikrcSeedBusy)return;
   var item = _ikrcSeedFinalists[_ikrcSeedSelectedIndex];
   if (!item) { toast('결선 참가자를 선택해주세요.', true); return; }
   var memo = val_('ikrc-seed-memo').trim();
   if (!confirm(ikrcSeedFinalistLabel_(item) + '의 Seed to Cup 결과를 +' + _ikrcSeedSelectedBonus + '점으로 저장할까요?')) return;
+  _ikrcSeedBusy=true;
   showOverlay();
   google.script.run
     .withSuccessHandler(function(res){
+      _ikrcSeedBusy=false;
       hideOverlay();
       toast((res && res.message) || (res && res.success ? '저장 완료' : '저장 실패'), !(res && res.success));
       if (res && res.success) loadIkrcSeedToCupFinalists();
     })
     .withFailureHandler(function(err){
+      _ikrcSeedBusy=false;
       hideOverlay();
       toast('Seed to Cup 저장 오류: ' + ((err && err.message) || err || ''), true);
     })
     .updateIkrcSeedToCupResult({
       targetType:item.targetType,
-      targetValue:item.targetValue
+      targetValue:item.targetValue,
+      expectedSavedAt:item.seedSavedAt || ''
     }, _ikrcSeedSelectedBonus, memo, adminActorPayload_());
 }
 
@@ -17423,6 +17482,7 @@ function showIkrcSetup() {
   var sub = document.getElementById('ikrc-setup-sub');
   if (title) title.textContent = calibrationMode ? 'IKRC 켈리브레이션' : 'IKRC 대회평가';
   if (sub) sub.textContent = judgeLineText() + '  ' + _selComp.currentRound + (calibrationMode ? ' · 공식 점수·순위 제외' : ' · 헤드 포함 공식 점수 반영');
+  if(sub && !calibrationMode && _selComp.currentRound==='결선')sub.textContent+=' · A·B조 공통 심사단: 헤드 1명 + 센서리 5명';
   var notice = document.getElementById('ikrcCalibrationNotice');
   if (notice) {
     notice.style.display = 'block';
