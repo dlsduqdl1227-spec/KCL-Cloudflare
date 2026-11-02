@@ -1,0 +1,154 @@
+/* Shared presentation only. Fields, values, evaluation order and storage stay unchanged.
+   Screen-only: existing paper score sheets and ranking PDFs keep their own layout. */
+@media screen {
+ :root {
+  --kcl-canvas:#101012;--kcl-surface:#1c1c1e;--kcl-raised:#242426;--kcl-line:#3a3a3e;
+  --kcl-blue:#0071e3;--kcl-blue-text:#91c5ff;
+  --kcl-type:-apple-system,BlinkMacSystemFont,"Segoe UI",Pretendard,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --bg:var(--kcl-canvas);--panel:var(--kcl-surface);--card:var(--kcl-surface);--card2:var(--kcl-raised);
+  --surface:#161618;--border:var(--kcl-line);--border-lt:#54545a;--text:#f5f5f7;--text-2:#d1d1d6;--text-3:#b2b2b7;--muted:#b2b2b7;
+  color-scheme:dark;
+ }
+ html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+ body{background:var(--kcl-canvas);color:var(--text);-webkit-font-smoothing:antialiased}
+ body,body *{font-family:var(--kcl-type)}
+ button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}
+ button,a{touch-action:manipulation}
+ :where(button,a,input,select,textarea,summary,[tabindex]):focus-visible{outline:3px solid #80bdff!important;outline-offset:3px}
+ :where(input,select,textarea):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]):not([type=file]):not([type=color]){font-size:16px;border-radius:12px;min-height:48px}
+ :where(input,select,textarea):not([type=range]):focus{border-color:#80bdff}
+ input[type=checkbox],input[type=radio]{accent-color:var(--kcl-blue)}
+ :where(.btn,.btn-outline,.btn-danger,.submit-btn-nav,.admin-comp-actions button){border-radius:12px;font-weight:600;line-height:1.45}
+ .btn:not(.secondary):not(.danger):not(:disabled){background:var(--kcl-blue);color:#fff;border-color:var(--kcl-blue)}
+ .btn-outline{background:var(--kcl-raised);border-color:#48484e;color:var(--text)}
+ .btn-danger{color:#d1d1d6;border-color:#48484e}
+ #review-edit-delete,.review-delete-btn{color:#ffb4b4;border-color:#825057;background:#3b2327}
+ .section-label{font-size:13px;font-weight:600;letter-spacing:0;line-height:1.5}
+ .divider{border-color:var(--kcl-line)}
+ body .global-nav-buttons .global-nav-btn{min-height:44px;border-color:#48484e;background:#1c1c1ef2;font-size:13px!important;font-weight:550;box-shadow:none}
+ .role-badge,.role-mode-badge,.round-tag{font-weight:600;border-radius:7px}
+ .comp-card,.oneshot-container,.score-row,.review-item,.rank-row{border-color:var(--kcl-line);border-radius:16px;box-shadow:none}
+ .comp-name,.eval-title{font-weight:650}
+ .eval-header{background:#1c1c1ef5;border-bottom:1px solid var(--kcl-line)}
+ .eval-sub{line-height:1.5}
+ .eval-total-val,.score-row-bignum,.rank-score{font-weight:650;font-variant-numeric:tabular-nums}
+ .eval-content{width:100%;max-width:1120px;margin-inline:auto}
+ .eval-hero-logo{margin-bottom:20px}
+ .score-row{padding:20px}
+ .score-row-name{font-weight:600;line-height:1.5}
+ .cup-nav{background:#1c1c1e;border-bottom-color:var(--kcl-line)}
+ .attr-tab,.review-eval-like-tab{font-weight:550;border-radius:11px}
+ #cupping-attr-tabs .attr-tab.active,#ikrc-attr-tabs .attr-tab.active,.review-attr-tabs .review-eval-like-tab.active{background:#173451;border-color:#527fae;color:#acd3ff}
+ .review-item{padding:18px;gap:16px}
+ .review-info-name{font-weight:650;line-height:1.5}
+ .review-info-sub,.rank-meta{line-height:1.65}
+ .review-actions{gap:8px}
+ .review-actions button{min-height:44px;border-radius:10px;padding:10px 14px}
+ .kcl-tag-picker-option,.kcl-tag-picker-done,.kcl-tag-launch{min-height:44px}
+ .rank-row{padding:18px}
+ .rank-unit{font-weight:650;line-height:1.5}
+ /* Management: retain every existing selector, control and permission. */
+ .registry-workspace .wrap,.admin-home-workspace .wrap{width:min(1240px,calc(100% - 64px));margin:36px auto 60px}
+ .registry-workspace .top{align-items:center;gap:24px;margin-bottom:28px}
+ .registry-workspace h1.brand,.admin-home-workspace .top h1{font-size:34px;font-weight:650;line-height:1.25;letter-spacing:-.04em}
+ .registry-workspace .card{padding:24px;margin-bottom:20px}
+ .registry-workspace .workspace-editor-card{padding:0;margin:0}
+ .registry-workspace .nav,.workspace-operations-nav{background:#242426;border-radius:14px}
+ .registry-workspace .nav a,.workspace-operations-nav a{min-height:44px;border-radius:10px}
+ .registry-workspace .workspace-tabs{border-radius:14px}
+ .registry-workspace .workspace-tabs .tab-btn{font-weight:600}
+ .registry-workspace .table th{padding-block:14px;font-size:12px}
+ .registry-workspace .table td{padding-block:16px}
+ .registry-workspace .table-actions .btn{min-height:40px}
+ .registry-workspace .workspace-dialog>header,.registry-workspace .workspace-dialog>footer{padding:20px 24px}
+ .registry-workspace .workspace-dialog .workspace-close{min-width:44px;min-height:44px}
+ .workspace-operation-context{padding:24px;gap:16px}
+ #pAdmin .admin-console-inner{width:min(1200px,calc(100% - 48px));padding-top:28px}
+ #pAdmin .admin-comp-card,#pAdmin .admin-mini-card{padding:24px}
+ #pAdmin .admin-comp-actions{gap:12px}
+ #pAdmin .admin-comp-actions button{min-height:52px}
+ .admin-home-workspace .admin-card{padding:26px;min-height:216px}
+ .admin-home-workspace .admin-card strong{font-size:24px}
+ .workspace-operations-nav a,.registry-workspace .nav a{transition:background .15s ease,color .15s ease}
+ /* Login and results share the same restrained surfaces as judging. */
+ #pLogin,#pStep1,#pStep2{max-width:540px}
+ .kcl-login-mark{width:180px;margin:26px auto 24px;padding:12px;border:0;border-radius:0;background:transparent;box-shadow:none}
+ .kcl-login-mark svg{display:block;width:100%;height:auto;max-height:120px}
+ #pLogin h2,#pStep1 h2,#pStep2 h2{font-size:26px;font-weight:650;line-height:1.35;letter-spacing:-.035em}
+ .result-header,.score-card,.rank-box,.comment-box{box-shadow:none}
+ .result-header{background:#1c1c1e;border:1px solid var(--kcl-line);border-radius:22px}
+ .result-header::before{display:none}
+ #pResult .report-label::before{content:none}
+ .result-name{font-weight:650}
+ .rank-box{background:#1c1c1e;border-color:var(--kcl-line)}
+ .rank-box .cell{background:#242426;border-color:#444448}
+ .score-card{background:#1c1c1e;border-color:var(--kcl-line);border-radius:18px;padding:24px;margin-bottom:18px}
+ .score-card-header{gap:16px;align-items:flex-start}
+ .judge-name{font-weight:650;line-height:1.5}
+ .score-item{background:#161618;border-color:var(--kcl-line);border-radius:12px;padding:14px}
+ .score-item-label{color:#b2b2b7;font-size:12px;line-height:1.5}
+ .score-item-val{font-weight:650}
+ .comment-box{background:#242426;border-left-color:#7bb7f4;border-radius:0 12px 12px 0;padding:16px;line-height:1.8}
+ .comment-box,.review-info-name,.rank-unit,.result-name{overflow-wrap:anywhere}
+ .ikrc-combined-meta{color:#b2b2b7}
+ body[data-kcl-page=camera]{--panel2:#242426;--accent:#0071e3;--line:#48484e}
+ body[data-kcl-page=camera] button.primary{color:#fff}
+ /* Home: three real entry points first; competition names are supporting information. */
+ .kcl-home{margin:0;min-height:100dvh;box-sizing:border-box;font-size:16px}
+ .kcl-home *{box-sizing:border-box}
+ .home-shell{width:min(1120px,calc(100% - 80px));margin-inline:auto}
+ .home-brand{display:flex;align-items:center;gap:14px;padding-block:38px;border-bottom:1px solid #303034;font-size:12px;font-weight:650;letter-spacing:.08em;color:#e5e5ea}
+ .home-brand small{display:block;margin-top:5px;color:#b2b2b7;font-size:12px;font-weight:400;letter-spacing:0}
+ .home-monogram{display:grid;place-items:center;flex:none;width:48px;height:48px;background:#242426;border:1px solid #48484c;border-radius:14px;font-size:16px;font-weight:700;letter-spacing:-.05em}
+ .home-intro{padding:64px 0 38px}
+ .home-eyebrow{margin:0 0 14px;color:#b2b2b7;font-size:16px}
+ .home-intro h1{margin:0;color:#f5f5f7;font-size:clamp(34px,5.5vw,64px);line-height:1.1;font-weight:650;letter-spacing:-.055em}
+ .home-description{margin:18px 0 0;color:#b2b2b7;font-size:19px;line-height:1.6}
+ .home-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;scroll-margin-top:24px}
+ .home-action{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:30px;min-height:220px;padding:28px;border:1px solid #3a3a3e;border-radius:24px;background:#1c1c1e;color:#f5f5f7;text-decoration:none;transition:background .18s ease,border-color .18s ease}
+ .home-action:hover{background:#242426;border-color:#73737a}
+ .home-action-primary{background:#0071e3;border-color:#0071e3;color:#fff}
+ .home-action-primary:hover{background:#0067ce;border-color:#0067ce}
+ .home-action-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#ffffff0c;color:#b9d8ff}
+ .home-action-primary .home-action-icon{background:#ffffff15;color:#fff}
+ .home-action-icon svg{width:28px;height:28px}
+ .home-action-copy{display:grid;gap:9px;min-width:0}
+ .home-action-copy strong{font-size:24px;font-weight:600;letter-spacing:-.035em;line-height:1.3}
+ .home-action-copy>span{color:#c1c1c7;font-size:14px;line-height:1.55}
+ .home-action-primary .home-action-copy>span{color:#fff}
+ .home-action-arrow{position:absolute;top:30px;right:28px;font-size:23px;color:#c1c1c7}
+ .home-action-primary .home-action-arrow{color:#fff}
+ .home-competitions-section{margin-top:44px;padding-top:28px;border-top:1px solid #303034}
+ .home-competitions-section h2{margin:0 0 20px;color:#b2b2b7;font-size:13px;font-weight:550;letter-spacing:0;text-align:left}
+ .home-competitions{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:20px;list-style:none;padding:0;margin:0}
+ .home-competitions li{min-width:0}
+ .home-competitions strong{display:block;color:#d1d1d6;font-size:16px;font-weight:600}
+ .home-competitions span{display:block;margin-top:7px;color:#b2b2b7;font-size:11px;line-height:1.55}
+ .home-footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:36px 0;color:#b2b2b7;font-size:12px}
+ @media(min-width:1000px){
+  .eval-content{padding:28px 32px calc(80px + env(safe-area-inset-bottom,0px))}.review-screen .eval-content{max-width:1040px}
+  #pResult.panel{max-width:1040px;width:100%}
+ }
+ @media(max-width:800px){
+  .home-shell{width:calc(100% - 40px)}.home-brand{padding-block:24px}.home-intro{padding:42px 0 28px}.home-description{font-size:16px}
+  .home-actions{grid-template-columns:1fr;gap:12px}.home-action{flex-direction:row;align-items:center;gap:18px;min-height:102px;padding:22px;border-radius:20px}
+  .home-action-copy{gap:5px;padding-right:22px}.home-action-copy strong{font-size:21px}.home-action-copy>span{font-size:13px}
+  .home-action-arrow{top:50%;right:22px;transform:translateY(-50%)}.home-action-icon{width:40px;height:40px;flex:none}
+  .home-competitions{grid-template-columns:repeat(4,minmax(0,1fr));gap:22px 14px}.home-competitions-section{margin-top:32px;padding-top:24px}
+  .home-competitions span{display:none}.home-competitions strong{font-size:14px}.home-footer{padding-block:28px;font-size:11px}
+  .registry-workspace .wrap,.admin-home-workspace .wrap{width:calc(100% - 28px);margin:24px auto 40px}.registry-workspace .top{gap:18px;margin-bottom:22px}
+  .registry-workspace h1.brand,.admin-home-workspace .top h1{font-size:28px}.registry-workspace .card{padding:18px}.registry-workspace .workspace-editor-card{padding:0}
+  .admin-home-workspace .admin-card{min-height:0;padding:22px}.registry-workspace .nav a,.workspace-operations-nav a{min-height:48px}
+  #pAdmin .admin-console-inner{width:calc(100% - 28px);padding-top:18px}#pAdmin .admin-comp-card,#pAdmin .admin-mini-card{padding:20px 16px}
+  .workspace-operation-context{padding:18px}.score-card{padding:18px}
+ }
+ @media(max-width:520px){
+  .home-shell{width:calc(100% - 32px)}.home-brand{gap:12px;padding-block:20px}.home-monogram{width:42px;height:42px;border-radius:12px;font-size:14px}
+  .home-brand>span:last-child{font-size:10px}.home-brand small{font-size:11px}.home-intro{padding-top:32px}.home-eyebrow{font-size:14px;margin-bottom:12px}
+  .home-action{padding:20px 18px;gap:14px}.home-action-copy strong{font-size:19px}.home-action-arrow{right:18px}.home-description{margin-top:14px}
+  .review-item{flex-wrap:wrap;padding:16px}.review-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;width:100%}.review-actions button{flex:1 1 auto}
+  .rank-row{padding:16px;gap:12px}.registry-workspace .workspace-dialog>header,.registry-workspace .workspace-dialog>footer{padding:16px}
+  .score-row{padding:16px}.score-card-header{gap:12px}
+ }
+ @media(prefers-reduced-motion:reduce){.home-action,.workspace-operations-nav a,.registry-workspace .nav a{transition:none}}
+}

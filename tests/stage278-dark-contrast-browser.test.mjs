@@ -32,6 +32,9 @@ try{
   await judge.evaluate(({code,round})=>{hideOverlay();_selComp={code,name:code,currentRound:round,isActive:true};if(code==='KBC')startKbc();if(code==='MOB')startMob();if(code==='KCR')initCuppingEval([1,2],round+'평가','Blending',round==='결선',false,{id:'contrast-station',label:'스테이션 1',start:1,end:2});if(code==='IKRC')initIkrcSamples(['A-1','A-2'],{id:'contrast-station',label:'스테이션 1',prefix:'A',start:1,end:2});if(code==='MOC')initMocTargets([1,2]);if(code==='KTCC')initKtccTargets([{num:1,teamName:'검수 팀 1'},{num:2,teamName:'검수 팀 2'}]);if(code==='KCAC'){startKcac(round==='결선'?'pattern':'');document.getElementById('kcac-num').value='1';onKcacParticipantSelected_();}}, {code,round});
   // These are manually selected visual scenarios, not live competition-config transitions.
   await judge.evaluate(()=>stopRegistryLiveSync_());
+  // Let the form's delayed draft restoration settle before opening a tag dialog.
+  // These visual scenarios switch competition/round directly, faster than normal navigation.
+  await judge.waitForTimeout(300);
   await check(judge,'evaluation-'+code+'-'+round);
   if(code==='KCAC'&&round==='예선'){await judge.locator('.kcac-milk-choice-btn').filter({hasText:'FAST Rosetta'}).click();await check(judge,'kcac-fast');await judge.locator('#kcac-cup-nav .cup-btn').nth(1).click();await check(judge,'kcac-slow');}
   const tags=judge.locator('.kcl-tag-launch:visible');if(await tags.count()){await tags.first().click();await check(judge,'tags-'+code+'-'+round,'#kcl-smart-tag-picker');const option=judge.locator('.kcl-tag-picker-option:visible').first();if(await option.count()){await option.click();await check(judge,'selected-tag-'+code+'-'+round,'#kcl-smart-tag-picker');}await judge.evaluate(()=>document.querySelector('.kcl-tag-picker-done')?.click());assert.equal(await judge.locator('#kcl-smart-tag-picker').isVisible(),false);}
