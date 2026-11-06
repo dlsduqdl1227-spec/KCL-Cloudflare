@@ -95,7 +95,7 @@ assert.equal(bundle.rankInfo.sensoryCount, 3);
 
 const avgBox = functionSource(debriefing, 'buildIkrcRoundAverageBox_');
 assert.match(avgBox, /총점 합계.*÷/, 'the debriefing sheet must show the exact average formula');
-assert.match(avgBox, /스테이션 10컵의 평균이 아니라/, 'the sheet must explain that it averages judges for one player');
+assert.match(avgBox, /이 선수를 평가한 심사위원별 총점의 평균/, 'the sheet must explain that it averages judges for one player without assuming a fixed cup count');
 assert.match(avgBox, /totalSum \/ totals\.length/, 'the visible average must be recalculated from the visible scorecards');
 assert.doesNotMatch(avgBox, /rank\.avgScore/, 'a stale ranking average must never override the visible scorecards');
 const rankBox = functionSource(debriefing, 'buildRankBox');

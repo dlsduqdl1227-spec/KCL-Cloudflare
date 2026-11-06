@@ -6544,7 +6544,9 @@ async function getIkrcOfficialCalibrationResultsByCup(env, sampleNo, requestedSc
   const heads = target.filter(item => isHeadRole_(item['역할'] || item.role));
   const submittedRows = heads.concat(sensory);
   const panelComplete = submittedRows.length > 0;
-  const finalAverage = panelComplete ? reviewPopulationStats_(submittedRows.map(item => ikrcScoreObjectFromItem_(item).total)).avg : null;
+  const finalSensoryOnly = data.currentRound === '결선';
+  const averagingRows = finalSensoryOnly ? sensory.filter(item=>!itemOfficialDq_(item)) : submittedRows;
+  const finalAverage = averagingRows.length ? reviewPopulationStats_(averagingRows.map(item => ikrcScoreObjectFromItem_(item).total)).avg : null;
   return {
     success:true,
     sampleNo:no,
@@ -6556,6 +6558,8 @@ async function getIkrcOfficialCalibrationResultsByCup(env, sampleNo, requestedSc
     reviewComplete:sensory.length > 0 && sensory.every(item => reviewCompletedStatus_(item['검수상태'] || item.status)),
     panelComplete,
     finalAverage,
+    round:data.currentRound,
+    headScoreIncluded:!finalSensoryOnly,
     headScoreHidden:false,
     message:panelComplete ? `현재 제출된 헤드 ${heads.length}명과 센서리 ${sensory.length}명의 공식 평가를 함께 표시합니다.` : '아직 제출된 공식 평가가 없습니다.'
   };
@@ -6640,6 +6644,16 @@ function applyIkrcSeedBonusToItem_(item, seedMap) {
   item.totalScore = base;
   return item;
 }
+function ikrcFinalTimetableForRow_(row) {
+  const schedule=parseJson(row && row.extra_json,{}).roundSchedules?.결선||{};
+  const clean=value=>{
+    const out={};value=value||{};
+    for(const key of ['date','group','station','waitingTime','preparationTime','performanceTime','cleanupTime','judgingTime','rehearsalTime','location'])out[key]=safeStr(value[key]);
+    out.order=Number.isInteger(Number(value.order))&&Number(value.order)>0?Number(value.order):0;
+    return out;
+  };
+  return {roastingSchedule:clean(schedule),seedSchedule:clean(schedule.seedToCup)};
+}
 async function getIkrcSeedToCupConsole(env, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC Seed to Cup 조회 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return auth.res;
@@ -6659,8 +6673,8 @@ async function getIkrcSeedToCupConsole(env, actorArg) {
     const panel = ikrcOfficialPanelRows_(rows.filter(item => participantKey_(itemNumber_(item)) === participantKey_(unit)));
     const direct = resultMap.get(ikrcSeedResultToken_('participantId', row.id));
     return {targetType:'participantId',targetValue:String(row.id),participantNo:participantRoundNumber_(row,'IKRC','결선'),playerName:row.name,affiliation:participantIdentityFromRow_(row,'IKRC').affiliation,
-      sensoryRowCount:panel.liveRows.length,seedBonus:direct ? ikrcSeedBonusFromValue_(direct.bonus) : 0,seedMemo:direct && !direct.deleted ? safeStr(direct.memo) : '',seedSaved:!!direct && !direct.deleted,seedSavedAt:direct ? safeStr(direct.savedAt) : ''};
-  });
+      sensoryRowCount:panel.liveRows.length,seedBonus:direct ? ikrcSeedBonusFromValue_(direct.bonus) : 0,seedMemo:direct && !direct.deleted ? safeStr(direct.memo) : '',seedSaved:!!direct && !direct.deleted,seedSavedAt:direct ? safeStr(direct.savedAt) : '',...ikrcFinalTimetableForRow_(row)};
+  }).sort((a,b)=>(a.seedSchedule.order||Number.MAX_SAFE_INTEGER)-(b.seedSchedule.order||Number.MAX_SAFE_INTEGER));
   const matchRows = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('IKRC_SEED_MATCH').all();
   const matches = (matchRows.results || []).map(r => parseJson(r.payload_json, {})).filter(Boolean).map(match => {
     const out = {...match};
@@ -6671,7 +6685,7 @@ async function getIkrcSeedToCupConsole(env, actorArg) {
     return out;
   }).sort((a,b) => safeStr(a.matchNo).localeCompare(safeStr(b.matchNo), 'ko', {numeric:true}));
   const results = finalists.filter(item=>item.seedSaved).map(item=>({targetType:item.targetType,targetValue:item.targetValue,bonus:item.seedBonus,memo:item.seedMemo,savedAt:item.seedSavedAt}));
-  return { success:true, isManager:true, currentRound:safeStr(cfg && cfg.current_round), finalists, matches, results, panel:{headCount:1,sensoryCount:5,sharedAcrossStations:true} };
+  return { success:true, isManager:true, currentRound:safeStr(cfg && cfg.current_round), finalists, matches, results, panel:{headCount:1,sensoryCount:5,sharedAcrossStations:true,headScoreIncluded:false} };
 }
 async function saveIkrcSeedToCupMatch(env, match, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC Seed to Cup 매치 저장 권한이 없습니다.');
@@ -6932,6 +6946,7 @@ function officialRankingBasisLabel_(code, basis) {
   const text = safeStr(basis);
   if (code === 'KCR') return /정규화|Normalized|공식/i.test(text) ? '정규화 총점 합산' : '심사위원 총점 합산';
   if (code === 'IKRC') {
+    if (/센서리 평균/.test(text)) return text;
     if (/실시간|확인|대기|현재 제출/.test(text)) return text;
     return /Seed to Cup/i.test(text) ? '최종 총점 + Seed to Cup' : '최종 총점';
   }
@@ -7374,7 +7389,10 @@ function aggregateRankingGroup_(code, g, round, options) {
 
   if (code === 'IKRC') {
     const panel = ikrcOfficialPanelRows_(activeRows);
-    const officialRows = panel.liveRows;
+    const finalSensoryOnly = roundName_(round,'') === '결선';
+    // Heads remain in calibration/review/output records. Only final ranking math
+    // excludes their scores; preliminary results keep their established formula.
+    const officialRows = finalSensoryOnly ? panel.liveRows.filter(item=>!isHeadRole_(item['역할']||item.role||item.judgeRole)) : panel.liveRows;
     if (!officialRows.length) {
       return {
         score:0,
@@ -7389,13 +7407,13 @@ function aggregateRankingGroup_(code, g, round, options) {
         confirmedHeadCount:panel.confirmedHeadCount,
         confirmedSensoryCount:panel.confirmedSensoryCount,
         confirmedJudgeCount:0,
-        expectedJudgeCount:panel.expectedJudgeCount
+        expectedJudgeCount:finalSensoryOnly?panel.sensoryCount:panel.expectedJudgeCount
       };
     }
     const sensoryAvg = avgRowsBy_(officialRows, ikrcSensoryBaseScoreFromItem_) || 0;
     const seedBonus = roundName_(round,'')==='결선' ? Math.max(0,...officialRows.map(item=>ikrcSeedBonusFromExtra_(item))) : 0;
     const score = roundName_(round,'')==='결선' ? roundScoreValue_(sensoryAvg + seedBonus) : (avgRowsBy_(officialRows, rankingScoreFromItem_) || 0);
-    const liveBasis = '현재 제출 평균';
+    const liveBasis = finalSensoryOnly ? '센서리 평균' : '현재 제출 평균';
     return {
       score, total: score, sensoryAvg, seedBonus, basis: liveBasis + (roundName_(round, '') === '결선' ? ' + Seed to Cup' : ''),
       panelComplete:panel.complete,
@@ -7404,8 +7422,8 @@ function aggregateRankingGroup_(code, g, round, options) {
       sensoryCount:panel.sensoryCount,
       confirmedHeadCount:panel.confirmedHeadCount,
       confirmedSensoryCount:panel.confirmedSensoryCount,
-      confirmedJudgeCount:panel.confirmedJudgeCount,
-      expectedJudgeCount:panel.expectedJudgeCount,
+      confirmedJudgeCount:officialRows.length,
+      expectedJudgeCount:finalSensoryOnly?panel.sensoryCount:panel.expectedJudgeCount,
       tie: {
         flavor: avgRowsBy_(officialRows, item => firstNumberFromKeys_(item, ['Flavor(플레이버) ×3','Flavor(플레이버)','Flavor','플레이버','향미'])) || 0,
         sweetness: avgRowsBy_(officialRows, item => firstNumberFromKeys_(item, ['Sweetness(스윗니스) ×2','Sweetness(단맛)','Sweetness(스윗니스)','Sweetness','스위트니스','스윗니스','단맛'])) || 0,
@@ -7613,7 +7631,8 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       ].filter(Boolean).join(' · ');
     }
     const agg = aggregateRankingGroup_(code, g, g.round, code==='KCAC'?parseJson(cfg && cfg.option_settings,{}):{});
-    // IKRC 실시간 순위는 현재 제출된 헤드·센서리 공식점수를 인원수 고정 없이 즉시 누적한다.
+    // IKRC is live as scores arrive. Finals count sensory judges only; head
+    // records remain available for comparison without changing preliminary math.
     if (code === 'IKRC' && (!agg || Number(agg.confirmedJudgeCount || 0) < 1)) return;
     const aggregateScore = toNumber(agg && agg.score);
     const aggregateTotal = toNumber(agg && agg.total);
@@ -7686,6 +7705,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       reviewComplete:code === 'IKRC' ? !!g.ikrcReviewComplete : undefined,
       finalized:code === 'IKRC' ? !!g.ikrcFinalized : undefined,
       headCount:code === 'IKRC' ? g.ikrcHeadCount : undefined,
+      headScoreIncluded:code === 'IKRC' ? g.round !== '결선' : undefined,
       sensoryCount:code === 'IKRC' ? g.ikrcSensoryCount : undefined,
       confirmedHeadCount:code === 'IKRC' ? g.ikrcConfirmedHeadCount : undefined,
       confirmedSensoryCount:code === 'IKRC' ? g.ikrcConfirmedSensoryCount : undefined,
@@ -7936,12 +7956,21 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const rawRankInfo = data.ranking.find(r => safeStr(r.unit) === targetUnit && (!targetRound || roundName_(r.round) === targetRound)) || null;
   const rows = rawRows.map(item => redactKcacIdentityForActor_(auth.actor, code, item, data.headers));
   const rankInfo = redactKcacIdentityForActor_(auth.actor, code, rawRankInfo, data.headers);
+  const finalSensoryOnly = code === 'IKRC' && targetRound === '결선';
   let totalScore = 0, count = 0, reviewedCount = 0, disqualified = false; const reasons = [];
-  rows.forEach(item => { const n = toNumber(item['총점'] ?? item['최종점수'] ?? item.totalScore); if (n !== null) { totalScore += n; count++; } if (code === 'KCR' ? shouldCountItemInRanking_(code,item) : reviewCompletedStatus_(item['검수상태'])) reviewedCount++; if (item.disqualified || item['실격여부'] === 'Y') { disqualified = true; if (item['실격사유']) reasons.push(item['실격사유']); } });
+  rows.forEach(item => {
+    if (code === 'KCR' ? shouldCountItemInRanking_(code,item) : reviewCompletedStatus_(item['검수상태'])) reviewedCount++;
+    const dq = finalSensoryOnly ? itemOfficialDq_(item) : !!(item.disqualified || item['실격여부'] === 'Y');
+    if (dq) { disqualified = true; if (item['실격사유']) reasons.push(item['실격사유']); }
+    if (finalSensoryOnly && isHeadRole_(item['역할'] || item.role || item.judgeRole)) return;
+    const n = finalSensoryOnly ? ikrcSensoryBaseScoreFromItem_(item) : toNumber(item['총점'] ?? item['최종점수'] ?? item.totalScore);
+    if (n !== null && !(finalSensoryOnly && dq)) { totalScore += n; count++; }
+  });
   totalScore = Math.round(totalScore * 100) / 100;
   const rankingTotal = rankInfo && rankInfo.totalScore !== undefined && rankInfo.totalScore !== null ? Number(rankInfo.totalScore) : null;
-  const displayTotal = Number.isFinite(rankingTotal) ? rankingTotal : totalScore;
-  const displayAvg = Number.isFinite(rankingTotal) ? rankingTotal : (count ? Math.round((totalScore / count) * 100) / 100 : 0);
+  const fallbackAverage = count ? Math.round((totalScore / count) * 100) / 100 : 0;
+  const displayTotal = Number.isFinite(rankingTotal) ? rankingTotal : (finalSensoryOnly ? fallbackAverage : totalScore);
+  const displayAvg = finalSensoryOnly && rankInfo ? Number(rankInfo.avgScore || 0) : (Number.isFinite(rankingTotal) ? rankingTotal : fallbackAverage);
   return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code), unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', unit: targetUnit, unitDisplay: targetUnit, round: targetRound, headers: data.headers, rows, scores: rows, totalScore: displayTotal, avgScore: displayAvg, rankInfo, rankInfos: rankInfo ? [rankInfo] : [], disqualified: disqualified || (rankInfo && rankInfo.disqualified) || false, disqualificationReason: reasons.join(' / ') || (rankInfo && rankInfo.disqualificationReason) || '', reviewedCount, totalCount: rows.length, playerNameSummary: (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || (rows[0] && rows[0].participantName) || '', playerAffiliationSummary: (rankInfo && rankInfo.playerAffiliationSummary) || (rows[0] && rows[0].participantAffiliation) || '' };
 }
 
@@ -8406,19 +8435,21 @@ async function buildIkrcPublicDebriefBundle_(env, blindTargets, rankingData=null
   const rankInfos = (data.ranking || []).filter(matchesTarget).map(rank => {
     const key = ikrcDebriefTargetKey_(rank.round, rank.unit, fallbackRound);
     const roundScores = scores.filter(item => ikrcDebriefTargetKey_(item.round || item['라운드'], itemNumber_(item), fallbackRound) === key);
-    const totals = roundScores.map(item => toNumber(item['총점'] ?? item['최종점수'] ?? item.totalScore)).filter(value => value !== null && Number.isFinite(Number(value))).map(Number);
+    const finalSensoryOnly=roundName_(rank.round,'')==='결선';
+    const averageRows=finalSensoryOnly?roundScores.filter(item=>!isHeadRole_(item['역할']||item.role||item.judgeRole)&&!itemOfficialDq_(item)):roundScores;
+    const totals = averageRows.map(item => toNumber(item['총점'] ?? item['최종점수'] ?? item.totalScore)).filter(value => value !== null && Number.isFinite(Number(value))).map(Number);
     const totalSum = roundScoreValue_(totals.reduce((sum, value) => sum + value, 0), 2);
     const exactAverage = totals.length ? Math.round((totalSum / totals.length) * 100 + 1e-8) / 100 : 0;
     const headCount = roundScores.filter(item => isHeadRole_(item['역할'] || item.role || item.judgeRole)).length;
     return Object.assign({}, rank, {
-      avgScore:exactAverage,
-      judgeCount:totals.length,
+      avgScore:finalSensoryOnly?rank.avgScore:exactAverage,
+      judgeCount:roundScores.length,
       headCount,
-      sensoryCount:Math.max(0, totals.length - headCount),
+      sensoryCount:Math.max(0, roundScores.length - headCount),
       displayedScoreSum:totalSum,
       displayedScoreCount:totals.length,
       averageFormula:totalSum + ' / ' + totals.length,
-      publicDataBasis:'화면에 표시된 공식 평가표 총점 합계 ÷ 평가표 수'
+      publicDataBasis:finalSensoryOnly?'센서리 평가표 총점 합계 ÷ 센서리 수 · 헤드 비교용':'화면에 표시된 공식 평가표 총점 합계 ÷ 평가표 수'
     });
   });
   return {

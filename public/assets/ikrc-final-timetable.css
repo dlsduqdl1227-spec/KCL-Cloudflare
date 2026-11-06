@@ -1,0 +1,9 @@
+.ikrc-final-schedule-fields[hidden]{display:none!important}
+.ikrc-timetable-editor{min-width:0;border:0;border-top:1px solid #3a3a3e;margin:18px 0 0;padding:18px 0 0}
+.ikrc-timetable-editor legend{padding:0 8px 0 0;color:#f5f5f7;font-size:15px;font-weight:600}
+.ikrc-final-timetable{border:1px solid #444448;border-radius:16px;padding:16px;margin:16px 0;background:#1c1c1e}
+.ikrc-final-timetable>summary{cursor:pointer;min-height:32px;line-height:1.6;font-weight:600;font-size:14px}
+.ikrc-final-timetable section{margin-top:20px}.ikrc-final-timetable h3{font-size:16px;margin-bottom:12px}
+.ikrc-timetable-list{margin:0;padding-left:24px;display:grid;gap:12px}.ikrc-timetable-list li{padding:12px;border:1px solid #3a3a3e;border-radius:10px;line-height:1.6}
+.ikrc-timetable-list strong,.ikrc-timetable-list span,.ikrc-timetable-list small{display:block;overflow-wrap:anywhere}
+.ikrc-timetable-list span,.ikrc-timetable-list small{font-size:12px;color:#b2b2b7;margin-top:4px}

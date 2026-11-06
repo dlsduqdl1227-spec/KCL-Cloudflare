@@ -75,10 +75,10 @@ assert.deepEqual(missingInlineHandlers, [], "Every inline assessment handler mus
 
 assert.match(
   assessment,
-  /onclick="window\.location\.href='\/registry\/'">등록·권한 관리<\/button>/,
+  /onclick="window\.location\.href='\/registry\/'">등록·데이터 관리<\/button>/,
   "The operations console must link directly to the single registry manager",
 );
-assert.match(registry, /<title>KCL 명단 관리<\/title>/);
+assert.match(registry, /<title>KCL 등록·데이터 관리<\/title>/);
 
 for (const retiredMarker of [
   "admin-account-list",

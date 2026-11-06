@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>KCL 명단 관리</title>
-<meta name="description" content="KCL 대회별 선수·팀, 심사위원, 관리자 등록과 일정을 관리합니다.">
+<title>KCL 등록·데이터 관리</title>
+<meta name="description" content="KCL 선수·심사위원 등록, 권한과 일정, 데이터 초기화를 관리합니다.">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#101012">
 <link rel="stylesheet" href="/assets/finalist-order.css?v=232">
@@ -72,23 +72,25 @@ input[type="date"]::-webkit-calendar-picker-indicator{cursor:pointer;filter:inve
 <script defer src="/assets/kcl-ui.js?v=276"></script>
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
 <link rel="stylesheet" href="/assets/registry-bulk.css?v=271">
-<script defer src="/assets/registry-rounds.js?v=277"></script>
+<script defer src="/assets/registry-rounds.js?v=282"></script>
 <script defer src="/assets/registry-bulk.js?v=277"></script>
 <link rel="stylesheet" href="/assets/admin-workspace.css?v=277">
 <link rel="stylesheet" href="/assets/admin-appearance.css?v=278">
 <script defer src="/assets/registry-workspace.js?v=276b"></script>
 <link rel="stylesheet" href="/assets/kcl-appearance.css?v=278">
 <link rel="stylesheet" href="/assets/kcl-refinement.css?v=280">
+<link rel="stylesheet" href="/assets/ikrc-final-timetable.css?v=282">
+<script defer src="/assets/ikrc-final-timetable.js?v=282"></script>
 </head>
 <body class="registry-workspace">
 <div class="wrap">
   <div class="top">
     <div>
       <div class="workspace-eyebrow">KCL 운영센터</div>
-      <h1 class="brand">명단 관리</h1>
-      <div class="sub">대회를 고르고, 관리할 명단을 선택하세요.</div>
+      <h1 class="brand">등록·데이터 관리</h1>
+      <div class="sub">선수·심사위원 등록부터 권한·일정·데이터 초기화까지 관리합니다.</div>
     </div>
-    <nav class="nav" aria-label="운영센터 이동"><a href="/admin/">운영센터 홈</a><a href="/registry/" aria-current="page">명단 관리</a><a href="/assessment/?admin=1">대회 운영</a><a href="/debriefing/?from=admin&amp;preview=1" aria-label="디브리핑 확인">디브리핑</a></nav>
+    <nav class="nav" aria-label="운영센터 이동"><a href="/admin/">운영센터 홈</a><a href="/registry/" aria-current="page" aria-label="등록·데이터 관리">등록·데이터</a><a href="/assessment/?admin=1">대회 운영</a><a href="/debriefing/?from=admin&amp;preview=1" aria-label="디브리핑 확인">디브리핑</a></nav>
   </div>
 
   <div class="card" id="loginCard">
@@ -827,7 +829,10 @@ function updateManualParticipantFields(){var code=((document.getElementById('com
   if(isKcr&&sort.value==='schedule'){sort.value='number-asc';participantSortMode='number-asc';}
   var help=document.getElementById('manualFieldHelp'); if(help)help.textContent='결선 진출자는 아래 배정을 펼쳐 번호와 일정을 입력하세요. 본선 경기가 별도인 대회는 경기별로 배정하며 기존 평가 기록은 유지됩니다.';
   setFieldVisible_('mMainDay',code==='KBC');
-  ['mMainStation','mMainPrep','mMainPerformance','mFinalPrep','mFinalPerformance'].forEach(function(id){setFieldVisible_(id,code==='KBC');});
+  ['mMainStation','mMainPrep','mMainPerformance'].forEach(function(id){setFieldVisible_(id,code==='KBC');});
+  setFieldVisible_('mFinalPrep',code==='KBC'||code==='IKRC',null,code==='IKRC'?'로스팅 준비시간':'결선 준비시간');
+  setFieldVisible_('mFinalPerformance',code==='KBC'||code==='IKRC',null,code==='IKRC'?'로스팅 시연시간':'결선 시연시간');
+  setFieldVisible_('mFinalDate',true,null,code==='IKRC'?'로스팅 일정':'결선 일정');
   if(!editingParticipantId)['mMainStation','mMainPrep','mMainPerformance','mFinalPrep','mFinalPerformance'].forEach(function(id){var field=document.getElementById(id);if(field)field.value='';});
   setHidden_('kbc-roster-tools',code!=='KBC');
   document.querySelector('#participantFinalsFields summary').textContent=code==='KBC'?'본선·결선 배정 (본선 1·2일차 / 결선 1일차)':'결선 배정 (선택)';
@@ -842,8 +847,9 @@ function updateManualParticipantFields(){var code=((document.getElementById('com
   setFieldVisible_('opTeam',!isKcr);
   if(isKcr&&opHelp)opHelp.textContent='평가할 스테이션을 선택하면 헤드·심사위원 점수가 해당 스테이션에 저장됩니다.';
   syncOperatorRoleOptions();
+  if(typeof IkrcFinalTimetable!=='undefined')IkrcFinalTimetable.sync(code);
 }
-function participantFormSnapshot_(){return JSON.stringify([editingParticipantId||'',selectedCompetitionCode_()].concat(['mNo','mName','mPhone','mAff','mDate','mMainNo','mMainDay','mMainDate','mMainStation','mMainPrep','mMainPerformance','mFinalNo','mFinalDate','mFinalPrep','mFinalPerformance'].map(function(id){var field=document.getElementById(id);return field?field.value:'';})));}
+function participantFormSnapshot_(){return JSON.stringify([editingParticipantId||'',selectedCompetitionCode_()].concat(['mNo','mName','mPhone','mAff','mDate','mMainNo','mMainDay','mMainDate','mMainStation','mMainPrep','mMainPerformance','mFinalNo','mFinalDate','mFinalPrep','mFinalPerformance'].map(function(id){var field=document.getElementById(id);return field?field.value:'';}),typeof IkrcFinalTimetable==='undefined'?[]:IkrcFinalTimetable.snapshot()));}
 function saveOneParticipant(){var code=document.getElementById('comp').value;var no=document.getElementById('mNo').value;var original=editingParticipantOriginal||{};var a=no||original.prelimCupNo||original.cupNo||original.sampleNo||original.teamNo||'';var b=document.getElementById('mFinalNo').value.trim();var main=document.getElementById('mMainNo').value.trim();var competitionDate=document.getElementById('mDate').value||'';var payload={rowIndex:editingParticipantId||'',competitionCode:code,name:document.getElementById('mName').value,phone:document.getElementById('mPhone').value,affiliation:document.getElementById('mAff').value,uniqueNo:no||original.uniqueNo||'',cupNo:'',sampleNo:'',teamNo:'',teamName:'',competitionDate:competitionDate,extra:Object.assign({},original.extra||{})};
   if(code==='KCR'){payload.prelimCupNo=a;payload.finalCupNo=b;}
   else if(code==='KCAC'){payload.prelimCupNo=a;payload.finalCupNo=b;}
@@ -857,6 +863,11 @@ function saveOneParticipant(){var code=document.getElementById('comp').value;var
     payload.extra.roundSchedules.본선.day=document.getElementById('mMainDay').value;
     payload.extra.roundSchedules.결선.day='1';
     [['본선','station','mMainStation'],['본선','preparationTime','mMainPrep'],['본선','performanceTime','mMainPerformance'],['결선','preparationTime','mFinalPrep'],['결선','performanceTime','mFinalPerformance']].forEach(function(item){var field=document.getElementById(item[2]);if(field)payload.extra.roundSchedules[item[0]][item[1]]=field.value.trim();});
+  }
+  if(code==='IKRC'){
+    payload.extra.roundSchedules.결선.preparationTime=document.getElementById('mFinalPrep').value.trim();
+    payload.extra.roundSchedules.결선.performanceTime=document.getElementById('mFinalPerformance').value.trim();
+    if(typeof IkrcFinalTimetable!=='undefined')IkrcFinalTimetable.collect(payload);
   }
   // 예선 기본정보 수정이 별도로 저장한 본·결선 일정/번호를 덮어쓰지 않도록 합니다.
   if(code==='KCR'){delete payload.competitionDate;}
@@ -1050,6 +1061,7 @@ function loadParticipantFinalsFields_(r){
     document.getElementById(pair[1]).value=schedule ? (schedule.date||'') : (ex['일정구분']===pair[0] ? (r.competitionDate||ex['대회일']||'') : '');
   });
   document.getElementById('participantFinalsFields').open=!!(r.mainCupNo||r.finalCupNo);
+  if(typeof IkrcFinalTimetable!=='undefined')IkrcFinalTimetable.load(r);
 }
 function editParticipant(rowIndex){var r=(participantRows||[]).find(function(x){return Number(x.rowIndex)===Number(rowIndex);});if(!r)return;editingParticipantId=Number(rowIndex);editingParticipantOriginal=JSON.parse(JSON.stringify(r||{}));var code=(document.getElementById('comp').value||r.competitionCode||'').toUpperCase();document.getElementById('mName').value=(code==='KTCC'?(r.teamName||r.name):(r.name||''));document.getElementById('mPhone').value=r.phone||'';document.getElementById('mAff').value=code==='KTCC'?ktccTeamMemberLabel_(r):(r.affiliation||'');document.getElementById('mNo').value=participantPrimaryNumber_(code,r)||'';document.getElementById('mCup').value=r.prelimCupNo||r.cupNo||r.sampleNo||r.teamNo||'';document.getElementById('mSample').value=r.mainCupNo||r.finalCupNo||'';loadParticipantFinalsFields_(r);
   var ex=r.extra||{};document.getElementById('mDate').value=participantPrelimDate_(r);document.getElementById('mDay').value=r.operatingDay||ex['운영일차']||'';document.getElementById('mOrder').value=r.performanceOrder||ex['경연순서']||'';document.getElementById('mStation').value=r.stationNo||ex[code==='IKRC'?'로스팅위치':'스테이션번호']||'';document.getElementById('mWaiting').value=r.waitingTime||ex['대기시간']||'';document.getElementById('mPrep').value=r.preparationTime||ex['준비시간']||'';document.getElementById('mPerformance').value=r.performanceTime||ex['시연시간']||ex['로스팅시간']||'';document.getElementById('mCleanup').value=r.cleanupTime||ex['정리시간']||'';

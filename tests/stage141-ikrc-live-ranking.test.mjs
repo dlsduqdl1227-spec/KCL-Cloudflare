@@ -39,7 +39,8 @@ assert.match(panel, /liveRows/);
 assert.match(panel, /confirmedJudgeCount/);
 
 const aggregate = functionSource(rpc, "aggregateRankingGroup_");
-assert.match(aggregate, /const officialRows = panel\.liveRows/);
+assert.match(aggregate, /const officialRows = finalSensoryOnly \? panel\.liveRows\.filter/);
+assert.match(aggregate, /finalSensoryOnly = roundName_\(round,''\) === '결선'/);
 assert.match(aggregate, /현재 제출 평균/);
 
 const ranking = functionSource(rpc, "buildRankingData_");

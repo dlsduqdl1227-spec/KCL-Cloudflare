@@ -46,7 +46,7 @@
  window.registryRosterSchedule_=function(row){
   var r=round();if(r==='예선')return participantPrelimDate_(row)||'일정 미정';
   if(code()==='KBC')return kbcParticipantRoundText_(row)||'일정 미정';
-  function label(item){var s=schedule(row,item);return [item,s.date||'일정 미정',s.station?'스테이션 '+s.station:'',s.preparationTime?'준비 '+s.preparationTime:'',s.performanceTime?'시연 '+s.performanceTime:''].filter(Boolean).join(' · ');}
+  function label(item){if(code()==='IKRC'&&item==='결선'&&typeof IkrcFinalTimetable!=='undefined')return IkrcFinalTimetable.registrySummary(row);var s=schedule(row,item);return [item,s.date||'일정 미정',s.station?'스테이션 '+s.station:'',s.preparationTime?'준비 '+s.preparationTime:'',s.performanceTime?'시연 '+s.performanceTime:''].filter(Boolean).join(' · ');}
   return r?label(r):['예선','본선','결선'].filter(function(item){return assigned(row,item);}).map(function(item){return item==='예선'?'예선 · '+(participantPrelimDate_(row)||'일정 미정'):label(item);}).join(' / ')||'미배정';
  };
  window.registryRosterRender_=function(selected,rows){

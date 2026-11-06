@@ -17,10 +17,10 @@ try {
  // The same six evaluate both A and B, despite a legacy A-team label.
  for(const [index,judge] of judges.entries())for(const station of stations)if(index||station!==stations[0])await api.rpc('submitScores',ikrcFinalSubmission(judge,station,6+index/10));
  let rankings=(await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking;
- assert.equal(rankings.length,12);assert.ok(rankings.every(r=>r.confirmedJudgeCount===6&&r.headCount===1&&r.sensoryCount===5));
+ assert.equal(rankings.length,12);assert.ok(rankings.every(r=>r.confirmedJudgeCount===5&&r.headCount===1&&r.sensoryCount===5&&r.headScoreIncluded===false));
  const a1=rankings.find(r=>r.unit==='A-1');
- assert.equal(a1.roastingScore,62.5);assert.equal(a1.seedBonus,3);assert.equal(a1.rankingScore,65.5);
- assert.equal(a1.avgScore,62.5,'judge average does not include Seed bonus');
+ assert.equal(a1.roastingScore,63);assert.equal(a1.seedBonus,3);assert.equal(a1.rankingScore,66);
+ assert.equal(a1.avgScore,63,'sensory-only average does not include head or Seed bonus');
  assert.equal(rankings.find(r=>r.unit==='B-1').seedBonus,0);
  const scopes=await api.rpc('getIkrcOfficialCalibrationScopeOptions',judges[0]);
  assert.equal(scopes.stations.length,2,'shared head can compare both evaluated groups');
@@ -28,18 +28,18 @@ try {
  assert.equal(comparison.headCount,1);assert.equal(comparison.judgeCount,5);
  assert.equal((await reject('submitScores',ikrcFinalSubmission(judges[0],stations[0],6))).success,false,'duplicate official scores remain blocked');
  await api.rpc('submitScores',ikrcFinalSubmission(judges[0],stations[1],10,'IKRC 스테이션 켈리브레이션'));
- assert.equal((await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking.find(r=>r.unit==='B-1').roastingScore,62.5,'calibration never affects competition scores');
+ assert.equal((await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking.find(r=>r.unit==='B-1').roastingScore,63,'calibration never affects competition scores');
  const originalScores=JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all());
  const originalPlayers=JSON.stringify(api.db.prepare('SELECT * FROM participants ORDER BY id').all());
  const preview=await api.rpc('getAdminDebriefPreview','IKRC','A-1','결선',api.actor);
- assert.equal(preview.scores.length,6);assert.equal(preview.rankInfo.rankingScore,65.5);assert.equal(preview.rankInfo.avgScore,62.5);
+ assert.equal(preview.scores.length,6);assert.equal(preview.rankInfo.rankingScore,66);assert.equal(preview.rankInfo.avgScore,63);
  assert.equal(preview.scores.reduce((sum,s)=>sum+s['총점'],0)/6,62.5,'judge cards keep original roasting total');
  consoleData=await api.rpc('getIkrcSeedToCupConsole',api.actor);
  let saved=consoleData.finalists.find(p=>p.targetValue===target.targetValue);
  assert.equal(saved.seedBonus,3);assert.equal(saved.seedSaved,true);assert.equal(saved.sensoryRowCount,6);
  assert.equal((await reject('updateIkrcSeedToCupResult',{...target,expectedSavedAt:''},1,'stale',api.actor)).success,false);
  await api.rpc('updateIkrcSeedToCupResult',{...target,expectedSavedAt:saved.seedSavedAt},2,'수정 결과',api.actor);
- assert.equal((await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking.find(r=>r.unit==='A-1').rankingScore,64.5);
+ assert.equal((await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking.find(r=>r.unit==='A-1').rankingScore,65);
  const match={matchNo:'결승 <1>',participantA:target,participantB:{targetType:'participantId',targetValue:String(participants[6].id)},memo:'운영',status:'오픈'};
  const created=await api.rpc('saveIkrcSeedToCupMatch',match,api.actor);
  assert.equal((await reject('saveIkrcSeedToCupMatch',match,api.actor)).success,false,'no accidental overwrites');
@@ -51,7 +51,7 @@ try {
  assert.equal(api.db.prepare("SELECT COUNT(*) n FROM sessions WHERE kind='IKRC_SEED_MATCH_ARCHIVE'").get().n,1);
  consoleData=await api.rpc('getIkrcSeedToCupConsole',api.actor);saved=consoleData.finalists.find(p=>p.targetValue===target.targetValue);
  await api.rpc('deleteIkrcSeedRecord',{kind:'result',...target,expectedSavedAt:saved.seedSavedAt},api.actor);
- assert.equal((await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking.find(r=>r.unit==='A-1').rankingScore,62.5);
+ assert.equal((await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking.find(r=>r.unit==='A-1').rankingScore,63);
  assert.equal((await api.rpc('getIkrcSeedToCupConsole',api.actor)).finalists.find(p=>p.targetValue===target.targetValue).seedSaved,false);
  // Legacy blind-code results map to the correct roster identity, not a numeric finalist.
  const legacy={competitionCode:'IKRC',targetType:'participant',targetValue:'B-2',bonus:1,memo:'기존 결과',savedAt:'2026-11-01'};
