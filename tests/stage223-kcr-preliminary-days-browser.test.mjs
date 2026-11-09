@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 import {seedKcrStations} from './helpers/kcr-station-fixture.mjs';
 const api=await createRpcFixture(),qa=await createBrowserFixture({apiHandler:api.handle});
 fs.mkdirSync('tmp/stage223-qa',{recursive:true});
@@ -12,6 +12,7 @@ try{
   for(const width of [360,768,1440]){
     await save();const page=await qa.page(width);await page.goto(qa.origin+'/assessment/');
     await page.evaluate(actor=>{_judge=actor;_adminPreferredSection='config';loadAdminPanel();},api.actor);
+    await selectOperationsCompetition(page,'KCR','config');
     const panel=page.locator('#admin-config-card-KCR [data-kcr-station-manager]');await panel.waitFor();
     const filter=panel.locator('[data-kcr-day-filter]'),all=panel.locator('[data-ikrc-station-row]');
     assert.equal(await all.count(),3);

@@ -51,7 +51,11 @@ try {
       startKcac();
     });
     assert.equal(await page.locator('#pKcacFinalArea').evaluate(el=>el.classList.contains('active')),true);
-    await page.locator('#pKcacFinalArea button').filter({hasText:'센서리 · 프레젠테이션'}).click();
+    assert.deepEqual(await page.locator('#pKcacFinalArea button[onclick^="startKcac"]').allTextContents(),[
+      '패턴디자인 (1잔 · 60점)','일반우유 센서리 (1잔 · 20점)','어메이징오트바리스타 센서리 (1잔 · 20점)'
+    ]);
+    // Existing two-cup records/drafts remain editable; stage261 exercises the current one-cup panel.
+    await page.evaluate(()=>startKcac('sensory'));
     await page.waitForFunction(()=>document.querySelector('#kcac-attrs [data-kcac-score="맛균형"]'));
     await page.locator('#kcac-num').fill('1');
     await page.evaluate(()=>onKcacParticipantSelected_());

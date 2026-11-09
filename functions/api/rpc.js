@@ -5182,7 +5182,10 @@ async function submitScores(env, payload, signature, request = null) {
   if (initial.code === 'KCR' && rows.length > 20) {
     return { success:false, message:'KCR은 기록 안전을 위해 한 번에 최대 20개 컵까지 제출할 수 있습니다. 범위를 나누어 진행해주세요.' };
   }
-  const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(initial.code).first();
+  const cfg = await env.DB.prepare('SELECT current_round, option_settings, is_active FROM competitions WHERE code=?').bind(initial.code).first();
+  if (cfg && Number(cfg.is_active) === 0 && requestedEvaluationCategory === 'competition' && !hasManageAccess(auth.actor, initial.code)) {
+    return { success:false, message:'현재 대회가 닫혀 있어 새 평가를 제출할 수 없습니다. 입력 내용은 유지됩니다. 운영팀장에게 대회 오픈 상태를 확인해주세요.' };
+  }
   const requestedRound = safeStr(initial.round);
   if (requestedRound && cfg && normalizeRoundForCompetition_(initial.code, requestedRound) !== normalizeRoundForCompetition_(initial.code, cfg.current_round)) {
     return { success:false, message:'평가를 시작한 라운드와 현재 운영 라운드가 다릅니다. 입력 내용은 유지됩니다. 운영팀장에게 라운드를 확인한 뒤 다시 제출해주세요.' };
@@ -5757,13 +5760,13 @@ async function finalCorrectionContext_(env, request, actorArg, returning) {
     if(returning?returnedEvaluation_(row):(code!=='KCR'&&!returnedEvaluation_(row)))return {success:false,message:returning?'이미 반려된 평가입니다.':'반려된 평가만 재제출할 수 있습니다.'};
     originals.set(id,row);
   }
-  return {success:true,code,actor:auth.actor,originals,entries};
+  return {success:true,code,actor:auth.actor,originals,entries,cfg};
 }
-async function commitFinalCorrection_(env,code,originals,changed,status){
+async function commitFinalCorrection_(env,code,originals,changed,status,cfg){
   const plan=[...changed.values()].map(row=>({id:row.id,oldPayload:originals.get(row.id).payload_json,oldStatus:originals.get(row.id).review_status,
     payload:row.payload_json,total:row.total_score,dq:row.disqualified,reason:row.disqualification_reason}));
   // One guarded statement: a concurrent return/resubmit cannot partially save a group.
-  const result=await env.DB.prepare(`WITH plan AS (SELECT json_extract(value,'$.id') id,json_extract(value,'$.oldPayload') old_payload,
+  const update=env.DB.prepare(`WITH plan AS (SELECT json_extract(value,'$.id') id,json_extract(value,'$.oldPayload') old_payload,
     json_extract(value,'$.oldStatus') old_status,json_extract(value,'$.payload') payload,json_extract(value,'$.total') total,
     json_extract(value,'$.dq') dq,json_extract(value,'$.reason') reason FROM json_each(?)),
     safe AS MATERIALIZED (SELECT 1 WHERE (SELECT COUNT(*) FROM plan p JOIN scores s ON s.id=p.id AND s.competition_code=?
@@ -5771,7 +5774,15 @@ async function commitFinalCorrection_(env,code,originals,changed,status){
     UPDATE scores SET payload_json=(SELECT payload FROM plan WHERE id=scores.id),total_score=(SELECT total FROM plan WHERE id=scores.id),
       disqualified=(SELECT dq FROM plan WHERE id=scores.id),disqualification_reason=(SELECT reason FROM plan WHERE id=scores.id),review_status=?
     WHERE competition_code=? AND id IN(SELECT id FROM plan) AND EXISTS(SELECT 1 FROM safe)`)
-    .bind(JSON.stringify(plan),code,plan.length,status,code).run();
+    .bind(JSON.stringify(plan),code,plan.length,status,code);
+  const tokens=code==='IKRC'?[...new Set([...originals.values()].map(row=>ikrcStationFinalizationTokenForScore_(row,cfg)).filter(Boolean))]:[];
+  // Keep the score transition and its station confirmation in the same transaction.
+  // A failed compare-and-swap must not clear an otherwise valid confirmation.
+  const result=tokens.length?(await env.DB.batch([
+    update,
+    env.DB.prepare("DELETE FROM sessions WHERE kind='IKRC_STATION_FINALIZATION' AND token IN (SELECT value FROM json_each(?)) AND changes()=?")
+      .bind(JSON.stringify(tokens),plan.length)
+  ]))[0]:await update.run();
   return Number(result.meta?.changes)===plan.length;
 }
 async function returnFinalEvaluations(env,request,actorArg){
@@ -5784,7 +5795,7 @@ async function returnFinalEvaluations(env,request,actorArg){
       history:[...(previous.history||[]),{action:'return',at,by:context.actor.name,reason,total:row.total_score}]};
     changed.set(row.id,{...row,payload_json:JSON.stringify(payload)});
   }
-  if(!await commitFinalCorrection_(env,context.code,context.originals,changed,'반려'))return {success:false,message:'동시에 변경된 평가가 있어 반려하지 않았습니다. 새로고침해주세요.'};
+  if(!await commitFinalCorrection_(env,context.code,context.originals,changed,'반려',context.cfg))return {success:false,message:'동시에 변경된 평가가 있어 반려하지 않았습니다. 새로고침해주세요.'};
   return {success:true,message:'반려되었습니다. 수정 후 재제출하면 즉시 순위에 반영됩니다.',count:changed.size};
 }
 async function resubmitFinalEvaluations(env,request,actorArg){
@@ -5804,7 +5815,7 @@ async function resubmitFinalEvaluations(env,request,actorArg){
       history:[...(previous.history||[]),{action:'resubmit',at,by:context.actor.name,previousTotal:context.originals.get(id).total_score,total:row.total_score}]};
     changed.set(id,{...row,payload_json:JSON.stringify(payload)});
   }
-  if(!await commitFinalCorrection_(env,context.code,context.originals,changed,'검수완료'))return {success:false,message:'동시에 변경된 평가가 있어 저장하지 않았습니다. 입력 내용은 유지하고 최신 평가를 확인해주세요.'};
+  if(!await commitFinalCorrection_(env,context.code,context.originals,changed,'검수완료',context.cfg))return {success:false,message:'동시에 변경된 평가가 있어 저장하지 않았습니다. 입력 내용은 유지하고 최신 평가를 확인해주세요.'};
   return {success:true,message:context.code==='KCR'?'수정 완료 · 순위에 반영되었습니다.':'재제출 완료 · 순위에 반영되었습니다.',status:'평가완료',count:changed.size};
 }
 async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatus, roleText, actorArg, finalPreparation = null) {
@@ -6454,13 +6465,17 @@ async function getIkrcStationFinalization_(env, round, station) {
   const row = await env.DB.prepare("SELECT payload_json FROM sessions WHERE token=? AND kind='IKRC_STATION_FINALIZATION'").bind(token).first();
   return row ? parseJson(row.payload_json, null) : null;
 }
-async function invalidateIkrcStationFinalizationForScore_(env, scoreRow, cfg) {
-  if (!scoreRow || isCalibrationMode_(ikrcScoreMode_(scoreRow))) return;
+function ikrcStationFinalizationTokenForScore_(scoreRow, cfg) {
+  if (!scoreRow || isCalibrationMode_(ikrcScoreMode_(scoreRow))) return '';
   const round = ikrcScoreRound_(scoreRow) || safeStr(cfg && cfg.current_round);
   const station = ikrcStationsForPurposeServer_(cfg, round, 'competition').find(item => ikrcScoreBelongsToStationServer_(scoreRow, item));
-  if (!station) return;
+  return station ? ikrcStationFinalizationToken_(round, station.id) : '';
+}
+async function invalidateIkrcStationFinalizationForScore_(env, scoreRow, cfg) {
+  const token = ikrcStationFinalizationTokenForScore_(scoreRow, cfg);
+  if (!token) return;
   await env.DB.prepare("DELETE FROM sessions WHERE token=? AND kind='IKRC_STATION_FINALIZATION'")
-    .bind(ikrcStationFinalizationToken_(round, station.id)).run();
+    .bind(token).run();
 }
 async function ikrcOfficialCalibrationRows_(env, requestedScope, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC 대회평가 스테이션 확인 권한이 없습니다. 다시 로그인해주세요.');
@@ -6495,7 +6510,7 @@ async function ikrcOfficialCalibrationRows_(env, requestedScope, actorArg) {
     if (scope.scope === 'station' && scope.station && !ikrcScoreBelongsToStationServer_(scoreRow, scope.station)) return false;
     return true;
   }).map(row => rowToReviewItem(row, 'IKRC', headers, currentRound));
-  rows = latestOfficialJudgeRowsByUnit_(rows);
+  rows = latestOfficialJudgeRowsByUnit_(rows.filter(item => shouldCountItemInRanking_('IKRC', item)));
   return { auth, actorRole, canManageAll, cfg, currentRound, stations, allowedStations, scope, rows };
 }
 async function getIkrcOfficialCalibrationScopeOptions(env, actorArg) {
@@ -6654,10 +6669,13 @@ function ikrcFinalTimetableForRow_(row) {
   };
   return {roastingSchedule:clean(schedule),seedSchedule:clean(schedule.seedToCup)};
 }
+function canManageIkrcSeedToCup_(actor) {
+  return hasManageAccess(actor, 'IKRC') || isStaffActorForCode_(actor, 'IKRC');
+}
 async function getIkrcSeedToCupConsole(env, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC Seed to Cup 조회 권한이 없습니다. 다시 로그인해주세요.');
   if (!auth.ok) return auth.res;
-  if (!hasManageAccess(auth.actor, 'IKRC') && normalizeAccountType_(auth.actor.type || auth.actor.accountType || '', auth.actor.role || '') !== 'STAFF') {
+  if (!canManageIkrcSeedToCup_(auth.actor)) {
     return { success:false, message:'IKRC Seed to Cup은 관리자, 대회팀장 또는 운영진만 사용할 수 있습니다.' };
   }
   const cfg = await env.DB.prepare('SELECT current_round FROM competitions WHERE code=?').bind('IKRC').first();
@@ -6665,7 +6683,7 @@ async function getIkrcSeedToCupConsole(env, actorArg) {
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? ORDER BY id ASC').bind('IKRC', '결선').all();
   const headers = mergeHeaders('IKRC', rawRows.results || []);
   let rows = (rawRows.results || []).map(r => rowToReviewItem(r, 'IKRC', headers, cfg && cfg.current_round));
-  rows = rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode));
+  rows = rows.filter(item => shouldCountItemInRanking_('IKRC', item));
   rows = rows.filter(item => roundName_(item.round || item['라운드']) === '결선');
   const resultMap = await loadIkrcSeedResultMap_(env, participants);
   const finalists = sortRoundParticipants_(participants, 'IKRC', '결선').map(row => {
@@ -6690,7 +6708,7 @@ async function getIkrcSeedToCupConsole(env, actorArg) {
 async function saveIkrcSeedToCupMatch(env, match, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC Seed to Cup 매치 저장 권한이 없습니다.');
   if (!auth.ok) return auth.res;
-  if (!hasManageAccess(auth.actor, 'IKRC') && normalizeAccountType_(auth.actor.type || auth.actor.accountType || '', auth.actor.role || '') !== 'STAFF') return { success:false, message:'IKRC Seed to Cup 매치 저장은 관리자, 대회팀장 또는 운영진만 가능합니다.' };
+  if (!canManageIkrcSeedToCup_(auth.actor)) return { success:false, message:'IKRC Seed to Cup 매치 저장은 관리자, 대회팀장 또는 운영진만 가능합니다.' };
   const m = match || {};
   const matchNo = safeStr(m.matchNo);
   if (!matchNo || matchNo.length>80) return { success:false, message:'매치번호를 80자 이내로 입력해주세요.' };
@@ -6710,7 +6728,7 @@ async function saveIkrcSeedToCupMatch(env, match, actorArg) {
 async function updateIkrcSeedToCupResult(env, target, bonus, memo, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'IKRC', 'IKRC Seed to Cup 결과 저장 권한이 없습니다.');
   if (!auth.ok) return auth.res;
-  if (!hasManageAccess(auth.actor, 'IKRC') && normalizeAccountType_(auth.actor.type || auth.actor.accountType || '', auth.actor.role || '') !== 'STAFF') return { success:false, message:'IKRC Seed to Cup 결과 저장은 관리자, 대회팀장 또는 운영진만 가능합니다.' };
+  if (!canManageIkrcSeedToCup_(auth.actor)) return { success:false, message:'IKRC Seed to Cup 결과 저장은 관리자, 대회팀장 또는 운영진만 가능합니다.' };
   const participants=await ikrcSeedParticipants_(env), row=ikrcSeedResolveParticipant_(participants,target);
   if (!row || !/^[0-3]$/.test(safeStr(bonus))) return {success:false,message:'결선 선수와 +0·+1·+2·+3점 중 하나를 선택해주세요.'};
   const resultMap=await loadIkrcSeedResultMap_(env,participants), old=resultMap.get(ikrcSeedResultToken_('participantId',row.id));
@@ -6731,7 +6749,7 @@ async function writeIkrcSeedResult_(env, id, payload, old) {
 async function deleteIkrcSeedRecord(env, request, actorArg) {
   const auth=await requireActorForCode_(env,actorArg,'IKRC','Seed to Cup 관리 권한이 없습니다.');
   if(!auth.ok)return auth.res;
-  if(!hasManageAccess(auth.actor,'IKRC')&&normalizeAccountType_(auth.actor.type||auth.actor.accountType||'',auth.actor.role||'')!=='STAFF')return {success:false,message:'Seed to Cup 삭제 권한이 없습니다.'};
+  if(!canManageIkrcSeedToCup_(auth.actor))return {success:false,message:'Seed to Cup 삭제 권한이 없습니다.'};
   const input=request||{};
   if(input.kind==='result') {
     const participants=await ikrcSeedParticipants_(env),row=ikrcSeedResolveParticipant_(participants,input);

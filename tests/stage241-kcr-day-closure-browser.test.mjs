@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 import {seedKcrDayClosure} from './helpers/kcr-day-closure-fixture.mjs';
 import {stationSubmission} from './helpers/kcr-station-fixture.mjs';
 const api=await createRpcFixture(),qa=await createBrowserFixture({apiHandler:api.handle});
@@ -14,6 +14,7 @@ try {
     await save([]);
     const page=await qa.page(width);await page.goto(qa.origin+'/assessment/');
     await page.evaluate(actor=>{_judge=actor;_adminPreferredSection='config';loadAdminPanel();},api.actor);
+    await selectOperationsCompetition(page,'KCR','config');
     const panel=page.locator('#admin-config-card-KCR [data-kcr-station-manager]');await panel.waitFor();
     await panel.locator('[data-kcr-close-day="1"]').check();
     const saved=page.waitForResponse(r=>r.request().postDataJSON()?.action==='updateCompetitionAdminSettings');

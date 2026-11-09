@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
 import {seedRoundRankings,competitionCodes,roundsFor} from './helpers/round-ranking-fixture.mjs';
 
@@ -21,15 +21,15 @@ try {
     await page.evaluate(actor=>{_judge=actor;loadAdminPanel();},api.actor);
     await page.waitForSelector('#admin-comp-list [data-act=rank]');
     for(const code of competitionCodes){
-      await page.evaluate(()=>{showPanel('pAdmin');adminSwitchSection('run');});
-      const index=await page.evaluate(code=>_adminConsole.configs.findIndex(c=>c.code===code),code);
-      await page.locator('#admin-comp-list .admin-comp-card').nth(index).locator('[data-act=rank]').click();
+      await page.evaluate(()=>showPanel('pAdmin'));
+      await selectOperationsCompetition(page,code);
+      await page.locator('#admin-comp-list [data-workspace-competition='+code+'] [data-act=rank]').click();
       await waitRanking(page,code,'결선');
       assert.equal(await page.locator('#ranking-round-select').inputValue(),'결선');
-      assert.deepEqual(await page.locator('#ranking-round-select option').allTextContents(),['예선','결선']);
+      assert.deepEqual(await page.locator('#ranking-round-select option').allTextContents(),code==='KBC'?['예선','본선','결선']:['예선','결선']);
       for(const round of roundsFor(code)){
-        await page.locator('#ranking-round-select').selectOption(round==='본선'?'결선':round);
-        if(['KBC','MOC'].includes(code)&&round!=='예선'){
+        await page.locator('#ranking-round-select').selectOption(code==='MOC'&&round==='본선'?'결선':round);
+        if(code==='MOC'&&round!=='예선'){
           if(!await page.locator('#ranking-stage-wrap').evaluate(el=>el.open))await page.locator('#ranking-stage-wrap summary').click();
           await page.locator('#ranking-stage-select').selectOption(round);
         }

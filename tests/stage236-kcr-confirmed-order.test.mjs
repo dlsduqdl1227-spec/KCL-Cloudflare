@@ -55,11 +55,12 @@ try {
   await page.evaluate(a=>{actor=a;document.getElementById('loginCard').classList.add('hidden');document.getElementById('main').classList.remove('hidden');loadRegistry();},api.actor);
   await page.locator('#comp option[value=KCR]').waitFor({state:'attached'});
   await page.locator('#participantSortMode').selectOption('name');await page.locator('#comp').selectOption('KCR');
-  await page.waitForFunction(()=>document.getElementById('partTable').textContent.includes('예선 배정 대기'));
-  const numbers=await page.locator('#partTable td.cell-number').allTextContents();
-  assert.deepEqual(numbers,['1','2','3','예선 배정 대기']);
+  await page.waitForFunction(()=>participantRows.length===4&&participantRows.every(r=>r.competitionCode==='KCR'));
+  assert.deepEqual(await page.locator('#partTable td.cell-number').allTextContents(),['1','2','3']);
   assert.equal(await page.locator('#participantSortMode').inputValue(),'number-asc');
-  assert.match(await page.locator('#partCount').innerText(),/예선 배정 3명 · 대기 1명/);
+  assert.match(await page.locator('#partCount').innerText(),/예선 3명 · 전체 4명/);
+  await page.locator('[data-roster-phase=all]').click();
+  assert.equal(await page.locator('#partTable [data-edit-part]').count(),4,'pending participants remain available in the all-roster tab');
   await page.locator(`[data-edit-part="${pending.rowIndex}"]`).click();assert.equal(await page.locator('#mNo').inputValue(),'');
   assert.equal((await inspectPage(page)).pageOverflow,false);
   await page.screenshot({path:`tmp/stage236-qa/registry-${width}.png`});await page.close();

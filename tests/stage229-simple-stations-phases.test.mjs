@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createAllDebriefFixture} from './helpers/all-debrief-fixture.mjs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 
 // Real API, disposable databases: no production mutations, SMS or external traffic.
 const debrief=await createAllDebriefFixture();
@@ -55,13 +55,14 @@ try{
     await seed();const page=await qa.page(width);
     await page.goto(qa.origin+'/assessment/');
     await page.evaluate(actor=>{_judge=actor;_adminPreferredSection='run';loadAdminPanel();},api.actor);
-    await page.waitForSelector('#admin-comp-list [data-act=station-settings]');
+    await selectOperationsCompetition(page,'KCR');
     const card=page.locator('#admin-comp-list .admin-comp-card').filter({has:page.locator('[data-act=kcr-cal-station]')});
     assert.deepEqual(await card.locator('.station-workflow-actions button').evaluateAll(els=>els.map(el=>el.dataset.act)),['kcr-cal-station','kcr-cal-result','eval','review']);
     assert.equal(await card.locator('[data-act=score-backup]').isVisible(),false);
     await card.locator('.station-tools summary').click();
     assert.equal(await card.locator('[data-act=score-backup]').isVisible(),true);
     assert.equal(await card.locator('[data-act=judge-qr]').evaluate(el=>typeof el.onclick),'function','moved controls retain handlers');
+    await card.locator('.workspace-operation-extras summary').click();
     await card.locator('[data-act=station-settings]').click();
     const panel=page.locator('#admin-config-card-KCR');
     await panel.waitFor({state:'visible'});
@@ -104,6 +105,7 @@ try{
     const layout=await inspectPage(page);assert.equal(layout.pageOverflow,false);assert.deepEqual(layout.overflow,[]);
     await page.screenshot({path:`tmp/stage229-qa/kcr-${width}.png`});
     // IKRC uses the same compact controls, not KCR's participant-number model.
+    await selectOperationsCompetition(page,'IKRC','config');
     await page.locator('#admin-config-card-IKRC details.station-editor').first().locator('summary').click();
     const ikrc=page.locator('#admin-config-card-IKRC details.station-editor').first();
     await ikrc.locator('[data-field=prefix]').fill('Z');

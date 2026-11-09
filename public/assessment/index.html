@@ -2006,7 +2006,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/admin-workspace.css?v=277">
 <link rel="stylesheet" href="/assets/admin-appearance.css?v=278">
-<script defer src="/assets/operations-workspace.js?v=282"></script>
+<script defer src="/assets/operations-workspace.js?v=283"></script>
 <link rel="stylesheet" href="/assets/kcr-viewport.css?v=228">
 <script defer src="/assets/kcr-viewport.js?v=228"></script>
 <link rel="stylesheet" href="/assets/station-manager.css?v=246">
@@ -2578,7 +2578,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <div id="kbc-participant-help" class="participant-picker-help"></div>
     <div id="kbc-participant-complete" class="participant-complete-badge" style="display:none">✓ 내 평가 제출완료</div>
     <input type="number" id="kbc-num" placeholder="참가자 번호" inputmode="numeric" oninput="applyParticipantNumberInput_('KBC','kbc-num','kbc-name')">
-    <input type="text" id="kbc-name" placeholder="참가자명">
+    <input type="text" id="kbc-name" placeholder="참가자명" aria-label="참가자명">
     <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
 
     <div id="kbc-service-block">
@@ -3699,7 +3699,7 @@ function syncParticipantIdentityInput_(code, cfg) {
   } else {
     el.readOnly = false;
     if (!el.placeholder || /블라인드/.test(el.placeholder)) el.placeholder = '선수명 (선택)';
-    el.removeAttribute('aria-label');
+    el.setAttribute('aria-label',String(code||'').toUpperCase()==='KTCC'?'팀명':'참가자명');
   }
 }
 function participantNumberKey_(v) {
@@ -3882,7 +3882,9 @@ function renderParticipantControl_(code, cfg) {
   if (help) {
     var policy = st.policy || {};
     help.style.display = 'block';
-    if (policy.identityHidden) {
+    if (st.message) {
+      help.textContent=st.message;
+    } else if (policy.identityHidden) {
       help.textContent = (policy.numberLabel || '심사용 번호') + '만 표시됩니다. 선수명과 소속은 관리자만 확인할 수 있습니다.';
     } else if (code === 'MOB') {
       var scope = st.scheduleScope || {};
@@ -3910,20 +3912,54 @@ function setParticipantRefreshState_(code, loading) {
     button.textContent = loading ? '…' : '↻';
   });
 }
+function participantRosterRound_(code) {
+  var round=_selComp && _selComp.code===code && _selComp.currentRound;
+  return round ? normalizeRoundForCompetition_(code,round) : '';
+}
+function participantRosterResponseMatches_(code,res) {
+  var round=participantRosterRound_(code);
+  return (!res.competitionCode || res.competitionCode===code) &&
+    (!round || !res.currentRound || normalizeRoundForCompetition_(code,res.currentRound)===round);
+}
+function clearParticipantRosterForRound_(state,round) {
+  if(!state.round || !round || state.round===round)return;
+  state.list=[];state.policy={};state.scheduleScope=null;state.loaded=false;state.round='';
+}
 function loadParticipantAssignmentsForCode_(code) {
   code = String(code || '').toUpperCase();
   if (!code || !(_judge && _judge.judgeToken)) { renderParticipantControls_(code); setParticipantRefreshState_(code, false); return; }
   var st = participantStateForCode_(code);
+  var ownerToken=_judge.judgeToken, requestedRound=participantRosterRound_(code);
+  var requestSequence=st.requestSequence=(st.requestSequence||0)+1;
+  clearParticipantRosterForRound_(st,requestedRound);
+  // A slow request must not replace another round's roster or a new login's data.
+  function finishCurrentRequest(){
+    if(!_judge || _judge.judgeToken!==ownerToken || _participantAssignments[code]!==st || st.requestSequence!==requestSequence)return false;
+    st.loading=false;
+    setParticipantRefreshState_(code,false);
+    if(requestedRound && requestedRound!==participantRosterRound_(code)){
+      clearParticipantRosterForRound_(st,participantRosterRound_(code));
+      renderParticipantControls_(code);
+      return false;
+    }
+    return true;
+  }
   st.loading = true;
   st.message = '';
   setParticipantRefreshState_(code, true);
   renderParticipantControls_(code);
   google.script.run
     .withSuccessHandler(function(res){
+      if(!finishCurrentRequest())return;
       var cur = participantStateForCode_(code);
-      cur.loading = false;
       cur.loaded = true;
       if (res && res.success) {
+        if(!participantRosterResponseMatches_(code,res)){
+          cur.message='운영 회차가 다릅니다. 작성한 내용은 유지됩니다. 대회 선택에서 현재 회차를 확인해주세요.';
+          renderParticipantControls_(code);
+          return;
+        }
+        cur.round=res.currentRound?normalizeRoundForCompetition_(code,res.currentRound):requestedRound;
         cur.list = res.assignments || [];
         cur.policy = res.policy || {};
         cur.scheduleScope = res.scheduleScope || null;
@@ -3934,7 +3970,6 @@ function loadParticipantAssignmentsForCode_(code) {
         cur.message = (res && res.message) || '선수등록 목록을 불러오지 못했습니다. 직접 입력하세요.';
       }
       renderParticipantControls_(code);
-      setParticipantRefreshState_(code, false);
       if (code === 'KCAC') onKcacParticipantSelected_();
       if (code === 'KBC') onKbcParticipantSelected_();
       if (code === 'KBC' && document.getElementById('evalKbc').classList.contains('active')) kclMaybeRestoreDraftForActiveEval_();
@@ -3943,21 +3978,20 @@ function loadParticipantAssignmentsForCode_(code) {
       if (code === 'KCR' && _selComp && _selComp.code === 'KCR') renderKcrStationChoices_();
     })
     .withFailureHandler(function(){
+      if(!finishCurrentRequest())return;
       var cur = participantStateForCode_(code);
-      cur.loading = false;
       cur.loaded = true;
       cur.list = [];
       cur.policy = {};
       cur.scheduleScope = null;
       cur.message = '선수등록 목록을 불러오지 못했습니다. 직접 입력하세요.';
       renderParticipantControls_(code);
-      setParticipantRefreshState_(code, false);
       if (code === 'KCAC') onKcacParticipantSelected_();
       if (code === 'KBC') onKbcParticipantSelected_();
       if (code === 'MOC') renderMocSetupList();
       if (code === 'KTCC') renderKtccSetupList();
     })
-    .getParticipantAssignments(code, { judgeToken: _judge.judgeToken || '' });
+    .getParticipantAssignments(code, { judgeToken:ownerToken, round:requestedRound });
 }
 function refreshParticipantAssignmentsForActiveComp_(code) {
   code = String(code || (_selComp && _selComp.code) || '').toUpperCase();
@@ -4000,8 +4034,9 @@ function participantLiveListSignature_(list) {
   }));
 }
 function applyLiveParticipantAssignments_(code, res) {
-  if (!res || !res.participantChanged || !Array.isArray(res.assignments)) return false;
+  if (!res || !res.participantChanged || !Array.isArray(res.assignments) || !participantRosterResponseMatches_(code,res)) return false;
   var st = participantStateForCode_(code);
+  clearParticipantRosterForRound_(st,participantRosterRound_(code));
   var controls = participantControlsForCode_(code);
   var selected = controls.map(function(cfg){
     var select = document.getElementById(cfg.selectId);
@@ -4012,6 +4047,7 @@ function applyLiveParticipantAssignments_(code, res) {
   var before = participantLiveListSignature_(st.list || []);
   st.loading = false;
   st.loaded = true;
+  st.round = res.currentRound ? normalizeRoundForCompetition_(code,res.currentRound) : participantRosterRound_(code);
   st.list = res.assignments || [];
   st.policy = res.policy || {};
   st.scheduleScope = res.scheduleScope || null;

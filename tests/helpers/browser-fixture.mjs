@@ -51,6 +51,13 @@ export async function createBrowserFixture(options = {}) {
   };
 }
 
+// Follow the same competition selector and tabs as the production operations console.
+export async function selectOperationsCompetition(page,code,section='run') {
+  await page.locator('#admin-workspace-competition option[value="'+code+'"]').waitFor({state:'attached'});
+  await page.locator('#admin-workspace-competition').selectOption(code);
+  await page.locator('#admin-tab-'+section).click();
+}
+
 export async function inspectPage(page) {
   return page.evaluate(() => {
     const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' &&

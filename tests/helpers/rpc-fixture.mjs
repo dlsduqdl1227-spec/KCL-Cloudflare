@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import {DatabaseSync} from 'node:sqlite';
 
 // Real Pages RPC + disposable SQLite. No Cloudflare credentials or network calls.
+let fixtureSequence=0;
 export async function createRpcFixture(options = {}) {
   const source = options.source || fs.readFileSync(new URL('../../functions/api/rpc.js',import.meta.url),'utf8');
-  const api = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+  const api = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64') + '#fixture-' + ++fixtureSequence);
   const db = new DatabaseSync(':memory:');
   class Statement {
     constructor(sql,params=[]) { this.sql=sql; this.params=params; }

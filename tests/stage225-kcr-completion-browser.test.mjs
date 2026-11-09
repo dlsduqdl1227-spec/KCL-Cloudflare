@@ -46,7 +46,7 @@ try{
     }
     await page.waitForFunction(()=>document.querySelector('#kcr-station-grid [data-station-id="stable-b"]')?.disabled);
     assert.match(await b(page).innerText(),/평가완료 2\/2/);
-    assert.equal(await page.locator('#kcr-station-help button').innerText(),'내평가 검수');
+    assert.equal((await page.locator('#kcr-station-help button').innerText()).replace(/\s/g,''),'내평가검수');
     await page.evaluate(()=>startKcrStation_('stable-b'));
     assert.equal(await page.evaluate(()=>hasActiveEval_()),false,'direct start cannot bypass completion guard');
     assert.equal(await page.locator('#kcr-station-grid [data-station-id="stable-c"]').isEnabled(),true,'other station remains available');

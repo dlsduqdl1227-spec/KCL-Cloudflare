@@ -22,7 +22,7 @@
   document.querySelectorAll('#admin-comp-list>.admin-comp-card').forEach(function(card){
    var actions=card.querySelector('.admin-comp-actions');if(!actions||card.querySelector('.workspace-operation-extras'))return;
    var extras=document.createElement('details');extras.className='workspace-operation-extras';var caption=document.createElement('summary');caption.textContent='심사 도구·스테이션·백업';extras.appendChild(caption);var more=document.createElement('div');more.className='admin-comp-actions';extras.appendChild(more);
-   Array.from(actions.children).forEach(function(button){if(!['eval','review','rank','debrief-preview'].includes(button.dataset.act))more.appendChild(button);});if(more.children.length)card.appendChild(extras);
+   Array.from(actions.children).forEach(function(control){if(!control.classList.contains('station-workflow-actions')&&!['eval','review','rank','debrief-preview'].includes(control.dataset.act))more.appendChild(control);});if(more.children.length)card.appendChild(extras);
   });
   filter();
  }

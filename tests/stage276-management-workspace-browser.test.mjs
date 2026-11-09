@@ -43,6 +43,13 @@ try{
  await ops.locator('#admin-workspace-competition').selectOption('MOB');assert.equal(await ops.locator('#admin-comp-list [data-workspace-competition]:not([hidden])').count(),1);assert.equal(await ops.locator('#admin-comp-list [data-workspace-competition=MOB]').isVisible(),true);
  await ops.locator('#admin-tab-config').click();assert.equal(await ops.locator('#admin-config-card-MOB').isVisible(),true);assert.equal(await ops.locator('#admin-config-card-KBC').isVisible(),false);
  await ops.locator('#admin-tab-run').click();await ops.locator('#admin-comp-list [data-workspace-competition=MOB] .workspace-operation-extras summary').click();assert.equal(await ops.locator('#admin-comp-list [data-workspace-competition=MOB] [data-act=mob-tech-head]').isVisible(),true);
+ for(const code of ['IKRC','KCR']){
+  await ops.locator('#admin-workspace-competition').selectOption(code);
+  const card=ops.locator('#admin-comp-list [data-workspace-competition='+code+']');
+  assert.equal(await card.locator('[data-act=eval]').isVisible(),true,code+' primary evaluation must not be hidden under operations tools');
+  assert.equal(await card.locator('[data-act=review]').isVisible(),true,code+' primary review must remain visible');
+ }
+ await ops.locator('#admin-workspace-competition').selectOption('MOB');
  for(const width of [390,768,1440]){await ops.setViewportSize({width,height:1000});assert.equal((await inspectPage(ops)).pageOverflow,false);await ops.screenshot({path:'tmp/stage276-qa/operations-'+width+'.png'});}
  await ops.setViewportSize({width:390,height:1000});await ops.locator('#admin-tab-config').click();await ops.screenshot({path:'tmp/stage276-qa/config-mobile.png',fullPage:true});await ops.locator('#admin-workspace-competition').selectOption('KCR');await ops.screenshot({path:'tmp/stage276-qa/config-stations-mobile.png',fullPage:true});assert.equal((await inspectPage(ops)).pageOverflow,false);
  const home=await qa.page(390,950);await home.goto(qa.origin+'/admin/');await home.evaluate(a=>showAdmin(a),api.actor);assert.equal(await home.locator('#adminMain a.admin-card').count(),3);assert.equal((await inspectPage(home)).pageOverflow,false);await home.screenshot({path:'tmp/stage276-qa/admin-home-mobile.png'});

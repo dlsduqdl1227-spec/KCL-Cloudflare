@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 import {seedFreeCups} from './helpers/kcr-free-cups-fixture.mjs';
 fs.mkdirSync('tmp/stage247-qa',{recursive:true});
 for(const width of [360,768,1440]){
@@ -13,6 +13,7 @@ for(const width of [360,768,1440]){
   const page=await qa.page(width);await page.goto(qa.origin+'/assessment/');
   const configs=(await api.rpc('getConfig')).configs;
   await page.evaluate(({actor,configs})=>{_judge=actor;_configs=configs;_adminConsole.configs=configs;showPanel('pAdmin');adminSwitchSection('config');adminRenderConfigList_();},{actor:api.actor,configs});
+  await selectOperationsCompetition(page,'KCR','config');
   const panel=page.locator('#admin-config-card-KCR [data-kcr-station-manager]');
   await panel.locator('[data-kcr-edit-round]').selectOption('결선');
   assert.equal(await page.locator('#admin-cfg-round-KCR').inputValue(),'예선','editing round is not live round');

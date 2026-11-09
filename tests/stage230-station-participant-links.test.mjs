@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 import {seedKcrStations} from './helpers/kcr-station-fixture.mjs';
 const api=await createRpcFixture(),qa=await createBrowserFixture({apiHandler:api.handle});
 fs.mkdirSync('tmp/stage230-qa',{recursive:true});
@@ -50,6 +50,7 @@ try{
   const page=await qa.page(width);await page.goto(qa.origin+'/assessment/');
   const configs=(await api.rpc('getConfig')).configs;
   await page.evaluate(({actor,configs})=>{_judge=actor;_configs=configs;_adminConsole.configs=configs;showPanel('pAdmin');adminSwitchSection('config');adminRenderConfigList_();},{actor:api.actor,configs});
+  await selectOperationsCompetition(page,'KCR','config');
   const box=page.locator('#admin-config-card-KCR .station-cup-identities');
   await box.locator('summary').click();await box.locator('[data-cup-load]').click();
   await box.locator('[data-cup-station]').waitFor();assert.match(await box.innerText(),/예선 선수/);

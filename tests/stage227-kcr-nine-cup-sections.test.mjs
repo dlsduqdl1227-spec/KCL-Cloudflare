@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 import {seedKcrStations,stationSubmission} from './helpers/kcr-station-fixture.mjs';
 import {buildKcrNineCupPlan} from '../maintenance/kcr-nine-cup-plan.mjs';
 const api=await createRpcFixture();
@@ -43,6 +43,7 @@ try {
     await save(plan);
     const page=await qa.page(width);await page.goto(qa.origin+'/assessment/');
     await page.evaluate(actor=>{_judge=actor;_adminPreferredSection='config';loadAdminPanel();},api.actor);
+    await selectOperationsCompetition(page,'KCR','config');
     const panel=page.locator('#admin-config-card-KCR [data-kcr-station-manager]');await panel.waitFor();
     const row=panel.locator('[data-station-id="station4"]');
     assert.equal(await row.locator('[data-field=end]').inputValue(),'9');

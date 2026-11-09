@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
 
 const api=await createRpcFixture();const qa=await createBrowserFixture({apiHandler:api.handle});
@@ -10,15 +10,15 @@ try{
     const page=await qa.page(width);
     await page.goto(qa.origin+'/assessment/');
     await page.evaluate(actor=>{_judge=actor;loadAdminPanel();},api.actor);
-    await page.waitForSelector('#admin-cfg-round-KBC',{state:'attached'});
-    await page.evaluate(()=>adminSwitchSection('config'));
-    assert.deepEqual(await page.locator('#admin-cfg-round-KBC option').allTextContents(),['예선','본선','결선']);
-    await page.locator('#admin-cfg-round-KBC').selectOption('결선');
+    await selectOperationsCompetition(page,'KBC','config');
+    assert.deepEqual(await page.locator('#admin-cfg-round-KBC-stage option').allTextContents(),['예선','본선 1일차','본선 2일차','결선']);
+    await page.locator('#admin-cfg-round-KBC-stage').selectOption('결선');
     const kbcSaved=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='updateCompetitionAdminSettings');
     await page.locator('#admin-config-card-KBC [data-save]').click();
     assert.equal((await(await kbcSaved).json()).success,true);
     await page.waitForFunction(()=>document.getElementById('admin-cfg-round-KBC')?.value==='결선');
     for(const code of ['MOC']){
+      await selectOperationsCompetition(page,code,'config');
       const id='#admin-cfg-round-'+code;
       assert.deepEqual(await page.locator(id+'-group option').allTextContents(),['예선','결선']);
       await page.locator(id+'-group').selectOption('결선');
@@ -42,14 +42,14 @@ try{
       assert.equal(await page.locator('#admin-cfg-round-'+code+'-group').count(),0);
       assert.deepEqual(await page.locator('#admin-cfg-round-'+code+' option').allTextContents(),['예선','결선']);
     }
-    await page.locator('#admin-config-card-KBC').scrollIntoViewIfNeeded();
+    await selectOperationsCompetition(page,'KBC','config');
     await page.screenshot({path:'tmp/rounds-qa/admin-'+width+'.png'});
     assert.equal((await inspectPage(page)).pageOverflow,false);
     // Reuse the real API with a team-lead-shaped UI actor; auth remains local-only.
     await page.evaluate(actor=>{_judge={judgeToken:actor.judgeToken,name:'QA 팀장',phone:actor.phone,type:'TEAMLEAD',accountType:'TEAMLEAD',role:'대회팀장',access:'KBC,MOC',accountTypeMap:{KBC:'TEAMLEAD',MOC:'TEAMLEAD'},roleMap:{KBC:'대회팀장',MOC:'대회팀장'}};loadTeamPanel();},api.actor);
-    await page.waitForSelector('#team-cfg-round-KBC');
+    await page.waitForSelector('#team-cfg-round-KBC-stage');
     assert.equal(await page.locator('#team-cfg-round-KBC').inputValue(),'결선');
-    await page.locator('#team-cfg-round-KBC').selectOption('본선');
+    await page.locator('#team-cfg-round-KBC-stage').selectOption('본선:1');
     const saved=page.waitForResponse(r=>r.url().includes('/api/rpc')&&r.request().postDataJSON()?.action==='updateCompetitionAdminSettings');
     await page.locator('.admin-comp-card').filter({has:page.locator('#team-cfg-round-KBC')}).locator('[data-act=save-cfg]').click();
     assert.equal((await (await saved).json()).success,true);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {createRpcFixture} from './helpers/rpc-fixture.mjs';
-import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
+import {createBrowserFixture,inspectPage,selectOperationsCompetition} from './helpers/browser-fixture.mjs';
 import {seedKcrComparison} from './helpers/kcr-comparison-fixture.mjs';
 import {stationSubmission} from './helpers/kcr-station-fixture.mjs';
 
@@ -66,7 +66,8 @@ try{
   }
   const page=await qa.page(390);await page.goto(qa.origin+'/assessment/');
   await page.evaluate(actor=>{_judge=actor;loadAdminPanel();},api.actor);
-  await page.locator('[data-act=kcr-cal-result]').click();await page.waitForSelector('#kcr-comparison-station');
+  await selectOperationsCompetition(page,'KCR');
+  await page.locator('#admin-comp-list [data-act=kcr-cal-result]').click();await page.waitForSelector('#kcr-comparison-station');
   for(const label of ['예선 · 스테이션 3','예선 · 스테이션 4','예선 · 스테이션 1']){
     await page.locator('#kcr-comparison-station').selectOption({label});
     assert.equal(await page.locator('#review-count-val').innerText(),label.split(' · ')[1],'header follows station changes immediately');
