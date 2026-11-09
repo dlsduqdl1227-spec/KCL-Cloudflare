@@ -1582,9 +1582,29 @@ body.kcl-admin-scroll-mode{height:100dvh!important;min-height:100dvh!important;o
 .detail-media-thumb{flex:0 0 auto;width:86px;height:86px;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:#000;cursor:pointer;position:relative}
 .detail-media-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .detail-media-thumb span{position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.72);color:#fff;font-size:10px;padding:2px 4px;border-radius:4px;max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.report-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;width:100%}
-.report-actions button{flex:1 1 160px}
-@media(max-width:560px){.report-actions{display:grid;grid-template-columns:1fr}.detail-media-thumb{width:74px;height:74px}}
+@media(max-width:560px){.detail-media-thumb{width:74px;height:74px}}
+
+/* Ranking cards keep text and actions in separate rows, including on narrow screens. */
+@media screen {
+  #pRanking .rank-summary,.ranking-finalist-card{
+    display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:16px;
+    background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:14px
+  }
+  #pRanking .rank-summary-sub,#ranking-title{line-height:1.45;overflow-wrap:anywhere}
+  .ranking-round-controls .list-refresh-btn{width:44px;height:44px}
+  .ranking-actions:not([hidden]){
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,196px),1fr));gap:8px
+  }
+  .ranking-actions>:is(a,button){
+    display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:48px;
+    padding:10px 12px;margin:0;border-radius:10px;font-size:14px;line-height:1.4;
+    text-align:center;text-decoration:none;white-space:normal;overflow-wrap:anywhere
+  }
+  .ranking-finalist-card h3{margin:0;line-height:1.4;overflow-wrap:anywhere}
+  .ranking-finalist-card p,#kbc-finalist-plan{color:var(--text-3);font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+  #kbc-finalist-plan ol{margin-top:8px;padding-inline-start:24px}
+}
+@media print{#pRanking>.no-print{display:none!important}}
 
 
 /* STAGE19 ADMIN LAYOUT FINAL GUARD
@@ -2273,7 +2293,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
       <div class="rank-summary-title" id="rank-summary-title">순위표</div>
       <div class="rank-summary-sub" id="rank-summary-sub"></div>
     </div>
-    <div class="report-actions" id="ranking-report-actions" style="display:none">
+    <div class="report-actions ranking-actions" id="ranking-report-actions" hidden>
       <button class="rank-print-btn" id="ranking-pdf-button" type="button" onclick="printRanking()">순위 PDF 저장</button>
       <button class="btn-outline" type="button" onclick="downloadFinalReportExcel()">최종디브리핑 엑셀</button>
     </div>
@@ -11164,7 +11184,7 @@ function goRankingByCode(code, name, round) {
   var cachedRanking = rankingScopedResponse_(_rankingCacheByCode[rankingCacheKey], rankingCode, selectedRound);
   _ranking = cachedRanking;
   var reportActions = document.getElementById('ranking-report-actions');
-  if (reportActions) reportActions.style.display = canPrintRanking(code) ? 'flex' : 'none';
+  if (reportActions) reportActions.hidden = !canPrintRanking(code);
   var rankingPdfButton = document.getElementById('ranking-pdf-button');
   if (rankingPdfButton) rankingPdfButton.textContent = rankingCode === 'MOB' ? 'Top 12 순위 PDF 저장' : (rankingCode === 'KCR' ? 'Top 40 순위 PDF 저장' : '순위 PDF 저장');
   document.getElementById('ranking-title').textContent = (name || code) + ' ' + rankingLabel;
@@ -11228,8 +11248,18 @@ function renderKbcFinalistEntry_(res) {
   var old = document.getElementById('kbc-finalist-entry');
   if (old) old.remove();
   if (!res || res.compCode !== 'KBC' || res.selectedRound !== '본선') return;
-  var box = document.createElement('section'); box.id = 'kbc-finalist-entry'; box.className = 'review-readonly-block';
-  box.innerHTML = '<strong>본선 1·2일차 통합 순위 · 결선 6명</strong><p>순위는 참고용입니다. 결선 진출자는 본선 명단에서 직접 선택하면 즉시 반영됩니다.</p><a class="btn" href="/registry/?kbcView=final" target="_blank" rel="noopener">결선 진출자 선택</a><button type="button" class="btn-outline" onclick="loadKbcFinalistPlan_()">진출 예상 명단 새로고침</button><div id="kbc-finalist-plan" role="status"></div>';
+  var box = document.createElement('section');
+  box.id = 'kbc-finalist-entry';
+  box.className = 'ranking-finalist-card no-print';
+  box.setAttribute('aria-labelledby', 'kbc-finalist-title');
+  box.innerHTML =
+    '<h3 id="kbc-finalist-title">본선 1·2일차 통합 순위 · 결선 6명</h3>' +
+    '<p>본선 명단에서 결선 진출자를 선택하면 즉시 반영됩니다.</p>' +
+    '<div class="ranking-actions">' +
+      '<a class="btn" href="/registry/?kbcView=final" target="_blank" rel="noopener">결선 진출자 선택</a>' +
+      '<button type="button" class="btn-outline" onclick="loadKbcFinalistPlan_()">진출 예상 명단 새로고침</button>' +
+    '</div>' +
+    '<div id="kbc-finalist-plan" role="status"></div>';
   document.getElementById('ranking-list').before(box);
   loadKbcFinalistPlan_();
 }
@@ -11242,9 +11272,9 @@ function loadKbcFinalistPlan_() {
     if (!current()) return;
     area.textContent = '';
     var info = document.createElement('p'); info.textContent = res.success ? '현재 결선 배정 '+(res.assignedFinalists||[]).length+'명 · 아래 순위는 참고용입니다.' : (res.message || ''); area.appendChild(info);
-    if (!res.success) return;
-    var list = document.createElement('ol'); list.style.paddingLeft='22px'; list.style.lineHeight='1.7';
-    (res.candidates || []).forEach(function(item) { var row=document.createElement('li'); row.textContent='본선 '+item.rank+'위 · '+item.name+' · '+item.score+'점'; list.appendChild(row); });
+    if (!res.success || !res.candidates || !res.candidates.length) return;
+    var list = document.createElement('ol');
+    res.candidates.forEach(function(item) { var row=document.createElement('li'); row.textContent='본선 '+item.rank+'위 · '+item.name+' · '+item.score+'점'; list.appendChild(row); });
     area.appendChild(list);
   }).withFailureHandler(function(){if(current())area.textContent='진출자 확인에 실패했습니다. 다시 시도해주세요.';}).getKbcFinalistPlan(_judge);
 }
