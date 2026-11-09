@@ -77,7 +77,7 @@ assert.match(functionSource(assessment, "ikrcRenumberStationConfigRows_"), /'스
 assert.match(assessment, /@media\(max-width:620px\)[\s\S]*kcr-station-process-field/);
 assert.match(assessment, /kcr-station-manager-panel[^}]*overflow:hidden/);
 
-const rankingActions = assessment.match(/<div class="report-actions" id="ranking-report-actions"[\s\S]*?<\/div>/)?.[0] || "";
+const rankingActions = assessment.match(/<div\b[^>]*\bid="ranking-report-actions"[^>]*>[\s\S]*?<\/div>/)?.[0] || "";
 assert.match(rankingActions, /순위 PDF 저장/);
 assert.match(rankingActions, /최종디브리핑 엑셀/);
 assert.doesNotMatch(rankingActions, /점수·검수 백업/);

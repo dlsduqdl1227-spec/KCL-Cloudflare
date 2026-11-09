@@ -650,6 +650,7 @@ async function dispatch(action, args, env, request) {
     bulkUpdateParticipantPrelimDate: () => bulkUpdateParticipantPrelimDate(env, args[0], args[1]),
     getRegistrationTemplates: () => getRegistrationTemplates(),
     getParticipantAssignments: () => getParticipantAssignments(env, args[0], args[1]),
+    checkIkrcFinalJudgeAccess: () => checkIkrcFinalJudgeAccess(env, args[0]),
     getParticipantRoundOrder: () => getParticipantRoundOrder(env, args[0], args[1]),
     saveParticipantRoundOrder: () => saveParticipantRoundOrder(env, args[0], args[1]),
     getStationCupParticipants: () => getStationCupParticipants(env, args[0], args[1], args[2]),
@@ -713,7 +714,9 @@ async function dispatch(action, args, env, request) {
 }
 
 async function getConfig(env) {
-  const rows = await env.DB.prepare('SELECT * FROM competitions ORDER BY id').all();
+  const rows = await env.DB.prepare(`SELECT competitions.*,
+    CASE WHEN code='IKRC' THEN EXISTS(SELECT 1 FROM system_settings WHERE setting_key=?) ELSE 0 END AS ikrc_final_roster_restricted
+    FROM competitions ORDER BY id`).bind(IKRC_FINAL_JUDGE_ROSTER_KEY).all();
   return { success: true, configs: (rows.results || []).map(rowToConfig) };
 }
 async function getKtccFinalTeams_(env, actorArg) {
@@ -823,7 +826,8 @@ function rowToConfig(r) {
     sheetName: r.sheet_name || r.code,
     debriefing: !!r.debriefing,
     smsPrefix: r.sms_prefix || r.code,
-    optionSettings: parseJson(r.option_settings, {})
+    optionSettings: parseJson(r.option_settings, {}),
+    ...(r.ikrc_final_roster_restricted ? {ikrcFinalRosterRestricted:true} : {})
   };
 }
 
@@ -1215,6 +1219,45 @@ async function requireManageActorForCode_(env, actorArg, code, message) {
   if (!actor) return { ok: false, res: { success: false, message: message || '로그인이 만료되었습니다. 다시 로그인해주세요.' } };
   if (code && !hasManageAccess(actor, code)) return { ok: false, res: { success: false, message: code + ' 관리 권한이 없습니다.' } };
   return { ok: true, actor };
+}
+
+const IKRC_FINAL_JUDGE_ROSTER_KEY = 'ikrc_final_judge_roster';
+function ikrcFinalJudgeSeat_(role) {
+  const value = safeStr(role);
+  if (/테크니컬|technical/i.test(value)) return '';
+  if (isHeadRole_(value)) return 'head';
+  return /센서리|sensory/i.test(value) ? 'sensory' : '';
+}
+async function ikrcFinalJudgeAccessError_(env, actor, round, category) {
+  if (normalizeRoundForCompetition_('IKRC', round) !== '결선' || category !== 'competition') return null;
+  const setting = await env.DB.prepare('SELECT setting_value FROM system_settings WHERE setting_key=?')
+    .bind(IKRC_FINAL_JUDGE_ROSTER_KEY).first();
+  // Roster restrictions are opt-in for this round only; no operator permissions are removed.
+  if (!setting) return null;
+  const roster = parseJson(setting.setting_value, null);
+  const sensory = roster?.sensoryOperatorIds;
+  const ids = [roster?.headOperatorId, ...(Array.isArray(sensory) ? sensory : [])];
+  if (ids.length !== 6 || new Set(ids).size !== 6 || !ids.every(id => Number.isSafeInteger(id) && id > 0)) {
+    return {success:false, errorCode:'IKRC_FINAL_ROSTER_INVALID', message:'IKRC 결선 심사단 설정을 확인해주세요. 입력 내용은 유지됩니다.'};
+  }
+  const seat = ikrcFinalJudgeSeat_(actor?.roleMap?.IKRC || actor?.role);
+  const allowedIds = seat === 'head' ? [roster.headOperatorId] : (seat === 'sensory' ? sensory : []);
+  const rows = Array.isArray(actor?.operatorRows) ? actor.operatorRows : [];
+  const allowed = actorAccountTypeForCode_(actor,'IKRC') === 'JUDGE' && rows.some(row =>
+    allowedIds.includes(Number(row.rowIndex)) && ikrcFinalJudgeSeat_(row.role) === seat &&
+    normalizeAccountType_(row.accountType, row.role) === 'JUDGE' &&
+    accessCodes_(row.access).some(code => code === 'IKRC' || code === 'ALL'));
+  return allowed ? null : {success:false, errorCode:'IKRC_FINAL_JUDGE_NOT_ASSIGNED',
+    message:'IKRC 결선 공식 평가는 지정된 헤드 1명과 센서리 5명만 제출할 수 있습니다. 입력 내용은 유지됩니다.'};
+}
+async function checkIkrcFinalJudgeAccess(env, actorArg) {
+  const auth = await requireActorForCode_(env, {judgeToken:safeStr(actorArg?.judgeToken)}, 'IKRC', 'IKRC 평가 로그인이 만료되었습니다. 다시 로그인해주세요.');
+  if (!auth.ok) return auth.res;
+  const cfg = await env.DB.prepare("SELECT current_round FROM competitions WHERE code='IKRC'").first();
+  if (!cfg || normalizeRoundForCompetition_('IKRC', cfg.current_round) !== '결선') {
+    return {success:false, message:'IKRC 운영 라운드가 변경되었습니다. 평가 화면을 다시 열어주세요.'};
+  }
+  return (await ikrcFinalJudgeAccessError_(env, auth.actor, cfg.current_round, 'competition')) || {success:true};
 }
 function payloadIdentityCandidates_(payload) {
   payload = payload && typeof payload === 'object' ? payload : {};
@@ -5243,6 +5286,8 @@ async function submitScores(env, payload, signature, request = null) {
     }
   }
   if (initial.code === 'IKRC') {
+    const rosterError = await ikrcFinalJudgeAccessError_(env, auth.actor, submitRound, requestedEvaluationCategory);
+    if (rosterError) return rosterError;
     const stationValidation = validateIkrcStationSubmission_(basePayload, cfg);
     if (!stationValidation.ok) return { success:false, message:stationValidation.message };
     // 현장에서는 같은 심사위원이 운영팀장의 안내에 따라 여러 스테이션을 순차 평가할 수 있습니다.
@@ -5746,6 +5791,11 @@ async function finalCorrectionContext_(env, request, actorArg, returning) {
   if(!Array.isArray(entries)||!entries.length||entries.length>40)return {success:false,message:'변경할 평가를 선택해주세요.'};
   const originals=new Map();
   const cfg=code==='IKRC'?await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first():null;
+  // Managers retain their existing ability to correct a saved evaluation, not to add their own vote.
+  if (code==='IKRC' && !returning && !manager) {
+    const rosterError=await ikrcFinalJudgeAccessError_(env,auth.actor,request.round,'competition');
+    if (rosterError) return rosterError;
+  }
   const station=manager && cfg?ikrcActorAssignedStationServer_(auth.actor,cfg):null;
   for(const entry of entries){
     const ref=parseReviewRowRef_(entry.rowIndex),id=ref.id;

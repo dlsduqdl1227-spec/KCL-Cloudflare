@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:finals-integrity": "node --test tests/stage283-finals-integrity.test.mjs tests/stage283-final-roster-browser.test.mjs",
+    "test:finals-integrity": "node --test tests/stage283-finals-integrity.test.mjs tests/stage283-final-roster-browser.test.mjs tests/stage285-ikrc-final-judge-roster.test.mjs",
     "test:ikrc-final-sensory": "node tests/stage282-ikrc-finals-timetable-panel.test.mjs",
     "test:home-intro": "node tests/stage281-home-intro-browser.test.mjs",
     "test:app-layout": "node tests/stage280-app-layout-browser.test.mjs",

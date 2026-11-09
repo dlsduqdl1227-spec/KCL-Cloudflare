@@ -17534,8 +17534,30 @@ function saveIkrcSeedToCupResult_() {
     }, _ikrcSeedSelectedBonus, memo, adminActorPayload_());
 }
 
+var _ikrcFinalEntryRequest = 0;
 function startIkrc() {
-  showIkrcSetup();
+  var request = ++_ikrcFinalEntryRequest;
+  var competition = _selComp;
+  if (!competition || !competition.ikrcFinalRosterRestricted ||
+      normalizeRoundForCompetition_('IKRC', competition.currentRound) !== '결선' || isIkrcCalibrationMode_()) {
+    showIkrcSetup();
+    return;
+  }
+  var actor = _judge;
+  var panel = document.querySelector('.panel.active');
+  showOverlay();
+  function finish(response) {
+    if (request !== _ikrcFinalEntryRequest) return;
+    hideOverlay();
+    if (actor !== _judge || competition !== _selComp || panel !== document.querySelector('.panel.active') || isIkrcCalibrationMode_()) return;
+    if (!response || !response.success) {
+      toast((response && response.message) || 'IKRC 결선 심사 권한을 확인하지 못했습니다. 다시 시도해주세요.', true);
+      return;
+    }
+    showIkrcSetup();
+  }
+  google.script.run.withSuccessHandler(finish).withFailureHandler(function(){ finish(null); })
+    .checkIkrcFinalJudgeAccess({judgeToken:actor && actor.judgeToken});
 }
 function isIkrcCalibrationMode_() { return isActiveCalibrationMode_(); }
 function ikrcAttrMeta_(key) {
