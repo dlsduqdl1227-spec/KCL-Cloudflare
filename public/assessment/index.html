@@ -2413,8 +2413,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 </style>
 <div id="pKcacFinalArea" class="panel">
   <div class="hero-logo-wrap" data-comp-logo="KCAC"></div>
-  <h2>결선 평가 영역</h2>
-  <p class="review-edit-help">창작 주제: 동물 · 담당 평가를 선택하세요.</p>
+  <h2>KCAC 결선 평가표</h2>
+  <p class="review-edit-help">창작 주제: 동물 · 평가표를 연 뒤 참가자를 선택하세요.</p>
   <button class="btn" type="button" onclick="startKcac('pattern')">패턴디자인 (1잔 · 60점)</button>
   <button class="btn-outline" type="button" onclick="startKcac('sensory-regular')">일반우유 센서리 (1잔 · 20점)</button>
   <button class="btn-outline" type="button" onclick="startKcac('sensory-oat')">어메이징오트바리스타 센서리 (1잔 · 20점)</button>
@@ -2451,6 +2451,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
   </div>
   <div class="eval-content">
     <div class="eval-hero-logo" data-comp-logo="KCAC"></div>
+    <p class="review-edit-help" id="kcac-final-entry-guide" hidden>참가자를 선택하면 결선 평가 항목과 제출 버튼이 표시됩니다.</p>
     <div class="section-label">참가자 정보</div>
     <div class="participant-refresh-row"><select id="kcac-participant-select" class="participant-picker" onchange="applyParticipantSelect_('KCAC','kcac-participant-select','kcac-num','kcac-name')"></select><button type="button" class="list-refresh-btn participant-list-refresh" data-code="KCAC" onclick="refreshEvaluationList_('KCAC')" aria-label="평가 참가자 목록 새로고침" title="평가 참가자 목록 새로고침">↻</button></div>
     <div id="kcac-participant-help" class="participant-picker-help"></div>
@@ -5173,7 +5174,10 @@ function installBrowserBackGuard_() {
     goBackContext_();
   });
 }
+var _evaluationViewGeneration = 0;
 function showEval(id) {
+  var viewGeneration = ++_evaluationViewGeneration;
+  clearTimeout(_kclDraftSaveTimer);
   document.querySelectorAll('.panel').forEach(function(p){
     p.classList.remove('active');
     p.classList.remove('print-active');
@@ -5185,12 +5189,15 @@ function showEval(id) {
   window.scrollTo(0, 0);
   try {
     setTimeout(function(){
-      if (typeof kclMaybeRestoreDraftForActiveEval_ === 'function') kclMaybeRestoreDraftForActiveEval_();
+      if (viewGeneration !== _evaluationViewGeneration) return;
+      if (id !== 'evalKcac' && typeof kclMaybeRestoreDraftForActiveEval_ === 'function') kclMaybeRestoreDraftForActiveEval_();
       if (typeof kclEnsureDraftBanner_ === 'function') kclEnsureDraftBanner_();
     }, 180);
   } catch(e) {}
 }
 function hideEval() {
+  ++_evaluationViewGeneration;
+  clearTimeout(_kclDraftSaveTimer);
   document.querySelectorAll('.eval-wrap').forEach(function(e){ e.classList.remove('active'); });
   if (_kcac.raf) { cancelAnimationFrame(_kcac.raf); _kcac.raf = null; }
 }
@@ -6153,6 +6160,10 @@ function isIkrcFinalConfig_(cfg) {
     String(cfg.code || '').toUpperCase() === 'IKRC' &&
     /결선|final/i.test(String(cfg.currentRound || ''));
 }
+function isKcacFinalConfig_(cfg) {
+  return !!cfg && String(cfg.code || '').toUpperCase() === 'KCAC' &&
+    normalizeKcacRoundDisplay_(cfg.currentRound) === '결선';
+}
 function openIkrcSeedToCup_(cfg) {
   if (cfg) _selComp = cfg;
   if (!isIkrcFinalConfig_(_selComp)) { toast('IKRC 결선을 선택해주세요.', true); return; }
@@ -6210,7 +6221,9 @@ function adminRenderRunCards_() {
         '<button data-act="score-backup">점수·검수 백업</button>' +
         '<button data-act="judge-qr">심사 웹 QR</button>' + extra +
       '</div>';
-    div.querySelector('[data-act="eval"]').onclick = function(){ adminOpenEval_(c, ''); };
+    var evaluateButton = div.querySelector('[data-act="eval"]');
+    if (isKcacFinalConfig_(c)) evaluateButton.textContent = '결선 평가표';
+    evaluateButton.onclick = function(){ adminOpenEval_(c, ''); };
     div.querySelector('[data-act="rank"]').onclick = function(){ adminOpenRanking_(c); };
     div.querySelector('[data-act="debrief-preview"]').onclick = function(){ openAdminDebriefPreviewFromConsole_(c); };
     div.querySelector('[data-act="review"]').onclick = function(){ adminOpenReview_(c); };
@@ -6429,6 +6442,8 @@ function loadTeamPanel() {
           var kcrStationManageButton = String(c.code || '').toUpperCase() === 'KCR'
             ? '<button class="primary" data-act="kcr-stations">KCR 스테이션 만들기 / 관리</button>'
             : '';
+          var kcacFinalEntry = isKcacFinalConfig_(c);
+          var hasPrimaryEvaluationEntry = cardCode === 'MOC' || kcacFinalEntry;
           var div = document.createElement('div');
           div.className = 'admin-comp-card';
           div.innerHTML =
@@ -6450,8 +6465,8 @@ function loadTeamPanel() {
               kcrStationManageButton +
               '<button data-act="save-cfg">' + ((String(c.code).toUpperCase()==='KCR' || String(c.code).toUpperCase()==='IKRC') ? '스테이션 설정 저장' : '운영 설정 저장') + '</button>' +
               ikrcWorkflowButtons +
-              ((String(c.code).toUpperCase()==='MOC') ? '<button class="primary" data-act="eval">대회평가시작</button>' : '') +
-              '<button' + ((String(c.code).toUpperCase()==='MOC') ? '' : ' class="primary"') + ' data-act="rank">실시간 순위</button>' +
+              (hasPrimaryEvaluationEntry ? '<button class="primary" data-act="eval">' + (kcacFinalEntry ? '결선 평가표' : '대회평가시작') + '</button>' : '') +
+              '<button' + (hasPrimaryEvaluationEntry ? '' : ' class="primary"') + ' data-act="rank">실시간 순위</button>' +
               (cardCode === 'IKRC' ? '' : '<button data-act="review">' + (c.currentRound !== '예선' ? '평가 관리 · 반려' : '평가 검수/수정') + '</button>') +
               '<button data-act="score-backup">점수·검수 백업</button>' +
               '<button data-act="judge-qr">심사 웹 QR</button>' + kcrCalibrationButtons + teamLeadHeadButtons + blindButton + seedButton +
@@ -12760,7 +12775,8 @@ function startKcac(finalArea) {
     return;
   }
   document.getElementById('kcac-round-badge').textContent = roundName;
-  document.getElementById('kcac-sub').textContent = judgeLineText() + '  ' + roundName + ' · 헤드 심사위원 공식평가' + (isMainFinal ? ' · 창작 주제: 동물' : '') + ' · 공식 점수 반영';
+  var areaLabel = {pattern:'패턴디자인', 'sensory-regular':'일반우유 센서리', 'sensory-oat':'오트우유 센서리'}[finalArea] || '';
+  document.getElementById('kcac-sub').textContent = judgeLineText() + '  ' + roundName + ' · ' + (isMainFinal && areaLabel ? areaLabel + ' 평가표' : '헤드 심사위원 공식평가') + (isMainFinal ? ' · 창작 주제: 동물' : '') + ' · 공식 점수 반영';
 
   _kcac.jars = [];
   _kcacOpenSmartTagBranches = {};
@@ -12802,10 +12818,15 @@ function startKcac(finalArea) {
   showEval('evalKcac');
   renderEvaluationDisqualification_('KCAC', 'evalKcac', 'button[onclick="kcacSubmitAll()"]');
   setKcacPenaltyRuleLabels_();
-  setTimeout(function() {
-    renderKcacCupNav();
-    loadKcacJar(0);
-  }, 80);
+  // Render the selected sheet before the user can pick a participant. A delayed
+  // callback can briefly reveal the previous area's controls on fast switching.
+  renderKcacCupNav();
+  loadKcacJar(0);
+  // Restore only after the new area's controls are ready, before any input or
+  // delayed save can overwrite an existing draft for this area.
+  var draftKey = kclDraftKey_('KCAC');
+  if (draftKey) delete _kclDraftPrompted[draftKey];
+  kclMaybeRestoreDraftForActiveEval_();
 }
 
 function syncKcacRoundParticipantUi_(isMainFinal) {
@@ -12984,6 +13005,8 @@ function syncKcacEvaluationVisibility_() {
   var panel = document.getElementById('kcac-jar-evaluation-panel');
   var num = document.getElementById('kcac-num');
   var hasParticipant = !!(num && String(num.value || '').trim());
+  var finalGuide = document.getElementById('kcac-final-entry-guide');
+  if (finalGuide) finalGuide.hidden = _kcac.roundName !== '결선' || hasParticipant;
   var isQual = kcacIsUnifiedQualComment_();
   var hasCupOrder = _kcac.jars.length > 0 && (!isQual || kcacValidQualPattern_(String(_kcac.qualFirstPattern || '')));
   var showMilkSetup = hasParticipant && isQual;
@@ -17535,16 +17558,18 @@ function calcIkrcSampleTotal_(s) {
 
 function showIkrcSetup() {
   var calibrationMode = isIkrcCalibrationMode_();
+  var finalRound = normalizeRoundForCompetition_('IKRC', _selComp.currentRound) === '결선';
   var title = document.getElementById('ikrc-setup-title');
   var sub = document.getElementById('ikrc-setup-sub');
   if (title) title.textContent = calibrationMode ? 'IKRC 켈리브레이션' : 'IKRC 대회평가';
-  if (sub) sub.textContent = judgeLineText() + '  ' + _selComp.currentRound + (calibrationMode ? ' · 공식 점수·순위 제외' : ' · 헤드 포함 공식 점수 반영');
-  if(sub && !calibrationMode && _selComp.currentRound==='결선')sub.textContent+=' · A·B조 공통 심사단: 헤드 1명 + 센서리 5명';
+  if (sub) sub.textContent = judgeLineText() + '  ' + _selComp.currentRound + (calibrationMode ? ' · 공식 점수·순위 제외' : finalRound ? ' · 센서리 평균 + Seed to Cup 순위 반영' : ' · 헤드 포함 공식 점수 반영');
+  if(sub && !calibrationMode && finalRound)sub.textContent+=' · A·B조 공통 심사단: 헤드 1명 + 센서리 5명';
   var notice = document.getElementById('ikrcCalibrationNotice');
   if (notice) {
     notice.style.display = 'block';
     notice.textContent = calibrationMode
       ? '헤드와 센서리 심사위원 모두 참여할 수 있으며, 제출값은 공식 점수·순위에 반영되지 않습니다.'
+      : finalRound ? '결선 대회평가입니다. 헤드 점수는 비교·표준편차 확인용이며, 순위는 센서리 평균에 Seed to Cup 가산점을 더해 계산합니다.'
       : '대회평가입니다. 각 스테이션의 헤드와 심사위원 평가만 해당 스테이션에 독립 저장되며, 헤드 심사위원 점수도 일반 심사위원과 동일하게 공식 합산에 반영됩니다.';
   }
   _ikrcStation = null;
@@ -17596,7 +17621,8 @@ function initIkrcSamples(cupNumbers, station) {
   _ikrcSubmitting = false;
   resetEvaluationDisqualification_('IKRC');
   cupNumbers.forEach(function(cupNo) { _ikrcSamples.push(makeIkrcSampleData(cupNo)); });
-  document.getElementById('ikrc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + ((_ikrcStation && _ikrcStation.label) || '스테이션') + ' · ' + cupNumbers.length + '개 샘플' + (isIkrcCalibrationMode_() ? ' · 켈리브레이션 · 순위 제외' : ' · 대회평가 · 공식 점수 반영');
+  var finalHead = normalizeRoundForCompetition_('IKRC', _selComp.currentRound) === '결선' && isHeadRoleForCode_('IKRC');
+  document.getElementById('ikrc-sub').textContent = judgeLineText() + '  ' + _selComp.currentRound + ' · ' + ((_ikrcStation && _ikrcStation.label) || '스테이션') + ' · ' + cupNumbers.length + '개 샘플' + (isIkrcCalibrationMode_() ? ' · 켈리브레이션 · 순위 제외' : finalHead ? ' · 대회평가 · 헤드 비교용 · 순위 제외' : ' · 대회평가 · 공식 점수 반영');
   renderIkrcNav();
   loadIkrcSample(0);
   showEval('evalIkrc');
@@ -18420,7 +18446,11 @@ function ikrcSubmitAll() {
   var notEdited = _ikrcSamples.filter(function(x){ return x.generatedComment && !x.commentEdited; });
   if (notEdited.length > 0) { toast('자동 생성 코멘트를 적용한 샘플은 모두 직접 수정해야 제출할 수 있습니다.', true); loadIkrcSample(_ikrcSamples.indexOf(notEdited[0])); switchIkrcAttr('comment'); return; }
   var stationText = _ikrcStation.label + ' · ' + _ikrcSamples[0].no + ' ~ ' + _ikrcSamples[_ikrcSamples.length - 1].no;
-  if (!confirm(stationText + '\n총 ' + _ikrcSamples.length + '개 샘플을 한 번에 제출하시겠습니까?' + (isIkrcCalibrationMode_() ? '\n이 데이터는 ' + evaluationPurposeDisplayLabel_() + '으로 분리 저장되어 순위에는 반영되지 않습니다.' : '\n헤드 심사위원을 포함해 대회평가 공식 점수에 반영됩니다.'))) return;
+  var isFinal = normalizeRoundForCompetition_('IKRC', kclDraftRound_()) === '결선';
+  var scoreNotice = isIkrcCalibrationMode_() ? '이 데이터는 ' + evaluationPurposeDisplayLabel_() + '으로 분리 저장되어 순위에는 반영되지 않습니다.'
+    : isFinal ? (isHeadRoleForCode_('IKRC') ? '헤드 점수는 비교용으로 저장되며 결선 순위에는 반영되지 않습니다.' : '센서리 평가로 저장되며 결선 순위에 반영됩니다.')
+    : '헤드 심사위원을 포함해 대회평가 공식 점수에 반영됩니다.';
+  if (!confirm(stationText + '\n총 ' + _ikrcSamples.length + '개 샘플을 한 번에 제출하시겠습니까?\n' + scoreNotice)) return;
   kclSaveActiveEvalDraftNow_(true);
   if (!_ikrcClientSubmissionId) _ikrcClientSubmissionId = 'IKRC-' + Date.now() + '-' + Math.random().toString(36).slice(2,10);
   _ikrcSubmitting = true;
@@ -20140,7 +20170,8 @@ function kclScheduleEvalDraftSave_() {
   if (_kclDraftApplying) return;
   if (!kclActiveEvalEl_()) return;
   clearTimeout(_kclDraftSaveTimer);
-  _kclDraftSaveTimer = setTimeout(function(){ kclSaveActiveEvalDraftNow_(true); }, 420);
+  var viewGeneration = _evaluationViewGeneration;
+  _kclDraftSaveTimer = setTimeout(function(){ if (viewGeneration === _evaluationViewGeneration) kclSaveActiveEvalDraftNow_(true); }, 420);
 }
 function kclRestoreDraftForCode_(code, draft) {
   if (!draft || !draft.state) return;
@@ -20353,7 +20384,8 @@ function kclClearActiveEvalDraftAfterSubmit(payload) {
     var t = e.target;
     if (!t) return;
     if (t.closest && (t.closest('.score-row') || t.closest('.score-lock') || t.closest('.yn-row') || t.closest('.cup-btn') || t.closest('.kcac-pattern-card') || t.closest('.timer-actions') || t.closest('.pen-grid') || t.closest('.quick-choice-row'))) {
-      setTimeout(kclScheduleEvalDraftSave_, 80);
+      var viewGeneration = _evaluationViewGeneration;
+      setTimeout(function(){ if (viewGeneration === _evaluationViewGeneration) kclScheduleEvalDraftSave_(); }, 80);
     }
   }, true);
   window.addEventListener('beforeunload', function(){ try { kclSaveActiveEvalDraftNow_(true); } catch(e) {} });

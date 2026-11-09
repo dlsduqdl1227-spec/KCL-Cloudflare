@@ -42,6 +42,13 @@ try{
  await publicPage.locator('.avg-box').screenshot({path:out+'/sensory-only-average.png'});
  const comparisonPage=await qa.page(390,950);await comparisonPage.goto(qa.origin+'/assessment/');await comparisonPage.evaluate(({actor,detail})=>{_judge=actor;_selComp={code:'IKRC',currentRound:'결선'};document.getElementById('ikrc-cal-detail').innerHTML=buildIkrcCalibrationHtml_('A-1',detail);showPanel('pIkrcCalDetail');},{actor:judges[0],detail:comparison});assert.match(await comparisonPage.locator('#ikrc-cal-detail').innerText(),/순위 반영 센서리 평균\s*63[\s\S]*헤드·센서리 전체 평균 ± 표준편차[\s\S]*69\.17/);await comparisonPage.screenshot({path:out+'/six-judge-comparison.png'});
  const seedPage=await qa.page();await seedPage.goto(qa.origin+'/assessment/');await seedPage.evaluate(a=>{_judge=a;_selComp={code:'IKRC',currentRound:'결선'};openIkrcSeedToCup_(_selComp);},api.actor);await seedPage.locator('#ikrc-seed-list .review-item').nth(11).waitFor();
+ const headPage=await qa.page();await headPage.goto(qa.origin+'/assessment/');
+ const finalConfig=(await api.rpc('getConfig')).configs.find(c=>c.code==='IKRC');
+ await headPage.evaluate(({actor,config})=>{_judge=actor;_selComp=config;goEval();},{actor:judges[0],config:finalConfig});
+ assert.match(await headPage.locator('#ikrcCalibrationNotice').innerText(),/헤드 점수는 비교.*센서리 평균/);
+ await headPage.locator('#ikrc-station-grid button').first().click();
+ assert.match(await headPage.locator('#ikrc-sub').innerText(),/헤드 비교용 · 순위 제외/);
+ assert.deepEqual(headPage.qaErrors,[]);await headPage.close();
  assert.deepEqual((await seedPage.locator('#ikrc-seed-list .review-info-name').allTextContents()).map(s=>s.split(' · ')[0]),seedOrder);assert.match(await seedPage.locator('#ikrc-seed-list .review-item').first().innerText(),/김기출[\s\S]*2026-11-12[\s\S]*13:50~14:15/);
  await seedPage.locator('#ikrc-final-timetable').evaluate(e=>e.open=true);assert.equal(await seedPage.locator('.ikrc-timetable-list li').count(),24);
  const registry=await qa.page();await registry.goto(qa.origin+'/registry/');await registry.evaluate(a=>{actor=a;document.getElementById('loginCard').classList.add('hidden');document.getElementById('main').classList.remove('hidden');loadRegistry();},api.actor);await registry.locator('#comp option[value=IKRC]').waitFor({state:'attached'});await registry.locator('#comp').selectOption('IKRC');await registry.waitForFunction(()=>participantRows[0]?.competitionCode==='IKRC');await registry.locator('[data-roster-phase=finals]').click();
