@@ -29,7 +29,7 @@ for (const code of ['KCR', 'IKRC']) {
 assert.match(assessment, /function setStationEvaluationRefreshState_\(code, loading\)/);
 assert.match(assessment, /function refreshStationEvaluationList_\(code, silent\)[\s\S]*?\.getConfig\(\)/);
 
-const reviewStart = assessment.indexOf('function goReviewByCode(code, name, backPanel)');
+const reviewStart = assessment.indexOf('function goReviewByCode(');
 const reviewEnd = assessment.indexOf('function isKcacFinalReviewItem_', reviewStart);
 assert.ok(reviewStart > 0 && reviewEnd > reviewStart, 'review loader must be present');
 const reviewLoader = assessment.slice(reviewStart, reviewEnd);

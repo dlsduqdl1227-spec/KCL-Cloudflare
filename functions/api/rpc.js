@@ -665,7 +665,7 @@ async function dispatch(action, args, env, request) {
     updateReviewRow: () => updateReviewRow(env, args[0], args[1], args[2], args[3], args[4], args[5]),
     updateReviewStatus: () => updateReviewStatus(env, args[0], [args[1]], args[2], args[3], args[4]),
     updateReviewStatusBatch: () => updateReviewStatus(env, args[0], args[1], args[2], args[3], args[4]),
-    deleteReviewRow: () => deleteReviewRow(env, args[0], args[1], args[3] || args[2]),
+    deleteReviewRow: () => deleteReviewRow(env, args[0], args[1], args[3] || args[2], args[4]),
     getKbcFinalistPlan: () => getKbcFinalistPlan(env, args[0]),
     assignKbcFinalists: () => assignKbcFinalists(env, args[0], args[1]),
     getKbcFinalistSelection: () => getKbcFinalistSelection(env, args[0]),
@@ -1257,6 +1257,8 @@ async function checkIkrcFinalJudgeAccess(env, actorArg) {
   if (!cfg || normalizeRoundForCompetition_('IKRC', cfg.current_round) !== '결선') {
     return {success:false, message:'IKRC 운영 라운드가 변경되었습니다. 평가 화면을 다시 열어주세요.'};
   }
+  // Administrators can inspect the form without becoming an official scoring seat.
+  if (hasAdmin(auth.actor)) return {success:true, previewOnly:true};
   return (await ikrcFinalJudgeAccessError_(env, auth.actor, cfg.current_round, 'competition')) || {success:true};
 }
 function payloadIdentityCandidates_(payload) {
@@ -1296,7 +1298,10 @@ function reviewManageScopeRequested_(actorArg) {
   return scope === 'manage' || actorArg && actorArg.manageReview === true;
 }
 function reviewManageAllowed_(actor, code, actorArg) {
-  return hasManageAccess(actor, code) && reviewManageScopeRequested_(actorArg);
+  const scope = safeStr(actorArg && (actorArg.reviewScope || actorArg.scope)).toLowerCase();
+  const token = safeStr(typeof actorArg==='string'?actorArg:actorArg?.judgeToken||actorArg?.actorToken);
+  return hasManageAccess(actor, code) && (reviewManageScopeRequested_(actorArg) ||
+    (hasAdmin(actor) && !!token && actor.judgeToken===token && scope !== 'own' && actorArg?.manageReview !== false));
 }
 function reviewRoleCategoryServer_(roleText) {
   const r = safeStr(roleText).replace(/\s/g, '').toLowerCase();
@@ -5760,7 +5765,9 @@ async function getReviewList(env, competitionCode, actorArg) {
     return meta?{...item,...meta,status:returnedEvaluation_(item)?'반려':'평가완료','검수상태':returnedEvaluation_(item)?'반려':'평가완료'}:item;
   });
   const requestedRound=safeStr(actorArg && actorArg.round);
-  if(['본선','결선'].includes(requestedRound) && !calibrationOnly){
+  if(requestedRound==='예선' && manager && hasAdmin(auth.actor) && !calibrationOnly){
+    list=list.filter(item=>item.round==='예선');
+  }else if(['본선','결선'].includes(requestedRound) && !calibrationOnly){
     list=list.filter(item=>item.round===requestedRound && !isCalibrationMode_(item.mode || item['모드']));
     // KCR judges may correct their own final submissions without a manager return.
     // Keep this compatible with already-open clients still sending returnedOnly.
@@ -5786,6 +5793,9 @@ async function finalCorrectionContext_(env, request, actorArg, returning) {
   const auth=await requireActorForCode_(env,actorArg,code,'해당 대회 평가 권한이 없습니다.');
   if(!auth.ok)return auth.res;
   const manager=hasManageAccess(auth.actor,code);
+  const suppliedToken=safeStr(typeof actorArg==='string'?actorArg:actorArg?.judgeToken||actorArg?.actorToken);
+  const adminDirect=hasAdmin(auth.actor) && !!suppliedToken && auth.actor.judgeToken===suppliedToken;
+  if(hasAdmin(auth.actor) && !adminDirect)return {success:false,message:'관리자 로그인을 다시 한 뒤 평가를 관리해주세요.'};
   if(returning && !manager)return {success:false,message:'반려는 해당 대회팀장 또는 관리자만 가능합니다.'};
   const entries=request?.entries;
   if(!Array.isArray(entries)||!entries.length||entries.length>40)return {success:false,message:'변경할 평가를 선택해주세요.'};
@@ -5807,10 +5817,10 @@ async function finalCorrectionContext_(env, request, actorArg, returning) {
     if(!manager && !canReviewScoreRow_(row,auth.actor,code,false))return {success:false,message:'본인이 제출한 평가만 수정할 수 있습니다.'};
     if(station&&!ikrcScoreBelongsToStationServer_(row,station))return {success:false,message:'담당 스테이션 평가만 처리할 수 있습니다.'};
     if(entry.revision!==await finalEvaluationRevision_(row))return {success:false,message:'평가가 변경되었습니다. 목록을 새로고침한 뒤 다시 확인해주세요.'};
-    if(returning?returnedEvaluation_(row):(code!=='KCR'&&!returnedEvaluation_(row)))return {success:false,message:returning?'이미 반려된 평가입니다.':'반려된 평가만 재제출할 수 있습니다.'};
+    if(returning?returnedEvaluation_(row):(code!=='KCR'&&!adminDirect&&!returnedEvaluation_(row)))return {success:false,message:returning?'이미 반려된 평가입니다.':'반려된 평가만 재제출할 수 있습니다.'};
     originals.set(id,row);
   }
-  return {success:true,code,actor:auth.actor,originals,entries,cfg};
+  return {success:true,code,actor:auth.actor,originals,entries,cfg,adminDirect};
 }
 async function commitFinalCorrection_(env,code,originals,changed,status,cfg){
   const plan=[...changed.values()].map(row=>({id:row.id,oldPayload:originals.get(row.id).payload_json,oldStatus:originals.get(row.id).review_status,
@@ -5851,22 +5861,27 @@ async function returnFinalEvaluations(env,request,actorArg){
 async function resubmitFinalEvaluations(env,request,actorArg){
   const context=await finalCorrectionContext_(env,request,actorArg,false);if(!context.success)return context;
   const changed=new Map(context.originals),seen=new Set();
+  const editActor=context.adminDirect?{judgeToken:context.actor.judgeToken,reviewScope:'manage'}:actorArg;
   for(const entry of context.entries){
     const ref=parseReviewRowRef_(entry.rowIndex),key=ref.id+':'+(ref.payloadRowIndex||0);
     if(seen.has(key))return {success:false,message:'같은 평가 내용이 중복되었습니다.'};seen.add(key);
     if(!entry.updates||typeof entry.updates!=='object'||Array.isArray(entry.updates))return {success:false,message:'수정할 평가 내용을 확인해주세요.'};
-    const prepared=await updateReviewRow(env,context.code,entry.rowIndex,entry.updates,'검수완료','',actorArg,{current:changed.get(ref.id)});
+    const prepared=await updateReviewRow(env,context.code,entry.rowIndex,entry.updates,'검수완료','',editActor,{current:changed.get(ref.id)});
     if(!prepared.success)return prepared;changed.set(ref.id,prepared.row);
   }
   const at=nowIso();
+  let directEdit=false;
   for(const [id,row] of changed){
     const payload=parseJson(row.payload_json,{}),previous=payload.finalReview||{};
-    payload.finalReview={...previous,resubmittedAt:at,resubmittedBy:context.actor.name,
-      history:[...(previous.history||[]),{action:'resubmit',at,by:context.actor.name,previousTotal:context.originals.get(id).total_score,total:row.total_score}]};
+    const adminEdit=context.adminDirect&&!returnedEvaluation_(context.originals.get(id));
+    directEdit=directEdit||adminEdit;
+    const stamp=adminEdit?{editedAt:at,editedBy:context.actor.name}:{resubmittedAt:at,resubmittedBy:context.actor.name};
+    payload.finalReview={...previous,...stamp,
+      history:[...(previous.history||[]),{action:adminEdit?'admin-edit':'resubmit',at,by:context.actor.name,previousTotal:context.originals.get(id).total_score,total:row.total_score}]};
     changed.set(id,{...row,payload_json:JSON.stringify(payload)});
   }
   if(!await commitFinalCorrection_(env,context.code,context.originals,changed,'검수완료',context.cfg))return {success:false,message:'동시에 변경된 평가가 있어 저장하지 않았습니다. 입력 내용은 유지하고 최신 평가를 확인해주세요.'};
-  return {success:true,message:context.code==='KCR'?'수정 완료 · 순위에 반영되었습니다.':'재제출 완료 · 순위에 반영되었습니다.',status:'평가완료',count:changed.size};
+  return {success:true,message:context.code==='KCR'||directEdit?'수정 완료 · 순위에 반영되었습니다.':'재제출 완료 · 순위에 반영되었습니다.',status:'평가완료',count:changed.size};
 }
 async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatus, roleText, actorArg, finalPreparation = null) {
   const code = safeStr(competitionCode).toUpperCase();
@@ -6052,16 +6067,26 @@ async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus, r
   }
   return { success: true, message: '상태 변경 완료' };
 }
-async function deleteReviewRow(env, competitionCode, rowIndex, actorArg) {
+async function deleteReviewRow(env, competitionCode, rowIndex, actorArg, expectedRevision) {
   const code = safeStr(competitionCode).toUpperCase();
-  const actor = await getActor(env, actorArg);
+  const token = safeStr(typeof actorArg==='string'?actorArg:actorArg?.judgeToken||actorArg?.actorToken);
+  const actor = await getActor(env, {judgeToken:token});
   if (!hasAdmin(actor)) return { success: false, message: '삭제는 전체 관리자만 가능합니다.' };
   const ref = parseReviewRowRef_(rowIndex);
-  const current = ['IKRC','KCR'].includes(code) ? await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(ref.id, code).first() : null;
+  const current = await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(ref.id, code).first();
+  if (!current) return {success:false,message:'삭제할 제출 기록을 찾을 수 없습니다. 평가 목록을 새로고침해주세요.'};
+  if (ref.isVirtual && ref.payloadRowIndex >= (parseJson(current.payload_json,{}).rows || []).length) {
+    return {success:false,message:'삭제할 평가 항목이 변경되었습니다. 목록을 새로고침해주세요.'};
+  }
   const cfg = ['IKRC','KCR'].includes(code) ? await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first() : null;
   if (code === 'KCR' && kcrClosedScore_(current,kcrClosedPrelimStations_(cfg))) return kcrClosedResponse_();
-  await env.DB.prepare('DELETE FROM scores WHERE id=? AND competition_code=?').bind(ref.id, code).run();
-  if (code === 'IKRC' && current) await invalidateIkrcStationFinalizationForScore_(env, current, cfg);
+  const stale = {success:false,stale:true,message:'평가가 변경되어 삭제하지 않았습니다. 목록을 새로고침한 뒤 다시 확인해주세요.'};
+  if (expectedRevision && expectedRevision !== await finalEvaluationRevision_(current)) return stale;
+  const remove=env.DB.prepare('DELETE FROM scores WHERE id=? AND competition_code=? AND payload_json IS ? AND review_status IS ? AND total_score IS ?')
+    .bind(ref.id,code,current.payload_json,current.review_status,current.total_score);
+  const stationToken=code==='IKRC'?ikrcStationFinalizationTokenForScore_(current,cfg):'';
+  const result=stationToken?(await env.DB.batch([remove,env.DB.prepare("DELETE FROM sessions WHERE token=? AND kind='IKRC_STATION_FINALIZATION' AND changes()=1").bind(stationToken)]))[0]:await remove.run();
+  if (Number(result.meta?.changes)!==1) return stale;
   return { success: true, message: '삭제 완료' };
 }
 

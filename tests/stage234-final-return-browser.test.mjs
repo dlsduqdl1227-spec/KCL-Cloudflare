@@ -17,13 +17,13 @@ try{
    assert.match(await page.locator('#review-title').innerText(),/평가 관리/);
    assert.doesNotMatch(await page.locator('#review-stat').innerText(),/미검수|검수완료/);
    await page.locator('#review-list .review-edit-btn').first().click();
-   assert.equal(await page.locator('#review-edit-save-only').isVisible(),code==='KCR');
-   if(code!=='KCR')assert.equal(await page.locator('#review-edit-fields input:not([disabled]),#review-edit-fields textarea:not([disabled])').count(),0,'submitted record locked '+code);
+   assert.equal(await page.locator('#review-edit-save-only').isVisible(),true,'administrator can directly correct submitted records '+code);
+   assert.equal(await page.locator('#review-edit-delete').isVisible(),true,'administrator can delete the viewed submission '+code);
    await page.evaluate(()=>backToReviewList());await page.locator('.final-return-btn').first().waitFor();
    await page.locator('.final-return-btn').first().click();
    await page.waitForFunction(()=>document.querySelector('#review-list .final-return-reason'));
    await page.locator('#review-list .review-edit-btn').first().click();
-   assert.equal(await page.locator('#review-edit-save-only').innerText(),code==='KCR'?'수정완료':'수정 후 재제출');
+   assert.equal(await page.locator('#review-edit-save-only').innerText(),'수정완료');
    assert.equal(await page.locator('#review-edit-save-complete').isVisible(),false);
    const area=page.locator('#review-edit-fields textarea:not([disabled])').first();
    if(await area.count()){

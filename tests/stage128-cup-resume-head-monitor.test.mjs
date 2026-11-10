@@ -73,6 +73,7 @@ assert.equal(cupContext._cupping.currentAttr, "mouthfeel");
 
 const ikrcContext = {
   document: domStub,
+  _ikrcPreviewOnly:false,
   _ikrcSamples: [
     { activeAttr:"acidity", comment:"", generatedComment:"" },
     { activeAttr:"flavor", comment:"", generatedComment:"" },

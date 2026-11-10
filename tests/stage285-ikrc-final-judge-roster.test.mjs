@@ -33,9 +33,10 @@ test('IKRC official finals require the six assigned accounts in both stations',a
   assert.deepEqual(configs.filter(c=>c.ikrcFinalRosterRestricted).map(c=>c.code),['IKRC']);
   assert.ok(!JSON.stringify(configs).includes('OperatorId'),'public config must not reveal the roster IDs');
   assert.equal((await raw(api,'checkIkrcFinalJudgeAccess',judges[0].name)).success,false);
+  assert.deepEqual(await api.rpc('checkIkrcFinalJudgeAccess',token(api.actor)),{success:true,previewOnly:true});
 
   for(const outsider of [extraHead,extraSensory,api.actor]){
-   assert.equal((await raw(api,'checkIkrcFinalJudgeAccess',{...token(outsider),operatorRows:judges[0].operatorRows})).errorCode,'IKRC_FINAL_JUDGE_NOT_ASSIGNED');
+   if(outsider!==api.actor)assert.equal((await raw(api,'checkIkrcFinalJudgeAccess',{...token(outsider),operatorRows:judges[0].operatorRows})).errorCode,'IKRC_FINAL_JUDGE_NOT_ASSIGNED');
    for(const station of stations){
     const payload={...ikrcFinalSubmission(outsider,station,9.6),judgeName:judges[0].name,judgeRole:judges[0].role,operatorRows:judges[0].operatorRows};
     assert.equal((await raw(api,'submitScores',payload)).errorCode,'IKRC_FINAL_JUDGE_NOT_ASSIGNED');
