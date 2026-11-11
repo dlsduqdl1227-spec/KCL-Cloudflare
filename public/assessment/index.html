@@ -2702,7 +2702,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
     <p class="score-guide-line">점수 표현: 매우 미흡 → 미흡 → 보완 필요 → 기준점 → 안정적 → 양호 → 우수 → 매우 우수</p>
 
     <div id="mob-tech-block">
-      <div class="sub-section"><div class="sub-section-title">기술 심사 (1~5점, 0.2단위)</div></div>
+<div class="sub-section"><div class="sub-section-title" id="mob-tech-title">기술 심사 (1~5점, 0.2단위)</div></div>
       <div class="timer-box" id="mob-time-box">
         <div class="timer-help">MOB 규정 기준 시연시간을 입력하세요. 예선 10분, 결선 15분 기준으로 감점·실격을 표시합니다.</div>
         <input type="text" id="mob-end-time" placeholder="00분 00.00초 또는 10.08" oninput="onMobTimeInput()" style="margin-bottom:0">
@@ -2711,10 +2711,6 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
         <div class="mob-time-meta" id="mob-time-meta"></div>
       </div>
       <div id="mob-tech-rows"></div>
-      <div id="mob-sig-tech-block" style="display:none">
-        <div class="sub-section"><div class="sub-section-title">Technical — Signature Drink (1~5점, 0.2단위)</div></div>
-        <div id="mob-sig-tech-rows"></div>
-      </div>
     </div>
 
     <div id="mob-sensory-block">
@@ -8023,6 +8019,8 @@ function reviewMobHeaderGroup_(h) {
 }
 function reviewMobHeaderAppliesToRole_(h, item) {
   if (String((_reviewState && _reviewState.code) || '').toUpperCase() !== 'MOB') return true;
+  // Preserve legacy stored fields, but never show duplicate workstation criteria.
+  if (/Signature(?:\s*Technical)?\s*(?:Pre[-\s]*Service|Service\s*Station|Post[-\s]*Service)|창작음료\s*시연/i.test(String(h || ''))) return false;
   var group = reviewMobHeaderGroup_(h);
   if (!group) return true;
   if (/^derived/.test(group)) return false;
@@ -16072,16 +16070,16 @@ function mobGetDesc(v) {
 }
 
 var MOB_TECH = [
-  {id:'mob-t1', name:'Pre-Service Station(시연 전 작업대)', commentHeader:'Pre-Service Station 코멘트'},
-  {id:'mob-t2', name:'Service Station(시연 중 작업대)', commentHeader:'Service Station 코멘트'},
-  {id:'mob-t3', name:'Post-Service Station(시연 후 작업대)', commentHeader:'Post-Service Station 코멘트'}
+  {id:'mob-t1', name:'Pre-Service Station(시연 전 작업대)', label:'시연 전 작업대 청결 및 관리', guide:'기물의 정돈 상태와 작업 도구의 청결함을 평가합니다.', commentHeader:'Pre-Service Station 코멘트'},
+  {id:'mob-t2', name:'Service Station(시연 중 작업대)', label:'시연 중 작업대 청결 및 관리', guide:'시연 중 위생 관리와 시연 과정의 숙련도를 평가합니다.', commentHeader:'Service Station 코멘트'},
+  {id:'mob-t3', name:'Post-Service Station(시연 후 작업대)', label:'시연 후 작업대 청결 및 관리', guide:'사용 기물의 정리·청소와 전체 작업 공간의 마무리 청결 상태를 평가합니다.', commentHeader:'Post-Service Station 코멘트'}
 ];
 var MOB_SIG_TECH = [
-  {id:'mob-st1', name:'Signature Technical Pre-Service Station(창작음료 시연 전 작업대)', commentHeader:'Signature Technical Pre-Service Station 코멘트'},
-  {id:'mob-st2', name:'Signature Technical Service Station(창작음료 시연 중 작업대)', commentHeader:'Signature Technical Service Station 코멘트'},
-  {id:'mob-st3', name:'Signature Technical Ingredient Use(부재료 사용의 적절함)', commentHeader:'Signature Technical Ingredient Use 코멘트'},
-  {id:'mob-st4', name:'Signature Technical Post-Service Station(창작음료 시연 후 작업대)', commentHeader:'Signature Technical Post-Service Station 코멘트'}
+  {id:'mob-st3', name:'Signature Technical Ingredient Use(부재료 사용의 적절함)', label:'부재료 사용의 적절함(시그니처)', guide:'부재료 계량, 개인 도구 사용 숙련도와 재료 낭비 여부를 평가합니다. 부재료는 한 잔 정도를 더 만들 수 있는 분량까지 허용합니다.', commentHeader:'Signature Technical Ingredient Use 코멘트'}
 ];
+function mobTechnicalAttrs_(creative) {
+  return MOB_TECH.slice(0,2).concat(creative ? MOB_SIG_TECH : [], MOB_TECH.slice(2));
+}
 var MOB_SENS = [
   {id:'mob-s1', name:'Sweetness(스윗니스)', commentHeader:'Sweetness 코멘트'},
   {id:'mob-s2', name:'Flavor(플레이버)', commentHeader:'Flavor 코멘트'},
@@ -16113,21 +16111,9 @@ var MOB_SMART_TAGS = {
     }
   },
   signatureTechnical:{
-    'Signature Pre-Service Station':{
-      '긍정':['창작 재료 정돈','도구 배치 명확','준비 흐름 안정'],
-      '보완':['창작 재료 준비 미흡','도구 배치 보완']
-    },
-    'Signature Service Station':{
-      '긍정':['제조 동선 안정','서비스 흐름 안정','재료 계량 정확'],
-      '보완':['제조 동선 보완','서비스 흐름 불안정']
-    },
     'Ingredient Use':{
       '긍정':['부재료 계량 정확','부재료 사용 효율','재료 낭비 없음','개인 도구 사용 숙련'],
       '보완':['부재료 계량 보완','재료 낭비 확인','도구 사용 숙련 보완']
-    },
-    'Signature Post-Service Station':{
-      '긍정':['창작 기물 정리 우수','잔여 재료 관리','후처리 깔끔'],
-      '보완':['창작 기물 정리 지연','잔여 재료 관리 보완']
     }
   },
   brewing:{
@@ -16647,11 +16633,10 @@ function startMob() {
   _mobScoreLocks = {};
   _mobClientSubmissionId = 'MOB-' + Date.now() + '-' + Math.random().toString(36).slice(2,10);
   _mobSubmitting = false;
-  document.getElementById('mob-tech-rows').innerHTML = MOB_TECH.map(function(a){
-    return makeScoreRow(a.id, a.name, '', 1, 5, 0.2, 3, mobGetDesc, 'calcMobTotal()', mobCommentId_(a.id), a.name + ' 코멘트', mobScoreLockHtml_(a.id) + renderMobInlineTagSection_(a), MOB_SCORE_LABELS);
-  }).join('');
-  document.getElementById('mob-sig-tech-rows').innerHTML = MOB_SIG_TECH.map(function(a){
-    return makeScoreRow(a.id, a.name, '', 1, 5, 0.2, 3, mobGetDesc, 'calcMobTotal()', mobCommentId_(a.id), a.name + ' 코멘트', mobScoreLockHtml_(a.id) + renderMobInlineTagSection_(a), MOB_SCORE_LABELS);
+  document.getElementById('mob-tech-rows').innerHTML = mobTechnicalAttrs_(true).map(function(a){
+    var label = a.label || a.name;
+    var row = makeScoreRow(a.id, label, a.guide || '', 1, 5, 0.2, 3, mobGetDesc, 'calcMobTotal()', mobCommentId_(a.id), label + ' 코멘트', mobScoreLockHtml_(a.id) + renderMobInlineTagSection_(a), MOB_SCORE_LABELS);
+    return a.id === 'mob-st3' ? '<div id="mob-sig-tech-block" style="display:none">' + row + '</div>' : row;
   }).join('');
   document.getElementById('mob-sens-rows').innerHTML = MOB_SENS.map(function(a){
     return makeScoreRow(a.id, a.name, '', 1, 5, 0.2, 3, mobGetDesc, 'calcMobTotal()', '', '', mobScoreLockHtml_(a.id) + renderMobInlineTagSection_(a), MOB_SCORE_LABELS);
@@ -16670,7 +16655,7 @@ function startMob() {
   var menuEl = document.getElementById('mob-menu');
   var creativeOption = menuEl ? Array.prototype.slice.call(menuEl.options).filter(function(o){ return o.value === '창작'; })[0] : null;
   if (creativeOption) creativeOption.disabled = !mobCreativeAllowed_();
-  if (menuEl) menuEl.value = mobCreativeAllowed_() && !isMobCalibrationMode_() ? '창작' : '브루잉';
+  if (menuEl) menuEl.value = mobCreativeAllowed_() && (!isMobCalibrationMode_() || isMobTechnicalOnly_()) ? '창작' : '브루잉';
   setVal_('mob-name', '');
   refreshParticipantAssignmentsForActiveComp_('MOB');
   var ga = document.getElementById('mob-comment-gen');
@@ -16697,9 +16682,9 @@ function startMob() {
 
 function toggleMobSig() {
   var menuEl = document.getElementById('mob-menu');
-  if (menuEl && mobCreativeAllowed_() && !isMobCalibrationMode_()) menuEl.value = '창작';
+  if (menuEl && mobCreativeAllowed_() && (!isMobCalibrationMode_() || isMobTechnicalOnly_())) menuEl.value = '창작';
   if (menuEl) Array.prototype.forEach.call(menuEl.options, function(option){
-    if (option.value === '브루잉') option.disabled = mobCreativeAllowed_() && !isMobCalibrationMode_();
+    if (option.value === '브루잉') option.disabled = mobCreativeAllowed_() && (!isMobCalibrationMode_() || isMobTechnicalOnly_());
     if (option.value === '창작') option.textContent = '브루잉 + 창작메뉴';
   });
   if (menuEl && menuEl.value === '창작' && !mobCreativeAllowed_()) {
@@ -16708,6 +16693,8 @@ function toggleMobSig() {
   }
   var onlyTech = isMobTechnicalOnly_();
   var creative = document.getElementById('mob-menu').value === '창작';
+  var techTitle = document.getElementById('mob-tech-title');
+  if (techTitle) techTitle.textContent = creative ? '기술 심사 · 4개 항목 (각 1~5점, 총 20점)' : '기술 심사 · 3개 항목 (각 1~5점, 총 15점)';
   document.getElementById('mob-sig-tech-block').style.display =
     (!isMobSensoryOnly_() && creative) ? 'block' : 'none';
   document.getElementById('mob-sig-block').style.display =
@@ -16999,13 +16986,10 @@ function mobSubmit() {
 function mobCalibrationAttrs_() {
   var category = mobRoleCategoryClient_();
   var tech = [
-    {key:'pre', label:'Pre-Service'},
-    {key:'service', label:'Service'},
-    {key:'post', label:'Post-Service'},
-    {key:'signatureTechPre', label:'Signature Technical Pre-Service'},
-    {key:'signatureTechService', label:'Signature Technical Service'},
-    {key:'signatureIngredientUse', label:'Signature Ingredient Use'},
-    {key:'signatureTechPost', label:'Signature Technical Post-Service'}
+    {key:'pre', label:'시연 전 작업대 청결 및 관리'},
+    {key:'service', label:'시연 중 작업대 청결 및 관리'},
+    {key:'signatureIngredientUse', label:'부재료 사용의 적절함(시그니처)'},
+    {key:'post', label:'시연 후 작업대 청결 및 관리'}
   ];
   var sensory = [
     {key:'sweetness', label:'Sweetness'},

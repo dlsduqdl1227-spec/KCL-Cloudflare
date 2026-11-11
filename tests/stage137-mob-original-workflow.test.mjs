@@ -28,7 +28,7 @@ function functionSource(source, name) {
 }
 
 const startMobSource = functionSource(assessment, "startMob");
-assert.match(startMobSource, /MOB_TECH/);
+assert.match(startMobSource, /mobTechnicalAttrs_/);
 assert.match(startMobSource, /MOB_SENS/);
 assert.match(startMobSource, /MOB_SIG/);
 assert.doesNotMatch(startMobSource, /IKRC_ATTRS|startIkrc/);

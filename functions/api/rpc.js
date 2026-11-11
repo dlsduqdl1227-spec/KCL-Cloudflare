@@ -3976,7 +3976,7 @@ function mobExtraComponents_(extra) {
   extra = extra || {};
   const dqRaw = extra['실격여부'] || extra['DQ'] || extra.disqualified;
   const isDq = isDisqualifiedValue_(dqRaw);
-  const rawTech = sumFromKeys_(extra, ['Pre-Service Station(시연 전 작업대)','Service Station(시연 중 작업대)','Post-Service Station(시연 후 작업대)','Signature Technical Pre-Service Station(창작음료 시연 전 작업대)','Signature Technical Service Station(창작음료 시연 중 작업대)','Signature Technical Ingredient Use(부재료 사용의 적절함)','Signature Technical Post-Service Station(창작음료 시연 후 작업대)']);
+  const rawTech = sumFromKeys_(extra, ['Pre-Service Station(시연 전 작업대)','Service Station(시연 중 작업대)','Signature Technical Ingredient Use(부재료 사용의 적절함)','Post-Service Station(시연 후 작업대)']);
   const rawSensory = sumFromKeys_(extra, ['Sweetness(스윗니스)','Flavor(플레이버)','Balance(균형)','Clean Cup(클린컵)','Mouthfeel(질감)','Professionalism(시연 전문성)']);
   const rawCreative = sumFromKeys_(extra, ['Creative Form & Usability(형태와 용이성)','Creative Flavor(창작 향미)','Creative Balance(균형)','Creative Mouthfeel(질감)','Creative Professionalism(전문성과 독창성)']);
   const tech = rawTech !== null ? rawTech : valueOrZero_(extra, ['테크니컬 총점','테크니컬총점','Technical Total','TechnicalTotal']);
@@ -6182,7 +6182,7 @@ function mobScoreObjectFromItem_(item) {
   const creativeBalance = n(['Creative Balance(균형)','Creative Balance']);
   const creativeMouthfeel = n(['Creative Mouthfeel(질감)','Creative Mouthfeel']);
   const creativeProfessionalism = n(['Creative Professionalism(전문성과 독창성)','Professionalism & Originality(전문성과 독창성)','Creative Professionalism']);
-  const computedTechnicalTotal = Math.round((pre + service + post + signatureTechPre + signatureTechService + signatureIngredientUse + signatureTechPost) * 10) / 10;
+  const computedTechnicalTotal = Math.round((pre + service + signatureIngredientUse + post) * 10) / 10;
   const computedSensoryTotal = Math.round((sweetness + flavor + balance + cleanCup + mouthfeel + professionalism) * 10) / 10;
   const computedCreativeTotal = Math.round((creativeForm + creativeFlavor + creativeBalance + creativeMouthfeel + creativeProfessionalism) * 10) / 10;
   const total = Number(item.totalScore ?? item['총점'] ?? item['최종점수'] ?? item['총평가 반영점수'] ?? 0) || 0;
@@ -7442,7 +7442,7 @@ function aggregateSimpleAverageCompetition_(code, rows, basis) {
   return { score: score === null ? 0 : score, total: score === null ? 0 : score, basis, tie: {} };
 }
 
-const MOB_TECH_KEYS_ = ['Pre-Service Station(시연 전 작업대)','Service Station(시연 중 작업대)','Post-Service Station(시연 후 작업대)','Signature Technical Pre-Service Station(창작음료 시연 전 작업대)','Signature Technical Service Station(창작음료 시연 중 작업대)','Signature Technical Ingredient Use(부재료 사용의 적절함)','Signature Technical Post-Service Station(창작음료 시연 후 작업대)'];
+const MOB_TECH_KEYS_ = ['Pre-Service Station(시연 전 작업대)','Service Station(시연 중 작업대)','Signature Technical Ingredient Use(부재료 사용의 적절함)','Post-Service Station(시연 후 작업대)'];
 const MOB_SENS_KEYS_ = ['Sweetness(스윗니스)','Flavor(플레이버)','Balance(균형)','Clean Cup(클린컵)','Mouthfeel(질감)','Professionalism(시연 전문성)'];
 const MOB_CREATIVE_KEYS_ = ['Creative Form & Usability(형태와 용이성)','Creative Flavor(창작 향미)','Creative Balance(균형)','Creative Mouthfeel(질감)','Creative Professionalism(전문성과 독창성)'];
 function mobComponentsFromItem_(item) {

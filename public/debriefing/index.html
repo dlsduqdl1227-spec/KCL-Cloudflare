@@ -2056,6 +2056,7 @@ function mobPublicIsDerivedSummaryHeader_(h) {
   return /^derived/.test(mobPublicHeaderGroup_(h));
 }
 function mobPublicHeaderAppliesToRole_(h, s) {
+  if (/Signature(?:\s*Technical)?\s*(?:Pre[-\s]*Service|Service\s*Station|Post[-\s]*Service)|창작음료\s*시연/i.test(String(h || ''))) return false;
   var group = mobPublicHeaderGroup_(h);
   if (!group) return true;
   var flags = mobPublicRoleFlags_(s || {});
