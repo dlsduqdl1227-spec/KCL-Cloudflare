@@ -6263,7 +6263,7 @@ async function getMobCalibrationParticipantNumbers(env, requestedTeam, roleText,
   const data = await mobCalibrationRows_(env, requestedTeam, roleText, actorArg);
   if (data.error) return data.error;
   const normal = latestCalibrationRowsByJudge_(data.rows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role)));
-  if (!normal.length) return [];
+  if (!normal.length) return { success:true, numbers:[] };
   const checksRaw = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('MOB_CALIBRATION_CHECK').all();
   const checks = new Map();
   (checksRaw.results || []).forEach(r => checks.set(r.token, parseJson(r.payload_json, {})));
@@ -6281,17 +6281,18 @@ async function getMobCalibrationParticipantNumbers(env, requestedTeam, roleText,
     by.set(no, cur);
   });
   // 확인완료 뒤에도 헤드가 점수·코멘트를 다시 열어볼 수 있도록 목록에 유지한다.
-  return Array.from(by.values()).sort((a,b) => safeStr(a.participantNo).localeCompare(safeStr(b.participantNo), 'ko', {numeric:true}));
+  // The strict API transport requires an explicit success envelope, including empty lists.
+  return { success:true, numbers:Array.from(by.values()).sort((a,b) => safeStr(a.participantNo).localeCompare(safeStr(b.participantNo), 'ko', {numeric:true})) };
 }
 async function getMobCalibrationResultsByParticipant(env, participantNo, requestedTeam, roleText, actorArg) {
   const data = await mobCalibrationRows_(env, requestedTeam, roleText, actorArg);
   if (data.error) return data.error;
   const no = safeStr(participantNo);
-  if (!no) return [];
+  if (!no) return { success:true, rows:[] };
   const targetRows = data.rows.filter(item => mobCalNumberFromItem_(item) === no);
   const normal = latestCalibrationRowsByJudge_(targetRows.filter(item => !isCalibrationMode_(item['모드'] || item.mode) && !isHeadRole_(item['역할'] || item.role)));
   const heads = latestCalibrationRowsByJudge_(targetRows.filter(item => isCalibrationMode_(item['모드'] || item.mode) && isHeadRole_(item['역할'] || item.role)));
-  return normal.concat(heads).map(mobScoreObjectFromItem_).sort((a,b) => Number(a.isHeadCalibration) - Number(b.isHeadCalibration) || safeStr(a.judgeName).localeCompare(safeStr(b.judgeName), 'ko'));
+  return { success:true, rows:normal.concat(heads).map(mobScoreObjectFromItem_).sort((a,b) => Number(a.isHeadCalibration) - Number(b.isHeadCalibration) || safeStr(a.judgeName).localeCompare(safeStr(b.judgeName), 'ko')) };
 }
 async function markMobCalibrationChecked(env, participantNo, requestedTeam, checkerName, roleText, actorArg) {
   const data = await mobCalibrationRows_(env, requestedTeam, roleText, actorArg);

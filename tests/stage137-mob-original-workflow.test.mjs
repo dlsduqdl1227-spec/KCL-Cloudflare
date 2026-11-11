@@ -113,7 +113,7 @@ assert.equal(calibrationContext.canCalibrationCode_("MOB"), true);
 const teamPanelSource = functionSource(assessment, "loadTeamPanel");
 assert.match(teamPanelSource, /mobHeadCard/);
 assert.match(teamPanelSource, /MOB 헤드 켈리브레이션 입력/);
-assert.match(teamPanelSource, /mobHeadCard && c.currentRound === '예선'/);
+assert.match(teamPanelSource, /mobHeadCard \? ''/);
 assert.match(teamPanelSource, /반려된 평가 수정' : '내평가검수/);
 assert.match(teamPanelSource, /if \(judgeReview\) judgeReview\.onclick/);
 assert.match(functionSource(assessment, "adminRenderRunCards_"), /센서리 헤드 켈리브레이션 입력/);

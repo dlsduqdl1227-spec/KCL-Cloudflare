@@ -5534,7 +5534,7 @@ function updateSelectReviewButton_() {
   if (reviewBtn) {
     reviewBtn.style.display = (_selComp && canReviewCode_(code) && !isKcrMenu && !isMobHeadEntry) ? 'block' : 'none';
     reviewBtn.textContent = isKcrMenu ? '내평가검수' : ((isAdminRole() || isTeamLeaderForCode_(code)) ? '검수 / 현황 보기' : '내평가검수');
-    if (finalRoundForCode_(code)) { reviewBtn.textContent='반려된 평가 수정';reviewBtn.style.display=isKcrMenu?'none':'block'; }
+    if (finalRoundForCode_(code)) { reviewBtn.textContent='반려된 평가 수정';reviewBtn.style.display=isKcrMenu||isMobHeadEntry?'none':'block'; }
   }
   document.querySelectorAll('[data-kcr-select-actions]').forEach(function(wrap){
     var active = isKcrMenu && !!wrap.closest('.comp-card.active');
@@ -6450,7 +6450,7 @@ function loadTeamPanel() {
                 (cardCode === 'KCR' ? '<button data-act="judge-cal-input">켈리브레이션</button>' + (cardHead ? '<button data-act="judge-cal-result">켈리브레이션 확인</button>' : '') : '') +
                 (cardCode === 'IKRC' ? '<button data-act="judge-cal-input">전체 켈리브레이션</button>' : '') +
                 '<button class="primary" data-act="judge-eval">' + (cardCode === 'KCR' ? '대회평가' : (mobHeadCard ? 'MOB 헤드 켈리브레이션 입력' : '대회평가시작')) + '</button>' +
-                (mobHeadCard && c.currentRound === '예선' ? '' : '<button data-act="judge-review">' + (cardCode !== 'KCR' && c.currentRound !== '예선' ? '반려된 평가 수정' : '내평가검수') + '</button>') +
+                (mobHeadCard ? '' : '<button data-act="judge-review">' + (cardCode !== 'KCR' && c.currentRound !== '예선' ? '반려된 평가 수정' : '내평가검수') + '</button>') +
                 (cardHead && (cardCode === 'MOB' || cardCode === 'IKRC') ? '<button data-act="judge-cal-result">' + (cardCode === 'MOB' ? 'MOB 심사 켈리브레이션' : '심사 켈리브레이션') + '</button>' : '') +
               '</div>';
             judgeCard.querySelector('[data-act="judge-eval"]').onclick = (function(cfg){ return function(){ _selComp = cfg; goEval(); }; })(c);
@@ -17038,6 +17038,11 @@ function mobCalItem_(item) {
   };
 }
 function mobCalibrationTeamArg_() { return judgeTeamText('MOB'); }
+function mobCalibrationLoadError_(target, message) {
+  message = String(message || 'MOB 검수 데이터를 불러오지 못했습니다. 다시 시도해주세요.');
+  if (target) target.innerHTML = '<p role="alert" style="text-align:center;color:var(--muted);padding:24px">' + escHtml(message) + '</p>';
+  toast(message, true);
+}
 function loadMobCalibrationTargets() {
   if (isMobHeadCategoryMissing_()) { toast(mobHeadCategoryMessage_(), true); return; }
   if (!_selComp) _selComp = {code:'MOB', name:'MOB', currentRound:''};
@@ -17050,6 +17055,7 @@ function loadMobCalibrationTargets() {
   google.script.run
     .withSuccessHandler(function(items){
       hideOverlay();
+      if (items && items.success === false) { mobCalibrationLoadError_(wrap, items.message); return; }
       items = (Array.isArray(items) ? items : (items && Array.isArray(items.numbers) ? items.numbers : (items && Array.isArray(items.items) ? items.items : []))).map(mobCalItem_).filter(function(x){ return !!x.participantNo; });
       if (!items.length) {
         wrap.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">현재 확인할 일반 심사위원 제출 데이터가 없습니다.</p>';
@@ -17064,7 +17070,7 @@ function loadMobCalibrationTargets() {
       });
       wrap.innerHTML = html;
     })
-    .withFailureHandler(function(err){ hideOverlay(); toast('MOB 켈리브레이션 목록 오류: ' + ((err && err.message) || err || ''), true); })
+    .withFailureHandler(function(err){ hideOverlay(); mobCalibrationLoadError_(wrap, 'MOB 켈리브레이션 목록 오류: ' + ((err && err.message) || err || '')); })
     .getMobCalibrationParticipantNumbers(mobCalibrationTeamArg_(), mobRoleText_(), _judge.judgeToken || '');
 }
 function completeMobCalibration(participantNo) {
@@ -17085,10 +17091,12 @@ function openMobCalibrationDetail(participantNo) {
   if (title) title.textContent = 'MOB 참가자 ' + participantNo + ' 켈리브레이션';
   var detail = document.getElementById('mob-cal-detail');
   if (detail) detail.innerHTML = '<p style="text-align:center;color:var(--muted);padding:24px">불러오는 중...</p>';
+  showPanel('pMobCalDetail');
   showOverlay();
   google.script.run
     .withSuccessHandler(function(results){
       hideOverlay();
+      if (results && results.success === false) { mobCalibrationLoadError_(detail, results.message); return; }
       results = Array.isArray(results) ? results : (results && Array.isArray(results.rows) ? results.rows : []);
       var sub = document.getElementById('mob-cal-detail-sub');
       if (sub) {
@@ -17097,9 +17105,8 @@ function openMobCalibrationDetail(participantNo) {
         sub.textContent = judgeLineText() + '  ' + mobCalibrationLabel_() + ' · 일반 ' + generalCount + '명' + (headCount ? ' · 헤드 기준 ' + headCount + '건' : '');
       }
       if (detail) detail.innerHTML = buildMobCalibrationHtml_(participantNo, results);
-      showPanel('pMobCalDetail');
     })
-    .withFailureHandler(function(err){ hideOverlay(); toast('MOB 켈리브레이션 상세 오류: ' + ((err && err.message) || err || ''), true); })
+    .withFailureHandler(function(err){ hideOverlay(); mobCalibrationLoadError_(detail, 'MOB 켈리브레이션 상세 오류: ' + ((err && err.message) || err || '')); })
     .getMobCalibrationResultsByParticipant(participantNo, mobCalibrationTeamArg_(), mobRoleText_(), _judge.judgeToken || '');
 }
 function mobCalibrationAggregateSpecs_(category) {
@@ -17147,7 +17154,7 @@ function buildMobCalibrationHtml_(participantNo, rows) {
   });
   var aggregateSpecs = mobCalibrationAggregateSpecs_(category);
   var referenceHead = mobCalibrationReferenceHead_(headRows, attrs, aggregateSpecs);
-  var html = '<div class="review-top-actions"><button class="btn complete-primary" onclick="completeMobCalibration(\'' + escapeJsString_(participantNo) + '\')">검수완료</button><button class="btn-outline" onclick="loadMobCalibrationTargets()" style="margin-left:8px">목록으로</button><div class="review-edit-help" style="margin:8px 0 0">검수확인 후 검수완료를 누르면 해당 참가자는 목록에서 숨겨집니다. 헤드 기준 평가는 순위·총점 집계에는 포함되지 않는 참고값입니다. 여러 헤드 기준값이 있으면 헤드차는 전체 헤드 기준 평균으로 계산합니다.</div></div>';
+  var html = '<div class="review-top-actions"><button class="btn complete-primary" onclick="completeMobCalibration(\'' + escapeJsString_(participantNo) + '\')">검수완료</button><button class="btn-outline" onclick="loadMobCalibrationTargets()" style="margin-left:8px">목록으로</button><div class="review-edit-help" style="margin:8px 0 0">검수완료 후에도 목록에서 점수·코멘트를 다시 확인할 수 있습니다. 헤드 기준 평가는 순위·총점 집계에는 포함되지 않는 참고값입니다. 여러 헤드 기준값이 있으면 헤드차는 전체 헤드 기준 평균으로 계산합니다.</div></div>';
 
   if (headRows.length) {
     html += '<div class="overall-summary-box"><div class="overall-summary-title">헤드 기준 평가 <span style="color:var(--muted);font-weight:600">순위 제외</span></div>';
