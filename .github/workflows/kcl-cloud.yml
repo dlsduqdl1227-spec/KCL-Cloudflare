@@ -28,13 +28,19 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: |
+          pnpm release:prepare
+          node --input-type=module -e "import {RELEASE_INFO} from './lib/release-info.mjs'; console.log('KCL_RELEASE_INFO '+JSON.stringify(RELEASE_INFO))"
       - run: pnpm test
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: api-audit
-          path: tmp/kcl-checks/
+          path: |
+            tmp/kcl-checks/
+            lib/release-info.mjs
+            public/ops-build.json
           retention-days: 14
   browser-audit:
     needs: api-audit
@@ -51,17 +57,24 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: |
+          pnpm release:prepare
+          node --input-type=module -e "import {RELEASE_INFO} from './lib/release-info.mjs'; console.log('KCL_RELEASE_INFO '+JSON.stringify(RELEASE_INFO))"
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:browser
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: browser-audit
-          path: tmp/kcl-checks/
+          path: |
+            tmp/kcl-checks/
+            lib/release-info.mjs
+            public/ops-build.json
           retention-days: 14
+  # The machine endpoint returns only a health boolean; no production data is
+  # logged, summarized, uploaded as an artifact, or written to the repository.
   live-audit:
-    needs: [api-audit, browser-audit]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -81,9 +94,3 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm ops:live
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: live-audit
-          path: tmp/kcl-checks/*.json
-          retention-days: 14

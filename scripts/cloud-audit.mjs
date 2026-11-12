@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {root} from './test-runner.mjs';
-import {OPS_AUDIENCE} from '../lib/ops-auth.mjs';
+import {OPS_AUDIENCE,verifyOperationsToken} from '../lib/ops-auth.mjs';
 import {releaseIdentity} from './release-identity.mjs';
 const origin='https://kcl-cloudflare.pages.dev',codes=['KBC','KTCC','MOC','MOB','KCR','IKRC','KCAC'];
 const selected=process.env.KCL_AUDIT_COMPETITION||'all';
@@ -22,11 +22,14 @@ for(const code of selected==='all'?codes:[selected]){
   const token=(await response.json()).value;if(typeof token!=='string')throw new Error('단기 인증 응답이 올바르지 않습니다.');
   console.log('::add-mask::'+token);
   const result=await request(origin+'/api/operations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({competition:code})});
-  const data=await result.json();if(!result.ok||!data.success||data.release?.sourceId!==expectedSource)throw new Error('운영 진단 실패: '+code+' HTTP '+result.status);
-  audits.push(data.audit);console.log(code+': '+data.audit.status+' ('+data.audit.records+' records)');
+  const data=await result.json();
+  if(result.status===401){
+    const claims=JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString());
+    console.error(JSON.stringify({authenticationStage:data.stage,localVerification:await verifyOperationsToken(token),claims:Object.fromEntries(['iss','aud','repository_id','repository_owner_id','ref','ref_type','workflow_ref','job_workflow_ref','runner_environment','event_name','iat','nbf','exp'].map(key=>[key,claims[key]]))}));
+  }
+  if(!result.ok||!data.success||data.release?.sourceId!==expectedSource)throw new Error('운영 진단 실패: '+code+' HTTP '+result.status);
+  if(data.healthy!==true)throw new Error('운영 진단에서 관리자 확인이 필요합니다. 세부 정보는 관리자 세션에서만 확인하세요.');
+  audits.push(true);
 }
-const report={schemaVersion:1,checkedSourceCommit:expected,sourceId:expectedSource,checkedAt:new Date().toISOString(),readOnly:true,audits};
-const dir=path.join(root,'tmp/kcl-checks');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'live.json'),JSON.stringify(report,null,2)+'\n');
-const summary=['## KCL 운영 진단','',`Commit: ${expected}`,'','| 대회 | 상태 | 저장 기록 | 순위 항목 | 오류 | 경고 |','|---|---|---:|---:|---:|---:|',...audits.map(a=>`| ${a.competition} | ${a.status} | ${a.records} | ${a.rounds.reduce((n,r)=>n+r.rankedUnits,0)} | ${a.issues.filter(i=>i.severity==='error').reduce((n,i)=>n+i.count,0)} | ${a.issues.filter(i=>i.severity==='warning').reduce((n,i)=>n+i.count,0)} |`),'','읽기 전용. 이름·연락처·개별 점수는 보고하지 않으며 점수·순위·검수·명단을 변경하지 않습니다.',''];
-if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,summary.join('\n'));
-if(audits.some(a=>a.status==='error'))process.exitCode=1;
+console.log('KCL_READ_ONLY_HEALTH_CHECK_PASSED');
+if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'KCL read-only health checks passed. No production records, counts or scores were exported.\n');
