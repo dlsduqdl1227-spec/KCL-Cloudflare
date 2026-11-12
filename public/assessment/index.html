@@ -11817,6 +11817,7 @@ function openRankingDetail(item) {
 
 function renderRankingDetail(res) {
   var rows = res.rows || [];
+  if (String(res.compCode || '').toUpperCase() === 'IKRC') rows = rows.filter(function(item){ return !item.ikrcRankingExcluded && !/헤드|head/i.test(String(item['역할'] || item.role || item.judgeRole || '')); });
   var rankInfo = res.rankInfo || {};
   var isDqDetail = !!(res.disqualified || rankInfo.disqualified);
   var dqReason = res.disqualificationReason || rankInfo.disqualificationReason || '';
@@ -11843,6 +11844,7 @@ function renderRankingDetail(res) {
     : ((res.unitLabel || '식별자') + ' ' + (res.unitDisplay || res.unit || '-') + (res.playerNameSummary ? ' · ' + res.playerNameSummary : ''));
   var html = '<div class="detail-summary"><div class="detail-title">' + escHtml(detailTitleText) + '</div>' +
     '<div class="detail-sub">라운드: ' + escHtml(res.round || '-') + (res.teamSummary ? '<br>' + (String(res.compCode || '').toUpperCase() === 'KTCC' ? '테이블: ' : '평가팀: ') + escHtml(res.teamSummary) : '') + (res.checkerSummary ? '<br>체크: ' + escHtml(res.checkerSummary) : '') + (res.endTimeDisplay ? '<br>종료시간: ' + escHtml(res.endTimeDisplay) : '') + detailTotalLine + (rankFullText ? ' · 전체순위: ' + escHtml(rankFullText) : '') + (isDqDetail && dqReason ? '<br>실격 사유: ' + escHtml(dqReason) : '') + (rankInfo.tieBreakRule && !isDqDetail ? '<br>동점 기준: ' + escHtml(rankInfo.tieBreakRule) : '') + '</div></div>';
+  if (isIkrcDetail) html += '<div class="review-edit-help">순위 상세에는 반영 센서리 평가만 표시합니다. 헤드 평가는 대회평가 비교 화면에서 확인할 수 있으며 순위에서 제외됩니다.</div>';
   if (res.scoreStddev || res.kbcStddev) html += buildStddevHtml_(res.scoreStddev || res.kbcStddev, res.compCode);
   rows.forEach(function(row, idx){ html += renderDetailCard(row, res.headers || [], idx, res.compCode); });
   body.innerHTML = html;

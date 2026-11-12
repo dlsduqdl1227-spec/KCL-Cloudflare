@@ -39,7 +39,7 @@ for(const round of ['예선','결선'])test('IKRC '+round+' ranks sensory scores
     await api.rpc('submitScores',submission(judges[0],station,round,[10,0]));
     assert.equal((await api.rpc('getRanking','IKRC',api.actor,round)).ranking.length,0,'a head-only entry cannot receive a rank');
     const headOnly=await api.rpc('getRankingDetail','IKRC','A-1',round,api.actor);
-    assert.equal(headOnly.totalScore,0);assert.equal(headOnly.avgScore,0);assert.equal(headOnly.rows.length,1);
+    assert.equal(headOnly.totalScore,0);assert.equal(headOnly.avgScore,0);assert.equal(headOnly.rows.length,0);assert.equal(headOnly.comparisonRows.length,1);
     await api.rpc('submitScores',submission(judges[1],station,round,[6,8]));
     await api.rpc('submitScores',submission(judges[2],station,round,[8,8]));
     const saved=JSON.stringify(api.db.prepare("SELECT * FROM scores WHERE competition_code='IKRC' ORDER BY id").all());
@@ -49,7 +49,7 @@ for(const round of ['예선','결선'])test('IKRC '+round+' ranks sensory scores
     assert.equal(second.avgScore,80);assert.ok(second.rank<first.rank,'head 100 versus 0 must not reverse the sensory ranking');
     assert.deepEqual(first.sensoryJudgeNames,[judges[1].name,judges[2].name]);
     const detail=await api.rpc('getRankingDetail','IKRC','A-1',round,api.actor);
-    assert.equal(detail.avgScore,70);assert.equal(detail.totalScore,70);assert.equal(detail.rows.length,3);
+    assert.equal(detail.avgScore,70);assert.equal(detail.totalScore,70);assert.equal(detail.rows.length,2);assert.equal(detail.comparisonRows.length,1);
     const comparison=await api.rpc('getIkrcOfficialCalibrationResultsByCup','A-1',{scope:'station',stationId:station.id},judges[0]);
     assert.equal(comparison.finalAverage,70);assert.equal(comparison.headScoreIncluded,false);assert.equal(comparison.rows.length,3);
     const preview=await api.rpc('getAdminDebriefPreview','IKRC','A-1',round,api.actor);
@@ -74,7 +74,7 @@ test('all five assigned sensory judges count, including a historical score misla
     assert.equal(first.headCount,1);assert.equal(first.sensoryCount,5);assert.equal(first.confirmedJudgeCount,5);assert.equal(first.expectedJudgeCount,5);
     assert.equal(first.avgScore,63);assert.equal(first.rankingScore,66);assert.equal(first.panelComplete,true);assert.deepEqual(first.missingSensoryJudgeNames,[]);
     assert.ok(first.sensoryJudgeNames.includes(judges[5].name));assert.ok(!first.sensoryJudgeNames.includes(judges[0].name));
-    const detail=await api.rpc('getRankingDetail','IKRC','A-1','결선',api.actor);assert.equal(detail.avgScore,63);assert.equal(detail.totalScore,66);assert.equal(detail.rows.length,6);
+    const detail=await api.rpc('getRankingDetail','IKRC','A-1','결선',api.actor);assert.equal(detail.avgScore,63);assert.equal(detail.totalScore,66);assert.equal(detail.rows.length,5);assert.equal(detail.comparisonRows.length,1);
     const comparison=await api.rpc('getIkrcOfficialCalibrationResultsByCup','A-1',{scope:'station',stationId:stations[0].id},judges[0]);
     assert.equal(comparison.judgeCount,5);assert.equal(comparison.headCount,1);assert.equal(comparison.finalAverage,63);
     const preview=await api.rpc('getAdminDebriefPreview','IKRC','A-1','결선',api.actor);assert.equal(preview.rankInfo.avgScore,63);assert.equal(preview.rankInfo.rankingScore,66);assert.equal(preview.scores.length,6);

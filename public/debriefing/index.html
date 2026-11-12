@@ -1496,7 +1496,7 @@ function renderResult(res) {
 }
 
 function ikrcRoundAverageRows_(list,round) {
-  return (list || []).filter(function(s){return !/헤드|head/i.test(String(s['역할']||s.role||s.judgeRole||''))&&!s.disqualified&&s['실격여부']!=='Y';});
+  return (list || []).filter(function(s){return !s.ikrcRankingExcluded&&!/헤드|head/i.test(String(s['역할']||s.role||s.judgeRole||''))&&!s.disqualified&&s['실격여부']!=='Y';});
 }
 function ikrcLocalRoundAverage_(list,round) {
   var vals = ikrcRoundAverageRows_(list,round).map(function(s){ return Number(s['총점'] != null ? s['총점'] : s['최종점수']); }).filter(function(n){ return !isNaN(n); });
