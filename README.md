@@ -39,7 +39,7 @@ Node.js 24와 pnpm 10.11.1을 사용합니다. 전체 저장소를 체크아웃�
 | `KCL_BROWSER_CHANNEL=bundled pnpm test:browser` | 모바일·데스크톱 화면 검사 |
 | `pnpm ops:live` | GitHub main 작업에서만 운영 데이터 읽기 전용 진단 |
 
-`pnpm install`의 배포 전 검사에 실패하면 검증 파일을 만들지 않습니다. Pages API가 이 파일을 필수로 참조하므로 검사를 생략한 빌드도 배포되지 않습니다. 실제 승인된 커밋과 검사 결과는 `/api/health`와 `/ops-build.json`에서 확인합니다. 상태 확인은 선수 정보나 점수를 공개하지 않습니다.
+`pnpm release:prepare`는 핵심 검사 통과 후 검증된 소스 지문을 생성합니다. 생성된 `lib/release-info.mjs`, `public/ops-build.json`을 소스와 함께 반영합니다. 설치 시 지문을 대조하며, 운영 진단도 실행 중인 소스 지문을 대조합니다. 정확한 배포 커밋은 GitHub의 Cloudflare Pages 검사로 확인합니다. 상태 확인은 선수 정보나 점수를 공개하지 않습니다.
 
 GitHub Actions의 **KCL Cloud** 작업은 전체 API 검사와 브라우저 검사를 실행합니다. main 배포 후 `live-audit` 작업은 일회성 GitHub 인증으로 7개 대회의 운영 기록을 읽기만 합니다. 이후 모바일 요청에서도 이 작업을 다시 실행해 점검할 수 있습니다. 장기 관리자 토큰이나 Cloudflare 비밀번호를 저장하지 않습니다.
 

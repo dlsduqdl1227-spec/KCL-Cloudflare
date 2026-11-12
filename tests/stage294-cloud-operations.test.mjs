@@ -36,7 +36,7 @@ test('authenticated audit RPC rejects anonymous and other-competition staff',asy
   }finally{api.close();}
 });
 test('public health is a read-only schema probe and returns no data on database failure',async()=>{
-  let source=fs.readFileSync(new URL('../functions/api/health.js',import.meta.url),'utf8');source=source.replace("import {RELEASE_INFO} from '../../lib/verified-release.mjs';","const RELEASE_INFO={commit:'test',gate:{status:'passed'}};");
+  let source=fs.readFileSync(new URL('../functions/api/health.js',import.meta.url),'utf8');source=source.replace("import {RELEASE_INFO} from '../../lib/release-info.mjs';","const RELEASE_INFO={commit:'test',gate:{status:'passed'}};");
   const {onRequestGet}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
   let queries=0;const env={DB:{prepare(sql){queries++;assert.match(sql,/^SELECT\b/);return {all:async()=>({results:tables.map(name=>({name}))})};}}};
   const good=await onRequestGet({env});assert.equal(good.status,200);assert.equal((await good.json()).status,'ready');assert.equal(queries,1);
@@ -44,7 +44,7 @@ test('public health is a read-only schema probe and returns no data on database 
 });
 test('operations endpoint rejects unsigned requests before touching D1',async()=>{
   let source=fs.readFileSync(new URL('../functions/api/operations.js',import.meta.url),'utf8');
-  source=source.replace("import {RELEASE_INFO} from '../../lib/verified-release.mjs';","const RELEASE_INFO={commit:'test'};").replace("import {verifyOperationsToken} from '../../lib/ops-auth.mjs';","const verifyOperationsToken=async()=>false;").replace("import {runCompetitionAudit} from './rpc.js';","const runCompetitionAudit=()=>{throw new Error('D1 must not be touched');};");
+  source=source.replace("import {RELEASE_INFO} from '../../lib/release-info.mjs';","const RELEASE_INFO={commit:'test'};").replace("import {verifyOperationsToken} from '../../lib/ops-auth.mjs';","const verifyOperationsToken=async()=>false;").replace("import {runCompetitionAudit} from './rpc.js';","const runCompetitionAudit=()=>{throw new Error('D1 must not be touched');};");
   const {onRequestPost}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
   const response=await onRequestPost({request:new Request('https://qa.test/api/operations',{method:'POST',body:'{}'}),env:{}});assert.equal(response.status,401);
 });

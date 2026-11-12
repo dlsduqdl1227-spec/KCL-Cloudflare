@@ -1,10 +1,6 @@
-import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-const script=fileURLToPath(new URL('./release-gate.mjs',import.meta.url));
-// Dashboard NODE_VERSION can override .node-version. Use the same tested runtime
-// without requiring an account-setting change or changing the production runtime.
-if(Number(process.versions.node.split('.')[0])===24)await import('./release-gate.mjs');
-else{
-  const result=spawnSync(process.platform==='win32'?'npx.cmd':'npx',['--yes','--package=node@24.22.1','node',script],{stdio:'inherit',env:process.env,timeout:180000});
-  if(result.error)console.error(result.error.message);process.exit(result.status??1);
-}
+import {releaseIdentity} from './release-identity.mjs';
+import {RELEASE_INFO} from '../lib/release-info.mjs';
+const actual=releaseIdentity(fileURLToPath(new URL('../',import.meta.url)));
+if(RELEASE_INFO.sourceId!==actual.sourceId||RELEASE_INFO.files!==actual.files||RELEASE_INFO.gate?.status!=='passed')throw new Error('검증 후 소스가 변경됐습니다. node scripts/release-gate.mjs 로 검사한 뒤 다시 배포하세요.');
+console.log('KCL_VERIFIED_SOURCE '+actual.sourceId);

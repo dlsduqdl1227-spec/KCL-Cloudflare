@@ -19,8 +19,8 @@
 6. `completed`와 `success` 및 해당 커밋의 배포 결과를 확인한 뒤에만 배포 성공으로 보고한다. 확인한 커밋과 배포 URL을 함께 기록한다.
 7. `scripts/kcl.mjs doctor`로 환경을 먼저 확인한다. `pnpm test`는 등록된 모든 API 검사를 실행한다. 누락된 테스트가 있으면 `node scripts/kcl.mjs catalog`로 목록을 갱신한다.
 8. 화면 변경은 KCL Cloud의 `browser-audit` 결과도 확인한다. 작업 환경에서 브라우저 실행이 제한되면 GitHub 호스팅 검사를 사용한다. 실행하지 않은 검사를 완료했다고 보고하지 않는다.
-9. 모바일 지시에도 같은 저장소·Actions·Pages 경로를 사용한다. `/api/health`의 정확한 커밋을 확인하고 main의 `live-audit`을 확인/재실행한다. 단기 OIDC 진단은 읽기 전용이며 관리자 로그인이나 영구 토큰이 필요하지 않다.
-10. 배포 전 검사 파일 `lib/verified-release.mjs`, `public/ops-build.json`을 직접 작성하거나 커밋하지 않는다. `postinstall` 검사에서만 생성한다.
+9. 모바일 지시에도 같은 저장소·Actions·Pages 경로를 사용한다. `/api/health`의 소스 지문과 정확한 배포 커밋의 Pages 결과를 대조하고 main의 `live-audit`을 확인/재실행한다. 단기 OIDC 진단은 읽기 전용이며 관리자 로그인이나 영구 토큰이 필요하지 않다.
+10. 변경 완료 후 `pnpm release:prepare`로 핵심 검사를 통과시켜 `lib/release-info.mjs`, `public/ops-build.json`을 생성하고 함께 커밋한다. 값을 손으로 작성하지 않는다. `pnpm release:verify`는 소스 지문을 대조한다. 정적 Pages 배포에서도 검증 산출물을 재사용하므로 Cloudflare 설정 변경에 의존하지 않는다.
 
 ## 데이터와 대회 구분
 

@@ -4,9 +4,9 @@
 
 1. 연결된 GitHub에서 `main`의 최신 커밋과 진행 중인 작업을 확인한다.
 2. 전체 저장소를 체크아웃하고 Node 24, pnpm 10.11.1로 준비한다. 토큰이 없는 경우에도 공개 저장소 읽기와 연결된 GitHub 수정·기존 Pages 배포가 가능하다.
-3. 관련 코드 수정 후 `pnpm test`, 필요한 브라우저 검사를 실행한다. 점수 산식 변경은 해당 대회 원문과 회귀 사례를 먼저 확인한다.
+3. 관련 코드 수정 후 `pnpm test`, 필요한 브라우저 검사 및 `pnpm release:prepare`를 실행한다. 검증 산출물도 함께 반영한다. 점수 산식 변경은 해당 대회 원문과 회귀 사례를 먼저 확인한다.
 4. `ops/…` 브랜치에 먼저 반영하고 KCL Cloud 검사와 Pages 미리보기 결과를 확인한다.
-5. 검증된 커밋을 `main`에 반영하고 그 커밋의 Cloudflare Pages `completed/success`를 확인한다. `/api/health`의 `release.commit`과 `/ops-build.json`도 대조한다.
+5. 검증된 커밋을 `main`에 반영하고 그 커밋의 Cloudflare Pages `completed/success`를 확인한다. `/api/health`의 `release.sourceId`와 `/ops-build.json`의 소스 지문을 체크아웃 소스와 대조한다. 소스 지문과 Git 커밋은 서로 다른 식별자다.
 6. GitHub Actions `live-audit` 결과를 확인한다. 추후 모바일 지시에서는 최근 main의 해당 작업을 재실행할 수 있다. 새 배포가 필요하지 않은 조회에도 이 경로를 사용한다.
 
 ## 검증 범위

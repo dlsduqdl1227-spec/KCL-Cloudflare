@@ -1,4 +1,4 @@
-import {RELEASE_INFO} from '../../lib/verified-release.mjs';
+import {RELEASE_INFO} from '../../lib/release-info.mjs';
 export async function onRequestGet({env}){
   let ready=false;
   try{

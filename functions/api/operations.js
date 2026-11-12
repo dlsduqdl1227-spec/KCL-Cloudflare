@@ -1,4 +1,4 @@
-import {RELEASE_INFO} from '../../lib/verified-release.mjs';
+import {RELEASE_INFO} from '../../lib/release-info.mjs';
 import {verifyOperationsToken} from '../../lib/ops-auth.mjs';
 import {runCompetitionAudit} from './rpc.js';
 const headers={'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};

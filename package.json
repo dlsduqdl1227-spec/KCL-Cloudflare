@@ -75,7 +75,9 @@
     "test:browser": "node scripts/kcl.mjs check --browser",
     "ops:doctor": "node scripts/kcl.mjs doctor",
     "ops:live": "node scripts/kcl.mjs live",
-    "postinstall": "node scripts/release-bootstrap.mjs"
+    "postinstall": "node scripts/release-bootstrap.mjs",
+    "release:verify": "node scripts/release-bootstrap.mjs",
+    "release:prepare": "node scripts/release-gate.mjs"
   },
   "devDependencies": {
     "playwright": "1.65.0",
