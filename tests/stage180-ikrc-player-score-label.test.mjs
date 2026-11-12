@@ -29,6 +29,6 @@ function functionSource(source, name) {
 const rankBox = functionSource(debriefing, 'buildRankBox');
 assert.doesNotMatch(rankBox, /가산점 반영 최종 점수/);
 assert.match(rankBox, /var scoreCells = isIkrc\s*\? ''/);
-assert.match(debriefing, /IKRC 심사위원 평균/, '선수에게 보여줄 심사위원 평균점수는 유지해야 합니다.');
+assert.match(debriefing, /IKRC 센서리 평균/, '선수에게 보여줄 심사위원 평균점수는 유지해야 합니다.');
 
 process.stdout.write('Stage180 IKRC player score-label visibility tests passed.\n');

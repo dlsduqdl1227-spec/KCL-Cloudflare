@@ -1496,7 +1496,7 @@ function renderResult(res) {
 }
 
 function ikrcRoundAverageRows_(list,round) {
-  return (list || []).filter(function(s){return round!=='결선'||(!/헤드|head/i.test(String(s['역할']||s.role||s.judgeRole||''))&&!s.disqualified&&s['실격여부']!=='Y');});
+  return (list || []).filter(function(s){return !/헤드|head/i.test(String(s['역할']||s.role||s.judgeRole||''))&&!s.disqualified&&s['실격여부']!=='Y';});
 }
 function ikrcLocalRoundAverage_(list,round) {
   var vals = ikrcRoundAverageRows_(list,round).map(function(s){ return Number(s['총점'] != null ? s['총점'] : s['최종점수']); }).filter(function(n){ return !isNaN(n); });
@@ -1517,8 +1517,8 @@ function buildIkrcRoundAverageBox_(round, list, rank) {
   var headCount = Number(rank.headCount || list.filter(function(s){ return /헤드|head/i.test(String(s['역할'] || s.role || '')); }).length || 0);
   var sensoryCount = Number(rank.sensoryCount || Math.max(0, judgeCount - headCount) || 0);
   var panelText = [];
-  if (headCount) panelText.push('헤드 ' + headCount + '명'+(round==='결선'?' 비교용':''));
-  if (sensoryCount) panelText.push('센서리 ' + sensoryCount + '명'+(round==='결선'?' 반영':''));
+  if (headCount) panelText.push('헤드 ' + headCount + '명 비교용');
+  if (sensoryCount) panelText.push('센서리 ' + sensoryCount + '명 반영');
   if (!panelText.length) panelText.push('심사위원 ' + judgeCount + '명');
   var formulaText = totals.length
     ? ('총점 합계 ' + fmtScore(totalSum, 2) + ' ÷ ' + totals.length + '명')
@@ -1526,10 +1526,10 @@ function buildIkrcRoundAverageBox_(round, list, rank) {
   var box = document.createElement('div');
   box.className = 'avg-box';
   box.innerHTML =
-    '<div class="avg-title">'+(round==='결선'?'IKRC 센서리 평균':'IKRC 심사위원 평균')+'</div>' +
-    '<div class="avg-total">' + (round==='결선'&&!totals.length?'집계 대기':fmtScore(avg, 2)) + '</div>' +
-    '<div class="avg-sub">' + escHtml(round || '-') + ' · ' + escHtml(panelText.join(round==='결선'?' · ':' + ')) + ' · ' + escHtml(formulaText) + '</div>' +
-    '<div class="avg-sub">이 선수를 평가한 심사위원별 총점의 평균입니다.</div>';
+    '<div class="avg-title">'+'IKRC 센서리 평균'+'</div>' +
+    '<div class="avg-total">' + (!totals.length?'집계 대기':fmtScore(avg, 2)) + '</div>' +
+    '<div class="avg-sub">' + escHtml(round || '-') + ' · ' + escHtml(panelText.join(' · ')) + ' · ' + escHtml(formulaText) + '</div>' +
+    '<div class="avg-sub">이 선수를 평가한 센서리 심사위원별 총점의 평균입니다. 헤드 평가는 비교용이며 순위에서 제외됩니다.</div>';
   if(round==='결선')box.innerHTML+='<div class="avg-sub">헤드 평가는 비교용이며, 센서리 심사위원 점수만 평균에 반영합니다.</div>'+(totals.length?'<div class="avg-sub">로스팅 센서리 평균 '+fmtScore(avg,2)+' + Seed to Cup '+Number(rank.seedBonus||0)+' = 최종점수 '+fmtScore(rank.rankingScore == null ? avg+Number(rank.seedBonus||0) : rank.rankingScore,2)+'</div>':'');
   return box;
 }
@@ -2106,7 +2106,7 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
   else if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
   else if (isSensoryDebriefCard_(s, compCode)) publicTitle = (Number(anonymousJudgeNo) > 0 ? Number(anonymousJudgeNo) : 1) + '번 센서리심사위원 평가';
   if (isKtcc) publicTitle = teamTitle || '팀 평가 결과';
-  var ikrcFinalHead=isIkrc&&String(s.round||s['라운드'])==='결선'&&/헤드|head/i.test(roleRaw);
+  var ikrcFinalHead=isIkrc&&/헤드|head/i.test(roleRaw);
   if(ikrcFinalHead)publicTitle='헤드심사위원 평가 · 비교용';
   var statusRaw = String(s['검수상태'] || s.status || '').replace(/\s/g, '');
   var statusBadge = (statusRaw === '검수완료' || statusRaw === '수정완료') ? '<span class="reviewed-pill">' + escHtml(statusRaw) + '</span>' : '';

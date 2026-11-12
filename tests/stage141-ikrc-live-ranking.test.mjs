@@ -39,9 +39,9 @@ assert.match(panel, /liveRows/);
 assert.match(panel, /confirmedJudgeCount/);
 
 const aggregate = functionSource(rpc, "aggregateRankingGroup_");
-assert.match(aggregate, /const officialRows = finalSensoryOnly \? panel\.liveRows\.filter/);
-assert.match(aggregate, /finalSensoryOnly = roundName_\(round,''\) === '결선'/);
-assert.match(aggregate, /현재 제출 평균/);
+assert.match(aggregate, /const officialRows = panel\.liveRows\.filter/);
+assert.doesNotMatch(aggregate, /finalSensoryOnly/);
+assert.match(aggregate, /센서리 평균/);
 
 const ranking = functionSource(rpc, "buildRankingData_");
 assert.match(ranking, /confirmedJudgeCount \|\| 0\) < 1/);
@@ -53,7 +53,7 @@ assert.match(countable, /isCalibrationMode_/);
 assert.match(countable, /ikrcOfficialHeadItem_/);
 
 const render = functionSource(assessment, "renderRanking");
-assert.match(render, /반영 심사/);
+assert.match(render, /반영 센서리/);
 assert.match(render, /item\.finalized \? '최종확정' : '진행중'/);
 
 process.stdout.write("Stage141 IKRC live incremental ranking tests passed.\n");

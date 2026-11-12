@@ -39,10 +39,10 @@ assert.equal(context.fmtRankingScore_(71.1, 2, 'IKRC', '공식 확정점수'), '
 
 const ranking = functionSource(assessment, 'renderRanking');
 assert.match(ranking, /isIkrcRank && item\.avgScore != null \? item\.avgScore/, 'IKRC 실시간 순위는 디브리핑과 동일한 총평균값을 표시해야 합니다.');
-assert.match(ranking, /displayScoreBasis = isIkrcRank \? '심사위원 총평균'/, 'IKRC 실시간 순위 점수 기준을 명확히 표시해야 합니다.');
+assert.match(ranking, /displayScoreBasis = isIkrcRank \? '센서리 평균'/, 'IKRC 실시간 순위 점수 기준을 명확히 표시해야 합니다.');
 
 const detail = functionSource(assessment, 'renderRankingDetail');
 assert.match(detail, /rankInfo\.avgScore != null \? rankInfo\.avgScore : res\.totalScore/, 'IKRC 순위 상세도 동일한 총평균값을 표시해야 합니다.');
-assert.match(detail, /'심사위원 총평균'/, 'IKRC 순위 상세 총점 명칭을 평균으로 통일해야 합니다.');
+assert.match(detail, /'센서리 평균'/, 'IKRC 순위 상세 총점 명칭을 평균으로 통일해야 합니다.');
 
 process.stdout.write('Stage181 IKRC ranking average-display tests passed.\n');

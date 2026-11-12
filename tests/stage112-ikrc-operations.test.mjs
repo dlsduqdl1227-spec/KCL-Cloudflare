@@ -84,7 +84,7 @@ assert.match(extractFunction(rpc, "ikrcCalibrationRows_"), /scope\.scope === 'st
 assert.match(extractFunction(rpc, "rowToReviewItem"), /스테이션ID/);
 assert.match(assessment, /커핑 기준: 11g 홀빈 \/ 200g 물 \/ 93℃ \/ 600~700µm/);
 assert.match(extractFunction(assessment, "isIkrcCalibrationMode_"), /isActiveCalibrationMode_/);
-assert.match(extractFunction(assessment, "showIkrcSetup"), /헤드 포함 공식 점수 반영/);
+assert.match(extractFunction(assessment, "showIkrcSetup"), /센서리 평균 순위 반영 · 헤드 비교용/);
 assert.match(extractFunction(assessment, "evaluationTeamForSubmit_"), /전체 켈리브레이션팀/);
 assert.match(extractFunction(assessment, "setIkrcCalibrationScope_"), /'station'/);
 

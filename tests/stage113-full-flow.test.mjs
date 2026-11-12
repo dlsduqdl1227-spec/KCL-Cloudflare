@@ -687,7 +687,7 @@ assert.ok(officialStationBeforeReview.items.every((item) => item.headCount === 1
 const headOnlyLiveRanking = await rpc("getRanking", "IKRC", adminActor);
 const headOnlyZ1 = headOnlyLiveRanking.ranking.find((item) => item.unit === "Z-1");
 assert.ok(headOnlyZ1, "현재 제출된 헤드·센서리 공식점수는 별도 완료 버튼 없이 실시간 순위에 표시되어야 합니다");
-assert.equal(headOnlyZ1.confirmedJudgeCount, 4);
+assert.equal(headOnlyZ1.confirmedJudgeCount, 3);
 assert.equal(headOnlyZ1.finalized, false);
 
 const preReviewIkrcList = await rpc("getReviewList", "IKRC", adminActor);
@@ -697,8 +697,8 @@ assert.equal(firstSensoryReview.success, true, firstSensoryReview.message);
 const twoJudgeLiveRanking = await rpc("getRanking", "IKRC", adminActor);
 const twoJudgeZ1 = twoJudgeLiveRanking.ranking.find((item) => item.unit === "Z-1");
 assert.ok(twoJudgeZ1, "센서리 심사위원 검수 완료 점수는 즉시 실시간 순위에 합산되어야 합니다");
-assert.equal(twoJudgeZ1.confirmedJudgeCount, 4);
-assert.equal(twoJudgeZ1.scoreBasis, "현재 제출 평균");
+assert.equal(twoJudgeZ1.confirmedJudgeCount, 3);
+assert.equal(twoJudgeZ1.scoreBasis, "센서리 평균");
 const resetFirstSensoryReview = await rpc("updateReviewStatusBatch", "IKRC", firstSensoryStationRows.map((item) => item.rowIndex), "미검수", "관리자", adminActor);
 assert.equal(resetFirstSensoryReview.success, true, resetFirstSensoryReview.message);
 const officialZ1Detail = await rpc("getIkrcOfficialCalibrationResultsByCup", "Z-1", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
@@ -1068,7 +1068,7 @@ const ikrcRankingBeforeStationFinal = await rpc("getRanking", "IKRC", adminActor
 assert.equal(ikrcRankingBeforeStationFinal.success, true);
 const reviewedBeforeFinalZ1 = ikrcRankingBeforeStationFinal.ranking.find((item) => item.unit === "Z-1");
 assert.ok(reviewedBeforeFinalZ1, "센서리 검수 완료 점수는 헤드 최종확정 전에도 실시간 순위에 표시되어야 합니다");
-assert.equal(reviewedBeforeFinalZ1.confirmedJudgeCount, 4);
+assert.equal(reviewedBeforeFinalZ1.confirmedJudgeCount, 3);
 assert.equal(reviewedBeforeFinalZ1.finalized, false);
 const stationFinal = await rpc("finalizeIkrcStationEvaluation", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
 assert.equal(stationFinal.success, true, stationFinal.message);
@@ -1081,9 +1081,9 @@ const ikrcRankingAfterReview = await rpc("getRanking", "IKRC", adminActor);
 assert.equal(ikrcRankingAfterReview.success, true, ikrcRankingAfterReview.message);
 const rankedZ1 = ikrcRankingAfterReview.ranking.find((item) => item.unit === "Z-1");
 assert.ok(rankedZ1);
-assert.equal(rankedZ1.totalScore, 20, "The official IKRC result must average the unchanged head and sensory scores");
-assert.equal(rankedZ1.judgeCount, 4, "The head official score and three sensory scores must be averaged together");
-assert.equal(rankedZ1.confirmedJudgeCount, 4);
+assert.equal(rankedZ1.totalScore, 20, "The official IKRC result must average the unchanged sensory scores");
+assert.equal(rankedZ1.judgeCount, 3, "Only the three sensory scores determine the ranking average");
+assert.equal(rankedZ1.confirmedJudgeCount, 3);
 assert.equal(rankedZ1.finalized, true);
 
 const judgeZRows = reviewLists.IKRC.list.filter((item) => item.judgeName === "QA 센서리Z" && String(item.unit).startsWith("Z-"));
@@ -1094,14 +1094,14 @@ assert.equal(judgeZOwnReopened.list.length, 6, "재평가 허용 후 센서리 �
 const rankingAfterReopen = await rpc("getRanking", "IKRC", adminActor);
 const reopenedZ1 = rankingAfterReopen.ranking.find((item) => item.unit === "Z-1");
 assert.ok(reopenedZ1, "재수정 중에도 현재 제출점수의 실시간 평균은 유지되어야 합니다");
-assert.equal(reopenedZ1.confirmedJudgeCount, 4);
+assert.equal(reopenedZ1.confirmedJudgeCount, 3);
 assert.equal(reopenedZ1.finalized, false, "재평가 허용 시 기존 스테이션 최종확정은 해제되어야 합니다");
 const completeJudgeZAgain = await rpc("updateReviewStatusBatch", "IKRC", judgeZRows.map((item) => item.rowIndex), "검수완료", "센서리 심사위원", { judgeToken:judgeZ.judgeToken, reviewScope:"own", manageReview:false });
 assert.equal(completeJudgeZAgain.success, true, completeJudgeZAgain.message);
 const rankingBeforeRefinal = await rpc("getRanking", "IKRC", adminActor);
 const reviewedAgainZ1 = rankingBeforeRefinal.ranking.find((item) => item.unit === "Z-1");
 assert.ok(reviewedAgainZ1, "재검수 완료 점수는 헤드 재확정 전에도 즉시 실시간 순위에 복구되어야 합니다");
-assert.equal(reviewedAgainZ1.confirmedJudgeCount, 4);
+assert.equal(reviewedAgainZ1.confirmedJudgeCount, 3);
 assert.equal(reviewedAgainZ1.finalized, false);
 const refinal = await rpc("finalizeIkrcStationEvaluation", { scope:"station", stationId:"station2", team:"스테이션 2" }, { judgeToken:head.judgeToken });
 assert.equal(refinal.success, true, refinal.message);

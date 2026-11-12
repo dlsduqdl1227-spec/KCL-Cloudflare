@@ -65,6 +65,7 @@ const bundleContext = {
   shouldCountItemInRanking_: (_code, item) => !item.calibration,
   toNumber: value => value == null || value === '' || Number.isNaN(Number(value)) ? null : Number(value),
   roundScoreValue_: (value, decimals=3) => Math.round(Number(value) * 10 ** decimals) / 10 ** decimals,
+  itemOfficialDq_: item => !!item.disqualified || item['실격여부'] === 'Y',
   isHeadRole_: value => /헤드|head/i.test(String(value || ''))
 };
 vm.createContext(bundleContext);
@@ -87,15 +88,15 @@ const bundle = await bundleContext.buildIkrcPublicDebriefBundle_({}, [{round:'�
   ]
 });
 assert.equal(bundle.scores.length, 4, 'only the four official displayed C-3 scorecards may enter the bundle');
-assert.equal(bundle.rankInfo.avgScore, 67, 'the public average must be 268 divided by the four displayed scorecards');
-assert.equal(bundle.rankInfo.displayedScoreSum, 268);
-assert.equal(bundle.rankInfo.displayedScoreCount, 4);
+assert.equal(bundle.rankInfo.avgScore, 64.93, 'the public average must exclude the comparison head: 194.8 divided by three sensory scorecards');
+assert.equal(bundle.rankInfo.displayedScoreSum, 194.8);
+assert.equal(bundle.rankInfo.displayedScoreCount, 3);
 assert.equal(bundle.rankInfo.headCount, 1);
 assert.equal(bundle.rankInfo.sensoryCount, 3);
 
 const avgBox = functionSource(debriefing, 'buildIkrcRoundAverageBox_');
 assert.match(avgBox, /총점 합계.*÷/, 'the debriefing sheet must show the exact average formula');
-assert.match(avgBox, /이 선수를 평가한 심사위원별 총점의 평균/, 'the sheet must explain that it averages judges for one player without assuming a fixed cup count');
+assert.match(avgBox, /이 선수를 평가한 센서리 심사위원별 총점의 평균/, 'the sheet must explain that it averages judges for one player without assuming a fixed cup count');
 assert.match(avgBox, /totalSum \/ totals\.length/, 'the visible average must be recalculated from the visible scorecards');
 assert.doesNotMatch(avgBox, /rank\.avgScore/, 'a stale ranking average must never override the visible scorecards');
 const rankBox = functionSource(debriefing, 'buildRankBox');
