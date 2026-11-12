@@ -4071,6 +4071,9 @@ function kcacSubtotalFromRaw_(extra) {
 function singleRowExtra_(payload, code, rowIndex=0) {
   const rows = Array.isArray(payload && payload.rows) ? payload.rows : [];
   const row = rows[rowIndex] || rows[0] || {};
+  // A legacy IKRC submission may contain several cups. Per-cup values must
+  // outrank a stale submission-wide snapshot during correction and ranking.
+  if (safeStr(code).toUpperCase() === 'IKRC' && rows.length > 1) return extractExtraSingleRow_(payload, code, rowIndex);
   return extractExtra(Object.assign({}, payload || {}, { rows: [row] }), code, 0);
 }
 function canonicalScoreForPayload_(code, payload, rowIndex=0, preparedExtra=null) {
@@ -6037,7 +6040,9 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
   const dqReason = dq ? firstNonEmpty([item['실격사유'], inferred.dqReason, current.disqualification_reason]) : '';
   const status = statusRequested;
   if (finalPreparation) {
-    if(unit!==current.unit) return {success:false,message:'반려 수정에서는 참가자번호를 바꿀 수 없습니다.'};
+    const originalUnit = code === 'IKRC' && payload.rows.length > 1
+      ? rowToReviewItem(current, code, headers, current.round, targetRowIndex).unit : current.unit;
+    if(unit!==originalUnit) return {success:false,message:'반려 수정에서는 참가자번호를 바꿀 수 없습니다.'};
     if(finalSubmissionScope_(code,payload,current.role)!==finalSubmissionScope_(code,parseJson(current.payload_json,{}),current.role))return {success:false,message:'반려 수정에서는 평가 영역이나 경기 매치를 바꿀 수 없습니다. 운영자에게 확인해주세요.'};
     return {success:true,row:{...current,total_score:total,disqualified:boolInt(dq),disqualification_reason:dqReason,payload_json:JSON.stringify(payload)}};
   }
