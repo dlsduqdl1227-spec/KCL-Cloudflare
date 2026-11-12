@@ -74,7 +74,9 @@ try {
       await page.waitForFunction(()=>_ranking?.selectedRound==='결선');
       assert.equal(await page.locator('#ranking-list .rank-row').count(),0,'preliminary rows never appear in empty finals');
     }
+    const rankingResponse=page.waitForResponse(r=>r.request().postDataJSON()?.action==='getRanking'&&r.request().postDataJSON()?.args?.[2]==='예선');
     await page.evaluate(()=>goRankingByCode('KCR','KCR','예선'));
+    await rankingResponse;
     await page.waitForFunction(()=>document.querySelectorAll('#ranking-list .rank-row').length===226);
     await page.locator('#ranking-list .rank-row').nth(40).scrollIntoViewIfNeeded();
     await page.screenshot({path:'tmp/stage237-qa/ranks-after-40-'+width+'.png'});

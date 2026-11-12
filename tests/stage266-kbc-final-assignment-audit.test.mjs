@@ -56,10 +56,11 @@ try{
  await page.waitForFunction(()=>!_kclDraftApplying);
  await page.evaluate(()=>{hideEval();_selComp={code:'MOB',name:'MOB',currentRound:'예선'};startMob();});
  const mobDraftKey=await page.evaluate(()=>{
-   const group=mobVisibleTagGroups_()[0],category=Object.keys(group.data)[0];
-   for(let i=1;i<=12;i++)mobToggleTagValue_(group.key,category,'MOB 복원 표현 '+i);
-   mobRefreshInlineTagCategory_(group.key,category);kclSaveActiveEvalDraftNow_(true);return kclDraftKey_('MOB');
+   const meta=mobAttrTagMeta_(MOB_TECH[0]);
+   for(let i=1;i<=12;i++)mobToggleTagValue_(meta.group,meta.category,'MOB 복원 표현 '+i);
+   mobRefreshInlineTagCategory_(meta.group,meta.category);kclSaveActiveEvalDraftNow_(true);return kclDraftKey_('MOB');
  });
+ await page.waitForFunction(()=>document.querySelector('#evalMob .kcl-tag-launch')?.textContent.includes('12개'));
  assert.match(await page.locator('#evalMob .kcl-tag-launch').first().innerText(),/12개/,'the fixture must populate the visible MOB field before reload');
  assert.equal(await page.evaluate(key=>!!JSON.parse(localStorage.getItem(key))?.state?.mobTags,mobDraftKey),true);
  await page.reload();

@@ -1355,6 +1355,7 @@ function kcacDebriefJudgeKey_(score, fallbackIndex) {
 function isSensoryDebriefCard_(score, competition) {
   if (['KCAC','KTCC'].indexOf(String(competition || '').toUpperCase()) >= 0) return false;
   var role = String(score['역할'] || score.Role || score.JudgeRole || '').toLowerCase();
+  if (String(competition || '').toUpperCase() === 'IKRC' && /헤드|head/.test(role)) return false;
   return !/technical|테크|기술/.test(role) && /sensory|센서|감각|심사/.test(role);
 }
 function sensoryDebriefJudgeKey_(score, fallbackIndex) {

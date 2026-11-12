@@ -33,6 +33,10 @@ export function runSuite(suite,options={}){
     ok:result.status===0&&number('tests')>0&&number('fail')===0,failures:[...text.matchAll(/^not ok \d+ - (.+)$/gm)].map(m=>m[1]),log:path.relative(root,log)};
   fs.writeFileSync(report,JSON.stringify(summary,null,2)+'\n');
   console.log(JSON.stringify(summary));
-  if(!summary.ok)console.error(text.split('\n').slice(-130).join('\n')||result.error?.message||result.stderr);
+  if(!summary.ok){
+    const lines=text.split('\n');
+    for(let i=0;i<lines.length;i++)if(/^not ok /.test(lines[i]))console.error(lines.slice(Math.max(0,i-38),i+24).join('\n'));
+    console.error(lines.slice(-15).join('\n')||result.error?.message||result.stderr);
+  }
   return summary;
 }

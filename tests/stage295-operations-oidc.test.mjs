@@ -23,3 +23,9 @@ test('rejects forged signatures, alg confusion, unavailable key service and over
   assert.equal(await verifyOperationsToken('x'.repeat(17000),{now,fetcher}),false);
   assert.equal(await verifyOperationsToken(undefined,{now,fetcher}),false);
 });
+test('unknown key IDs cannot force repeated requests to the GitHub key service',async()=>{
+  let requests=0;const bounded=async(...args)=>{requests++;return fetcher(...args);};
+  assert.equal(await verifyOperationsToken(await signed(),{now,fetcher:bounded}),true);
+  for(const kid of ['unknown-1','unknown-2','unknown-3'])assert.equal(await verifyOperationsToken(await signed({},{kid}),{now,fetcher:bounded}),false);
+  assert.equal(requests,1);
+});
