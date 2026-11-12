@@ -7,7 +7,7 @@ const seconds=1800000000,now=seconds*1000;
 const original={iss:'https://token.actions.githubusercontent.com',aud:OPS_AUDIENCE,repository:'dlsduqdl1227-spec/KCL-Cloudflare',repository_id:'1283722078',repository_owner_id:'240860836',ref:'refs/heads/main',ref_type:'branch',workflow_ref:'dlsduqdl1227-spec/KCL-Cloudflare/.github/workflows/kcl-cloud.yml@refs/heads/main',runner_environment:'github-hosted',event_name:'push',sub:'repo:immutable-id:ref:refs/heads/main',iat:seconds-5,nbf:seconds-5,exp:seconds+295};
 const b64=value=>Buffer.from(typeof value==='string'?value:JSON.stringify(value)).toString('base64url');
 async function signed(changes={},header={}){const h=b64({alg:'RS256',kid:'qa-key',...header}),p=b64({...original,...changes});return h+'.'+p+'.'+Buffer.from(await crypto.subtle.sign('RSASSA-PKCS1-v1_5',pair.privateKey,new TextEncoder().encode(h+'.'+p))).toString('base64url');}
-const fetcher=async(url,options)=>{assert.equal(url,'https://token.actions.githubusercontent.com/.well-known/jwks');assert.equal(options.redirect,'error');return new Response(JSON.stringify({keys:[jwk]}));};
+const fetcher=async(url,options)=>{assert.equal(url,'https://token.actions.githubusercontent.com/.well-known/jwks');assert.equal(options.redirect,'manual');return new Response(JSON.stringify({keys:[jwk]}));};
 test('only signed main deployment workflow tokens with immutable repository IDs authorize diagnostics',async()=>{
   assert.equal(await verifyOperationsToken(await signed(),{now,fetcher}),true);
   assert.equal(await verifyOperationsToken(await signed({event_name:'workflow_dispatch'}),{now,fetcher}),true);
@@ -28,4 +28,18 @@ test('unknown key IDs cannot force repeated requests to the GitHub key service',
   assert.equal(await verifyOperationsToken(await signed(),{now,fetcher:bounded}),true);
   for(const kid of ['unknown-1','unknown-2','unknown-3'])assert.equal(await verifyOperationsToken(await signed({},{kid}),{now,fetcher:bounded}),false);
   assert.equal(requests,1);
+});
+
+test('Cloudflare-compatible fetch rejects redirects without following another key host',async()=>{
+  let requests=0,stage='';
+  const fetcher=async(url,options)=>{
+    requests++;
+    // workerd throws TypeError for redirect:error before sending a request.
+    assert.equal(options.redirect,'manual');
+    assert.equal(url,'https://token.actions.githubusercontent.com/.well-known/jwks');
+    return new Response(null,{status:302,headers:{Location:'https://untrusted.test/keys'}});
+  };
+  assert.equal(await verifyOperationsToken(await signed(),{now,fetcher,onReject:value=>{stage=value;}}),false);
+  assert.equal(requests,1);
+  assert.equal(stage,'jwks_http_302');
 });
