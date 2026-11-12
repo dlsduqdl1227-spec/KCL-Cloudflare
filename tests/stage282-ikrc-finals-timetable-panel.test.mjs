@@ -19,11 +19,11 @@ try{
  // A head can evaluate both stations, but cannot create a ranking alone.
  for(const station of stations)await api.rpc('submitScores',ikrcFinalSubmission(judges[0],station,10));
  assert.equal((await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking.length,0);
- const headOnlyDetail=await api.rpc('getRankingDetail','IKRC','A-1','결선',api.actor);assert.equal(headOnlyDetail.totalScore,0);assert.equal(headOnlyDetail.avgScore,0);assert.equal(headOnlyDetail.rows.length,1);
+ const headOnlyDetail=await api.rpc('getRankingDetail','IKRC','A-1','결선',api.actor);assert.equal(headOnlyDetail.totalScore,0);assert.equal(headOnlyDetail.avgScore,0);assert.equal(headOnlyDetail.rows.length,0);assert.equal(headOnlyDetail.comparisonRows.length,1);
  await api.rpc('updateIkrcSeedToCupResult',{targetType:'participantId',targetValue:String(participants[0].id),expectedSavedAt:''},3,'결선 결과',api.actor);
  for(let i=1;i<judges.length;i++)for(const station of stations)await api.rpc('submitScores',ikrcFinalSubmission(judges[i],station,6+i/10));
  let ranking=(await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking;assert.equal(ranking.length,12);assert.ok(ranking.every(r=>r.roastingScore===63&&r.confirmedJudgeCount===5&&r.headCount===1&&r.sensoryCount===5));assert.equal(ranking.find(r=>r.unit==='A-1').rankingScore,66);
- const detail=await api.rpc('getRankingDetail','IKRC','A-1','결선',api.actor);assert.equal(detail.avgScore,63);assert.equal(detail.totalScore,66);assert.equal(detail.rows.length,6);
+ const detail=await api.rpc('getRankingDetail','IKRC','A-1','결선',api.actor);assert.equal(detail.avgScore,63);assert.equal(detail.totalScore,66);assert.equal(detail.rows.length,5);assert.equal(detail.comparisonRows.length,1);
  const comparison=await api.rpc('getIkrcOfficialCalibrationResultsByCup','A-1',{scope:'station',stationId:stations[0].id},judges[0]);assert.equal(comparison.headCount,1);assert.equal(comparison.judgeCount,5);assert.equal(comparison.rows.length,6);assert.equal(comparison.finalAverage,63);assert.equal(comparison.headScoreIncluded,false);
  for(let i=0;i<judges.length;i++)await api.rpc('submitScores',ikrcFinalSubmission(judges[i],stations[0],i?4:9,'IKRC 스테이션 켈리브레이션'));
  const calibration=await raw('getIkrcCalibrationResultsByCup','A-1',{scope:'station',stationId:stations[0].id},judges[0]);assert.equal(calibration.length,6);assert.equal(calibration.filter(p=>p.isHeadCalibration).length,1);

@@ -65,6 +65,7 @@ assert.match(registry, /affiliationLabel=ktcc\?'팀원':'소속'/);
 assert.match(registry, /round==='예선'\?\(ktcc\?'팀번호':'참가번호'\)/);
 assert.match(registry, /function ktccTeamMembers_/);
 assert.match(assessment, /팀번호를 선택하면 팀명과 팀원 이름이 함께 표시됩니다/);
-assert.match(pkg.scripts.posttest, /stage191-ktcc-team-roster\.test\.mjs/);
+const plan = JSON.parse(fs.readFileSync(new URL('./test-plan.json', import.meta.url), 'utf8'));
+assert.ok(plan.api.includes('tests/stage191-ktcc-team-roster.test.mjs'), 'default API suite must register this test');
 
 process.stdout.write('Stage191 KTCC team roster tests passed.\n');

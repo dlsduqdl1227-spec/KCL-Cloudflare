@@ -675,6 +675,7 @@ async function dispatch(action, args, env, request) {
     getKbcMainTimetablePlan: () => getKbcMainTimetablePlan(env, args[0]),
     applyKbcMainTimetable: () => applyKbcMainTimetable(env, args[0], args[1]),
     getRanking: () => getRanking(env, args[0], args[1], args[2]),
+    getCompetitionOpsAudit: () => getCompetitionOpsAudit_(env, args[0], args[1]),
     getRankingDetail: () => getRankingDetail(env, args[0], args[1], args[2], args[3]),
     getAdminDebriefPreviewOptions: () => getAdminDebriefPreviewOptions(env, args[0], args[1]),
     getAdminDebriefPreview: () => getAdminDebriefPreview(env, args[0], args[1], args[2], args[3], args[4]),
@@ -8025,6 +8026,51 @@ async function getRanking(env, competitionCode, actorArg, requestedRound) {
     return redactKcacIdentityForActor_(auth.actor, code, item, data.headers);
   });
   return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : code, currentRound: data.cfg ? data.cfg.current_round : '', selectedRound, unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking, tieBreakRule: tieRuleLabel_(code, selectedRound || (data.cfg ? data.cfg.current_round : '')) };
+}
+
+// Read-only diagnostics: use the same fresh source records as the ranking API.
+// Return aggregate counts only; no participant/judge names, contacts, comments,
+// sample numbers, individual scores or SQL are exposed to automation logs.
+export async function runCompetitionAudit(env, competitionCode) {
+  const code=safeStr(competitionCode).toUpperCase();
+  if(!COMPETITION_CODES.includes(code))throw new Error('invalid competition');
+  const data=await buildRankingData_(env,code,'',code==='KCR');
+  const issues=[], add=(severity,key,count)=>{if(count>0)issues.push({severity,code:key,count});};
+  const raw=(await env.DB.prepare('SELECT id,payload_json FROM scores WHERE competition_code=?').bind(code).all()).results||[];
+  let malformed=0;for(const row of raw){try{const p=JSON.parse(row.payload_json);if(!p||typeof p!=='object')malformed++;}catch{malformed++;}}
+  add('error','INVALID_SCORE_PAYLOAD',malformed);
+  add('error','MISSING_COMPETITION_CONFIG',data.cfg?0:1);
+  const rows=data.rows,active=officialScoreItemsForOutput_(code,rows.filter(item=>shouldCountItemInRanking_(code,item)));
+  add('warning','MISSING_SELECTED_HISTORY',new Set(rows.filter(r=>r.ikrcSelectionMissing).map(ikrcSelectionBucket_)).size);
+  const keys=new Set();let duplicateRank=0,invalidRank=0,headIncluded=0,sensoryMismatch=0;
+  for(const row of data.ranking){
+    const key=row.round+'::'+row.unit;if(keys.has(key))duplicateRank++;keys.add(key);
+    if(!Number.isFinite(row.rankingScore)||!Number.isFinite(row.totalScore))invalidRank++;
+    if(code==='IKRC'){
+      if(row.headScoreIncluded!==false)headIncluded++;
+      const group=rows.filter(r=>shouldCountItemInRanking_(code,r)&&roundName_(r.round||r['라운드'],'')===row.round&&itemNumber_(r)===row.unit&&!itemOfficialDq_(r));
+      const sensory=ikrcOfficialPanelRows_(group).liveRows.filter(r=>!r.ikrcRankingExcluded&&!isHeadRole_(r['역할']||r.role));
+      if(sensory.length!==row.confirmedJudgeCount)sensoryMismatch++;
+    }
+  }
+  add('error','DUPLICATE_RANKED_UNIT',duplicateRank);add('error','NONFINITE_RANKING',invalidRank);
+  add('error','IKRC_HEAD_INCLUDED',headIncluded);add('error','IKRC_SENSORY_COUNT_MISMATCH',sensoryMismatch);
+  add('info','OFFICIAL_OVERRIDE_PRESERVED',data.ranking.filter(r=>r.officialResultOverride).length);
+  add('info','IKRC_LEGACY_FINAL_OVERRIDE_IGNORED',data.ranking.filter(r=>r.ignoredOfficialResultOverride).length);
+  const rounds=COMPETITION_ROUNDS[code].map(round=>{
+    const list=rows.filter(r=>roundName_(r.round||r['라운드'],'')===round),ranking=data.ranking.filter(r=>r.round===round);
+    return {round,state:list.length?'recorded':'not_started',records:list.length,rankedUnits:ranking.length,returned:list.filter(returnedEvaluation_).length,
+      awaitingReview:list.filter(r=>!returnedEvaluation_(r)&&!officialReviewCompleted_(code,r)).length,
+      incompletePanels:code==='IKRC'?ranking.filter(r=>!r.panelComplete).length:0};
+  });
+  return {schemaVersion:1,competition:code,checkedAt:nowIso(),currentRound:data.cfg?.current_round||'',active:!!data.cfg?.is_active,
+    records:raw.length,virtualRecords:rows.length,activeOfficialRecords:active.length,historyRecords:rows.filter(r=>r.ikrcRankingSuppressed).length,
+    rounds,issues,status:issues.some(i=>i.severity==='error')?'error':issues.some(i=>i.severity==='warning')?'warning':'ok',readOnly:true};
+}
+async function getCompetitionOpsAudit_(env,code,actorArg){
+  code=safeStr(code).toUpperCase();if(!COMPETITION_CODES.includes(code))return {success:false,message:'대회를 선택해주세요.'};
+  const auth=await requireManageActorForCode_(env,actorArg,code);if(!auth.ok)return auth.res;
+  return {success:true,audit:await runCompetitionAudit(env,code)};
 }
 const KBC_MAIN_TIMETABLE_2026_ = {
   days:[

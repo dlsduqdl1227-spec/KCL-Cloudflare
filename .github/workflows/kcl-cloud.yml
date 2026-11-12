@@ -1,0 +1,89 @@
+name: KCL Cloud
+on:
+  push:
+    branches: [main, 'ops/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      competition:
+        description: 읽기 전용 운영 진단 대상
+        type: choice
+        default: all
+        options: [all, KBC, KTCC, MOC, MOB, KCR, IKRC, KCAC]
+permissions:
+  contents: read
+concurrency:
+  group: kcl-cloud-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  api-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: api-audit
+          path: tmp/kcl-checks/
+          retention-days: 14
+  browser-audit:
+    needs: api-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      KCL_BROWSER_CHANNEL: bundled
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: browser-audit
+          path: tmp/kcl-checks/
+          retention-days: 14
+  live-audit:
+    needs: [api-audit, browser-audit]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      KCL_AUDIT_COMPETITION: ${{ inputs.competition || 'all' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm ops:live
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: live-audit
+          path: tmp/kcl-checks/*.json
+          retention-days: 14

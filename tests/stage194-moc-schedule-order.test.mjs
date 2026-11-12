@@ -67,6 +67,7 @@ assert.match(rpc, /aCode === 'MOB' \|\| aCode === 'KBC' \|\| aCode === 'MOC'/);
 assert.match(rpc, /if \(am\.operatingDay !== bm\.operatingDay\)/);
 assert.match(registry, /function setParticipantDefaultSortForCode_\(code\)/);
 assert.match(registry, /code==='MOC'\)\{select\.value='schedule'/);
-assert.match(pkg.scripts.posttest, /stage194-moc-schedule-order\.test\.mjs/);
+const plan = JSON.parse(fs.readFileSync(new URL('./test-plan.json', import.meta.url), 'utf8'));
+assert.ok(plan.api.includes('tests/stage194-moc-schedule-order.test.mjs'), 'default API suite must register this test');
 
 process.stdout.write('Stage194 MOC day and schedule ordering tests passed.\n');

@@ -80,7 +80,7 @@ test('IKRC return and resubmit keep station confirmation, comparisons and ranks 
   assert.equal((await cups(a)).finalization,null);
   assert.deepEqual((await cups(b)).finalization,bConfirmation);
   const seed=await api.rpc('getIkrcSeedToCupConsole',api.actor);
-  assert.equal(seed.finalists.find(p=>p.targetValue===String(participants[0].id)).sensoryRowCount,5);
+  assert.equal(seed.finalists.find(p=>p.targetValue===String(participants[0].id)).sensoryRowCount,4);
   const returned=await api.rpc('getReviewList','IKRC',{...judges[5],round:'결선',returnedOnly:true});
   assert.equal(returned.list.length,1);
   await api.rpc('finalizeIkrcStationEvaluation',scope(a),judges[0]);

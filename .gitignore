@@ -7,3 +7,5 @@ node_modules/
 /output/
 /outputs/
 /20??????/
+/lib/verified-release.mjs
+/public/ops-build.json

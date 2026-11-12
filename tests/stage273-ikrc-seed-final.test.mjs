@@ -36,7 +36,7 @@ try {
  assert.equal(preview.scores.reduce((sum,s)=>sum+s['총점'],0)/6,62.5,'judge cards keep original roasting total');
  consoleData=await api.rpc('getIkrcSeedToCupConsole',api.actor);
  let saved=consoleData.finalists.find(p=>p.targetValue===target.targetValue);
- assert.equal(saved.seedBonus,3);assert.equal(saved.seedSaved,true);assert.equal(saved.sensoryRowCount,6);
+ assert.equal(saved.seedBonus,3);assert.equal(saved.seedSaved,true);assert.equal(saved.sensoryRowCount,5);
  assert.equal((await reject('updateIkrcSeedToCupResult',{...target,expectedSavedAt:''},1,'stale',api.actor)).success,false);
  await api.rpc('updateIkrcSeedToCupResult',{...target,expectedSavedAt:saved.seedSavedAt},2,'수정 결과',api.actor);
  assert.equal((await api.rpc('getRanking','IKRC',api.actor,'결선')).ranking.find(r=>r.unit==='A-1').rankingScore,65);

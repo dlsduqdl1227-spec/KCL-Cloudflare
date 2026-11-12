@@ -18,6 +18,7 @@ for (const indexName of ['idx_operators_phone_id', 'idx_sessions_expires_at', 'i
   assert.match(rpc, new RegExp('CREATE INDEX IF NOT EXISTS ' + indexName));
 }
 assert.doesNotMatch(migration, /DROP\s+INDEX|DROP\s+TABLE|DELETE\s+FROM/i, 'index migration must not remove production data');
-assert.match(pkg.scripts.posttest, /stage190-d1-query-plan-indexes\.test\.mjs/);
+const plan = JSON.parse(fs.readFileSync(new URL('./test-plan.json', import.meta.url), 'utf8'));
+assert.ok(plan.api.includes('tests/stage190-d1-query-plan-indexes.test.mjs'), 'default API suite must register this test');
 
 process.stdout.write('Stage190 D1 query-plan index tests passed.\n');

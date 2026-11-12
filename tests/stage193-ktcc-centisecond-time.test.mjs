@@ -68,6 +68,7 @@ assert.match(assessment, /id="ktcc-end-centi"/);
 assert.match(assessment, /분·초·1\/100초까지 입력/);
 assert.match(assessment, /normalizeKtccElapsedTimeDisplay_\(el\.value\)/);
 assert.match(rpc, /function formatKtccEndTime_/);
-assert.match(pkg.scripts.posttest, /stage193-ktcc-centisecond-time\.test\.mjs/);
+const plan = JSON.parse(fs.readFileSync(new URL('./test-plan.json', import.meta.url), 'utf8'));
+assert.ok(plan.api.includes('tests/stage193-ktcc-centisecond-time.test.mjs'), 'default API suite must register this test');
 
 process.stdout.write('Stage193 KTCC centisecond time tests passed.\n');

@@ -12,6 +12,7 @@ assert.match(assessment, /\.d1-usage-grid\{display:grid;grid-template-columns:re
 assert.match(assessment, /@media\(max-width:760px\)\{\.d1-usage-grid\{grid-template-columns:1fr\}\}/);
 assert.match(assessment, /@media\(max-width:560px\)\{\.d1-usage-head\{display:block\}/);
 assert.match(assessment, /font-size:clamp\(16px,1\.6vw,20px\)/);
-assert.match(pkg.scripts.posttest, /stage192-d1-responsive-layout\.test\.mjs/);
+const plan = JSON.parse(fs.readFileSync(new URL('./test-plan.json', import.meta.url), 'utf8'));
+assert.ok(plan.api.includes('tests/stage192-d1-responsive-layout.test.mjs'), 'default API suite must register this test');
 
 process.stdout.write('Stage192 D1 responsive layout tests passed.\n');

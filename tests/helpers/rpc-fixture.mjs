@@ -32,5 +32,5 @@ export async function createRpcFixture(options = {}) {
   }
   await rpc('ping');
   const actor=await rpc('adminLogin','01099990000','local-qa-only','5061');
-  return {db,actor,rpc,handle,close:()=>db.close()};
+  return {db,actor,rpc,handle,env,audit:code=>api.runCompetitionAudit(env,code),close:()=>db.close()};
 }
