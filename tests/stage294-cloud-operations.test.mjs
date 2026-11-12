@@ -48,3 +48,20 @@ test('operations endpoint rejects unsigned requests before touching D1',async()=
   const {onRequestPost}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
   const response=await onRequestPost({request:new Request('https://qa.test/api/operations',{method:'POST',body:'{}'}),env:{}});assert.equal(response.status,401);
 });
+
+test('machine diagnostics export only a health boolean and flag both errors and warnings',async()=>{
+  let source=fs.readFileSync(new URL('../functions/api/operations.js',import.meta.url),'utf8');
+  source=source.replace("import {RELEASE_INFO} from '../../lib/release-info.mjs';","const RELEASE_INFO={sourceId:'test'};")
+    .replace("import {verifyOperationsToken} from '../../lib/ops-auth.mjs';","const verifyOperationsToken=async()=>true;")
+    .replace("import {runCompetitionAudit} from './rpc.js';","let status='ok'; export const setStatus=value=>{status=value;}; const runCompetitionAudit=async()=>({status,records:99,rounds:[{records:99}],scores:[{name:'private-fixture',score:87}]});");
+  const api=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+  for(const status of ['ok','warning','error']){
+    api.setStatus(status);
+    const response=await api.onRequestPost({request:new Request('https://qa.test/api/operations',{method:'POST',headers:{Authorization:'Bearer signed.test.token'},body:JSON.stringify({competition:'IKRC'})}),env:{}});
+    assert.equal(response.status,200);
+    const text=await response.text(),result=JSON.parse(text);
+    assert.deepEqual(Object.keys(result).sort(),['healthy','release','success']);
+    assert.equal(result.healthy,status==='ok');
+    assert.doesNotMatch(text,/private-fixture|scores|records|rounds|87|99/);
+  }
+});

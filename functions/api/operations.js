@@ -13,7 +13,7 @@ export async function onRequestPost({request,env}){
     const audit=await runCompetitionAudit(env,body.competition);
     // Machine access reveals a health flag only. No counts, rounds, issues,
     // identities, score records or private metadata leave this endpoint.
-    return new Response(JSON.stringify({success:true,release:RELEASE_INFO,healthy:audit.status!=='error'}),{headers});
+    return new Response(JSON.stringify({success:true,release:RELEASE_INFO,healthy:audit.status==='ok'}),{headers});
   }
   catch{return new Response(JSON.stringify({success:false,error:'audit_unavailable',release:RELEASE_INFO}),{status:503,headers});}
 }
