@@ -15,7 +15,7 @@ function finalDraftKey_(item) {
 var _finalCorrectionDrafts={};
 var _finalCorrectionSaving=false;
 function canAdminManageFinalItem_(item){return !!(item&&item.finalWorkflow&&!item.stationClosed&&isAdminRole()&&reviewManageScopeForCode_(_reviewState.code));}
-function canCorrectFinalItem_(item){return !!(item&&item.finalWorkflow&&!item.stationClosed&&(canAdminManageFinalItem_(item)||_reviewState.code==='KCR'||item.status==='반려'));}
+function canCorrectFinalItem_(item){return !!(item&&item.finalWorkflow&&!item.stationClosed&&!(_reviewState.code==='IKRC'&&item.ikrcRankingSuppressed)&&(canAdminManageFinalItem_(item)||_reviewState.code==='KCR'||item.status==='반려'));}
 function finalCorrectionSaveLabel_(){return _reviewState.code==='KCR'||canAdminManageFinalItem_(_reviewState.current)?'수정완료':'수정 후 재제출';}
 function finalCorrectionItems_(item){var items=reviewGroupItems_(item);return items.length?items:[item];}
 function readFinalDraft_(item){
@@ -69,6 +69,7 @@ function renderFinalEvaluationRows_(visible,code,wrap){
     };
     var button=row.querySelector('.final-return-btn');if(button)button.onclick=function(){returnFinalEvaluationUi_(group.filter(function(x){return x.status!=='반려';}),button);};
     if(code==='KTCC'&&typeof ktccAddFinalDecisionAction_==='function')ktccAddFinalDecisionAction_(row,item);
+    if(code==='IKRC'&&typeof appendIkrcHistoryButton_==='function')appendIkrcHistoryButton_(row,item);
     wrap.appendChild(row);
   });
 }

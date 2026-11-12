@@ -662,6 +662,8 @@ async function dispatch(action, args, env, request) {
     resubmitFinalEvaluations: () => resubmitFinalEvaluations(env, args[0], args[1]),
     submitWithSignature: () => submitScores(env, args[0], args[1] || (args[0] && (args[0].signatureBase64 || args[0].signatureData || args[0].signature)), request),
     getReviewList: () => getReviewList(env, args[0], args[1]),
+    getIkrcScoreHistory: () => getIkrcScoreHistory(env, args[0], args[1]),
+    selectIkrcOfficialScore: () => selectIkrcOfficialScore(env, args[0], args[1]),
     updateReviewRow: () => updateReviewRow(env, args[0], args[1], args[2], args[3], args[4], args[5]),
     updateReviewStatus: () => updateReviewStatus(env, args[0], [args[1]], args[2], args[3], args[4]),
     updateReviewStatusBatch: () => updateReviewStatus(env, args[0], args[1], args[2], args[3], args[4]),
@@ -1248,6 +1250,118 @@ function ikrcApplyFinalPanel_(rows, panel, fallbackRound='') {
     return {...row, role:account.seat === 'head' ? '센서리 헤드 심사위원' : '센서리 심사위원', ikrcPanelOperatorId:Number(account.id), ikrcRankingExcluded:account.seat !== 'sensory'};
   });
 }
+
+const IKRC_OFFICIAL_SELECTION_KIND_ = 'IKRC_OFFICIAL_SELECTION';
+function ikrcScoreRefKey_(value) {
+  const ref = parseReviewRowRef_(value);
+  return String(ref.id) + ':' + String(ref.payloadRowIndex || 0);
+}
+function ikrcSelectionBucket_(item) {
+  return JSON.stringify([roundName_(item.round || item['라운드'], ''), safeStr(itemNumber_(item)).toUpperCase(), itemJudgeIdentityKey_(item)]);
+}
+async function loadIkrcOfficialSelections_(env) {
+  const result = await env.DB.prepare("SELECT token, payload_json FROM sessions WHERE kind=? AND expires_at>?")
+    .bind(IKRC_OFFICIAL_SELECTION_KIND_, nowIso()).all();
+  const map = new Map();
+  (result.results || []).forEach(row => {
+    const selection = parseJson(row.payload_json, {});
+    if (safeStr(selection.bucket) && safeStr(selection.rowIndex)) map.set(selection.bucket, {...selection, token:row.token, storedPayload:row.payload_json});
+  });
+  return map;
+}
+async function ikrcSelectionToken_(bucket) {
+  return IKRC_OFFICIAL_SELECTION_KIND_ + ':' + await sha256Hex_(bucket);
+}
+function ikrcApplyOfficialSelections_(items, selections) {
+  const groups = new Map(), metadata = new Map();
+  (items || []).forEach(item => {
+    if (isCalibrationMode_(item.mode || item['모드'])) return;
+    const bucket = ikrcSelectionBucket_(item);
+    if (!groups.has(bucket)) groups.set(bucket, []);
+    groups.get(bucket).push(item);
+  });
+  groups.forEach((rows, bucket) => {
+    const selection = selections && selections.get(bucket);
+    let chosen = null;
+    if (selection) chosen = rows.find(row => ikrcScoreRefKey_(row.rowIndex) === ikrcScoreRefKey_(selection.rowIndex)) || null;
+    else rows.forEach(row => { if (scoreItemIsNewer_(row, chosen)) chosen = row; });
+    rows.forEach(row => metadata.set(row, {ikrcOfficialSelected:row === chosen, ikrcRankingSuppressed:row !== chosen,
+      ikrcHistoryCount:rows.length, ikrcSelectionSource:selection ? 'manual' : 'latest', ikrcSelectionMissing:!chosen}));
+  });
+  return (items || []).map(item => metadata.has(item) ? {...item, ...metadata.get(item)} : item);
+}
+async function ikrcScoreHistoryContext_(env, request, actorArg) {
+  const auth = await requireManageActorForCode_(env, actorArg, 'IKRC', '과거 평가 선택은 IKRC 팀장·관리자 권한이 필요합니다.');
+  if (!auth.ok) return auth.res;
+  const round = rankingRoundScope_(request && request.round);
+  if (!['예선','결선'].includes(round)) return {success:false,message:'과거 평가를 확인할 라운드를 선택해주세요.'};
+  const cfg = await env.DB.prepare("SELECT * FROM competitions WHERE code='IKRC'").first();
+  const result = await env.DB.prepare("SELECT * FROM scores WHERE competition_code='IKRC' ORDER BY id DESC").all();
+  const originals = result.results || [], panel = await loadIkrcFinalPanel_(env);
+  const raw = ikrcApplyFinalPanel_(originals, panel, cfg && cfg.current_round);
+  const headers = mergeHeaders('IKRC', raw);
+  const station = ikrcActorAssignedStationServer_(auth.actor, cfg);
+  const scoped = station ? raw.filter(row => ikrcScoreBelongsToStationServer_(row, station)) : raw;
+  const items = scoped.flatMap(row => rowToReviewItems_(row, 'IKRC', headers, cfg && cfg.current_round))
+    .filter(item => roundName_(item.round, '') === round && !isCalibrationMode_(item.mode));
+  const reference = items.find(item => ikrcScoreRefKey_(item.rowIndex) === ikrcScoreRefKey_(request && request.rowIndex));
+  if (!reference) return {success:false,message:'확인할 평가를 찾지 못했습니다. 현재 목록에서 다시 선택해주세요.'};
+  const bucket = ikrcSelectionBucket_(reference), selections = await loadIkrcOfficialSelections_(env);
+  const candidates = ikrcApplyOfficialSelections_(items.filter(item => ikrcSelectionBucket_(item) === bucket), selections);
+  const ids = new Set(candidates.map(item => parseReviewRowRef_(item.rowIndex).id));
+  const guardedRows = originals.filter(row => ids.has(Number(row.id)));
+  const revisions = new Map();
+  for (const row of guardedRows) revisions.set(Number(row.id), await finalEvaluationRevision_(row));
+  const token = await ikrcSelectionToken_(bucket), storedPayload = selections.get(bucket)?.storedPayload || null;
+  const revision = await sha256Hex_(JSON.stringify([bucket, storedPayload, candidates.map(item => [ikrcScoreRefKey_(item.rowIndex), revisions.get(parseReviewRowRef_(item.rowIndex).id)])]));
+  return {success:true,actor:auth.actor,cfg,reference,bucket,candidates,guardedRows,revisions,token,storedPayload,revision,round};
+}
+async function getIkrcScoreHistory(env, request, actorArg) {
+  const context = await ikrcScoreHistoryContext_(env, request, actorArg);
+  if (!context.success) return context;
+  return {success:true,round:context.round,unit:itemNumber_(context.reference),judgeName:context.reference.judgeName,
+    historyRevision:context.revision,entries:context.candidates.map(item => ({
+      rowIndex:item.rowIndex,revision:context.revisions.get(parseReviewRowRef_(item.rowIndex).id),
+      totalScore:ikrcSensoryBaseScoreFromItem_(item),submittedAt:item.submittedAt,status:returnedEvaluation_(item)?'반려':itemOfficialDq_(item)?'실격':'평가완료',
+      isSelected:!!item.ikrcOfficialSelected,canSelect:!item.ikrcRankingExcluded && !isHeadRole_(item.role),
+      comment:safeStr(item['종합코멘트'] || item.comment),
+      scores:{flavor:firstNumberFromKeys_(item,['Flavor(플레이버) ×3','Flavor(플레이버)','Flavor']),
+        cleanCup:firstNumberFromKeys_(item,['Clean Cup(클린컵) ×2','Clean Cup(클린컵)','Clean Cup']),
+        sweetness:firstNumberFromKeys_(item,['Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness']),
+        acidity:firstNumberFromKeys_(item,['Acidity(산미)','Acidity']),
+        mouthfeel:firstNumberFromKeys_(item,['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','Mouthfeel'])}
+    }))};
+}
+async function selectIkrcOfficialScore(env, request, actorArg) {
+  const context = await ikrcScoreHistoryContext_(env, request, actorArg);
+  if (!context.success) return context;
+  if (request.historyRevision !== context.revision) return {success:false,stale:true,message:'평가 또는 선택 상태가 변경되었습니다. 과거 평가 목록을 다시 확인해주세요.'};
+  const target = context.candidates.find(item => ikrcScoreRefKey_(item.rowIndex) === ikrcScoreRefKey_(request.selectedRowIndex));
+  if (!target || target.ikrcRankingExcluded || isHeadRole_(target.role)) return {success:false,message:'같은 심사위원·같은 샘플의 센서리 평가만 선택할 수 있습니다. 헤드는 순위에서 제외됩니다.'};
+  const previous = parseJson(context.storedPayload, {}), selectedAt = nowIso();
+  const payload = JSON.stringify({competitionCode:'IKRC',round:context.round,unit:itemNumber_(target),bucket:context.bucket,rowIndex:String(target.rowIndex),selectedAt,selectedBy:context.actor.name,
+    history:[...(Array.isArray(previous.history)?previous.history:[]),{at:selectedAt,by:context.actor.name,previousRowIndex:previous.rowIndex || null,rowIndex:String(target.rowIndex)}]});
+  const guards = context.guardedRows.map(row => ({id:row.id,payload:row.payload_json,status:row.review_status,total:row.total_score}));
+  const sql = [
+    "WITH guards AS (SELECT value FROM json_each(?)), safe AS MATERIALIZED (SELECT 1 WHERE",
+    "NOT EXISTS(SELECT 1 FROM guards g LEFT JOIN scores s ON s.id=json_extract(g.value,'$.id') AND s.competition_code='IKRC'",
+    "WHERE s.id IS NULL OR s.payload_json IS NOT json_extract(g.value,'$.payload') OR s.review_status IS NOT json_extract(g.value,'$.status')",
+    "OR s.total_score IS NOT json_extract(g.value,'$.total'))",
+    "AND (SELECT payload_json FROM sessions WHERE token=?) IS ?)",
+    "INSERT INTO sessions(token,kind,payload_json,expires_at,created_at) SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM safe)",
+    "ON CONFLICT(token) DO UPDATE SET kind=excluded.kind,payload_json=excluded.payload_json,expires_at=excluded.expires_at,created_at=excluded.created_at"
+  ].join('\n');
+  const update = env.DB.prepare(sql).bind(JSON.stringify(guards),context.token,context.storedPayload,
+    context.token,IKRC_OFFICIAL_SELECTION_KIND_,payload,'2035-12-31T23:59:59.000Z',nowIso());
+  const rawTarget = context.guardedRows.find(row => Number(row.id) === parseReviewRowRef_(target.rowIndex).id);
+  const finalToken = ikrcStationFinalizationTokenForScore_(rawTarget, context.cfg);
+  const result = finalToken ? (await env.DB.batch([update,
+    env.DB.prepare("DELETE FROM sessions WHERE kind='IKRC_STATION_FINALIZATION' AND token=? AND changes()=1").bind(finalToken)]))[0] : await update.run();
+  if (Number(result.meta?.changes) !== 1) return {success:false,stale:true,message:'동시에 평가가 변경되어 선택하지 않았습니다. 입력 내용은 유지됩니다. 목록을 다시 확인해주세요.'};
+  return {success:true,unit:itemNumber_(target),selectedRowIndex:target.rowIndex,
+    message:returnedEvaluation_(target)?'이 평가 1건을 선택했습니다. 반려 내용을 수정·재제출하면 순위에 반영됩니다.':'이 평가 1건만 순위에 반영합니다. 다른 기록은 비교용으로 보존됩니다.'};
+}
+
 function ikrcFinalJudgeSeat_(role) {
   const value = safeStr(role);
   if (/테크니컬|technical/i.test(value)) return '';
@@ -2775,7 +2889,7 @@ async function deleteAuxSessionsForCompetition_(env, code) {
   }
   if (code === 'IKRC') {
     // IKRC 보조 세션 kind는 IKRC 전용입니다. payload에 competitionCode가 없는 구버전 데이터도 IKRC 점수 초기화 때만 함께 삭제합니다.
-    const rs = await env.DB.prepare("SELECT token FROM sessions WHERE kind IN ('IKRC_CALIBRATION_CHECK','IKRC_OFFICIAL_CALIBRATION_CHECK','IKRC_STATION_FINALIZATION','IKRC_SEED_MATCH','IKRC_SEED_RESULT','OFFICIAL_RANKING_OVERRIDE')").all();
+    const rs = await env.DB.prepare("SELECT token FROM sessions WHERE kind IN ('IKRC_CALIBRATION_CHECK','IKRC_OFFICIAL_CALIBRATION_CHECK','IKRC_STATION_FINALIZATION','IKRC_SEED_MATCH','IKRC_SEED_RESULT','IKRC_OFFICIAL_SELECTION','OFFICIAL_RANKING_OVERRIDE')").all();
     for (const row of (rs.results || [])) { await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(row.token).run(); sessionDeleted++; }
   }
   const receiptRows = await env.DB.prepare("SELECT token FROM sessions WHERE kind='SCORE_SUBMISSION_RECEIPT' AND token LIKE ?")
@@ -5766,7 +5880,10 @@ async function getReviewList(env, competitionCode, actorArg) {
     list = list.map(item => compactReview && !finalOfficialEvaluation_(item) ? item : ({...item, _stddev:kcrStationReviewComparison_(item, comparisonIndex.get(kcrComparisonBucketKey_(item)) || [], false)}));
   }
   if (code === 'IKRC') {
-    const latest = latestIkrcReviewItems_(list);
+    const officialSelections = await loadIkrcOfficialSelections_(env);
+    const resolved = ikrcApplyOfficialSelections_(list, officialSelections);
+    const hiddenHistoryCount = resolved.filter(item => item.ikrcRankingSuppressed).length;
+    const latest = latestIkrcReviewItems_(resolved.filter(item => !item.ikrcRankingSuppressed || item.ikrcSelectionMissing));
     list = latest.list.map(item => {
       if (ikrcOfficialHeadItem_(code, item) && !returnedEvaluation_(item)) {
         item.status = '검수완료';
@@ -5774,13 +5891,14 @@ async function getReviewList(env, competitionCode, actorArg) {
       }
       return item;
     });
-    supersededCount = latest.supersededCount;
+    supersededCount = hiddenHistoryCount + latest.supersededCount;
     const canCompareOfficialScores = manager;
     if (canCompareOfficialScores && list.length) {
       const allHeaders = mergeHeaders(code, rawAll);
-      const allOfficialItems = rawAll
+      const allOfficialItems = ikrcApplyOfficialSelections_(rawAll
         .flatMap(r => rowToReviewItems_(r, code, allHeaders, cfg && cfg.current_round))
-        .filter(item => !isCalibrationMode_(item.mode || item['모드']));
+        .filter(item => !isCalibrationMode_(item.mode || item['모드'])), officialSelections)
+        .filter(item => shouldCountItemInRanking_('IKRC', item));
       list = list.map(item => {
         item._stddev = ikrcOfficialReviewComparison_(item, allOfficialItems);
         return item;
@@ -5856,6 +5974,21 @@ async function finalCorrectionContext_(env, request, actorArg, returning) {
     if(returning?returnedEvaluation_(row):(code!=='KCR'&&!adminDirect&&!returnedEvaluation_(row)))return {success:false,message:returning?'이미 반려된 평가입니다.':'반려된 평가만 재제출할 수 있습니다.'};
     originals.set(id,row);
   }
+  if (code === 'IKRC') {
+    const saved = await env.DB.prepare("SELECT * FROM scores WHERE competition_code='IKRC' ORDER BY id ASC").all();
+    const roleRows = ikrcApplyFinalPanel_(saved.results || [], await loadIkrcFinalPanel_(env), cfg && cfg.current_round);
+    const items = roleRows.flatMap(row => rowToReviewItems_(row, code, [], cfg && cfg.current_round));
+    const selections = await loadIkrcOfficialSelections_(env);
+    const resolved = ikrcApplyOfficialSelections_(items, selections);
+    const guards = new Map();
+    for (const entry of entries) {
+      const item = resolved.find(candidate => ikrcScoreRefKey_(candidate.rowIndex) === ikrcScoreRefKey_(entry.rowIndex));
+      if (!item || item.ikrcRankingSuppressed) return {success:false,stale:true,message:'현재 반영할 평가가 변경되었습니다. 입력 내용을 유지하고 과거 평가 선택 상태를 확인해주세요.'};
+      const bucket = ikrcSelectionBucket_(item), token = await ikrcSelectionToken_(bucket);
+      guards.set(token, {token,payload:selections.get(bucket)?.storedPayload || null});
+    }
+    originals.ikrcSelectionGuards = [...guards.values()];
+  }
   return {success:true,code,actor:auth.actor,originals,entries,cfg,adminDirect};
 }
 async function commitFinalCorrection_(env,code,originals,changed,status,cfg){
@@ -5866,11 +5999,12 @@ async function commitFinalCorrection_(env,code,originals,changed,status,cfg){
     json_extract(value,'$.oldStatus') old_status,json_extract(value,'$.payload') payload,json_extract(value,'$.total') total,
     json_extract(value,'$.dq') dq,json_extract(value,'$.reason') reason FROM json_each(?)),
     safe AS MATERIALIZED (SELECT 1 WHERE (SELECT COUNT(*) FROM plan p JOIN scores s ON s.id=p.id AND s.competition_code=?
-      AND s.payload_json IS p.old_payload AND s.review_status IS p.old_status)=?)
+      AND s.payload_json IS p.old_payload AND s.review_status IS p.old_status)=?
+      AND NOT EXISTS(SELECT 1 FROM json_each(?) g WHERE (SELECT payload_json FROM sessions WHERE token=json_extract(g.value,'$.token')) IS NOT json_extract(g.value,'$.payload')))
     UPDATE scores SET payload_json=(SELECT payload FROM plan WHERE id=scores.id),total_score=(SELECT total FROM plan WHERE id=scores.id),
       disqualified=(SELECT dq FROM plan WHERE id=scores.id),disqualification_reason=(SELECT reason FROM plan WHERE id=scores.id),review_status=?
     WHERE competition_code=? AND id IN(SELECT id FROM plan) AND EXISTS(SELECT 1 FROM safe)`)
-    .bind(JSON.stringify(plan),code,plan.length,status,code);
+    .bind(JSON.stringify(plan),code,plan.length,JSON.stringify(originals.ikrcSelectionGuards || []),status,code);
   const tokens=code==='IKRC'?[...new Set([...originals.values()].map(row=>ikrcStationFinalizationTokenForScore_(row,cfg)).filter(Boolean))]:[];
   // Keep the score transition and its station confirmation in the same transaction.
   // A failed compare-and-swap must not clear an otherwise valid confirmation.
@@ -6623,7 +6757,8 @@ async function ikrcOfficialCalibrationRows_(env, requestedScope, actorArg) {
     if (currentRound && scoreRound && scoreRound !== currentRound) return false;
     if (scope.scope === 'station' && scope.station && !ikrcScoreBelongsToStationServer_(scoreRow, scope.station)) return false;
     return true;
-  }).map(row => rowToReviewItem(row, 'IKRC', headers, currentRound));
+  }).flatMap(row => rowToReviewItems_(row, 'IKRC', headers, currentRound));
+  rows = ikrcApplyOfficialSelections_(rows, await loadIkrcOfficialSelections_(env));
   rows = latestOfficialJudgeRowsByUnit_(rows.filter(item => shouldCountItemInRanking_('IKRC', item)));
   return { auth, actorRole, canManageAll, cfg, currentRound, stations, allowedStations, scope, rows };
 }
@@ -6795,7 +6930,9 @@ async function getIkrcSeedToCupConsole(env, actorArg) {
   const participants = await ikrcSeedParticipants_(env);
   const rawRows = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? ORDER BY id ASC').bind('IKRC', '결선').all();
   const headers = mergeHeaders('IKRC', rawRows.results || []);
-  let rows = (rawRows.results || []).map(r => rowToReviewItem(r, 'IKRC', headers, cfg && cfg.current_round));
+  const roleRows = ikrcApplyFinalPanel_(rawRows.results || [], await loadIkrcFinalPanel_(env), cfg && cfg.current_round);
+  let rows = roleRows.flatMap(r => rowToReviewItems_(r, 'IKRC', headers, cfg && cfg.current_round));
+  rows = ikrcApplyOfficialSelections_(rows, await loadIkrcOfficialSelections_(env));
   rows = rows.filter(item => shouldCountItemInRanking_('IKRC', item));
   rows = rows.filter(item => roundName_(item.round || item['라운드']) === '결선');
   const resultMap = await loadIkrcSeedResultMap_(env, participants);
@@ -6804,7 +6941,7 @@ async function getIkrcSeedToCupConsole(env, actorArg) {
     const panel = ikrcOfficialPanelRows_(rows.filter(item => participantKey_(itemNumber_(item)) === participantKey_(unit)));
     const direct = resultMap.get(ikrcSeedResultToken_('participantId', row.id));
     return {targetType:'participantId',targetValue:String(row.id),participantNo:participantRoundNumber_(row,'IKRC','결선'),playerName:row.name,affiliation:participantIdentityFromRow_(row,'IKRC').affiliation,
-      sensoryRowCount:panel.liveRows.length,seedBonus:direct ? ikrcSeedBonusFromValue_(direct.bonus) : 0,seedMemo:direct && !direct.deleted ? safeStr(direct.memo) : '',seedSaved:!!direct && !direct.deleted,seedSavedAt:direct ? safeStr(direct.savedAt) : '',...ikrcFinalTimetableForRow_(row)};
+      sensoryRowCount:panel.sensoryCount,seedBonus:direct ? ikrcSeedBonusFromValue_(direct.bonus) : 0,seedMemo:direct && !direct.deleted ? safeStr(direct.memo) : '',seedSaved:!!direct && !direct.deleted,seedSavedAt:direct ? safeStr(direct.savedAt) : '',...ikrcFinalTimetableForRow_(row)};
   }).sort((a,b)=>(a.seedSchedule.order||Number.MAX_SAFE_INTEGER)-(b.seedSchedule.order||Number.MAX_SAFE_INTEGER));
   const matchRows = await env.DB.prepare('SELECT token, payload_json FROM sessions WHERE kind=?').bind('IKRC_SEED_MATCH').all();
   const matches = (matchRows.results || []).map(r => parseJson(r.payload_json, {})).filter(Boolean).map(match => {
@@ -6988,6 +7125,7 @@ function roundName_(v, fallback='예선') { const s=safeStr(v); if (/final|결�
 function shouldCountItemInRanking_(code, item) {
   if (!item) return false;
   if (returnedEvaluation_(item)) return false;
+  if (safeStr(code).toUpperCase() === 'IKRC' && item.ikrcRankingSuppressed) return false;
   if (isCalibrationMode_(item['모드'] || item.mode)) return false;
   if (finalOfficialEvaluation_(item)) return true;
   if (safeStr(code).toUpperCase() === 'KCR') return !isCalibrationMode_(item['검수상태'] || item.status);
@@ -7174,6 +7312,7 @@ function sumList_(list) {
 }
 function itemJudgeIdentityKey_(item) {
   item = item || {};
+  if (safeStr(item.competitionCode || item['대회코드']).toUpperCase() === 'IKRC' && Number(item.ikrcPanelOperatorId) > 0) return 'ikrc-seat:' + Number(item.ikrcPanelOperatorId);
   const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
   const nested = payload.judge && typeof payload.judge === 'object' ? payload.judge : {};
   const operatorIdentityKey = safeStr(firstNonEmpty([
@@ -7712,7 +7851,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
   const rankingRows = code === 'KCR' && selectedRound
     ? raw.filter(row => !safeStr(row.round) || roundName_(row.round, '') === selectedRound)
     : raw;
-  const converted = rankingRows.flatMap(r => (preparedKcrRows
+  let converted = rankingRows.flatMap(r => (preparedKcrRows
     ? [rowToReviewItem(r, code, [], cfg && cfg.current_round, 0, preparedKcrRows.get(r.id))]
     : rowToReviewItems_(r, code, headers, cfg && cfg.current_round)).map(item => {
     const round = roundName_(item.round || item['라운드'] || (cfg && cfg.current_round));
@@ -7724,6 +7863,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     }
     return item;
   })).filter(item => !selectedRound || roundName_(item.round || item['라운드'], '') === selectedRound);
+  if (code === 'IKRC') converted = ikrcApplyOfficialSelections_(converted, await loadIkrcOfficialSelections_(env));
   const groups = new Map();
   converted.forEach(item => {
     if (!shouldCountItemInRanking_(code, item)) return;
