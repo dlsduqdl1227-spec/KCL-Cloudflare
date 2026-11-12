@@ -1,0 +1,42 @@
+name: KCL Auth Doctor
+on:
+  push:
+    branches: ['ops/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  auth-doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Inspect non-secret OIDC claims
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          const url=new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+          url.searchParams.set('audience','https://kcl-cloudflare.pages.dev/api/operations');
+          const response=await fetch(url,{headers:{Authorization:'Bearer '+process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}});
+          if(!response.ok)throw new Error('OIDC unavailable');
+          const token=(await response.json()).value;
+          console.log('::add-mask::'+token);
+          const parts=token.split('.'),header=JSON.parse(Buffer.from(parts[0],'base64url')),claims=JSON.parse(Buffer.from(parts[1],'base64url'));
+          const report={header:{alg:header.alg,kid:header.kid},claims:Object.fromEntries(['iss','aud','repository','repository_id','repository_owner_id','ref','ref_type','workflow_ref','job_workflow_ref','runner_environment','event_name','iat','nbf','exp'].map(k=>[k,claims[k]])),now:Math.floor(Date.now()/1000),lifetime:claims.exp-claims.iat};
+          const jwks=await fetch('https://token.actions.githubusercontent.com/.well-known/jwks');
+          report.jwksStatus=jwks.status;
+          const keys=await jwks.json();report.keyCount=keys.keys?.length;
+          const jwk=keys.keys?.find(k=>k.kid===header.kid);
+          report.keyFound=!!jwk;
+          if(jwk){
+            const key=await crypto.subtle.importKey('jwk',jwk,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['verify']);
+            report.signatureValid=await crypto.subtle.verify('RSASSA-PKCS1-v1_5',key,Buffer.from(parts[2],'base64url'),new TextEncoder().encode(parts[0]+'.'+parts[1]));
+          }
+          console.log(JSON.stringify(report));
+          JS
