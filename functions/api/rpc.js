@@ -1237,10 +1237,10 @@ async function loadIkrcFinalPanel_(env) {
     return {...account, seat};
   });
 }
-function ikrcApplyFinalPanel_(rows, panel) {
+function ikrcApplyFinalPanel_(rows, panel, fallbackRound='') {
   if (!panel) return rows;
   return (rows || []).map(row => {
-    if (roundName_(ikrcScoreRound_(row), '') !== '결선' || isCalibrationMode_(row.mode)) return row;
+    if (roundName_(ikrcScoreRound_(row), fallbackRound) !== '결선' || isCalibrationMode_(ikrcScoreMode_(row))) return row;
     // Resolve historical role labels by the assigned account, never by score order.
     const matches = panel.filter(account => scoreOwnedByActor_(row, account));
     if (matches.length !== 1) return {...row, ikrcRankingExcluded:true};
@@ -5684,7 +5684,7 @@ async function getReviewList(env, competitionCode, actorArg) {
     ? (normalizeEffectiveDate_(actorArg && actorArg.mobReviewDate) || mobActiveParticipantDateFromConfig_(cfg))
     : '';
   const rowsRaw = await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? ORDER BY id DESC').bind(code).all();
-  if (code === 'IKRC') rowsRaw.results = ikrcApplyFinalPanel_(rowsRaw.results || [], await loadIkrcFinalPanel_(env));
+  if (code === 'IKRC') rowsRaw.results = ikrcApplyFinalPanel_(rowsRaw.results || [], await loadIkrcFinalPanel_(env), cfg && cfg.current_round);
   const rawAll = scopeMobScoreRowsToActiveDate_(code, cfg, scopedParticipantRows, rowsRaw.results || [], mobReviewDate);
   const manager = reviewManageAllowed_(auth.actor, code, actorArg);
   const closedStations = code === 'KCR' ? kcrClosedPrelimStations_(cfg) : [];
@@ -6610,7 +6610,7 @@ async function ikrcOfficialCalibrationRows_(env, requestedScope, actorArg) {
     }
     scope = ikrcCalibrationScope_({scope:'station', stationId:requestedStation.id, team:requestedStation.label}, auth.actor, stations);
   }
-  const allRaw = ikrcApplyFinalPanel_(rawRows.results || [], await loadIkrcFinalPanel_(env));
+  const allRaw = ikrcApplyFinalPanel_(rawRows.results || [], await loadIkrcFinalPanel_(env), currentRound);
   const headers = mergeHeaders('IKRC', allRaw);
   let rows = allRaw.filter(scoreRow => {
     if (isCalibrationMode_(ikrcScoreMode_(scoreRow))) return false;
@@ -7680,7 +7680,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
   const ikrcFinalPanel = code === 'IKRC' ? await loadIkrcFinalPanel_(env) : null;
   const raw = code === 'MOB'
     ? (rowsRaw.results || []).filter(row => !isCalibrationMode_(row && row.mode))
-    : (code === 'IKRC' ? ikrcApplyFinalPanel_(rowsRaw.results || [], ikrcFinalPanel) : (rowsRaw.results || []));
+    : (code === 'IKRC' ? ikrcApplyFinalPanel_(rowsRaw.results || [], ikrcFinalPanel, cfg && cfg.current_round) : (rowsRaw.results || []));
   // Ranking summaries do not use report-column arrays. Keep the full header
   // union for identity redaction, but parse each KCR payload/extra only once.
   // This map exists only during this request; edits are never cached across calls.

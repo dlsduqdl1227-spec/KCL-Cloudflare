@@ -11216,7 +11216,8 @@ function goRankingByCode(code, name, round) {
   if (sharedFinal && selectedRound !== '예선') rankingStage.value = selectedRound;
   document.getElementById('ranking-stage-label').textContent = '진행 경기: ' + (rankingStage.value === '본선' ? '본선 경기' : '최종 결승');
   var rankingLabel = rankingCode === 'KCR' ? '전체 순위' : '순위';
-  var cachedRanking = rankingScopedResponse_(_rankingCacheByCode[rankingCacheKey], rankingCode, selectedRound);
+  // IKRC live results must never fall back to a cached head-inclusive snapshot.
+  var cachedRanking = rankingCode === 'IKRC' ? null : rankingScopedResponse_(_rankingCacheByCode[rankingCacheKey], rankingCode, selectedRound);
   _ranking = cachedRanking;
   var reportActions = document.getElementById('ranking-report-actions');
   if (reportActions) reportActions.hidden = !canPrintRanking(code);
