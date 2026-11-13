@@ -11,9 +11,20 @@ export async function onRequestPost({request,env}){
   if(!['KBC','KTCC','MOC','MOB','KCR','IKRC','KCAC'].includes(body?.competition))return new Response(JSON.stringify({success:false,error:'invalid_competition'}),{status:400,headers});
   try{
     const audit=await runCompetitionAudit(env,body.competition);
+    // The requested one-time MOC registration is verified without exporting
+    // participant identities or giving automation any write capability.
+    let registrationReady=true;
+    if(body.competition==='MOC'){
+      const receipt=await env.DB.prepare("SELECT setting_value FROM system_settings WHERE setting_key='moc_final_participants_20261113_v1'").first();
+      try{registrationReady=JSON.parse(receipt?.setting_value||'{}').status==='applied';}catch{registrationReady=false;}
+    }
+    if(body.competition==='KBC'){
+      const receipt=await env.DB.prepare("SELECT setting_value FROM system_settings WHERE setting_key='kbc_final_order_20261113_reverse_v1'").first();
+      try{registrationReady=JSON.parse(receipt?.setting_value||'{}').status==='applied';}catch{registrationReady=false;}
+    }
     // Machine access reveals a health flag only. No counts, rounds, issues,
     // identities, score records or private metadata leave this endpoint.
-    return new Response(JSON.stringify({success:true,release:RELEASE_INFO,healthy:audit.status==='ok'}),{headers});
+    return new Response(JSON.stringify({success:true,release:RELEASE_INFO,healthy:audit.status==='ok'&&registrationReady}),{headers});
   }
   catch{return new Response(JSON.stringify({success:false,error:'audit_unavailable',release:RELEASE_INFO}),{status:503,headers});}
 }

@@ -1233,6 +1233,7 @@ function valueLooksNumericScore(value) {
 function scoreMaxForLabel(label, compCode) {
   label = String(label || '');
   compCode = String(compCode || '').toUpperCase();
+  if (compCode === 'KBC' && kbcPresentationPublicLabel_(label) && !isSmartTagLabel(label) && !isCommentLabel(label)) return 5;
   if (isSmartTagLabel(label)) return '';
   if (isCommentLabel(label)) return '';
   if (/총점|최종점수|총평가\s*반영|감점\s*전\s*합산|정답|가산|감점|시간|번호|리프수|패턴종류|Leaf|Pattern Type/.test(label)) return '';
@@ -1957,7 +1958,7 @@ function buildSmartTagBox(s, compCode) {
     var chips = uniqueList_(splitPublicTokens_(raw));
     if (String(compCode || '').toUpperCase() === 'KCR') chips = kcrPublicTagLabels_(chips);
     if (!chips.length) return;
-    rows.push({ label: smartTagPublicLabel_(k), chips: chips });
+    rows.push({ label: String(compCode || '').toUpperCase()==='KBC' && kbcPresentationPublicLabel_(k) || smartTagPublicLabel_(k), chips: chips });
   });
   if (!rows.length) return null;
   var box = document.createElement('div');
@@ -1983,12 +1984,12 @@ function buildCommentBox(s, compCode) {
     var isComment = isCommentLabel(k);
     var isTextAttr = !isComment && isCuppingAttributeLabel(k) && !valueLooksNumericScore(raw);
     if (!isComment && !isTextAttr) return;
-    var label = commentPublicLabel(k);
+    var label = comp==='KBC' && kbcPresentationPublicLabel_(k) || commentPublicLabel(k);
     // 새 KCR 양식은 항목별 코멘트도 공식 디브리핑에 공개한다.
     var text = cleanupPublicCommentText_(label, raw, s, compCode);
     if (!text || /^(0|0\.0+|0\s*\/\s*\d+)$/i.test(text)) return;
     var key = label.replace(/\s/g,'').toLowerCase();
-    if (rows.some(function(r){ return r.key === key; })) return;
+    if (rows.some(function(r){ return r.key === key && (!(comp==='KBC' && kbcPresentationPublicLabel_(k)) || r.text===text); })) return;
     rows.push({ key:key, label: label, text: text });
   });
   var hasSmartTags = Object.keys(s || {}).some(function(k){ return isSmartTagLabel(k) && splitPublicTokens_(s[k]).length > 0; });
@@ -2141,12 +2142,19 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
 }
 
 
-function isPublicScoreKey(k) {
+function kbcPresentationPublicLabel_(key) {
+  if (!/Service\s*Professionalism|서비스의\s*전문성|Presentation|프[레리]젠테이션/i.test(String(key || ''))) return '';
+  if (isSmartTagLabel(key)) return 'Presentation & Service Smart Tags(프레젠테이션·서비스 스마트태그)';
+  if (isCommentLabel(key)) return 'Presentation & Service Comment(프레젠테이션·서비스 코멘트)';
+  return 'Presentation & Service Professionalism(프레젠테이션·서비스 전문성)';
+}
+function isPublicScoreKey(k, compCode) {
   if (!k) return false;
   if (isSmartTagLabel(k)) return false;
   if (isCommentLabel(k)) return false;
   if (/번호|연락처|전화|휴대폰|제출시간|라운드|심사위원|팀|역할|모드|상태|검수|서명|프로세스|우유종류|우유명|우유제품|제품명|잔용도|컵용도|평가용도|가이드URL|패턴종류|리프수|Leaf|PatternType|주제|선택\s*컵|지정국가|농장|발효방식|평가구분/i.test(k)) return false;
   if (/코멘트|메모|Comment|총평|종합/i.test(k)) return false;
+  if (String(compCode || '').toUpperCase()==='KBC' && kbcPresentationPublicLabel_(k)) return !/선수명|참가자명|이름|소속|participant|judge|name|phone|token|secret/i.test(k);
   return /점|총점|최종점수|감점|정답|가산|보너스|종료시간|경기시간|소요시간|OX|O\/X|Y\/N|완성도|균형|품질|비율|선명도|표현|수행|청결|맛|질감|프레젠|Flavor|Sweetness|Acidity|Body|Mouthfeel|Clean|Aroma|Overall|Balance|Tactile/i.test(k);
 }
 function buildGenericScoreGrid(s, compCode) {
@@ -2157,13 +2165,13 @@ function buildGenericScoreGrid(s, compCode) {
     if (!publicHeaderAppliesToEvaluation_(k, s, comp)) return;
     if (publicIsDerivedSummaryHeader_(k, comp)) return;
     if (comp === 'MOB' && (/시간감점|Time\s*Penalty/i.test(String(k || '')) || /경기시간|시연시간|Elapsed/i.test(String(k || '')))) return;
-    if (!isPublicScoreKey(k)) return;
+    if (!isPublicScoreKey(k, comp)) return;
     var v = s[k];
     if (v == null || String(v) === '') return;
     if (publicIsZeroPenalty_(k, v)) return;
     var div = document.createElement('div');
     div.className = 'score-item';
-    div.innerHTML = '<div class="score-item-label">' + escHtml(publicLabel(k)) + '</div><div class="score-item-val">' + scoreDisplay(k, v, compCode) + '</div>' + scoreMeterHtml_(k, v, compCode);
+    div.innerHTML = '<div class="score-item-label">' + escHtml(comp==='KBC' && kbcPresentationPublicLabel_(k) || publicLabel(k)) + '</div><div class="score-item-val">' + scoreDisplay(k, v, compCode) + '</div>' + scoreMeterHtml_(k, v, compCode);
     grid.appendChild(div);
   });
   return grid;
