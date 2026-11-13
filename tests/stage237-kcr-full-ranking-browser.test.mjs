@@ -42,7 +42,8 @@ try {
     await page.goto(qa.origin+'/assessment/');
     for(const actor of [api.actor,lead]){
       await page.evaluate(actor=>{_judge=actor;goRankingByCode('KCR','KCR','예선');},actor);
-      await page.waitForFunction(()=>document.querySelectorAll('#ranking-list .rank-row').length===226);
+      // Cached rows appear before the fresh response updates the summary.
+      await page.waitForFunction(()=>document.querySelectorAll('#ranking-list .rank-row').length===226&&document.getElementById('rank-summary-sub').textContent.includes('총 226개 항목 · 전체 순위 표시'));
       assert.match(await page.locator('#ranking-title').innerText(),/전체 순위/);
       assert.match(await page.locator('#rank-summary-sub').innerText(),/총 226개 항목 · 전체 순위 표시/);
       assert.equal(await page.locator('.rank-round-title').innerText(),'예선 (226개)');
