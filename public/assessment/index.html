@@ -11154,6 +11154,14 @@ function detailMobHeaderApplies_(h, row, compCode) {
   if (flags.onlySens) return group === 'sensory' || group === 'creative';
   return true;
 }
+function kbcPresentationDetailField_(header) {
+  var h = String(header || '');
+  if (!/Service\s*Professionalism|서비스의\s*전문성|Presentation|프[레리]젠테이션/i.test(h)) return null;
+  if (/번호|연락처|전화|휴대폰|이름|선수명|참가자명|소속|심사위원|서명|participant|judge|name|phone|token|secret/i.test(h)) return null;
+  if (isSmartTagHeader(h)) return {kind:'detail',label:'Presentation & Service Smart Tags(프레젠테이션·서비스 스마트태그)'};
+  if (/코멘트|메모|Comment|Feedback|Note|의견|심사평/i.test(h)) return {kind:'comment',label:'Presentation & Service Comment(프레젠테이션·서비스 코멘트)'};
+  return {kind:'score',label:'Presentation & Service Professionalism(프레젠테이션·서비스 전문성)'};
+}
 function renderDetailCard(row, headers, idx, compCode) {
   var judge = displayJudgeLabel_(row['심사위원명'] || row['심사위원'] || row['Judge'] || '', row['역할'] || row['Role'] || row['JudgeRole'] || '', '심사위원 평가 ' + (idx + 1));
   var total = row['총점'] || row['최종점수'] || '';
@@ -11166,6 +11174,13 @@ function renderDetailCard(row, headers, idx, compCode) {
     if (!detailMobHeaderApplies_(h, row, compCode)) return;
     var v = row[h];
     if (v == null || String(v) === '') return;
+    var presentation = String(compCode || '').toUpperCase() === 'KBC' ? kbcPresentationDetailField_(h) : null;
+    if (presentation) {
+      if (presentation.kind === 'score') { if (Number.isFinite(Number(v))) scores.push([presentation.label,v]); }
+      else if (presentation.kind === 'comment') comments.push([presentation.label,v]);
+      else details.push([presentation.label,v]);
+      return;
+    }
     if (isDisqualificationHeader(h) || isDisqualificationReasonHeader(h)) details.push([h,v]);
     else if (isDetailBaseHeader(h)) return;
     else if (isDetailScoreHeader(h)) scores.push([h,v]);
