@@ -62,3 +62,23 @@
   return {kind:'score',label:'Machine & Equipment Professionalism(머신 및 기물 운용 전문성)'};
  };
 })();
+
+// MOC ranking rounds are independent, even though evaluation forms share rules.
+(function(){
+ 'use strict';
+ var open=window.goRankingByCode,change=window.changeRankingRound_;
+ window.goRankingByCode=function(code,name,round){
+  var result=open.apply(this,arguments);
+  if(String(code||'').toUpperCase()==='MOC'){
+   var select=document.getElementById('ranking-round-select');
+   select.innerHTML='<option value="예선">예선</option><option value="본선">본선</option><option value="결선">결선</option>';
+   select.value=_rankingContext.round;document.getElementById('ranking-stage-wrap').hidden=true;
+   document.getElementById('ranking-sub').textContent='조회 라운드: '+_rankingContext.round;
+  }
+  return result;
+ };
+ window.changeRankingRound_=function(round,exact){
+  if(_rankingContext&&_rankingContext.code==='MOC')return window.goRankingByCode('MOC',_rankingContext.name,round);
+  return change.apply(this,arguments);
+ };
+})();

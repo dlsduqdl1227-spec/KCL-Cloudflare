@@ -26,13 +26,10 @@ try {
       await page.locator('#admin-comp-list [data-workspace-competition='+code+'] [data-act=rank]').click();
       await waitRanking(page,code,'결선');
       assert.equal(await page.locator('#ranking-round-select').inputValue(),'결선');
-      assert.deepEqual(await page.locator('#ranking-round-select option').allTextContents(),code==='KBC'?['예선','본선','결선']:['예선','결선']);
+      assert.deepEqual(await page.locator('#ranking-round-select option').allTextContents(),['KBC','MOC'].includes(code)?['예선','본선','결선']:['예선','결선']);
       for(const round of roundsFor(code)){
-        await page.locator('#ranking-round-select').selectOption(code==='MOC'&&round==='본선'?'결선':round);
-        if(code==='MOC'&&round!=='예선'){
-          if(!await page.locator('#ranking-stage-wrap').evaluate(el=>el.open))await page.locator('#ranking-stage-wrap summary').click();
-          await page.locator('#ranking-stage-select').selectOption(round);
-        }
+        await page.locator('#ranking-round-select').selectOption(round);
+
         await waitRanking(page,code,round);
         assert.equal(await page.locator('.rank-round-section').count(),1);
         assert.match(await page.locator('.rank-round-title').innerText(),new RegExp('^'+round));

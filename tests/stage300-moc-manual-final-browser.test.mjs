@@ -25,7 +25,7 @@ test('MOC opens the manual final results by default, keeps main results and show
         assert.equal(await page.locator('#moc-final-score').inputValue(),'');assert.equal(await page.locator('#moc-final-save-status').innerText(),'');assert.match(await page.locator('#ranking-detail-body').innerText(),/2위 · 수기 확정/);
       }
       await page.locator('#pRankingDetail').getByRole('button',{name:'순위로 돌아가기'}).click();assert.match(await page.locator('.rank-row').first().locator('.rank-score').innerText(),/23\.5/);
-      if(!await page.locator('#ranking-stage-wrap').evaluate(el=>el.open))await page.locator('#ranking-stage-wrap summary').click();await page.locator('#ranking-stage-select').selectOption('본선');await page.waitForFunction(()=>_ranking?.selectedRound==='본선');assert.ok(await page.locator('.rank-row').count()>0);assert.doesNotMatch(await page.locator('#ranking-list').innerText(),/수기 확정/);
+      assert.deepEqual(await page.locator('#ranking-round-select option').allTextContents(),['예선','본선','결선']);await page.locator('#ranking-round-select').selectOption('본선');await page.waitForFunction(()=>_ranking?.selectedRound==='본선');assert.ok(await page.locator('.rank-row').count()>0);assert.doesNotMatch(await page.locator('#ranking-list').innerText(),/수기 확정/);
       assert.equal((await inspectPage(page)).pageOverflow,false);assert.deepEqual(page.qaErrors,[]);await page.close();
       const debrief=await qa.page(width);await debrief.goto(qa.origin+'/debriefing/');await debrief.waitForFunction(()=>_configs.length>0);
       const response=await api.rpc('getAdminDebriefPreview','MOC','110','결선',api.actor);await debrief.evaluate(res=>{renderResult(res);showPanel('pResult');},response);
