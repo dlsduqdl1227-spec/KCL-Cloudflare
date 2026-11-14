@@ -145,7 +145,12 @@ try {
     assert.equal(await page.evaluate(()=>_moc.s1Cups.length),6);
     assert.equal(await page.evaluate(()=>mocTimeLimitMs_()),360000);
     await page.evaluate(()=>{_selComp={code:'KTCC',currentRound:'결선'};initKtccTargets([1]);});
-    assert.deepEqual(await page.evaluate(()=>[_ktcc.s1Cups.length,_ktcc.s2Cups.length,_ktcc.s3Cups.length]),[4,6,6]);
+    assert.deepEqual(await page.evaluate(()=>[_ktcc.s1Cups.length,_ktcc.s2Cups.length,_ktcc.s3Cups.length]),[4,6,5]);
+    assert.equal(await page.locator('#ktcc-section3-cups button').count(),2);
+    await page.locator('#ktcc-section3-cups button').filter({hasText:'정답 · 4점'}).click();
+    assert.equal(await page.locator('#ktcc-final-big').innerText(),'4');
+    await page.locator('#ktcc-section3-cups button').filter({hasText:'오답 · 0점'}).click();
+    assert.equal(await page.locator('#ktcc-final-big').innerText(),'0');
     await page.evaluate(()=>{_selComp={code:'IKRC',currentRound:'결선'};initIkrcSamples(['A-1','A-2'],{id:'qa-station',label:'QA',prefix:'A',start:1,end:2});});
     assert.equal(await page.evaluate(()=>_ikrcSamples.length),2);
     assert.deepEqual(errors,[],'browser errors at '+width);
