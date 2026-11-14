@@ -1581,7 +1581,7 @@ function buildRankBox(res) {
       var rankText = r.rank ? (r.totalInRound ? (r.rank + ' / ' + r.totalInRound) : String(r.rank)) : '-';
       var score = r.totalScore != null ? r.totalScore : (r.rankingScore != null ? r.rankingScore : (r.avgScore || 0));
       if (isIkrc && r.avgScore != null) score = r.round==='결선' && r.rankingScore!=null ? r.rankingScore : r.avgScore;
-      html += '<div class="cell"><small>' + escHtml(round + ' 순위') + '</small><b>' + escHtml(rankText) + '</b></div>';
+      html += '<div class="cell"><small>' + escHtml(round + ' 순위' + (r.manualFinalResult ? ' · 수기 확정' : '')) + '</small><b>' + escHtml(rankText) + '</b></div>';
       html += r.manualRankingOnly ? '<div class="cell"><small>결선 결과</small><b>수기 확정</b></div>' : '<div class="cell"><small>' + escHtml(round + (isIkrc && round!=='결선' ? ' 평균점수' : ' 총점')) + '</small><b>' + escHtml(fmtScore(score, 2)) + '</b></div>';
       if(r.manualFinalResult&&r.endTimeDisplay)html+='<div class="cell"><small>결선 경기시간</small><b>'+escHtml(r.endTimeDisplay)+'</b></div>';
     });
