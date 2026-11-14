@@ -21,6 +21,11 @@ for(const code of selected==='all'?codes:[selected]){
   if(!response.ok)throw new Error('GitHub 단기 인증을 발급하지 못했습니다.');
   const token=(await response.json()).value;if(typeof token!=='string')throw new Error('단기 인증 응답이 올바르지 않습니다.');
   console.log('::add-mask::'+token);
+  if(code==='KTCC'){
+    const check=await request(origin+'/api/deployment-readiness',{headers:{Authorization:'Bearer '+token}});
+    const state=await check.json();if(!check.ok||!state.success)throw new Error('Deployment readiness unavailable');
+    console.log(state.ready?'ADMIN_SECRET_ENV_READY':'ADMIN_SECRET_ENV_MISSING');
+  }
   const result=await request(origin+'/api/operations',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({competition:code})});
   const data=await result.json();
   if(result.status===401){
