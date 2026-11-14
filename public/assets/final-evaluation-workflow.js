@@ -46,6 +46,8 @@ function renderFinalEvaluationList_(list,code){
   document.getElementById('review-count-val').textContent=(showSubmitted?scoped.length:returned.length)+'건';
   document.getElementById('review-nav-summary').textContent='제출 즉시 순위 반영';
   var wrap=document.getElementById('review-list');wrap.innerHTML='';
+  var stageNav=document.getElementById('ktcc-review-stages');if(stageNav)stageNav.remove();
+  if(code==='KTCC'&&round==='결선'&&typeof ktccRenderStageReview_==='function'){ktccRenderStageReview_(visible,wrap);return;}
   if(!visible.length){wrap.innerHTML='<p style="padding:24px;text-align:center;color:var(--muted)">'+(showSubmitted?'이 회차에 제출된 평가가 없습니다.':'반려된 평가가 없습니다.')+'</p>';return;}
   if(code==='KCR'){
     renderKcrOfficialReviewOverview_(visible,code,_reviewState.headers,0,renderFinalEvaluationRows_);

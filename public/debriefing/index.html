@@ -2112,7 +2112,7 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
   if (isKcac) publicTitle = (Number(anonymousJudgeNo) > 0 ? (Number(anonymousJudgeNo) + '번 심사위원 ') : '') + '라떼아트 평가';
   else if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
   else if (isSensoryDebriefCard_(s, compCode)) publicTitle = (Number(anonymousJudgeNo) > 0 ? Number(anonymousJudgeNo) : 1) + '번 센서리심사위원 평가';
-  if (isKtcc) publicTitle = teamTitle || '팀 평가 결과';
+  if (isKtcc) publicTitle = (teamTitle || '팀 평가 결과')+(s['토너먼트 단계']?' · '+s['토너먼트 단계']:'');
   var ikrcFinalHead=isIkrc&&/헤드|head/i.test(roleRaw);
   if(ikrcFinalHead)publicTitle='헤드심사위원 평가 · 비교용';
   var statusRaw = String(s['검수상태'] || s.status || '').replace(/\s/g, '');

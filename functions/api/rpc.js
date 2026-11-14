@@ -676,15 +676,15 @@ async function dispatch(action, args, env, request) {
     setKbcFinalistSelection: () => setKbcFinalistSelection(env, args[0], args[1]),
     getKbcMainTimetablePlan: () => getKbcMainTimetablePlan(env, args[0]),
     applyKbcMainTimetable: () => applyKbcMainTimetable(env, args[0], args[1]),
-    getRanking: () => getRanking(env, args[0], args[1], args[2]),
+    getRanking: () => getRanking(env, args[0], args[1], args[2], args[3]),
     getCompetitionOpsAudit: () => getCompetitionOpsAudit_(env, args[0], args[1]),
     updateMocFinalResult: () => updateMocFinalResult_(env,args[0],args[1]),
-    getRankingDetail: () => getRankingDetail(env, args[0], args[1], args[2], args[3]),
+    getRankingDetail: () => getRankingDetail(env, args[0], args[1], args[2], args[3], args[4]),
     getAdminDebriefPreviewOptions: () => getAdminDebriefPreviewOptions(env, args[0], args[1]),
     getAdminDebriefPreview: () => getAdminDebriefPreview(env, args[0], args[1], args[2], args[3], args[4]),
     getAdminDebriefPhase: () => getAdminDebriefPhase(env, args[0], args[1], args[2], args[3], args[4]),
     getDebriefPhase: () => getDebriefPhase(env, args[0], args[1]),
-    getFinalReport: () => getFinalReport(env, args[0], args[1], args[2]),
+    getFinalReport: () => getFinalReport(env, args[0], args[1], args[2], args[3]),
     getScoreBackupReport: () => getScoreBackupReport(env, args[0], args[1]),
     sendOTP: () => sendOTP(env, args[0], args[1], args[2], request),
     verifyOTP: () => verifyOTP(env, args[0], args[1], args[2], args[3], request, args[4]),
@@ -776,6 +776,18 @@ async function setKtccFinalDecision_(env, request, actorArg) {
 // A manager-owned supplement, not a rewrite of signed section scores. Each
 // result belongs to one submitted final team/match; no preliminary fallback.
 const KTCC_HIDDEN_MISSION_KIND = 'KTCC_HIDDEN_MISSION';
+const KTCC_MATCH_STAGES = ['8강','4강','결승','순위결정'];
+function ktccMatchStage_(item) {
+  const stage=safeStr(item&&item['토너먼트 단계']);
+  return !stage?'미지정':KTCC_MATCH_STAGES.includes(stage)?stage:'기타';
+}
+function ktccStageScope_(code, round, value) {
+  const stage=safeStr(value);
+  if(!stage)return {stage:''};
+  if(code!=='KTCC'||round!=='결선'||![...KTCC_MATCH_STAGES,'미지정','기타'].includes(stage))
+    return {error:{success:false,message:'KTCC 결선의 경기 단계를 다시 선택해주세요.'}};
+  return {stage};
+}
 function ktccHiddenMissionToken_(id, index=0) { return KTCC_HIDDEN_MISSION_KIND+':'+id+':'+index; }
 function ktccHiddenMissionBinding_(id, round, unit, extra, submittedAt) {
   return JSON.stringify([String(id),roundName_(round,''),safeStr(unit),safeStr(extra['토너먼트 단계']),safeStr(extra['매치번호']),safeStr(submittedAt)]);
@@ -4876,13 +4888,14 @@ async function getScoreBackupReport(env, competitionCode, actorArg) {
     calibrationRows
   };
 }
-async function getFinalReport(env, competitionCode, actorArg, requestedRound) {
+async function getFinalReport(env, competitionCode, actorArg, requestedRound, requestedKtccStage='') {
   const code = safeStr(competitionCode).toUpperCase();
   const auth = await requireManageActorForCode_(env, actorArg, code, '최종디브리핑 파일 다운로드 권한이 없습니다. 관리자 또는 대회팀장 권한으로 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const selectedRound = rankingRoundScope_(requestedRound);
   if (selectedRound === null) return { success:false, message:'예선, 본선 또는 결선을 선택해주세요.' };
-  const data = await buildRankingData_(env, code, selectedRound);
+  const scope=ktccStageScope_(code,selectedRound,requestedKtccStage);if(scope.error)return scope.error;
+  const data = await buildRankingData_(env, code, selectedRound,false,scope.stage);
   // 최종디브리핑 파일은 순위 반영 기준과 동일하게, 검수완료·수정완료이면서 순위 제외 대상이 아닌 데이터만 내려보냅니다.
   const finalItems = officialScoreItemsForOutput_(code, data.rows.filter(item => officialReviewCompleted_(code, item) && shouldCountItemInRanking_(code, item)));
   const approvedRows = finalItems.map(item => redactKcacIdentityForActor_(auth.actor, code, reportRowOut_(item, data.headers), data.headers));
@@ -4908,6 +4921,7 @@ async function getFinalReport(env, competitionCode, actorArg, requestedRound) {
     compName: data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code),
     currentRound: data.cfg ? data.cfg.current_round : '',
     selectedRound,
+    ...(code==='KTCC'?{selectedKtccStage:scope.stage}:{}),
     unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호',
     generatedAt: nowIso(),
     tieBreakRule: tieRuleLabel_(code, rounds[0] || (data.cfg && data.cfg.current_round) || ''),
@@ -7933,7 +7947,7 @@ async function applyMocManualFinalRanking_(env,ranking,participants,selectedRoun
   ranking.push(...finals);
 }
 
-async function buildRankingData_(env, competitionCode, selectedRound='', summaryOnly=false) {
+async function buildRankingData_(env, competitionCode, selectedRound='', summaryOnly=false, ktccStage='') {
   const code = safeStr(competitionCode).toUpperCase();
   const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
   const participantRowsRaw = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id ASC').bind(code).all();
@@ -7983,7 +7997,14 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     }
     return item;
   })).filter(item => !selectedRound || roundName_(item.round || item['라운드'], '') === selectedRound);
+  const ktccStageCounts={};
   if(code==='KTCC'){
+    // Stage filtering is read-only and happens before the legacy "latest per
+    // team" aggregation. An 8강 lookup must never select a record from 4강.
+    for(const item of converted.filter(item=>finalOfficialEvaluation_(item))) {
+      const stage=ktccMatchStage_(item);ktccStageCounts[stage]=(ktccStageCounts[stage]||0)+1;
+    }
+    if(ktccStage)converted=converted.filter(item=>item.round==='결선'&&ktccMatchStage_(item)===ktccStage);
     await applyKtccHiddenMissions_(env,converted,true);
     if(converted.some(item=>item.ktccHiddenMission)){
       for(const name of ['기존 평가점수','히든미션 결과','히든미션 점수'])if(!headers.includes(name))headers.push(name);
@@ -8027,6 +8048,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     if (code === 'KTCC') {
       const latest = latestOfficialItem_(g.rows || []) || {};
       g.ktccHiddenMission=latest.ktccHiddenMission;
+      g.ktccStage=ktccMatchStage_(latest);
       g.checkerSummary = latest['심사위원명'] || latest.judgeName || '';
       g.endTimeDisplay = latest['종료시간'] || latest['경기시간'] || '';
       g.tournamentSummary = [
@@ -8109,6 +8131,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       totalScore: g.rankingScore, avgScore: code === 'IKRC' && g.ikrcSensoryAvg !== undefined ? g.ikrcSensoryAvg : g.rankingScore, score: g.rankingScore, rankingScore: g.rankingScore,
       calculatedScore:g.calculatedRankingScore,
       ktccHiddenMission:code==='KTCC'?g.ktccHiddenMission:undefined,
+      ...(code==='KTCC'?{ktccStage:g.ktccStage}:{}),
       roastingScore:code === 'IKRC' ? g.ikrcSensoryAvg : undefined,
       seedBonus:code === 'IKRC' ? g.ikrcSeedBonus : undefined,
       officialResultOverride:!!g.officialResultOverride,
@@ -8139,16 +8162,17 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     }));
   });
   if(code==='MOC')await applyMocManualFinalRanking_(env,ranking,participantRows,selectedRound);
-  return { cfg, headers, rows: converted, ranking, participantRows };
+  return { cfg, headers, rows: converted, ranking, participantRows, ktccStageCounts };
 }
 
-async function getRanking(env, competitionCode, actorArg, requestedRound) {
+async function getRanking(env, competitionCode, actorArg, requestedRound, requestedKtccStage='') {
   const code = safeStr(competitionCode).toUpperCase();
   const auth = await requireManageActorForCode_(env, actorArg, code, '순위 조회 권한이 없습니다. 관리자 또는 대회팀장 권한으로 로그인해주세요.');
   if (!auth.ok) return auth.res;
   const selectedRound = rankingRoundScope_(requestedRound);
   if (selectedRound === null) return { success:false, message:'예선, 본선 또는 결선을 선택해주세요.' };
-  const data = await buildRankingData_(env, code, selectedRound, code === 'KCR');
+  const scope=ktccStageScope_(code,selectedRound,requestedKtccStage);if(scope.error)return scope.error;
+  const data = await buildRankingData_(env, code, selectedRound, code === 'KCR',scope.stage);
   const ranking = data.ranking.map(item => {
     if(code==='KBC' && item.round==='본선'){
       const participant=data.participantRows.find(row=>participantEvaluationCompletionUnitKey_('KBC',row.main_cup_no)===participantEvaluationCompletionUnitKey_('KBC',item.unit));
@@ -8156,7 +8180,7 @@ async function getRanking(env, competitionCode, actorArg, requestedRound) {
     }
     return redactKcacIdentityForActor_(auth.actor, code, item, data.headers);
   });
-  return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : code, currentRound: data.cfg ? data.cfg.current_round : '', selectedRound, unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking, tieBreakRule: tieRuleLabel_(code, selectedRound || (data.cfg ? data.cfg.current_round : '')) };
+  return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : code, currentRound: data.cfg ? data.cfg.current_round : '', selectedRound, ...(code==='KTCC'?{selectedKtccStage:scope.stage,ktccStageCounts:data.ktccStageCounts}:{}), unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', ranking, tieBreakRule: tieRuleLabel_(code, selectedRound || (data.cfg ? data.cfg.current_round : '')) };
 }
 
 // Read-only diagnostics: use the same fresh source records as the ranking API.
@@ -8409,13 +8433,14 @@ async function assignKbcFinalists(env, payload, actorArg) {
   if(Number(result.meta&&result.meta.changes)!==6)return {success:false,message:'동시에 변경된 기록이 있습니다. 진출자 명단을 다시 확인하세요.'};
   return {success:true,message:'상위 6명을 6위부터 역순으로 11/14 결선에 배정했습니다. 본선 점수는 이월하지 않습니다.'};
 }
-async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
+async function getRankingDetail(env, competitionCode, unit, round, actorArg, requestedKtccStage='') {
   const code = safeStr(competitionCode).toUpperCase(); const targetUnit = safeStr(unit); const targetRound = rankingRoundScope_(round);
   if (!code || !targetUnit) return { success: false, message: '상세 조회할 대회코드 또는 참가자번호가 없습니다.' };
   if (!targetRound) return { success:false, message:'상세 조회할 예선, 본선 또는 결선을 선택해주세요.' };
   const auth = await requireManageActorForCode_(env, actorArg, code, '순위 상세 조회 권한이 없습니다. 관리자 또는 대회팀장 권한으로 로그인해주세요.');
   if (!auth.ok) return auth.res;
-  const data = await buildRankingData_(env, code, targetRound);
+  const scope=ktccStageScope_(code,targetRound,requestedKtccStage);if(scope.error)return scope.error;
+  const data = await buildRankingData_(env, code, targetRound,false,scope.stage);
   const countableRows = officialScoreItemsForOutput_(code, data.rows.filter(item => shouldCountItemInRanking_(code, item)));
   const rawRows = countableRows.filter(item => itemNumber_(item) === targetUnit && roundName_(item.round || item['라운드'], '') === targetRound);
   const rawRankInfo = data.ranking.find(r => safeStr(r.unit) === targetUnit && (!targetRound || roundName_(r.round) === targetRound)) || null;
@@ -8438,7 +8463,7 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const fallbackAverage = count ? Math.round((totalScore / count) * 100) / 100 : 0;
   const displayTotal = Number.isFinite(rankingTotal) ? rankingTotal : (ikrcSensoryOnly ? fallbackAverage : totalScore);
   const displayAvg = ikrcSensoryOnly && rankInfo ? Number(rankInfo.avgScore || 0) : (Number.isFinite(rankingTotal) ? rankingTotal : fallbackAverage);
-  return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code), unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', unit: targetUnit, unitDisplay: targetUnit, round: targetRound, headers: data.headers, rows, scores: rows, comparisonRows, totalScore: rankInfo && rankInfo.manualRankingOnly ? null : displayTotal, avgScore: rankInfo && rankInfo.manualRankingOnly ? null : displayAvg, rankInfo, rankInfos: rankInfo ? [rankInfo] : [], disqualified: disqualified || (rankInfo && rankInfo.disqualified) || false, disqualificationReason: reasons.join(' / ') || (rankInfo && rankInfo.disqualificationReason) || '', reviewedCount, totalCount: rows.length, playerNameSummary: (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || (rows[0] && rows[0].participantName) || '', playerAffiliationSummary: (rankInfo && rankInfo.playerAffiliationSummary) || (rows[0] && rows[0].participantAffiliation) || '' };
+  return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code), ...(code==='KTCC'?{selectedKtccStage:scope.stage}:{}), unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', unit: targetUnit, unitDisplay: targetUnit, round: targetRound, headers: data.headers, rows, scores: rows, comparisonRows, totalScore: rankInfo && rankInfo.manualRankingOnly ? null : displayTotal, avgScore: rankInfo && rankInfo.manualRankingOnly ? null : displayAvg, rankInfo, rankInfos: rankInfo ? [rankInfo] : [], disqualified: disqualified || (rankInfo && rankInfo.disqualified) || false, disqualificationReason: reasons.join(' / ') || (rankInfo && rankInfo.disqualificationReason) || '', reviewedCount, totalCount: rows.length, playerNameSummary: (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || (rows[0] && rows[0].participantName) || '', playerAffiliationSummary: (rankInfo && rankInfo.playerAffiliationSummary) || (rows[0] && rows[0].participantAffiliation) || '' };
 }
 
 async function requireAdminPreviewActor_(env, actorArg) {

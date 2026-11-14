@@ -2024,7 +2024,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/shared-sensory-tags.js?v=228"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
 <script src="/assets/kcl-api-shim.js?v=stage255"></script>
-<script src="/assets/final-evaluation-workflow.js?v=293"></script>
+<script src="/assets/final-evaluation-workflow.js?v=302"></script>
 <script defer src="/assets/ikrc-score-history.js?v=293"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=258">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
@@ -2043,8 +2043,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <link rel="stylesheet" href="/assets/evaluation-attribute-layout.css?v=260">
 <script src="/assets/operational-health.js?v=259"></script>
 <link rel="stylesheet" href="/assets/kcl-appearance.css?v=278">
-<link rel="stylesheet" href="/assets/ktcc-finals.css?v=301">
-<script defer src="/assets/ktcc-finals.js?v=301"></script>
+<link rel="stylesheet" href="/assets/ktcc-finals.css?v=302">
+<script defer src="/assets/ktcc-finals.js?v=302"></script>
 <link rel="stylesheet" href="/assets/kcl-refinement.css?v=280">
 <link rel="stylesheet" href="/assets/ikrc-final-timetable.css?v=282">
 <script defer src="/assets/ikrc-final-timetable.js?v=282"></script>
@@ -6861,6 +6861,8 @@ function changeAdminReviewRound_(round) {
   goReviewByCode(_reviewState.code, _reviewState.name, _reviewState.backPanel, round);
 }
 function goReviewByCode(code, name, backPanel, selectedRound) {
+  document.getElementById('pReview').classList.remove('ktcc-stage-review');
+  var ktccStageNav=document.getElementById('ktcc-review-stages');if(ktccStageNav)ktccStageNav.remove();
   var normalizedCode = String(code || '').toUpperCase();
   var resolvedBack = backPanel || (_judge.role === '관리자' ? 'pAdmin' : (isTeamLeaderRole() ? 'pTeam' : 'pSelect'));
   var isAdminReview = isAdminRole() && resolvedBack === 'pAdmin' && !_reviewCalibrationOnly;
@@ -11204,23 +11206,25 @@ function changeRankingRound_(round, exact) {
   goRankingByCode(_rankingContext.code, _rankingContext.name, round);
 }
 function refreshRanking_() {
-  if (_rankingContext) goRankingByCode(_rankingContext.code, _rankingContext.name, _rankingContext.round);
+  if (_rankingContext) goRankingByCode(_rankingContext.code, _rankingContext.name, _rankingContext.round,_rankingContext.ktccStage||'');
 }
-function rankingScopedResponse_(res, code, round) {
+function rankingScopedResponse_(res, code, round, ktccStage) {
   if (!res || !res.success || String(res.compCode || '').toUpperCase() !== code ||
       (res.selectedRound && res.selectedRound !== round)) return null;
+  if(code==='KTCC'&&round==='결선'&&String(res.selectedKtccStage||'')!==String(ktccStage||''))return null;
   // Also filters old API responses during a rolling deployment.
   return Object.assign({}, res, {selectedRound:round, ranking:(res.ranking || []).filter(function(item){ return item.round === round; })});
 }
-function goRankingByCode(code, name, round) {
+function goRankingByCode(code, name, round, ktccStage) {
   var previousPlan = document.getElementById('kbc-finalist-entry');
   if (previousPlan) previousPlan.remove();
   var requestToken = ++_rankingRequestToken;
   ++_rankingDetailRequestToken;
   var rankingCode = String(code || '').toUpperCase();
   var selectedRound = normalizeRoundForCompetition_(rankingCode, round || ((_selComp && _selComp.code === rankingCode) ? _selComp.currentRound : '') || '예선');
-  var rankingCacheKey = rankingCode + '::' + selectedRound;
-  _rankingContext = {code:rankingCode, name:name || code, round:selectedRound};
+  ktccStage=rankingCode==='KTCC'&&selectedRound==='결선'?String(ktccStage||''):'';
+  var rankingCacheKey = rankingCode + '::' + selectedRound+(ktccStage?'::'+ktccStage:'');
+  _rankingContext = {code:rankingCode, name:name || code, round:selectedRound,ktccStage:ktccStage};
   _rankingDetail = null;
   var roundSelect = document.getElementById('ranking-round-select');
   var sharedFinal = usesSharedFinalRules_(rankingCode);
@@ -11233,14 +11237,15 @@ function goRankingByCode(code, name, round) {
   document.getElementById('ranking-stage-label').textContent = '진행 경기: ' + (rankingStage.value === '본선' ? '본선 경기' : '최종 결승');
   var rankingLabel = rankingCode === 'KCR' ? '전체 순위' : '순위';
   // IKRC live results must never fall back to a cached head-inclusive snapshot.
-  var cachedRanking = rankingCode === 'IKRC' ? null : rankingScopedResponse_(_rankingCacheByCode[rankingCacheKey], rankingCode, selectedRound);
+  var cachedRanking = rankingCode === 'IKRC' ? null : rankingScopedResponse_(_rankingCacheByCode[rankingCacheKey], rankingCode, selectedRound,ktccStage);
+  if(typeof ktccRenderRankingStages_==='function')ktccRenderRankingStages_(rankingCode,selectedRound,ktccStage,cachedRanking&&cachedRanking.ktccStageCounts);
   _ranking = cachedRanking;
   var reportActions = document.getElementById('ranking-report-actions');
   if (reportActions) reportActions.hidden = !canPrintRanking(code);
   var rankingPdfButton = document.getElementById('ranking-pdf-button');
   if (rankingPdfButton) rankingPdfButton.textContent = rankingCode === 'MOB' ? 'Top 12 순위 PDF 저장' : (rankingCode === 'KCR' ? 'Top 40 순위 PDF 저장' : '순위 PDF 저장');
   document.getElementById('ranking-title').textContent = (name || code) + ' ' + rankingLabel;
-  document.getElementById('ranking-sub').textContent = '조회 라운드: ' + competitionRoundLabel_(rankingCode, selectedRound);
+  document.getElementById('ranking-sub').textContent = '조회 라운드: ' + competitionRoundLabel_(rankingCode, selectedRound)+(ktccStage?' · '+ktccStage:'');
   if (!cachedRanking) document.getElementById('ranking-list').innerHTML = '';
   document.getElementById('rank-summary-title').textContent = rankingCode === 'KCR' ? '전체 순위표' : '순위표';
   if (cachedRanking) {
@@ -11249,7 +11254,7 @@ function goRankingByCode(code, name, round) {
   } else {
     document.getElementById('rank-summary-sub').textContent = '불러오는 중...';
   }
-  document.getElementById('rank-print-title').textContent = (name || code) + ' · ' + selectedRound + ' 순위표';
+  document.getElementById('rank-print-title').textContent = (name || code) + ' · ' + selectedRound+(ktccStage?' · '+ktccStage:'') + ' 순위표';
   var now = new Date();
   document.getElementById('rank-print-date').textContent =
     now.toLocaleDateString('ko-KR') + ' ' + now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
@@ -11276,7 +11281,7 @@ function goRankingByCode(code, name, round) {
           (cachedRanking ? '기존 순위 표시 중 · ' : '') + '오류: ' + ((res && res.message) || '알 수 없는 오류');
         return;
       }
-      var scoped = rankingScopedResponse_(res, rankingCode, selectedRound);
+      var scoped = rankingScopedResponse_(res, rankingCode, selectedRound,ktccStage);
       if (!scoped) {
         document.getElementById('rank-summary-sub').textContent = '조회 라운드가 일치하지 않습니다. 새로고침해주세요.';
         return;
@@ -11292,7 +11297,7 @@ function goRankingByCode(code, name, round) {
       document.getElementById('rank-summary-sub').textContent =
         (cachedRanking ? '기존 순위 표시 중 · ' : '') + '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
-    .getRanking(code, adminActorPayload_(), selectedRound);
+    .getRanking(code, adminActorPayload_(), selectedRound,ktccStage);
 }
 
 var _kbcFinalistPlanRequest = 0;
@@ -11334,8 +11339,9 @@ function renderRanking(res) {
   renderKbcFinalistEntry_(res);
   var list = (res.ranking || []).filter(function(item){ return !res.selectedRound || item.round === res.selectedRound; });
   var rankingCode = String(res.compCode || '').toUpperCase();
+  if(typeof ktccRenderRankingStages_==='function')ktccRenderRankingStages_(rankingCode,res.selectedRound,res.selectedKtccStage,res.ktccStageCounts);
   document.getElementById('rank-summary-sub').textContent =
-    (res.selectedRound ? res.selectedRound + ' · ' : '') + '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 전체 순위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
+    (res.selectedRound ? res.selectedRound + ' · ' : '')+(res.selectedKtccStage?res.selectedKtccStage+' · ':rankingCode==='KTCC'&&res.selectedRound==='결선'?'팀별 최근 경기 · ':'') + '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 전체 순위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
 
   var wrap = document.getElementById('ranking-list');
   wrap.innerHTML = '';
@@ -11365,7 +11371,7 @@ function renderRanking(res) {
 
     var title = document.createElement('div');
     title.className = 'rank-round-title';
-    title.textContent = round + ' (' + byRound[round].length + '개)';
+    title.textContent = round+(res.selectedKtccStage?' · '+res.selectedKtccStage:'') + ' (' + byRound[round].length + '개)';
     section.appendChild(title);
 
     byRound[round].forEach(function(item){
@@ -11396,7 +11402,7 @@ function renderRanking(res) {
         : (isIkrcRank
           ? ('블라인드코드 ' + String(displayUnit) + (nameSummary ? ' · ' + nameSummary : ' · 선수 연결 미지정') + (affSummary ? ' · ' + affSummary : ''))
           : (String(displayUnit) + (nameSummary ? ' · ' + nameSummary : '') + (affSummary ? ' · ' + affSummary : '')));
-      var ktccMeta = isKtccRank ? ('체크: ' + (item.checkerSummary || '-') + ' · 종료시간 ' + (item.endTimeDisplay || '-') + ' · '+(item.ktccHiddenMission?'기존 '+item.ktccHiddenMission.baseScore+'점 + 히든미션 '+item.ktccHiddenMission.points+'점 · ':'')) : '';
+      var ktccMeta = isKtccRank ? ((round==='결선'?escHtml(item.ktccStage||'단계 미지정')+' · ':'')+'체크: ' + escHtml(item.checkerSummary || '-') + ' · 종료시간 ' + escHtml(item.endTimeDisplay || '-') + ' · '+(item.ktccHiddenMission?'기존 '+item.ktccHiddenMission.baseScore+'점 + 히든미션 '+item.ktccHiddenMission.points+'점 · ':'')) : '';
       var ikrcMeta = isIkrcRank
         ? ((item.finalized ? '최종확정' : '진행중') + ' · 반영 센서리 ' + Number(item.confirmedJudgeCount || 0) + (Number(item.expectedJudgeCount) > Number(item.confirmedJudgeCount) ? '/' + Number(item.expectedJudgeCount) : '') + '명 · 헤드 제외 · ')
         : '';
@@ -11427,7 +11433,7 @@ function renderRanking(res) {
 function finalReportFileBase_(res) {
   var now = new Date();
   var stamp = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '_' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
-  return 'KCL_' + String((res && res.compCode) || (_ranking && _ranking.compCode) || 'REPORT').toUpperCase() + ((res && res.selectedRound) ? '_' + res.selectedRound : '') + '_최종디브리핑_' + stamp;
+  return 'KCL_' + String((res && res.compCode) || (_ranking && _ranking.compCode) || 'REPORT').toUpperCase() + ((res && res.selectedRound) ? '_' + res.selectedRound : '')+(res&&res.selectedKtccStage?'_'+res.selectedKtccStage:'') + '_최종디브리핑_' + stamp;
 }
 function scoreBackupFileBase_(res) {
   var now = new Date();
@@ -11489,6 +11495,7 @@ function finalReportRankingRows_(res, round) {
   return (res.ranking || []).filter(function(r){ return !round || r.round === round; }).map(function(r){
     return {
       '라운드': r.round || '',
+      ...(res.compCode==='KTCC'?{'경기단계':r.round==='결선'?(r.ktccStage||'미지정'):'예선'}:{}),
       '순위': r.rank || '',
       '식별번호': r.unitDisplay || r.unit || '',
       '선수/팀명': r.playerNameSummary || r.nameSummary || r.teamNameSummary || '',
@@ -11732,7 +11739,7 @@ function downloadFinalReportExcel() {
       });
     })
     .withFailureHandler(function(err){ hideOverlay(); toast('최종디브리핑 파일 다운로드 실패: ' + (err && err.message ? err.message : '서버 오류'), true); })
-    .getFinalReport(code, adminActorPayload_(), selectedRound);
+    .getFinalReport(code, adminActorPayload_(), selectedRound,(_rankingContext&&_rankingContext.ktccStage)||'');
 }
 function printRanking() {
   if (!canPrintRanking()) { toast('PDF 출력은 관리자 또는 대회팀장 권한에서만 가능합니다.', true); return; }
@@ -11829,7 +11836,7 @@ function openRankingDetail(item) {
       hideOverlay();
       document.getElementById('ranking-detail-sub').textContent = '불러오기 실패: ' + (err && err.message ? err.message : '서버 오류');
     })
-    .getRankingDetail(_ranking.compCode, item.unit, item.round, adminActorPayload_());
+    .getRankingDetail(_ranking.compCode, item.unit, item.round, adminActorPayload_(),_ranking.selectedKtccStage||'');
 }
 
 function renderRankingDetail(res) {
@@ -11842,7 +11849,7 @@ function renderRankingDetail(res) {
   var rankText = rankFullText ? ' · ' + rankFullText : '';
   document.getElementById('ranking-detail-title').textContent = (res.compName || res.compCode || '') + ' 상세 디브리핑';
   var detailUnitSubText = (res.unitLabel || '식별자') + ' ' + (res.unitDisplay || res.unit || '-') + (res.playerNameSummary ? ' · ' + res.playerNameSummary : '');
-  document.getElementById('ranking-detail-sub').textContent = detailUnitSubText + ' · ' + (res.round || '-') + rankText;
+  document.getElementById('ranking-detail-sub').textContent = detailUnitSubText + ' · ' + (res.round || '-')+(res.selectedKtccStage?' · '+res.selectedKtccStage:'') + rankText;
   var body = document.getElementById('ranking-detail-body');
   if (rankInfo.manualFinalResult) {
     var enteredScore=rankInfo.rankingScore==null?'미입력':fmtScore(rankInfo.rankingScore,2),enteredTime=rankInfo.endTimeDisplay||'미입력';
