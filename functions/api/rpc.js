@@ -676,6 +676,7 @@ async function dispatch(action, args, env, request) {
     applyKbcMainTimetable: () => applyKbcMainTimetable(env, args[0], args[1]),
     getRanking: () => getRanking(env, args[0], args[1], args[2]),
     getCompetitionOpsAudit: () => getCompetitionOpsAudit_(env, args[0], args[1]),
+    updateMocFinalResult: () => updateMocFinalResult_(env,args[0],args[1]),
     getRankingDetail: () => getRankingDetail(env, args[0], args[1], args[2], args[3]),
     getAdminDebriefPreviewOptions: () => getAdminDebriefPreviewOptions(env, args[0], args[1]),
     getAdminDebriefPreview: () => getAdminDebriefPreview(env, args[0], args[1], args[2], args[3], args[4]),
@@ -7814,6 +7815,48 @@ function rankingRoundScope_(value) {
   const round = roundName_(value, '');
   return ['예선','본선','결선'].includes(round) ? round : null;
 }
+async function updateMocFinalResult_(env,input,actorArg){
+  const auth=await requireManageActorForCode_(env,actorArg,'MOC','MOC 팀장 또는 관리자만 결선 점수와 시간을 입력할 수 있습니다.');if(!auth.ok)return auth.res;
+  input=input||{};const id=Number(input.participantId),expected=Number(input.revision);
+  const raw=input.score,score=raw===null||raw===undefined||safeStr(raw)===''?null:Number(raw);
+  if(!Number.isSafeInteger(id)||id<=0||!Number.isSafeInteger(expected)||expected<0||(score!==null&&(!Number.isFinite(score)||score<0)))return {success:false,message:'선수와 점수를 확인해주세요.'};
+  let time=safeStr(input.elapsedTime).replace(/^(\d+)\s*분\s*(\d+(?:\.\d+)?)\s*초$/,'$1:$2');
+  if(time){const m=/^(\d{1,3}):([0-5]?\d)(?:\.(\d{1,3}))?$/.exec(time);if(!m)return {success:false,message:'경기시간을 분:초 형식으로 입력해주세요. 예: 04:30.25'};time=m[1].padStart(2,'0')+':'+m[2].padStart(2,'0')+(m[3]?'.'+m[3]:'');}
+  const key='moc_final_official_ranks_20261114_v1';
+  for(let attempt=0;attempt<3;attempt++){
+    const saved=await env.DB.prepare('SELECT setting_value FROM system_settings WHERE setting_key=?').bind(key).first(),data=parseJson(saved&&saved.setting_value,{});
+    if(data.status!=='applied'||!Array.isArray(data.entries))return {success:false,message:'결선 확정 순위가 아직 등록되지 않았습니다.'};
+    const entry=data.entries.find(e=>e.participantId===id);if(!entry)return {success:false,message:'결선 참가자를 확인해주세요.'};
+    if(Number(entry.revision||0)!==expected)return {success:false,code:'MOC_FINAL_EDIT_CONFLICT',message:'다른 화면에서 먼저 수정했습니다. 새로고침 후 다시 입력해주세요.'};
+    const stamp=nowIso();data.history=data.history||[];data.history.push({participantId:id,score:entry.officialScore??null,elapsedTime:entry.elapsedTime||'',changedAt:stamp,changedBy:auth.actor.name||auth.actor.judgeName||'MOC 관리자'});
+    entry.officialScore=score;entry.elapsedTime=time;entry.revision=expected+1;entry.updatedAt=stamp;
+    const updated=await env.DB.prepare('UPDATE system_settings SET setting_value=?,updated_at=? WHERE setting_key=? AND setting_value=?').bind(JSON.stringify(data),stamp,key,saved.setting_value).run();
+    if(Number(updated.meta&&updated.meta.changes)===1)return {success:true,revision:entry.revision,rank:entry.rank,score,elapsedTime:time};
+  }
+  return {success:false,code:'MOC_FINAL_EDIT_CONFLICT',message:'동시 수정 중입니다. 잠시 후 다시 저장해주세요.'};
+}
+
+async function applyMocManualFinalRanking_(env,ranking,participants,selectedRound) {
+  if(selectedRound && selectedRound!=='결선')return;
+  const saved=await env.DB.prepare("SELECT setting_value FROM system_settings WHERE setting_key='moc_final_official_ranks_20261114_v1'").first();
+  const result=parseJson(saved && saved.setting_value,{}),entries=result.entries;
+  if(result.status!=='applied'||!Array.isArray(entries)||entries.length!==10)return;
+  if(entries.some((e,i)=>e.rank!==i+1)||new Set(entries.map(e=>e.participantId)).size!==10)return;
+  const finals=[];
+  for(const entry of entries){
+    const p=participants.find(p=>p.id===entry.participantId);if(!p)return;
+    const unit=safeStr(p.final_cup_no)||safeStr(entry.unit);if(!unit||finals.some(r=>r.unit===unit))return;
+    const old=ranking.find(r=>r.round==='결선'&&r.unit===unit),manualScore=toNumber(entry.officialScore);
+    finals.push({rank:entry.rank,officialRank:entry.rank,totalInRound:10,unit,unitDisplay:unit,round:'결선',playerNameSummary:p.name,nameSummary:p.name,
+      playerAffiliationSummary:p.affiliation||'',totalScore:manualScore,avgScore:manualScore,score:manualScore,rankingScore:manualScore,calculatedScore:old?old.rankingScore:null,
+      participantId:p.id,manualRevision:Number(entry.revision||0),manualFinalResult:true,manualRankingOnly:manualScore===null,endTimeDisplay:safeStr(entry.elapsedTime),officialResultOverride:true,officialResultSource:result.source,officialResultEffectiveAt:result.appliedAt,
+      scoreBasis:manualScore===null?'수기 결선 최종 순위':'수기 결선 확정점수',reviewedCount:old?old.reviewedCount:0,totalCount:old?old.totalCount:0,judgeCount:old?old.judgeCount:0,
+      disqualified:false,disqualificationReason:'',tieBreakRule:'주최측 수기 최종 순위',tieBreakSummary:''});
+  }
+  for(let i=ranking.length-1;i>=0;i--)if(ranking[i].round==='결선')ranking.splice(i,1);
+  ranking.push(...finals);
+}
+
 async function buildRankingData_(env, competitionCode, selectedRound='', summaryOnly=false) {
   const code = safeStr(competitionCode).toUpperCase();
   const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
@@ -8008,6 +8051,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       judgeCount: code === 'IKRC' ? g.ikrcConfirmedJudgeCount : g.rows.length
     }));
   });
+  if(code==='MOC')await applyMocManualFinalRanking_(env,ranking,participantRows,selectedRound);
   return { cfg, headers, rows: converted, ranking, participantRows };
 }
 
@@ -8045,7 +8089,7 @@ export async function runCompetitionAudit(env, competitionCode) {
   const keys=new Set();let duplicateRank=0,invalidRank=0,headIncluded=0,sensoryMismatch=0;
   for(const row of data.ranking){
     const key=row.round+'::'+row.unit;if(keys.has(key))duplicateRank++;keys.add(key);
-    if(!Number.isFinite(row.rankingScore)||!Number.isFinite(row.totalScore))invalidRank++;
+    if(!row.manualRankingOnly&&(!Number.isFinite(row.rankingScore)||!Number.isFinite(row.totalScore)))invalidRank++;
     if(code==='IKRC'){
       if(row.headScoreIncluded!==false)headIncluded++;
       const group=rows.filter(r=>shouldCountItemInRanking_(code,r)&&roundName_(r.round||r['라운드'],'')===row.round&&itemNumber_(r)===row.unit&&!itemOfficialDq_(r));
@@ -8053,6 +8097,7 @@ export async function runCompetitionAudit(env, competitionCode) {
       if(sensory.length!==row.confirmedJudgeCount)sensoryMismatch++;
     }
   }
+  if(code==='MOC'){const manual=await env.DB.prepare("SELECT setting_value FROM system_settings WHERE setting_key='moc_final_official_ranks_20261114_v1'").first();if(manual)add('error','MOC_MANUAL_FINAL_RESULT_INVALID',data.ranking.filter(r=>r.manualFinalResult).length===10?0:1);}
   add('error','DUPLICATE_RANKED_UNIT',duplicateRank);add('error','NONFINITE_RANKING',invalidRank);
   add('error','IKRC_HEAD_INCLUDED',headIncluded);add('error','IKRC_SENSORY_COUNT_MISMATCH',sensoryMismatch);
   add('info','OFFICIAL_OVERRIDE_PRESERVED',data.ranking.filter(r=>r.officialResultOverride).length);
@@ -8306,7 +8351,7 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg) {
   const fallbackAverage = count ? Math.round((totalScore / count) * 100) / 100 : 0;
   const displayTotal = Number.isFinite(rankingTotal) ? rankingTotal : (ikrcSensoryOnly ? fallbackAverage : totalScore);
   const displayAvg = ikrcSensoryOnly && rankInfo ? Number(rankInfo.avgScore || 0) : (Number.isFinite(rankingTotal) ? rankingTotal : fallbackAverage);
-  return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code), unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', unit: targetUnit, unitDisplay: targetUnit, round: targetRound, headers: data.headers, rows, scores: rows, comparisonRows, totalScore: displayTotal, avgScore: displayAvg, rankInfo, rankInfos: rankInfo ? [rankInfo] : [], disqualified: disqualified || (rankInfo && rankInfo.disqualified) || false, disqualificationReason: reasons.join(' / ') || (rankInfo && rankInfo.disqualificationReason) || '', reviewedCount, totalCount: rows.length, playerNameSummary: (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || (rows[0] && rows[0].participantName) || '', playerAffiliationSummary: (rankInfo && rankInfo.playerAffiliationSummary) || (rows[0] && rows[0].participantAffiliation) || '' };
+  return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code), unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', unit: targetUnit, unitDisplay: targetUnit, round: targetRound, headers: data.headers, rows, scores: rows, comparisonRows, totalScore: rankInfo && rankInfo.manualRankingOnly ? null : displayTotal, avgScore: rankInfo && rankInfo.manualRankingOnly ? null : displayAvg, rankInfo, rankInfos: rankInfo ? [rankInfo] : [], disqualified: disqualified || (rankInfo && rankInfo.disqualified) || false, disqualificationReason: reasons.join(' / ') || (rankInfo && rankInfo.disqualificationReason) || '', reviewedCount, totalCount: rows.length, playerNameSummary: (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || (rows[0] && rows[0].participantName) || '', playerAffiliationSummary: (rankInfo && rankInfo.playerAffiliationSummary) || (rows[0] && rows[0].participantAffiliation) || '' };
 }
 
 async function requireAdminPreviewActor_(env, actorArg) {
@@ -8323,6 +8368,7 @@ async function getAdminDebriefPreviewOptions(env, competitionCode, actorArg) {
   if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
   const data = await buildRankingData_(env, code);
   const publicCountByUnit = new Map();
+  if(code==='MOC')for(const rank of data.ranking)if(rank.manualFinalResult)publicCountByUnit.set(rank.round+'::'+safeStr(rank.unit),1);
   officialScoreItemsForOutput_(code, (data.rows || []).filter(item =>
     shouldCountItemInRanking_(code, item) && (code === 'IKRC' || officialReviewCompleted_(code, item))
   )).forEach(item => {
@@ -8727,6 +8773,7 @@ async function buildPublicDebriefBundle_(env, code, targets) {
     matches(item) && shouldCountItemInRanking_(code, item) && officialReviewCompleted_(code, item)
   ));
   const publicKeys = new Set(scores.map(item => debriefTargetKey_(code, item.round || item['라운드'], itemNumber_(item))));
+  if(code==='MOC')for(const rank of data.ranking)if(rank.manualFinalResult&&targetKeys.has(debriefTargetKey_(code,rank.round,rank.unit)))publicKeys.add(debriefTargetKey_(code,rank.round,rank.unit));
   const rankInfos = data.ranking.filter(rank => publicKeys.has(debriefTargetKey_(code, rank.round, rank.unit)));
   return { ...empty, scores:scores.map(publicDebriefScore_), headers:data.headers, rankInfos, rankInfo:rankInfos[0] || null };
 }

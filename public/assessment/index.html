@@ -11387,7 +11387,7 @@ function renderRanking(res) {
       var displayScoreBasis = isIkrcRank ? '센서리 평균' : item.scoreBasis;
       var isIkrcFinalRank = isIkrcRank && round === '결선';
       if (isIkrcFinalRank) {scoreValue=item.rankingScore;displayScoreBasis='센서리 평균 + Seed to Cup';}
-      var scoreLabel = item.disqualified ? 'DQ' : fmtRankingScore_(scoreValue || 0, 2, res.compCode, displayScoreBasis);
+      var scoreLabel = item.manualRankingOnly ? '수기 확정' : (item.disqualified ? 'DQ' : fmtRankingScore_(scoreValue || 0, 2, res.compCode, displayScoreBasis));
       var nameSummary = item.playerNameSummary || item.unitName || '';
       var affSummary = item.playerAffiliationSummary || item.affiliationSummary || '';
       var displayUnit = item.unitDisplay || item.unit;
@@ -11400,7 +11400,7 @@ function renderRanking(res) {
       var ikrcMeta = isIkrcRank
         ? ((item.finalized ? '최종확정' : '진행중') + ' · 반영 센서리 ' + Number(item.confirmedJudgeCount || 0) + (Number(item.expectedJudgeCount) > Number(item.confirmedJudgeCount) ? '/' + Number(item.expectedJudgeCount) : '') + '명 · 헤드 제외 · ')
         : '';
-      var reviewProgressMeta = String(res.compCode || '').toUpperCase() === 'KCR' ? ('공식 제출 ' + item.totalCount + '건 반영') : isIkrcRank
+      var reviewProgressMeta = item.manualFinalResult ? '주최측 수기 최종 결과' : String(res.compCode || '').toUpperCase() === 'KCR' ? ('공식 제출 ' + item.totalCount + '건 반영') : isIkrcRank
         ? '공식 제출 반영'
         : ('검수 ' + item.reviewedCount + '/' + item.totalCount + ' (' + reviewedRatio + '%)');
 
@@ -11844,6 +11844,16 @@ function renderRankingDetail(res) {
   var detailUnitSubText = (res.unitLabel || '식별자') + ' ' + (res.unitDisplay || res.unit || '-') + (res.playerNameSummary ? ' · ' + res.playerNameSummary : '');
   document.getElementById('ranking-detail-sub').textContent = detailUnitSubText + ' · ' + (res.round || '-') + rankText;
   var body = document.getElementById('ranking-detail-body');
+  if (rankInfo.manualFinalResult) {
+    var enteredScore=rankInfo.rankingScore==null?'미입력':fmtScore(rankInfo.rankingScore,2),enteredTime=rankInfo.endTimeDisplay||'미입력';
+    body.innerHTML='<div class="detail-summary"><div class="detail-title">결선 최종 순위: '+escHtml(String(rankInfo.rank))+'위 · 수기 확정</div><div class="detail-sub">점수: '+escHtml(enteredScore)+' · 경기시간: '+escHtml(enteredTime)+'</div></div>';
+    if(canPrintRanking('MOC')){
+      body.innerHTML+='<div class="detail-card"><div class="detail-title">결선 점수·시간 입력</div><p>확정된 등수는 유지됩니다. 점수와 경기시간만 입력해주세요.</p><div class="detail-grid"><label>점수<input id="moc-final-score" type="number" min="0" step="any" value="'+(rankInfo.rankingScore==null?'':escHtml(String(rankInfo.rankingScore)))+'"></label><label>경기시간 (분:초)<input id="moc-final-time" type="text" maxlength="20" placeholder="04:30.25" value="'+escHtml(rankInfo.endTimeDisplay||'')+'"></label></div><button type="button" class="btn" id="moc-final-save">점수·시간 저장</button><p id="moc-final-save-status" role="status"></p></div>';
+      document.getElementById('moc-final-save').onclick=function(){saveMocFinalResult_(rankInfo);};
+    }
+    if(!rows.length){body.insertAdjacentHTML('beforeend','<p class="detail-sub">팀장님이 위에서 최종 점수와 경기시간을 입력·수정할 수 있습니다. 심사위원별 평가표는 별도입니다.</p>');return;}
+    rows.forEach(function(row,idx){body.insertAdjacentHTML('beforeend',renderDetailCard(row,res.headers||[],idx,'MOC'));});return;
+  }
   if (!rows.length) {
     body.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px;font-size:14px">상세 점수 데이터가 없습니다.</p>';
     return;
@@ -11855,6 +11865,7 @@ function renderRankingDetail(res) {
   if(isIkrcFinalDetail)detailScoreValue=rankInfo.rankingScore;
   var totalScore = detailScoreValue != null ? (detailUsesAverageTotal ? fmtAverageScore_(detailScoreValue, 2) : fmtScore(detailScoreValue,2)) : '-';
   var detailTotalLine = '<br>' + (isIkrcDetail ? '센서리 평균' : '총점') + ': ' + escHtml(totalScore);
+  if(rankInfo.manualRankingOnly)detailTotalLine='<br>결선 최종 순위: '+escHtml(String(rankInfo.rank))+'위 · 수기 확정';
   if(isIkrcFinalDetail)detailTotalLine='<br>로스팅 평균: '+fmtAverageScore_(rankInfo.roastingScore == null ? rankInfo.avgScore : rankInfo.roastingScore,2)+' + Seed to Cup: '+Number(rankInfo.seedBonus||0)+' = 최종점수: '+escHtml(totalScore);
   var detailTitleText = String(res.compCode || '').toUpperCase() === 'KTCC'
     ? ('팀번호 ' + (res.unitDisplay || res.unit || '-') + (res.teamNameSummary ? ' · ' + res.teamNameSummary : ''))
@@ -11865,6 +11876,19 @@ function renderRankingDetail(res) {
   if (res.scoreStddev || res.kbcStddev) html += buildStddevHtml_(res.scoreStddev || res.kbcStddev, res.compCode);
   rows.forEach(function(row, idx){ html += renderDetailCard(row, res.headers || [], idx, res.compCode); });
   body.innerHTML = html;
+}
+
+function saveMocFinalResult_(rankInfo){
+  var button=document.getElementById('moc-final-save'),status=document.getElementById('moc-final-save-status');
+  var payload={participantId:rankInfo.participantId,revision:rankInfo.manualRevision||0,score:document.getElementById('moc-final-score').value,elapsedTime:document.getElementById('moc-final-time').value};
+  button.disabled=true;status.textContent='저장 중...';
+  google.script.run.withSuccessHandler(function(res){
+    button.disabled=false;if(!res||!res.success){status.textContent=res&&res.message||'저장 실패';return;}
+    rankInfo.manualRevision=res.revision;rankInfo.rankingScore=res.score;rankInfo.totalScore=res.score;rankInfo.endTimeDisplay=res.elapsedTime;rankInfo.manualRankingOnly=res.score==null;
+    if(_ranking&&_ranking.compCode==='MOC'){var entry=(_ranking.ranking||[]).find(function(r){return r.participantId===rankInfo.participantId;});if(entry)Object.assign(entry,rankInfo);renderRanking(_ranking);}
+    if(_rankingCacheByCode)delete _rankingCacheByCode['MOC::결선'];
+    if(_rankingDetail){_rankingDetail.totalScore=res.score;renderRankingDetail(_rankingDetail);}document.getElementById('moc-final-save-status').textContent='저장 완료 · 확정 순위 '+res.rank+'위 유지';
+  }).withFailureHandler(function(){button.disabled=false;status.textContent='저장에 실패했습니다. 다시 시도해주세요.';}).updateMocFinalResult(payload,adminActorPayload_());
 }
 
 function backToRanking() {

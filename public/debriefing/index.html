@@ -1413,6 +1413,10 @@ function renderResult(res) {
   document.body.classList.toggle('ikrc-debrief-print-mode', isIkrcDebrief);
   document.documentElement.classList.toggle('ikrc-debrief-print-mode', isIkrcDebrief);
   var screenOnlyNote = document.getElementById('screen-only-note'); if (screenOnlyNote) screenOnlyNote.style.display = scores.length ? 'block' : 'none';
+  if (scores.length === 0 && String(res.competition||'').toUpperCase()==='MOC' && (res.rankInfos||[]).some(function(r){return r.manualFinalResult;})) {
+    var manualRankBox=buildRankBox(res);if(manualRankBox)body.appendChild(manualRankBox);
+    var notice=document.createElement('div');notice.className='no-score';notice.textContent='주최측 수기 결선 최종 결과입니다.';body.appendChild(notice);return;
+  }
   if (scores.length === 0) {
     body.innerHTML = res.requestedPhase ? '<div class="no-score">' + escHtml(res.requestedPhase) + '에 공개된 평가 기록이 없습니다.</div>' : isIkrcDebrief
       ? '<div class="no-score">이 선수와 연결된 IKRC 공식 평가가 없습니다.<br>운영팀에 라운드별 블라인드코드 배정을 확인해주세요.</div>'
@@ -1578,7 +1582,8 @@ function buildRankBox(res) {
       var score = r.totalScore != null ? r.totalScore : (r.rankingScore != null ? r.rankingScore : (r.avgScore || 0));
       if (isIkrc && r.avgScore != null) score = r.round==='결선' && r.rankingScore!=null ? r.rankingScore : r.avgScore;
       html += '<div class="cell"><small>' + escHtml(round + ' 순위') + '</small><b>' + escHtml(rankText) + '</b></div>';
-      html += '<div class="cell"><small>' + escHtml(round + (isIkrc && round!=='결선' ? ' 평균점수' : ' 총점')) + '</small><b>' + escHtml(fmtScore(score, 2)) + '</b></div>';
+      html += r.manualRankingOnly ? '<div class="cell"><small>결선 결과</small><b>수기 확정</b></div>' : '<div class="cell"><small>' + escHtml(round + (isIkrc && round!=='결선' ? ' 평균점수' : ' 총점')) + '</small><b>' + escHtml(fmtScore(score, 2)) + '</b></div>';
+      if(r.manualFinalResult&&r.endTimeDisplay)html+='<div class="cell"><small>결선 경기시간</small><b>'+escHtml(r.endTimeDisplay)+'</b></div>';
     });
     box.innerHTML = html + '<div class="tie-rule">동점 기준: ' + escHtml(main.tieBreakRule || (isMob ? '총점 → 센서리 → 테크니컬 → 경기시간' : (isMoc ? '총점 → 종료시간 짧은 순' : '총점 → Sweetness → Overall → 재심사'))) + '</div>';
     return box;

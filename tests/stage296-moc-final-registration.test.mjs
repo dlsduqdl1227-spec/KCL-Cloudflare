@@ -13,6 +13,7 @@ const fixtureDigest=createHash('sha256').update(JSON.stringify(fixturePlan)).dig
 const dataUrl=source=>'data:text/javascript;base64,'+Buffer.from(source).toString('base64');
 const guardSource=fs.readFileSync(new URL('../lib/deployment-correction-20261113.mjs',import.meta.url),'utf8').replace(/(export const DEPLOYMENT_CORRECTION_DIGEST=)'[a-f0-9]+'/,"$1'"+fixtureDigest+"'");
 const testMiddlewareSource=fs.readFileSync(new URL('../functions/api/_middleware.js',import.meta.url),'utf8')
+  .replace('../../lib/moc-final-result-20261114.mjs',new URL('../lib/moc-final-result-20261114.mjs',import.meta.url).href)
   .replace('../../lib/moc-final-registration.mjs',new URL('../lib/moc-final-registration.mjs',import.meta.url).href)
   .replace('../../lib/kbc-final-order-20261113.mjs',new URL('../lib/kbc-final-order-20261113.mjs',import.meta.url).href)
   .replace('../../lib/deployment-correction-20261113.mjs',dataUrl(guardSource));
