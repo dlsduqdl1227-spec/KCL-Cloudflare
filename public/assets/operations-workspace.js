@@ -35,7 +35,7 @@
  'use strict';
  var originalFormat=window.fmtRankingScore_;
  window.fmtRankingScore_=function(value,digits,code,basis){
-  if(String(code||'').toUpperCase()==='MOC'&&basis==='수기 결선 확정점수')return String(value);
+  if(String(code||'').toUpperCase()==='MOC'&&/^수기 결선 (확정점수|최종 순위)$/.test(String(basis||'')))return String(value);
   return originalFormat.apply(this,arguments);
  };
  var originalDetail=window.renderRankingDetail;
