@@ -11881,14 +11881,15 @@ function renderRankingDetail(res) {
 function saveMocFinalResult_(rankInfo){
   var button=document.getElementById('moc-final-save'),status=document.getElementById('moc-final-save-status');
   var payload={participantId:rankInfo.participantId,revision:rankInfo.manualRevision||0,score:document.getElementById('moc-final-score').value,elapsedTime:document.getElementById('moc-final-time').value};
-  button.disabled=true;status.textContent='저장 중...';
+  var editor=_rankingDetail,scoreInput=document.getElementById('moc-final-score'),timeInput=document.getElementById('moc-final-time');
+  button.disabled=true;scoreInput.disabled=true;timeInput.disabled=true;status.textContent='저장 중...';
   google.script.run.withSuccessHandler(function(res){
-    button.disabled=false;if(!res||!res.success){status.textContent=res&&res.message||'저장 실패';return;}
+    button.disabled=false;scoreInput.disabled=false;timeInput.disabled=false;if(!res||!res.success){status.textContent=res&&res.message||'저장 실패';return;}
     rankInfo.manualRevision=res.revision;rankInfo.rankingScore=res.score;rankInfo.totalScore=res.score;rankInfo.endTimeDisplay=res.elapsedTime;rankInfo.manualRankingOnly=res.score==null;
     if(_ranking&&_ranking.compCode==='MOC'){var entry=(_ranking.ranking||[]).find(function(r){return r.participantId===rankInfo.participantId;});if(entry)Object.assign(entry,rankInfo);renderRanking(_ranking);}
     if(_rankingCacheByCode)delete _rankingCacheByCode['MOC::결선'];
-    if(_rankingDetail){_rankingDetail.totalScore=res.score;renderRankingDetail(_rankingDetail);}document.getElementById('moc-final-save-status').textContent='저장 완료 · 확정 순위 '+res.rank+'위 유지';
-  }).withFailureHandler(function(){button.disabled=false;status.textContent='저장에 실패했습니다. 다시 시도해주세요.';}).updateMocFinalResult(payload,adminActorPayload_());
+    if(_rankingDetail===editor&&document.getElementById('moc-final-save')===button){editor.totalScore=res.score;renderRankingDetail(editor);document.getElementById('moc-final-save-status').textContent='저장 완료 · 확정 순위 '+res.rank+'위 유지';}
+  }).withFailureHandler(function(){button.disabled=false;scoreInput.disabled=false;timeInput.disabled=false;status.textContent='저장에 실패했습니다. 다시 시도해주세요.';}).updateMocFinalResult(payload,adminActorPayload_());
 }
 
 function backToRanking() {

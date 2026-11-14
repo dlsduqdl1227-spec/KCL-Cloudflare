@@ -13,6 +13,17 @@ test('MOC opens the manual final results by default, keeps main results and show
       const rows=page.locator('.rank-row');for(const [i,e] of api.entries.entries()){assert.match(await rows.nth(i).innerText(),new RegExp(e.name));if(i===0&&entered)assert.match(await rows.nth(i).locator('.rank-score').innerText(),/23\.5/);else assert.equal(await rows.nth(i).locator('.rank-score').innerText(),'수기 확정');}
       await rows.first().click();await page.waitForFunction(()=>_rankingDetail?.rankInfo?.manualFinalResult);assert.match(await page.locator('#ranking-detail-body').innerText(),/1위 · 수기 확정/);assert.equal(await page.locator('#moc-final-save').isVisible(),true);
       await page.locator('#moc-final-score').fill('23.5');await page.locator('#moc-final-time').fill('04:30.25');await page.locator('#moc-final-save').click();await page.getByRole('status').filter({hasText:'저장 완료 · 확정 순위 1위 유지'}).waitFor();entered=true;
+      if(width===390){
+        await page.route('**/api/rpc',async route=>{
+          if(route.request().postDataJSON()?.action==='updateMocFinalResult'){const response=await route.fetch();await new Promise(resolve=>setTimeout(resolve,350));await route.fulfill({response});}
+          else await route.continue();
+        });
+        const saving=page.waitForResponse(r=>r.request().postDataJSON()?.action==='updateMocFinalResult');
+        await page.locator('#moc-final-save').click();assert.equal(await page.locator('#moc-final-score').isDisabled(),true);
+        await page.locator('#pRankingDetail').getByRole('button',{name:'순위로 돌아가기'}).click();await page.locator('.rank-row').nth(1).click();await page.waitForFunction(()=>_rankingDetail?.rankInfo?.rank===2);
+        await saving;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        assert.equal(await page.locator('#moc-final-score').inputValue(),'');assert.equal(await page.locator('#moc-final-save-status').innerText(),'');assert.match(await page.locator('#ranking-detail-body').innerText(),/2위 · 수기 확정/);
+      }
       await page.locator('#pRankingDetail').getByRole('button',{name:'순위로 돌아가기'}).click();
       if(!await page.locator('#ranking-stage-wrap').evaluate(el=>el.open))await page.locator('#ranking-stage-wrap summary').click();await page.locator('#ranking-stage-select').selectOption('본선');await page.waitForFunction(()=>_ranking?.selectedRound==='본선');assert.ok(await page.locator('.rank-row').count()>0);assert.doesNotMatch(await page.locator('#ranking-list').innerText(),/수기 확정/);
       assert.equal((await inspectPage(page)).pageOverflow,false);assert.deepEqual(page.qaErrors,[]);await page.close();
