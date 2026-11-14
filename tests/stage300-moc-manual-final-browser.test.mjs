@@ -12,7 +12,7 @@ test('MOC opens the manual final results by default, keeps main results and show
       await page.waitForFunction(()=>_ranking?.selectedRound==='결선'&&document.querySelectorAll('.rank-row').length===10);
       const rows=page.locator('.rank-row');for(const [i,e] of api.entries.entries()){assert.match(await rows.nth(i).innerText(),new RegExp(e.name));if(i===0&&entered)assert.match(await rows.nth(i).locator('.rank-score').innerText(),/23\.5/);else assert.equal(await rows.nth(i).locator('.rank-score').innerText(),'수기 확정');}
       await rows.first().click();await page.waitForFunction(()=>_rankingDetail?.rankInfo?.manualFinalResult);assert.match(await page.locator('#ranking-detail-body').innerText(),/1위 · 수기 확정/);assert.equal(await page.locator('#moc-final-save').isVisible(),true);
-      await page.locator('#moc-final-score').fill('23.5');await page.locator('#moc-final-time').fill('04:30.25');await page.locator('#moc-final-save').click();await page.getByRole('status').filter({hasText:'저장 완료 · 확정 순위 1위 유지'}).waitFor();entered=true;
+      await page.locator('#moc-final-score').fill('23.5');await page.locator('#moc-final-time').fill('04:30.25');await page.locator('#moc-final-save').click();await page.getByRole('status').filter({hasText:'저장 완료 · 확정 순위 1위 유지'}).waitFor();entered=true;assert.match(await page.locator('#ranking-detail-body .detail-sub').first().innerText(),/점수: 23\.5/);
       if(width===390){
         await page.route('**/api/rpc',async route=>{
           if(route.request().postDataJSON()?.action==='updateMocFinalResult'){const response=await route.fetch();await new Promise(resolve=>setTimeout(resolve,350));await route.fulfill({response});}

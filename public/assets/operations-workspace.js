@@ -29,3 +29,22 @@
  for(const name of ['adminRenderRunCards_','adminRenderConfigList_']){var original=window[name];window[name]=(function(fn){return function(){var result=fn.apply(this,arguments);refresh();return result;};})(original);}
  refresh();
 })();
+
+// Keep manual MOC totals exact without changing other scoring displays.
+(function(){
+ 'use strict';
+ var originalFormat=window.fmtRankingScore_;
+ window.fmtRankingScore_=function(value,digits,code,basis){
+  if(String(code||'').toUpperCase()==='MOC'&&basis==='수기 결선 확정점수')return String(value);
+  return originalFormat.apply(this,arguments);
+ };
+ var originalDetail=window.renderRankingDetail;
+ window.renderRankingDetail=function(result){
+  var rendered=originalDetail.apply(this,arguments),rank=result&&result.rankInfo;
+  if(result&&result.compCode==='MOC'&&rank&&rank.manualFinalResult){
+   var summary=document.querySelector('#ranking-detail-body .detail-summary .detail-sub');
+   if(summary)summary.textContent='점수: '+(rank.rankingScore==null?'미입력':String(rank.rankingScore))+' · 경기시간: '+(rank.endTimeDisplay||'미입력');
+  }
+  return rendered;
+ };
+})();
