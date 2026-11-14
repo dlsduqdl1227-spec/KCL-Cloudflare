@@ -2043,8 +2043,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <link rel="stylesheet" href="/assets/evaluation-attribute-layout.css?v=260">
 <script src="/assets/operational-health.js?v=259"></script>
 <link rel="stylesheet" href="/assets/kcl-appearance.css?v=278">
-<link rel="stylesheet" href="/assets/ktcc-finals.css?v=279">
-<script defer src="/assets/ktcc-finals.js?v=279"></script>
+<link rel="stylesheet" href="/assets/ktcc-finals.css?v=301">
+<script defer src="/assets/ktcc-finals.js?v=301"></script>
 <link rel="stylesheet" href="/assets/kcl-refinement.css?v=280">
 <link rel="stylesheet" href="/assets/ikrc-final-timetable.css?v=282">
 <script defer src="/assets/ikrc-final-timetable.js?v=282"></script>
@@ -11396,7 +11396,7 @@ function renderRanking(res) {
         : (isIkrcRank
           ? ('블라인드코드 ' + String(displayUnit) + (nameSummary ? ' · ' + nameSummary : ' · 선수 연결 미지정') + (affSummary ? ' · ' + affSummary : ''))
           : (String(displayUnit) + (nameSummary ? ' · ' + nameSummary : '') + (affSummary ? ' · ' + affSummary : '')));
-      var ktccMeta = isKtccRank ? ('체크: ' + (item.checkerSummary || '-') + ' · 종료시간 ' + (item.endTimeDisplay || '-') + ' · ') : '';
+      var ktccMeta = isKtccRank ? ('체크: ' + (item.checkerSummary || '-') + ' · 종료시간 ' + (item.endTimeDisplay || '-') + ' · '+(item.ktccHiddenMission?'기존 '+item.ktccHiddenMission.baseScore+'점 + 히든미션 '+item.ktccHiddenMission.points+'점 · ':'')) : '';
       var ikrcMeta = isIkrcRank
         ? ((item.finalized ? '최종확정' : '진행중') + ' · 반영 센서리 ' + Number(item.confirmedJudgeCount || 0) + (Number(item.expectedJudgeCount) > Number(item.confirmedJudgeCount) ? '/' + Number(item.expectedJudgeCount) : '') + '명 · 헤드 제외 · ')
         : '';

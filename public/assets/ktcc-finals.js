@@ -64,4 +64,71 @@ function ktccSaveFinalDecision_(){
 }
 function ktccAddFinalDecisionAction_(row,item){
  if(!ktccCanDecide_())return;var button=document.createElement('button');button.type='button';button.className='review-edit-btn ktcc-decision-btn';button.dataset.rowIndex=String(item.rowIndex);button.textContent='진출 판정'+(item['진출판정']?' · '+item['진출판정']:'');button.onclick=function(){ktccOpenFinalDecision_(item);};row.querySelector('.review-actions').appendChild(button);
+ ktccAddHiddenMissionAction_(row,item);
+}
+var _ktccMissionUi={dialog:null,loaded:null,ticket:0,saving:false,opener:null};
+function ktccMissionLabel_(result){return result==='correct'?'정답 · +4점':result==='incorrect'?'오답 · 0점':'미기록';}
+function ktccMissionSelected_(){var selected=_ktccMissionUi.dialog.querySelector('input[name="ktcc-hidden-result"]:checked');return selected?selected.value:'';}
+function ktccMissionPreview_(){
+ var state=_ktccMissionUi,res=state.loaded;if(!res)return;
+ var result=ktccMissionSelected_(),points=result==='correct'?4:0;
+ state.dialog.querySelector('[data-mission-total]').textContent='기존 '+res.baseScore+'점 + 히든미션 '+points+'점 = '+(res.disqualified?0:res.baseScore+points)+'점'+(res.disqualified?' · 실격':result?'':' · 히든미션 미기록');
+}
+function ktccMissionClose_(){
+ var state=_ktccMissionUi;if(state.saving)return;
+ if(state.loaded&&ktccMissionSelected_()!==state.loaded.result&&!confirm('저장하지 않은 히든미션 결과를 닫을까요?'))return;
+ state.ticket++;state.dialog.close();state.loaded=null;if(state.opener&&state.opener.isConnected)state.opener.focus();
+}
+function ktccOpenHiddenMission_(item,opener){
+ if(!ktccCanDecide_()||item.round!=='결선')return;
+ var state=_ktccMissionUi;if(state.saving)return;
+ if(!state.dialog){
+  var dialog=document.createElement('dialog');dialog.id='ktcc-mission-dialog';dialog.setAttribute('aria-labelledby','ktcc-mission-title');
+  dialog.innerHTML='<header><h2 id="ktcc-mission-title">결선 히든미션</h2><button type="button" data-mission-close>닫기</button></header><div class="ktcc-mission-content"><strong data-mission-team></strong><p class="ktcc-final-note" data-mission-summary></p><fieldset><legend>5컵 중 다른 컵 1개 찾기</legend><label><input type="radio" name="ktcc-hidden-result" value="">미기록</label><label><input type="radio" name="ktcc-hidden-result" value="correct">정답 <b>+4점</b></label><label><input type="radio" name="ktcc-hidden-result" value="incorrect">오답 <b>0점</b></label></fieldset><p data-mission-total></p><p class="ktcc-final-note">기존 평가 점수·종료시간·서명은 그대로 유지됩니다. 저장한 결과는 순위와 디브리핑에 반영됩니다.</p><p role="status" aria-live="polite" data-mission-message></p></div><footer><button type="button" data-mission-reload>다시 불러오기</button><button type="button" data-mission-save>결과 저장</button></footer>';
+  document.body.appendChild(dialog);state.dialog=dialog;
+  dialog.querySelector('[data-mission-close]').onclick=ktccMissionClose_;
+  dialog.addEventListener('cancel',function(e){e.preventDefault();ktccMissionClose_();});
+  dialog.querySelectorAll('input').forEach(function(input){input.onchange=ktccMissionPreview_;});
+  dialog.querySelector('[data-mission-reload]').onclick=function(){if(!state.loaded||ktccMissionSelected_()===state.loaded.result||confirm('입력 중인 결과 대신 저장된 결과를 불러올까요?'))ktccLoadHiddenMission_(state.rowIndex);};
+  dialog.querySelector('[data-mission-save]').onclick=ktccSaveHiddenMission_;
+ }
+ state.rowIndex=item.rowIndex;state.opener=opener;state.loaded=null;state.dialog.showModal();ktccLoadHiddenMission_(state.rowIndex);
+}
+function ktccLoadHiddenMission_(rowIndex){
+ var state=_ktccMissionUi,dialog=state.dialog,ticket=++state.ticket,token=_judge.judgeToken;
+ dialog.querySelectorAll('button').forEach(function(n){n.disabled=false;});
+ state.loaded=null;dialog.querySelectorAll('input,[data-mission-save]').forEach(function(n){n.disabled=true;});
+ dialog.querySelector('[data-mission-team]').textContent='';dialog.querySelector('[data-mission-summary]').textContent='';dialog.querySelector('[data-mission-total]').textContent='';dialog.querySelectorAll('input').forEach(function(n){n.checked=false;});
+ dialog.querySelector('[data-mission-message]').textContent='최신 평가와 히든미션 결과를 확인하는 중…';
+ function finish(res){
+  if(ticket!==state.ticket||!dialog.open||!_judge||_judge.judgeToken!==token)return;
+  if(!res||!res.success){dialog.querySelector('[data-mission-message]').textContent=res&&res.message||'불러오지 못했습니다. 다시 불러오기를 눌러주세요.';return;}
+  state.loaded=res;dialog.querySelector('[data-mission-team]').textContent=res.teamName||'팀명 미입력';
+  dialog.querySelector('[data-mission-summary]').textContent=[res.stage,res.opponent?'상대팀 '+res.opponent:'',res.endTime,res.returned?'반려 중 · 재제출 후 순위 반영':''].filter(Boolean).join(' · ');
+  dialog.querySelectorAll('input').forEach(function(n){n.disabled=false;n.checked=n.value===res.result;});dialog.querySelector('[data-mission-save]').disabled=false;
+  dialog.querySelector('[data-mission-message]').textContent='';ktccMissionPreview_();
+ }
+ google.script.run.withSuccessHandler(finish).withFailureHandler(function(){finish(null);}).getKtccHiddenMission({rowIndex:rowIndex},{judgeToken:token});
+}
+function ktccSaveHiddenMission_(){
+ var state=_ktccMissionUi;if(state.saving||!state.loaded||!ktccCanDecide_())return;
+ var dialog=state.dialog,ticket=state.ticket,token=_judge.judgeToken,loaded=state.loaded,result=ktccMissionSelected_();
+ state.saving=true;dialog.querySelectorAll('button,input').forEach(function(n){n.disabled=true;});dialog.querySelector('[data-mission-message]').textContent='저장 중…';
+ function finish(res){
+  state.saving=false;if(ticket!==state.ticket)return;
+  if(!_judge||_judge.judgeToken!==token){dialog.close();state.loaded=null;return;}
+  dialog.querySelectorAll('button,input').forEach(function(n){n.disabled=false;});
+  if(!res||!res.success){state.loaded=null;dialog.querySelector('[data-mission-save]').disabled=true;dialog.querySelector('[data-mission-message]').textContent=res&&res.message||'저장 상태를 확인하지 못했습니다. 다시 불러와 확인해주세요.';return;}
+  state.loaded=res;dialog.querySelector('[data-mission-message]').textContent=res.message;ktccMissionPreview_();
+  (_reviewState.list||[]).forEach(function(item){if(String(item.rowIndex)===String(res.rowIndex))item.ktccHiddenMission=res.recorded?{recorded:true,result:res.result,points:res.points,baseScore:res.baseScore,totalScore:res.totalScore}:null;});
+  document.querySelectorAll('.ktcc-mission-btn').forEach(function(button){if(button.dataset.rowIndex===String(res.rowIndex)){button.textContent='히든미션 · '+ktccMissionLabel_(res.result);var summary=button.closest('.review-item').querySelector('.ktcc-mission-summary');if(summary)summary.textContent=res.recorded?'기존 '+res.baseScore+'점 + 히든미션 '+res.points+'점 = '+res.totalScore+'점':'';}});
+ }
+ google.script.run.withSuccessHandler(finish).withFailureHandler(function(){finish(null);}).setKtccHiddenMission({rowIndex:loaded.rowIndex,result:result,revision:loaded.revision},{judgeToken:token});
+}
+function ktccAddHiddenMissionAction_(row,item){
+ if(!ktccCanDecide_()||item.round!=='결선')return;
+ var result=item.ktccHiddenMission,summary=document.createElement('div');summary.className='review-info-sub ktcc-mission-summary';
+ if(result)summary.textContent='기존 '+result.baseScore+'점 + 히든미션 '+result.points+'점 = '+result.totalScore+'점';
+ row.firstElementChild.appendChild(summary);
+ var button=document.createElement('button');button.type='button';button.className='review-edit-btn ktcc-mission-btn';button.dataset.rowIndex=String(item.rowIndex);button.textContent='히든미션 · '+ktccMissionLabel_(result&&result.result);button.onclick=function(){ktccOpenHiddenMission_(item,button);};row.querySelector('.review-actions').appendChild(button);
 }

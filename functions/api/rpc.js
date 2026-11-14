@@ -611,6 +611,8 @@ async function dispatch(action, args, env, request) {
     getKtccFinalTeams: () => getKtccFinalTeams_(env, args[0]),
     getKtccFinalDecision: () => getKtccFinalDecision_(env, args[0], args[1]),
     setKtccFinalDecision: () => setKtccFinalDecision_(env, args[0], args[1]),
+    getKtccHiddenMission: () => getKtccHiddenMission_(env, args[0], args[1]),
+    setKtccHiddenMission: () => setKtccHiddenMission_(env, args[0], args[1]),
     getKcrStationEvaluationState: () => getKcrStationEvaluationState(env, args[0]),
     judgeLogin: () => judgeLogin(env, args[0], args[1], args[2], request),
     adminLogin: () => adminLogin(env, args[0], args[1], args[2], request),
@@ -729,15 +731,15 @@ async function getKtccFinalTeams_(env, actorArg) {
   const rows=(await env.DB.prepare("SELECT * FROM participants WHERE competition_code='KTCC' AND COALESCE(final_cup_no,'')<>'' ORDER BY id").all()).results||[];
   return {success:true,teams:rows.map(row=>({id:Number(row.id),number:safeStr(row.final_cup_no),name:safeStr(row.team_name||row.name),members:ktccMemberSummaryFromRow_(row,parseJson(row.extra_json,{}))}))};
 }
-async function ktccFinalDecisionContext_(env, request, actorArg) {
-  const auth=await requireActorForCode_(env,actorArg,'KTCC','KTCC 진출 판정 권한이 없습니다.');
+async function ktccFinalDecisionContext_(env, request, actorArg, action='진출 판정') {
+  const auth=await requireActorForCode_(env,actorArg,'KTCC','KTCC '+action+' 권한이 없습니다.');
   if(!auth.ok)return {error:auth.res};
-  if(!hasManageAccess(auth.actor,'KTCC'))return {error:{success:false,message:'진출 판정은 KTCC 팀장·관리자만 변경할 수 있습니다.'}};
+  if(!hasManageAccess(auth.actor,'KTCC'))return {error:{success:false,message:action+'은 KTCC 팀장·관리자만 변경할 수 있습니다.'}};
   const ref=parseReviewRowRef_(request&&request.rowIndex),row=ref.id?await env.DB.prepare("SELECT * FROM scores WHERE id=? AND competition_code='KTCC'").bind(ref.id).first():null;
   if(!row||!finalOfficialEvaluation_(row))return {error:{success:false,message:'KTCC 결선 공식 평가를 찾지 못했습니다.'}};
   const payload=parseJson(row.payload_json,{}),index=Number(ref.payloadRowIndex)||0;
   if(!Array.isArray(payload.rows)||!payload.rows[index])return {error:{success:false,message:'판정할 팀의 평가 행을 찾지 못했습니다.'}};
-  return {row,payload,index,extra:extractExtraSingleRow_(payload,'KTCC',index),revision:await finalEvaluationRevision_(row)};
+  return {row,payload,index,extra:extractExtraSingleRow_(payload,'KTCC',index),revision:await finalEvaluationRevision_(row),actor:auth.actor};
 }
 function ktccFinalDecisionResponse_(context) {
   return {success:true,rowIndex:context.payload.rows.length>1?context.row.id+':'+context.index:context.row.id,revision:context.revision,teamName:safeStr(context.extra['팀명']||context.row.participant_name),stage:safeStr(context.extra['토너먼트 단계']),opponent:safeStr(context.extra['상대팀']),result:safeStr(context.extra['진출판정']),total:context.row.total_score,endTime:safeStr(context.extra['종료시간'])};
@@ -770,6 +772,79 @@ async function setKtccFinalDecision_(env, request, actorArg) {
   if(!Number(saved.meta&&saved.meta.changes))return {success:false,stale:true,message:'다른 수정이 먼저 저장되었습니다. 다시 열어 확인해주세요.'};
   context.row={...old,payload_json:serialized};context.extra={...context.extra,'진출판정':result};context.revision=await finalEvaluationRevision_(context.row);
   return {...ktccFinalDecisionResponse_(context),message:'진출 판정을 저장했습니다. 평가 점수·시간은 그대로 유지됩니다.'};
+}
+// A manager-owned supplement, not a rewrite of signed section scores. Each
+// result belongs to one submitted final team/match; no preliminary fallback.
+const KTCC_HIDDEN_MISSION_KIND = 'KTCC_HIDDEN_MISSION';
+function ktccHiddenMissionToken_(id, index=0) { return KTCC_HIDDEN_MISSION_KIND+':'+id+':'+index; }
+function ktccHiddenMissionBinding_(id, round, unit, extra, submittedAt) {
+  return JSON.stringify([String(id),roundName_(round,''),safeStr(unit),safeStr(extra['토너먼트 단계']),safeStr(extra['매치번호']),safeStr(submittedAt)]);
+}
+async function ktccHiddenMissionRevision_(ctx, rawJson='') {
+  return sha256Hex_(JSON.stringify([await finalEvaluationRevision_(ctx.row),ctx.binding,ctx.row.disqualified,rawJson]));
+}
+async function ktccHiddenMissionContext_(env, request, actorArg) {
+  const ctx=await ktccFinalDecisionContext_(env,request,actorArg,'히든미션');
+  if(ctx.error)return ctx;
+  if(roundName_(ctx.row.round,'')!=='결선')return {error:{success:false,message:'히든미션은 KTCC 결선에만 기록할 수 있습니다.'}};
+  ctx.token=ktccHiddenMissionToken_(ctx.row.id,ctx.index);
+  ctx.old=await env.DB.prepare('SELECT payload_json FROM sessions WHERE token=? AND kind=?').bind(ctx.token,KTCC_HIDDEN_MISSION_KIND).first();
+  ctx.binding=ktccHiddenMissionBinding_(ctx.row.id,ctx.row.round,ctx.row.unit,ctx.extra,ctx.row.submitted_at);
+  ctx.mission=parseJson(ctx.old&&ctx.old.payload_json,{});
+  if(ctx.mission.binding!==ctx.binding)ctx.mission={};
+  ctx.revision=await ktccHiddenMissionRevision_(ctx,ctx.old?ctx.old.payload_json:'');
+  return ctx;
+}
+function ktccHiddenMissionResponse_(ctx) {
+  const result=['correct','incorrect'].includes(ctx.mission.result)?ctx.mission.result:'';
+  const points=result==='correct'?4:0;
+  const base=canonicalScoreForPayload_('KTCC',ctx.payload,ctx.index)??Number(ctx.row.total_score||0);
+  const disqualified=!!ctx.row.disqualified||isDisqualifiedValue_(ctx.extra['실격여부']);
+  return {success:true,rowIndex:ctx.payload.rows.length>1?ctx.row.id+':'+ctx.index:ctx.row.id,revision:ctx.revision,
+    teamName:safeStr(ctx.extra['팀명']||ctx.row.participant_name),stage:safeStr(ctx.extra['토너먼트 단계']),opponent:safeStr(ctx.extra['상대팀']),
+    result,recorded:!!result,points,baseScore:disqualified?0:base,totalScore:disqualified?0:base+points,
+    endTime:safeStr(ctx.extra['종료시간']),disqualified,returned:returnedEvaluation_(ctx.row)};
+}
+async function getKtccHiddenMission_(env, request, actorArg) {
+  const ctx=await ktccHiddenMissionContext_(env,request,actorArg);
+  return ctx.error||ktccHiddenMissionResponse_(ctx);
+}
+async function setKtccHiddenMission_(env, request, actorArg) {
+  const ctx=await ktccHiddenMissionContext_(env,request,actorArg);
+  if(ctx.error)return ctx.error;
+  if(!request||!Object.prototype.hasOwnProperty.call(request,'result')||!['','correct','incorrect'].includes(request.result))
+    return {success:false,message:'미기록·정답(4점)·오답(0점) 중에서 선택해주세요.'};
+  if(!request.revision||request.revision!==ctx.revision)return {success:false,stale:true,message:'평가 또는 히든미션 결과가 변경되었습니다. 다시 불러와 확인해주세요.'};
+  const mission={competitionCode:'KTCC',round:'결선',binding:ctx.binding,result:request.result,points:request.result==='correct'?4:0,
+    updatedAt:nowIso(),updatedBy:safeStr(ctx.actor.name),version:uuid()};
+  const json=JSON.stringify(mission),old=ctx.row;
+  // Both source evaluation and supplement are checked atomically. A tombstone
+  // for "미기록" prevents stale clients from restoring a result after reset.
+  const prior=ctx.old?'EXISTS(SELECT 1 FROM sessions WHERE token=? AND kind=? AND payload_json=?)':'NOT EXISTS(SELECT 1 FROM sessions WHERE token=?)';
+  const saved=await env.DB.prepare('INSERT OR REPLACE INTO sessions(token,kind,payload_json,expires_at,created_at) SELECT ?,?,?,?,? WHERE '+prior+
+    " AND EXISTS(SELECT 1 FROM scores WHERE id=? AND competition_code='KTCC' AND round='결선' AND payload_json=? AND review_status IS ? AND total_score IS ? AND disqualified IS ? AND unit IS ? AND submitted_at IS ?)")
+    .bind(ctx.token,KTCC_HIDDEN_MISSION_KIND,json,'2035-12-31T23:59:59.000Z',nowIso(),ctx.token,...(ctx.old?[KTCC_HIDDEN_MISSION_KIND,ctx.old.payload_json]:[]),
+      old.id,old.payload_json,old.review_status,old.total_score,old.disqualified,old.unit,old.submitted_at).run();
+  if(!Number(saved.meta&&saved.meta.changes))return {success:false,stale:true,message:'다른 수정이 먼저 저장되었습니다. 다시 불러와 확인해주세요.'};
+  ctx.mission=mission;ctx.revision=await ktccHiddenMissionRevision_(ctx,json);
+  return {...ktccHiddenMissionResponse_(ctx),message:'히든미션 결과를 저장했습니다.'};
+}
+async function applyKtccHiddenMissions_(env, items, applyTotal=false) {
+  // Never accept client-supplied supplement/derived fields from score payloads.
+  for(const item of items||[])for(const key of ['ktccHiddenMission','기존 평가점수','히든미션 결과','히든미션 점수'])delete item[key];
+  const eligible=(items||[]).filter(item=>finalOfficialEvaluation_(item)&&roundName_(item.round||item['라운드'],'')==='결선');
+  if(!eligible.length)return;
+  const records=(await env.DB.prepare('SELECT token,payload_json FROM sessions WHERE kind=?').bind(KTCC_HIDDEN_MISSION_KIND).all()).results||[];
+  const map=new Map(records.map(row=>[row.token,parseJson(row.payload_json,{})]));
+  for(const item of eligible){
+    const record=map.get(ktccHiddenMissionToken_(item.scoreRowId,item.payloadRowIndex));
+    if(!record||record.binding!==ktccHiddenMissionBinding_(item.scoreRowId,item.round,item.unit,item,item.submittedAt)||!['correct','incorrect'].includes(record.result))continue;
+    const base=Number(item['총점']||0),points=record.result==='correct'?4:0;
+    item.ktccHiddenMission={recorded:true,result:record.result,points,baseScore:base,totalScore:itemOfficialDq_(item)?0:base+points};
+    if(!applyTotal)continue;
+    item['기존 평가점수']=base;item['히든미션 결과']=record.result==='correct'?'정답':'오답';item['히든미션 점수']=points;
+    item['총점']=item['최종점수']=item.totalScore=item.ktccHiddenMission.totalScore;
+  }
 }
 async function ktccOpponentError_(env, payload, rowIndex) {
   const extra=extractExtraSingleRow_(payload,'KTCC',rowIndex),id=Number(extra['상대팀ID']),name=safeStr(extra['상대팀']);
@@ -5844,6 +5919,7 @@ async function getReviewList(env, competitionCode, actorArg) {
   let list = conversionRows.flatMap(r => preparedRows
     ? [rowToReviewItem(r,code,compactReview && !finalOfficialEvaluation_(r) ? [] : headers,cfg && cfg.current_round,0,preparedRows.get(r.id))]
     : rowToReviewItems_(r, code, headers, cfg && cfg.current_round));
+  if(code==='KTCC')await applyKtccHiddenMissions_(env,list);
   if (closedIds.size) list = list.filter(item => hasManageAccess(auth.actor, code) || !closedIds.has(Number(item.scoreRowId)))
     .map(item => closedIds.has(Number(item.scoreRowId)) ? {...item,stationClosed:true} : item);
   if ((manager || (code === 'KCR' && hasAdmin(auth.actor))) && list.length) {
@@ -7724,7 +7800,7 @@ function aggregateRankingGroup_(code, g, round, options) {
     const dq = latest ? itemOfficialDq_(latest) : !!g.dq;
     const score = dq ? 0 : (latest ? (rankingScoreFromItem_(latest) ?? 0) : 0);
     return {
-      score, total: score, basis: '최신 공식 제출 총점', disqualified: dq,
+      score, total: score, basis: code==='KTCC'&&latest&&latest.ktccHiddenMission?'기존 평가점수 + 히든미션':'최신 공식 제출 총점', disqualified: dq,
       tie: { time: latest ? itemEndTimeSeconds_(latest) : 999999 }
     };
   }
@@ -7907,6 +7983,15 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     }
     return item;
   })).filter(item => !selectedRound || roundName_(item.round || item['라운드'], '') === selectedRound);
+  if(code==='KTCC'){
+    await applyKtccHiddenMissions_(env,converted,true);
+    if(converted.some(item=>item.ktccHiddenMission)){
+      for(const name of ['기존 평가점수','히든미션 결과','히든미션 점수'])if(!headers.includes(name))headers.push(name);
+      // Reports and details use the same derived totals; edit-column indices in
+      // getReviewList remain unchanged and cannot edit the supplement.
+      for(const item of converted)item.values=headers.map((h,i)=>(item['_col'+i]=item[h]??''));
+    }
+  }
   if (code === 'IKRC') converted = ikrcApplyOfficialSelections_(converted, await loadIkrcOfficialSelections_(env));
   const groups = new Map();
   converted.forEach(item => {
@@ -7941,6 +8026,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     }
     if (code === 'KTCC') {
       const latest = latestOfficialItem_(g.rows || []) || {};
+      g.ktccHiddenMission=latest.ktccHiddenMission;
       g.checkerSummary = latest['심사위원명'] || latest.judgeName || '';
       g.endTimeDisplay = latest['종료시간'] || latest['경기시간'] || '';
       g.tournamentSummary = [
@@ -8022,6 +8108,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       playerNameSummary: g.name || '', nameSummary: g.name || '', playerAffiliationSummary: g.affiliation || '', teamNameSummary: g.teamName || '', teamSummary: g.team || '',
       totalScore: g.rankingScore, avgScore: code === 'IKRC' && g.ikrcSensoryAvg !== undefined ? g.ikrcSensoryAvg : g.rankingScore, score: g.rankingScore, rankingScore: g.rankingScore,
       calculatedScore:g.calculatedRankingScore,
+      ktccHiddenMission:code==='KTCC'?g.ktccHiddenMission:undefined,
       roastingScore:code === 'IKRC' ? g.ikrcSensoryAvg : undefined,
       seedBonus:code === 'IKRC' ? g.ikrcSeedBonus : undefined,
       officialResultOverride:!!g.officialResultOverride,

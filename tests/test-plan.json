@@ -139,7 +139,8 @@
     "tests/stage297-kbc-final-reverse.test.mjs",
     "tests/stage298-kbc-presentation-debrief.test.mjs",
     "tests/stage299-kbc-ranking-presentation.test.mjs",
-    "tests/stage300-moc-manual-final.test.mjs"
+    "tests/stage300-moc-manual-final.test.mjs",
+    "tests/stage301-ktcc-hidden-mission.test.mjs"
   ],
   "browser": [
     "tests/stage201-finals-browser.test.mjs",
@@ -205,7 +206,8 @@
     "tests/stage286-admin-evaluation-access.test.mjs",
     "tests/stage298-kbc-presentation-browser.test.mjs",
     "tests/stage299-kbc-ranking-presentation-browser.test.mjs",
-    "tests/stage300-moc-manual-final-browser.test.mjs"
+    "tests/stage300-moc-manual-final-browser.test.mjs",
+    "tests/stage301-ktcc-hidden-mission-browser.test.mjs"
   ],
   "critical": [
     "tests/stage113-full-flow.test.mjs",
@@ -237,6 +239,7 @@
     "tests/stage297-kbc-final-reverse.test.mjs",
     "tests/stage298-kbc-presentation-debrief.test.mjs",
     "tests/stage299-kbc-ranking-presentation.test.mjs",
-    "tests/stage300-moc-manual-final.test.mjs"
+    "tests/stage300-moc-manual-final.test.mjs",
+    "tests/stage301-ktcc-hidden-mission.test.mjs"
   ]
 }

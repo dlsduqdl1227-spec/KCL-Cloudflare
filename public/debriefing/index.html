@@ -1931,7 +1931,7 @@ function publicHeaderAppliesToRound_(h, s, compCode) {
     if (/^결선\s*/i.test(header)) return isFinal && kcacPublicHeaderAppliesToPurpose_(header, s);
     return kcacPublicHeaderAppliesToPurpose_(header, s);
   }
-  if (comp === 'KTCC' && /전체오답|원기록\s*정답수/i.test(header)) return false;
+  if (comp === 'KTCC' && /전체오답|원기록\s*정답수|^기존 평가점수$|^히든미션 (결과|점수)$/i.test(header)) return false;
   return true;
 }
 function publicHeaderAppliesToEvaluation_(h, s, compCode) {
@@ -2128,6 +2128,10 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
       '<div class="judge-name">' + escHtml(publicTitle) + statusBadge + '</div>' +
       '<div class="total-score">' + totalHtml + '</div>' +
     '</div>';
+  if(isKtcc&&s.ktccHiddenMission){
+    var mission=s.ktccHiddenMission;
+    card.insertAdjacentHTML('beforeend','<div class="score-card-meta">기존 평가 '+escHtml(mission.baseScore)+'점 + 히든미션 '+escHtml(mission.result==='correct'?'정답 (+4점)':'오답 (0점)')+' = '+escHtml(total)+'점'+(s.disqualified?' · 실격':'')+'</div>');
+  }
   var kcacMeta = compCode === 'KCAC' ? buildKcacCupMetaLine(s) : '';
   if (kcacMeta) card.insertAdjacentHTML('beforeend', '<div class="score-card-meta">' + escHtml(kcacMeta) + '</div>');
   if (compCode === 'MOB') {

@@ -15,3 +15,24 @@
 #ktcc-decision-dialog :focus-visible{outline:2px solid #80bdff;outline-offset:3px}
 #ktcc-decision-dialog [data-decision-message]{font-size:13px;color:#d1d1d6;line-height:1.7}
 @media(max-width:600px){#ktcc-decision-dialog footer button{flex:1}}
+#ktcc-mission-dialog{color-scheme:dark;box-sizing:border-box;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px);margin:auto;padding:0;border:1px solid #54545a;border-radius:18px;background:#1c1c1e;color:#f5f5f7;overflow:auto;overflow-wrap:anywhere}
+#ktcc-mission-dialog::backdrop{background:#000a;backdrop-filter:blur(4px)}
+#ktcc-mission-dialog header,#ktcc-mission-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px;border-bottom:1px solid #3a3a3c}
+#ktcc-mission-dialog h2{font-size:20px;margin:0;text-align:left;line-height:1.4}
+#ktcc-mission-dialog .ktcc-mission-content{padding:20px}
+#ktcc-mission-dialog [data-mission-team]{display:block;font-size:22px;line-height:1.4}
+#ktcc-mission-dialog fieldset{min-width:0;margin:18px 0;padding:0;border:0}
+#ktcc-mission-dialog legend{margin-bottom:10px;font-weight:600;font-size:15px;color:#f5f5f7}
+#ktcc-mission-dialog fieldset label{display:flex;align-items:center;gap:10px;min-height:52px;box-sizing:border-box;margin:8px 0;padding:12px;border:1px solid #636366;border-radius:10px;font-size:16px;color:#f5f5f7;cursor:pointer}
+#ktcc-mission-dialog fieldset label:has(input:checked){border-color:#80bdff;background:#163451}
+#ktcc-mission-dialog input[type=radio]{appearance:auto;flex:0 0 22px;width:22px;height:22px;min-height:0;padding:0;margin:0;border-radius:50%;accent-color:#80bdff}
+#ktcc-mission-dialog label b{margin-left:auto;color:#f5f5f7}
+#ktcc-mission-dialog [data-mission-total]{font-size:16px;font-weight:600;line-height:1.6;color:#f5f5f7}
+#ktcc-mission-dialog button{min-height:44px;padding:10px 14px;border-radius:9px;border:1px solid #636366;background:#2c2c2e;color:#f5f5f7;font-size:14px;font-weight:600;white-space:normal}
+#ktcc-mission-dialog [data-mission-save]{background:#0063c7;border-color:#0063c7;color:#fff}
+#ktcc-mission-dialog footer{border-top:1px solid #3a3a3c;border-bottom:0;justify-content:flex-end}
+#ktcc-mission-dialog button:disabled{opacity:.5}
+#ktcc-mission-dialog :focus-visible{outline:2px solid #80bdff;outline-offset:3px}
+#ktcc-mission-dialog [data-mission-message]{font-size:14px;color:#d1d1d6;line-height:1.7;min-height:24px}
+.ktcc-mission-summary{margin-top:6px}
+@media(max-width:600px){#ktcc-mission-dialog footer button{flex:1}#ktcc-mission-dialog .ktcc-mission-content{padding:16px}}
