@@ -869,7 +869,8 @@ async function adminLogin(env, adminId, password, secretCode, request = null) {
   if (!password) return { success: false, message: '비밀번호를 입력해주세요.' };
   if (!secretCode) return { success: false, message: '시크릿 코드를 입력해주세요.' };
 
-  const requiredSecretCode = safeStr(env.KCL_ADMIN_SECRET_CODE || env.ADMIN_SECRET_CODE || '5061');
+  const requiredSecretCode = safeStr(env.KCL_ADMIN_SECRET_CODE || env.ADMIN_SECRET_CODE || '');
+  if (!requiredSecretCode) return { success: false, message: '관리자 보안 설정을 확인해주세요.' };
   if (!timingSafeEqual_(secretCode, requiredSecretCode)) {
     return { success: false, message: '시크릿 코드가 올바르지 않습니다.' };
   }
@@ -4284,9 +4285,10 @@ function canonicalScoreForPayload_(code, payload, rowIndex=0, preparedExtra=null
     const s1 = s1Wrong ? 0 : rawS1;
     const s2 = s2Wrong ? 0 : rawS2;
     const s3 = s3Wrong ? 0 : rawS3;
-    const bonus = (!s3Wrong && Number(s3) === 2) ? 2 : 0;
+    const hiddenMission = safeStr(extra['Section3 주제']) === '히든미션: 5컵 중 다른 컵 1개 찾기 (정답 4점 / 오답 0점)';
+    const bonus = hiddenMission ? ((!s3Wrong && Number(s3) === 1) ? 3 : 0) : ((!s3Wrong && Number(s3) === 2) ? 2 : 0);
     const hasKtcc = [rawS1,rawS2,rawS3,bonus].some(v => v > 0) || s1Wrong || s2Wrong || s3Wrong || firstNumberFromKeys_(extra, ['총점']) !== null;
-    if (hasKtcc) return roundScoreValue_(s1 + s2 + s3 + bonus);
+    if (hasKtcc) return roundScoreValue_(s1 + s2 + (hiddenMission ? (Number(s3)===1?1:0) : s3) + bonus);
     return fallback();
   }
   return fallback();

@@ -65,3 +65,33 @@ function ktccSaveFinalDecision_(){
 function ktccAddFinalDecisionAction_(row,item){
  if(!ktccCanDecide_())return;var button=document.createElement('button');button.type='button';button.className='review-edit-btn ktcc-decision-btn';button.dataset.rowIndex=String(item.rowIndex);button.textContent='진출 판정'+(item['진출판정']?' · '+item['진출판정']:'');button.onclick=function(){ktccOpenFinalDecision_(item);};row.querySelector('.review-actions').appendChild(button);
 }
+
+// Current final hidden mission; historical records keep their original theme/rule.
+(function(){
+ var RULE='히든미션: 5컵 중 다른 컵 1개 찾기 (정답 4점 / 오답 0점)';
+ function final(){return _ktcc.round==='final';}
+ var counts=window.ktccSectionCupCounts_;window.ktccSectionCupCounts_=function(round){var value=counts(round);if(round!=='qual')value.section3=5;return value;};
+ var max=window.ktccMaxForSection_;window.ktccMaxForSection_=function(section){return final()&&section==='section3'?1:max(section);};
+ var set=window.ktccSetSectionCount_;window.ktccSetSectionCount_=function(section,count){return set(section,final()&&section==='section3'?Math.min(1,Number(count)):count);};
+ var score=window.ktccSectionScore_;window.ktccSectionScore_=function(section){var n=score(section);return final()&&section==='section3'?(n===1?1:0):n;};
+ var bonus=window.ktccBonusFromS3_;window.ktccBonusFromS3_=function(n,invalid){return final()?(!invalid&&Number(n)===1?3:0):bonus(n,invalid);};
+ var render=window.renderKtccCups;window.renderKtccCups=function(section){
+  if(!final()||section!=='section3')return render(section);
+  var raw=ktccSectionRawCount_(section),invalid=ktccSectionInvalid_(section),locked=isCurrentKtccLocked_();
+  document.getElementById('ktcc-section3-cups').innerHTML='<p>5컵 중 다른 컵 1개 찾기 · 정답 4점 / 오답 0점</p><div class="ktcc-group-count">'+[0,1].map(function(n){return '<button type="button" class="g-btn'+(!invalid&&raw===n?' on':'')+'" '+(locked?'disabled':'')+' onclick="ktccChooseHiddenMission_('+n+')">'+(n?'정답 · 4점':'오답 · 0점')+'</button>';}).join('')+'</div>'+(raw>1?'<p>기존 임시 기록입니다. 히든미션의 정답 또는 오답을 다시 선택해주세요.</p>':'');
+ };
+ window.ktccChooseHiddenMission_=function(n){if(isCurrentKtccLocked_())return;ktccSetSectionInvalid_('section3',false);setKtccSectionAnswerCount('section3',n);};
+ var start=window.startKtcc;window.startKtcc=function(){var result=start.apply(this,arguments);if(final()){
+  var theme=document.getElementById('ktcc-s3-theme');theme.value=RULE;theme.readOnly=true;
+  document.getElementById('ktcc-s3-label').textContent='히든미션';document.getElementById('ktcc-rule-desc').textContent='Section 1·2는 기존 기준을 적용합니다. 히든미션은 5컵 중 다른 컵 1개 찾기: 정답 4점, 오답 0점입니다.';updateKtccScore();
+ }return result;};
+ var update=window.updateKtccScore;window.updateKtccScore=function(){var result=update.apply(this,arguments);if(final()&&!evalDisqualificationPayload_('KTCC',_ktcc.disqualified,'시간 초과').disqualified)document.getElementById('ktcc-final-sub').textContent='히든미션 '+(ktccSectionScore_('section3')===1?'정답 · 4점':'오답 · 0점')+' · Section 1·2 점수 합산';return result;};
+ var sign=window.ktccRequestSign;window.ktccRequestSign=function(){if(final()&&ktccSectionRawCount_('section3')>1){toast('히든미션 정답 또는 오답을 다시 선택해주세요.',true);return;}return sign.apply(this,arguments);};
+ var sync=window.syncMocKtccReviewTotal_;window.syncMocKtccReviewTotal_=function(){var result=sync.apply(this,arguments),item=_reviewState.current||{};
+  if(_reviewState.code!=='KTCC'||item['Section3 주제']!==RULE)return result;
+  var hidden=document.getElementById('review-derived-total-input');if(!hidden||hidden.value==='')return result;
+  var s1=reviewKtccSectionWrong_(1)?0:reviewKtccSectionScoreValue_(1),s2=reviewKtccSectionWrong_(2)?0:reviewKtccSectionScoreValue_(2),correct=!reviewKtccSectionWrong_(3)&&reviewKtccSectionScoreValue_(3)===1;
+  var i=(_reviewState.headers||[]).indexOf('Section3 가산점'),input=i>=0?document.querySelector('#review-edit-fields input[data-col="'+i+'"]'):null;if(input)input.value=correct?'3':'0';
+  setReviewDerivedTotalDisplay_((_reviewState.headers||[]).indexOf('총점'),s1+s2+(correct?4:0),{hiddenId:'review-derived-total-input',digits:1,dq:false,blankOnDq:true});return result;
+ };
+})();

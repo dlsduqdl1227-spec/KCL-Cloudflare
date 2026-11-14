@@ -8,7 +8,7 @@ export function discover(){
   const all=fs.readdirSync(path.join(root,'tests')).filter(n=>n.endsWith('.test.mjs')).sort().map(n=>'tests/'+n);
   const browser=all.filter(p=>/createBrowserFixture|from ['"][^'"]*playwright|chromium\.launch/.test(fs.readFileSync(path.join(root,p),'utf8')));
   const api=all.filter(p=>!browser.includes(p));
-  const criticalPrefixes=[113,136,138,146,148,187,195,197,198,200,205,207,219,248,255,283,287,288,289,290,291,292,293,294,295,296,297,298,299,300];
+  const criticalPrefixes=[113,136,138,146,148,187,195,197,198,200,205,207,219,248,255,283,287,288,289,290,291,292,293,294,295,296,297,298,299,300,301];
   const critical=api.filter(p=>criticalPrefixes.some(n=>p.startsWith('tests/stage'+n+'-')));
   return {schemaVersion:1,api,browser,critical};
 }
