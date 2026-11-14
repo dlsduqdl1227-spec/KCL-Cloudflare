@@ -48,3 +48,17 @@
   return rendered;
  };
 })();
+
+// KBC machine/equipment scores use their own detail labels and a five-point scale.
+(function(){
+ 'use strict';
+ var original=window.kbcPresentationDetailField_;if(typeof original!=='function')return;
+ window.kbcPresentationDetailField_=function(header){
+  var h=String(header||'');
+  if(!/Machine.*Equipment|머신.*기물|기물.*운용/i.test(h))return original.apply(this,arguments);
+  if(/번호|연락처|전화|휴대폰|이름|선수명|참가자명|소속|심사위원|서명|participant|judge|name|phone|token|secret/i.test(h))return null;
+  if(isSmartTagHeader(h))return {kind:'detail',label:'Machine & Equipment Smart Tags(머신·기물 운용 스마트태그)'};
+  if(/코멘트|메모|Comment|Feedback|Note|의견|심사평/i.test(h))return {kind:'comment',label:'Machine & Equipment Comment(머신·기물 운용 코멘트)'};
+  return {kind:'score',label:'Machine & Equipment Professionalism(머신 및 기물 운용 전문성)'};
+ };
+})();

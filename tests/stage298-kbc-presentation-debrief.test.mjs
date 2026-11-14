@@ -15,3 +15,8 @@ test('presentation comments and smart tags keep their own sections, and private 
   for(const key of ['Service Professionalism 코멘트','Presentation Comment','Service Professionalism 스마트태그','Presentation participantName','Presentation 연락처'])assert.equal(ctx.isPublicScoreKey(key,'KBC'),false,key);
   assert.match(ctx.kbcPresentationPublicLabel_('Service Professionalism 코멘트'),/코멘트/);assert.match(ctx.kbcPresentationPublicLabel_('Service Professionalism 스마트태그'),/스마트태그/);
 });
+
+test('KBC machine/equipment points and authored feedback have public labels and the correct five-point scale',()=>{
+  const h='Machine & Equipment Professionalism(머신 및 기물 운용 전문성)';assert.equal(ctx.isPublicScoreKey(h,'KBC'),true);assert.equal(ctx.scoreMaxForLabel(h,'KBC'),5);assert.match(ctx.kbcPresentationPublicLabel_(h),/머신 및 기물 운용 전문성/);
+  assert.equal(ctx.isPublicScoreKey('Machine & Equipment participantName','KBC'),false);assert.match(ctx.kbcPresentationPublicLabel_('Machine & Equipment 코멘트'),/운용 코멘트/);assert.match(ctx.kbcPresentationPublicLabel_('Machine & Equipment 스마트태그'),/운용 스마트태그/);
+});

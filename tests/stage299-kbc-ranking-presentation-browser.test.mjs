@@ -8,7 +8,7 @@ test('admin and KBC team lead click an actual ranking row and see presentation s
     const c=api.cases.find(c=>c.code==='KBC'),headers=['Service Professionalism(서비스의 전문성)','Presentation','Service Professionalism'];
     for(const row of api.db.prepare("SELECT id,round,payload_json FROM scores WHERE competition_code='KBC'").all()){
       const payload=JSON.parse(row.payload_json),index=c.rounds.indexOf(row.round),h=headers[index];
-      Object.assign(payload.rows[0].extraFields,{[h]:index===2?0:4.2,[h+' 코멘트']:row.round+' 프레젠테이션 원문 의견',[h+' 스마트태그']:row.round+' 의도 전달 명확'});
+      Object.assign(payload.rows[0].extraFields,{[h]:index===2?0:4.2,[h+' 코멘트']:row.round+' 프레젠테이션 원문 의견',[h+' 스마트태그']:row.round+' 의도 전달 명확','Machine & Equipment Professionalism(머신 및 기물 운용 전문성)':index===2?0:4.4,'Machine & Equipment Professionalism 코멘트':row.round+' 머신 운용 원문 평가','Machine & Equipment Professionalism 스마트태그':'기물 운용 숙련'});
       api.db.prepare('UPDATE scores SET payload_json=? WHERE id=?').run(JSON.stringify(payload),row.id);
     }
     // Reuse the existing disposable SQLite fixture identity; no real account or phone is introduced.
@@ -31,7 +31,8 @@ test('admin and KBC team lead click an actual ranking row and see presentation s
         await page.waitForFunction(round=>_rankingDetail?.round===round&&document.getElementById('pRankingDetail').classList.contains('active'),round);
         const field=page.locator('#ranking-detail-body .detail-field').filter({hasText:'프레젠테이션·서비스 전문성'}).first();
         assert.equal(await field.isVisible(),true);assert.match(await field.innerText(),index===2?/0 \/ 5/:/4\.2 \/ 5/);
-        const body=await page.locator('#ranking-detail-body').innerText();assert.ok(body.includes(round+' 프레젠테이션 원문 의견'));assert.ok(body.includes(round+' 의도 전달 명확'));
+        const machine=page.locator('#ranking-detail-body .detail-field').filter({hasText:'머신 및 기물 운용 전문성'}).first();assert.equal(await machine.isVisible(),true);assert.match(await machine.innerText(),index===2?/0 \/ 5/:/4\.4 \/ 5/);
+        const body=await page.locator('#ranking-detail-body').innerText();assert.ok(body.includes(round+' 머신 운용 원문 평가'));assert.ok(body.includes('기물 운용 숙련'));assert.ok(body.includes(round+' 프레젠테이션 원문 의견'));assert.ok(body.includes(round+' 의도 전달 명확'));
         for(const other of c.rounds.filter(r=>r!==round))assert.ok(!body.includes(other+' 프레젠테이션 원문 의견'));
         assert.equal((await inspectPage(page)).pageOverflow,false);
         await page.locator('#pRankingDetail').getByRole('button',{name:'순위로 돌아가기'}).click();

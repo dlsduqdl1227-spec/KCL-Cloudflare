@@ -45,3 +45,16 @@ test('the actual ranking-detail API supplies presentation for every KBC round wi
     assert.equal(snapshot(),before);assert.deepEqual(await api.rpc('getRanking','KBC',api.actor),rankBefore);
   }finally{api.close();}
 });
+
+// Exercise the same small runtime extension loaded by the assessment page.
+const operations=fs.readFileSync(new URL('../public/assets/operations-workspace.js',import.meta.url),'utf8');
+vm.runInContext('var window=globalThis;'+operations.slice(operations.indexOf('// KBC machine/equipment')),ctx);
+test('KBC machine/equipment numeric, zero, comment and tag fields appear in ranking detail without changing other competitions',()=>{
+  const h='Machine & Equipment Professionalism(머신 및 기물 운용 전문성)';
+  for(const score of [4.4,0]){
+    const row={[h]:score,'Machine & Equipment Professionalism 코멘트':'기물 운용 원문 평가','Machine & Equipment Professionalism 스마트태그':'기물 운용 숙련'};
+    const html=ctx.renderDetailCard(row,Object.keys(row),0,'KBC');assert.match(html,/머신 및 기물 운용 전문성/);assert.ok(html.includes(score+' / 5'));assert.match(html,/기물 운용 원문 평가/);assert.match(html,/기물 운용 숙련/);
+  }
+  assert.equal(ctx.kbcPresentationDetailField_('Machine & Equipment participantName'),null);
+  assert.doesNotMatch(ctx.renderDetailCard({'Machine & Equipment Professionalism':4.4},['Machine & Equipment Professionalism'],0,'MOC'),/4\.4/);
+});

@@ -2148,6 +2148,11 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
 
 
 function kbcPresentationPublicLabel_(key) {
+  if (/Machine.*Equipment|머신.*기물|기물.*운용/i.test(String(key || ''))) {
+    if (isSmartTagLabel(key)) return 'Machine & Equipment Smart Tags(머신·기물 운용 스마트태그)';
+    if (isCommentLabel(key)) return 'Machine & Equipment Comment(머신·기물 운용 코멘트)';
+    return 'Machine & Equipment Professionalism(머신 및 기물 운용 전문성)';
+  }
   if (!/Service\s*Professionalism|서비스의\s*전문성|Presentation|프[레리]젠테이션/i.test(String(key || ''))) return '';
   if (isSmartTagLabel(key)) return 'Presentation & Service Smart Tags(프레젠테이션·서비스 스마트태그)';
   if (isCommentLabel(key)) return 'Presentation & Service Comment(프레젠테이션·서비스 코멘트)';
