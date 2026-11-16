@@ -1,7 +1,7 @@
 name: KCL Cloud
 on:
   push:
-    branches: [main, 'ops/**']
+    branches: [main, 'ops/**', '!ops/verify-debrief-layout']
   pull_request:
   workflow_dispatch:
     inputs:
