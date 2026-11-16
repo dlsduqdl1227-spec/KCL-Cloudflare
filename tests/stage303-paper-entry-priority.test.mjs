@@ -112,5 +112,11 @@ try{
  assert.equal((await kcac.rpc('getRanking','KCAC',kcac.actor,'결선')).ranking[0].score,128,'48+48+16+16');
  const wrong=payload(2,4);wrong.rows[0].extraFields.패턴종류='sensory-oat';
  assert.equal((await(await kcac.handle({action:'submitScores',args:[wrong]})).json()).success,false,'transcription preserves assigned milk/sensory area');
+ const beforeRoleChange=JSON.stringify(kcac.db.prepare('SELECT * FROM scores ORDER BY id').all());
+ kcac.db.prepare('UPDATE operators SET role=? WHERE id=?').run(roles[2],ids[0]);
+ const moved=(await kcac.rpc('createPaperEntrySessions',{competitionCode:'KCAC',round:'결선',operatorIds:[ids[0]],paperConfirmed:true},kcac.actor)).entries[0];
+ const occupied=payload(2,4);occupied.judgeToken=moved.token;
+ assert.equal((await(await kcac.handle({action:'submitScores',args:[occupied]})).json()).success,false,'a role change cannot overwrite another judge or exceed a filled sensory seat');
+ assert.equal(JSON.stringify(kcac.db.prepare('SELECT * FROM scores ORDER BY id').all()),beforeRoleChange);
  console.log('Stage303 KCAC: all four head roles, 160-point combined scoring, occupied-panel replacement, correct role/area enforcement passed.');
 }finally{kcac.close();}

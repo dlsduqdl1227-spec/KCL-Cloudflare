@@ -5789,7 +5789,8 @@ async function submitScores(env, payload, signature, request = null) {
       if (kcacSplitFinal) {
         const panelLimit=finalScope==='pattern'?2:1;
         const samePanel=existing.filter(row=>!isCalibrationMode_(row.mode) && finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope);
-        if (samePanel.length>=panelLimit&&!(paperReplacing&&owned.length)) return {success:false,message:'해당 KCAC 결선 평가 영역은 모두 제출되었습니다. 기존 평가를 확인·반려하여 수정해주세요.'};
+        const replacedIds=new Set(paperReplacing?owned.map(row=>Number(row.id)):[]);
+        if (samePanel.filter(row=>!replacedIds.has(Number(row.id))).length>=panelLimit) return {success:false,message:'해당 KCAC 결선 평가 영역은 모두 제출되었습니다. 기존 평가를 확인·반려하여 수정해주세요.'};
       }
       if(finalOfficialEvaluation_(x))onePayload.finalEvaluationKey=await sha256Hex_(JSON.stringify([x.code,x.round,x.unit,actorIdentityKey,scoreEvaluationCategoryKey_(x.mode),kcacSplitFinal?'four-head':finalScope]));
     }
