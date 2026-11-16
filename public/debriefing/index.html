@@ -1558,22 +1558,16 @@ function buildIkrcRoundAverageBox_(round, list, rank) {
   var totalSum = totals.reduce(function(sum, value){ return sum + value; }, 0);
   var avg = totals.length ? Math.round((totalSum / totals.length) * 100 + 1e-8) / 100 : ikrcLocalRoundAverage_(list,round);
   if (isNaN(avg)) avg = 0;
-  var judgeCount = list.length || 0;
-  var headCount = Number(rank.headCount || list.filter(function(s){ return /헤드|head/i.test(String(s['역할'] || s.role || '')); }).length || 0);
-  var sensoryCount = Number(rank.sensoryCount || Math.max(0, judgeCount - headCount) || 0);
-  var panelText = [];
-  if (headCount) panelText.push('헤드 ' + headCount + '명 비교용');
-  if (sensoryCount) panelText.push('센서리 ' + sensoryCount + '명 반영');
-  if (!panelText.length) panelText.push('심사위원 ' + judgeCount + '명');
+  var panel = ikrcPanelDisplaySummary_(list);
   var formulaText = totals.length
     ? ('총점 합계 ' + fmtScore(totalSum, 2) + ' ÷ ' + totals.length + '명')
-    : ('심사위원 ' + judgeCount + '명 반영');
+    : '센서리 점수 집계 대기';
   var box = document.createElement('div');
   box.className = 'avg-box';
   box.innerHTML =
     '<div class="avg-title">'+'IKRC 센서리 평균'+'</div>' +
     '<div class="avg-total">' + (!totals.length?'집계 대기':fmtScore(avg, 2)) + '</div>' +
-    '<div class="avg-sub">' + escHtml(round || '-') + ' · ' + escHtml(panelText.join(' · ')) + ' · ' + escHtml(formulaText) + '</div>' +
+    '<div class="avg-sub">' + escHtml(round || '-') + ' · ' + escHtml(panel.text) + ' · ' + escHtml(formulaText) + '</div>' +
     '<div class="avg-sub">이 선수를 평가한 센서리 심사위원별 총점의 평균입니다. 헤드 평가는 비교용이며 순위에서 제외됩니다.</div>';
   if(round==='결선')box.innerHTML+='<div class="avg-sub">헤드 평가는 비교용이며, 센서리 심사위원 점수만 평균에 반영합니다.</div>'+(totals.length?'<div class="avg-sub">로스팅 센서리 평균 '+fmtScore(avg,2)+' + Seed to Cup '+Number(rank.seedBonus||0)+' = 최종점수 '+fmtScore(rank.rankingScore == null ? avg+Number(rank.seedBonus||0) : rank.rankingScore,2)+'</div>':'');
   return box;
@@ -1587,7 +1581,7 @@ function buildReportIntro(res, scores) {
   var rounds = Array.from(new Set((scores || []).map(function(s){ return normalizeKcacRoundForDisplay_(code, s.round || s['라운드'] || ''); }).filter(Boolean)));
   var box = document.createElement('div');
   box.className = 'report-intro';
-  var countText = code === 'IKRC' ? (' 심사위원 평가표 ' + count + '건') : (' 공개 항목 ' + count + '건');
+  var countText = code === 'IKRC' ? (' · ' + ikrcPanelDisplaySummary_(scores).text) : (' 공개 항목 ' + count + '건');
   if(code==='KTCC'&&rounds.indexOf('결선')>=0)countText='';
   var introTitle = code === 'IKRC' ? '공식 제출 평가 결과' : (code === 'KCAC' ? '라떼아트 공식 평가 결과' : '공식 검수 완료 평가 결과');
   var introText = code === 'IKRC'
@@ -1811,6 +1805,21 @@ function ikrcAggregateJudgeCount_(list) {
   });
   return Object.keys(seen).length;
 }
+function ikrcPanelDisplaySummary_(list) {
+  var heads = [], sensory = [], excluded = [];
+  (list || []).forEach(function(s){
+    if (/헤드|head/i.test(String(s['역할'] || s.role || s.judgeRole || ''))) heads.push(s);
+    else if (!s.ikrcRankingExcluded && !s.disqualified && s['실격여부'] !== 'Y') sensory.push(s);
+    else excluded.push(s);
+  });
+  var sensoryCount = ikrcAggregateJudgeCount_(sensory);
+  var headCount = ikrcAggregateJudgeCount_(heads);
+  var excludedCount = ikrcAggregateJudgeCount_(excluded);
+  var parts = ['점수 반영: 센서리 ' + sensoryCount + '명'];
+  if (headCount) parts.push('헤드 ' + headCount + '명 비교용 (평균·순위 미반영)');
+  if (excludedCount) parts.push('그 외 ' + excludedCount + '명 점수 미반영');
+  return {sensoryCount:sensoryCount, headCount:headCount, excludedCount:excludedCount, text:parts.join(' · ')};
+}
 function ikrcAggregateTags_(list, names, limit) {
   var stats = {}, order = 0;
   (list || []).forEach(function(s){
@@ -1876,7 +1885,6 @@ function ikrcManualCommentExcerpts_(list, limit) {
 function buildIkrcCombinedCommentText_(list) {
   list = list || [];
   if (!list.length) return '';
-  var judgeCount = ikrcAggregateJudgeCount_(list);
   var flavorTags = ikrcAggregateTags_(list, ['Flavor','플레이버'], 4);
   var cleanTags = ikrcAggregateTags_(list, ['Clean Cup','클린컵'], 3);
   var sweetTags = ikrcAggregateTags_(list, ['Sweetness','스윗니스','단맛'], 3);
@@ -1884,9 +1892,9 @@ function buildIkrcCombinedCommentText_(list) {
   var mouthfeelTags = ikrcAggregateTags_(list, ['Mouthfeel','마우스필'], 3);
   var sentences = [];
   if (flavorTags.length) {
-    sentences.push('심사위원 ' + judgeCount + '명의 공식 제출을 종합했습니다. 주요 향미로 ' + joinNatural_(flavorTags, '') + ' 등이 기록되었습니다.');
+    sentences.push('공식 제출된 심사 의견을 종합했습니다. 주요 향미로 ' + joinNatural_(flavorTags, '') + ' 등이 기록되었습니다.');
   } else {
-    sentences.push('심사위원 ' + judgeCount + '명의 공식 제출을 종합했습니다.');
+    sentences.push('공식 제출된 심사 의견을 종합했습니다.');
   }
   var sensoryParts = [];
   if (cleanTags.length) sensoryParts.push('클린컵: ' + joinNatural_(cleanTags, ''));
@@ -1918,7 +1926,7 @@ function buildIkrcCombinedCommentBox_(round, list) {
   box.className = 'comment-box ikrc-combined-comment';
   box.innerHTML = '<div class="comment-label">심사위원 종합 코멘트</div>' +
     '<div class="comment-text">' + escHtml(text) + '</div>' +
-    '<div class="ikrc-combined-meta">' + escHtml(round || '-') + ' · 공식 제출 평가 ' + ikrcAggregateJudgeCount_(list) + '명의 점수·스마트태그·수기 코멘트를 함께 반영</div>';
+    '<div class="ikrc-combined-meta">' + escHtml(round || '-') + ' · ' + escHtml(ikrcPanelDisplaySummary_(list).text) + '<br>제출된 스마트태그·수기 코멘트와 항목별 평가 의견을 정리했습니다. 비교용 헤드 의견이 포함되어도 헤드 점수는 평균·순위에 반영되지 않습니다.</div>';
   return box;
 }
 function publicRoundName_(s) {

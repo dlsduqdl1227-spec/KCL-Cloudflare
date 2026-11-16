@@ -114,7 +114,7 @@ test('legacy accounts sharing a phone retain both sensory votes',async()=>{
 
 test('public averages exclude heads in both rounds and label comparison cards clearly',()=>{
   const c=vm.createContext({document:{createElement:()=>({})},fmtScore:n=>String(n),escHtml:String});
-  for(const name of ['ikrcRoundAverageRows_','ikrcLocalRoundAverage_','buildIkrcRoundAverageBox_'])vm.runInContext(fn(debrief,name),c);
+  for(const name of ['ikrcAggregateJudgeCount_','ikrcPanelDisplaySummary_','ikrcRoundAverageRows_','ikrcLocalRoundAverage_','buildIkrcRoundAverageBox_'])vm.runInContext(fn(debrief,name),c);
   const rows=[{역할:'센서리 헤드 심사위원',총점:100},{역할:'센서리 심사위원',총점:60},{역할:'센서리 심사위원',총점:80}];
   for(const round of ['예선','결선']){
     assert.equal(c.ikrcLocalRoundAverage_(rows,round),70);

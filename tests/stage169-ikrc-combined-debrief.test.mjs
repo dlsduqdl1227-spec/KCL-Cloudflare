@@ -29,7 +29,7 @@ function functionSource(source, name) {
 
 assert.match(functionSource(debriefing, "renderResult"), /buildIkrcCombinedCommentBox_\(round, list\)/, "IKRC round must render one combined judge comment before individual cards");
 assert.match(debriefing, /className = 'comment-box ikrc-combined-comment'/, "combined comment must use a dedicated public debrief card");
-assert.match(debriefing, /점수·스마트태그·수기 코멘트를 함께 반영/, "combined comment must disclose the evidence used");
+assert.match(debriefing, /제출된 스마트태그·수기 코멘트와 항목별 평가 의견을 정리/, "combined comment must disclose the evidence without implying head scores enter the ranking");
 
 const context = {
   isSmartTagLabel: (label) => /스마트\s*태그|Smart\s*Tags?/i.test(String(label || "")),
@@ -99,7 +99,7 @@ const rows = [
 ];
 const before = JSON.stringify(rows);
 const combined = context.buildIkrcCombinedCommentText_(rows);
-assert.match(combined, /심사위원 4명/, "all judges for the player must be represented once");
+assert.match(combined, /공식 제출된 심사 의견을 종합/, "combined comments must describe opinions, not imply every submitted judge is counted in the ranking");
 assert.match(combined, /주요 향미로 오렌지/, "the most repeated smart tag must lead the combined sensory description");
 assert.match(combined, /오렌지의 산미와 단맛/, "manual sensory comments must be retained as evidence");
 assert.doesNotMatch(combined, /플레이버에서 오렌지가 느껴졌습니다/, "standard generated boilerplate must not be repeated as a manual note");
