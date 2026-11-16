@@ -23,7 +23,9 @@ try {
       assert.doesNotMatch(await page.locator('#res-body').innerText(),/비공개 이름/,'judge names stay out of rendered report');
       const totals=Array(6).fill(c.code==='IKRC'?'개별 평가 점수23.4':c.code==='MOB'?'평가 반영 점수23.4':'23.4');
       if(c.code==='IKRC')totals[2]='비교용 평가 점수23.4';
+      if(c.code==='KCAC')totals[5]='개별 제출 기록23.4';
       assert.deepEqual(await page.locator('.score-card .total-score').allTextContents(),totals);
+      assert.deepEqual(await page.locator('.score-card .total-score').evaluateAll(els=>els.map(el=>el.lastChild.textContent)),Array(6).fill('23.4'),'new captions never change legacy numeric totals');
       const previewMarkup=await page.locator('#res-body').innerHTML();
       await page.evaluate(res=>renderResult({...res,isAdminPreview:false}),result);
       assert.equal(await page.locator('#res-body').innerHTML(),previewMarkup,'same labels/content in public and preview');
