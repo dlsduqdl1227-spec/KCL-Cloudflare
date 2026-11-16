@@ -7,7 +7,7 @@ import {auditTextContrast} from './helpers/contrast-audit.mjs';
 
 const original='오렌지가 첫인상을 이룹니다.  발효된 과일같은 향미가 느껴집니다.\n\n여운은 길게 남습니다... 원문 <img src=x onerror="window.qaInjected=true"> & 기록 끝';
 const title='[안내] 로스팅 평가 점수 표기 차이 안내';
-const paragraphs=['대회 당일 공지된 로스팅 평가 점수와 웹 심사 시스템상에 표기된 점수가 일부 다를 수 있습니다.','이는 시스템 입력 방식에 따른 차이로\n실제 심사는 0.5점 단위로 진행되었으나, 웹 심사 시스템이 0.2점 단위(짝수 표기)만 지원하여 0.5점이 0.4점으로 대체 환산되어 표기되었습니다.'];
+const paragraphs=['대회 당일 공지된 로스팅 평가 점수와 웹 심사 시스템상에 표기된 점수가 일부 다를 수 있습니다.','이는 시스템 입력 방식에 따른 차이로\n실제 대회장에서 0.5점 단위로 수기 시트지 심사가 진행되었으나,\n디브리핑용 웹 심사 시스템이 0.2점 단위(짝수 표기)만 지원하여\n0.5점이 0.4점으로 대체 환산되어 표기되었습니다.'];
 
 test('all competition public/preview comments preserve exact authored text; IKRC notice is scoped, responsive and read-only',async()=>{
  const api=await createAllDebriefFixture(),qa=await createBrowserFixture({apiHandler:api.handle,pagesHeaders:true});

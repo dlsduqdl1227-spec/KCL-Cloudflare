@@ -58,7 +58,7 @@ try{
  await admin.locator('#teamlead-preview-toggle').check();await admin.waitForFunction(()=>document.getElementById('teamlead-preview-policy-message').textContent==='저장했습니다.');assert.equal((await api.rpc('getTeamLeadPreviewPolicy',api.actor)).enabled,true);
  const ikrc=await api.rpc('getAdminDebriefPreview','IKRC','A-1','결선',api.actor),debrief=await qa.page();await debrief.goto(qa.origin+'/debriefing/');
  await debrief.evaluate(res=>{renderResult(res);showPanel('pResult');},ikrc);assert.equal(await debrief.locator('.ikrc-score-unit-note').count(),1);assert.equal(await debrief.locator('.ikrc-score-unit-note h3').innerText(),'[안내] 로스팅 평가 점수 표기 차이 안내');
- assert.deepEqual(await debrief.locator('.ikrc-score-unit-note p').allTextContents(),['대회 당일 공지된 로스팅 평가 점수와 웹 심사 시스템상에 표기된 점수가 일부 다를 수 있습니다.','이는 시스템 입력 방식에 따른 차이로\n실제 심사는 0.5점 단위로 진행되었으나, 웹 심사 시스템이 0.2점 단위(짝수 표기)만 지원하여 0.5점이 0.4점으로 대체 환산되어 표기되었습니다.']);
+ assert.deepEqual(await debrief.locator('.ikrc-score-unit-note p').allTextContents(),['대회 당일 공지된 로스팅 평가 점수와 웹 심사 시스템상에 표기된 점수가 일부 다를 수 있습니다.','이는 시스템 입력 방식에 따른 차이로\n실제 대회장에서 0.5점 단위로 수기 시트지 심사가 진행되었으나,\n디브리핑용 웹 심사 시스템이 0.2점 단위(짝수 표기)만 지원하여\n0.5점이 0.4점으로 대체 환산되어 표기되었습니다.']);
  await debrief.evaluate(res=>renderResult(res),ikrc);assert.equal(await debrief.locator('.ikrc-score-unit-note').count(),1);
  assert.deepEqual(page.qaErrors,[]);assert.deepEqual(admin.qaErrors,[]);assert.deepEqual(debrief.qaErrors,[]);
  console.log('Stage303 UI: multi-judge private original forms, independent drafts/tokens/storage, saved-name attribution, replacement instead of duplicate, lead preview scoping, admin-only close/reopen policy, IKRC note and responsive contrast passed.');

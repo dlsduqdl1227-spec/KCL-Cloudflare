@@ -9161,6 +9161,14 @@ function publicDebriefScore_(item, headers=[]) {
   const clean=input=>Array.isArray(input)?input.map(clean):input&&typeof input==='object'?Object.fromEntries(Object.entries(input).filter(([key])=>!privateDebriefMetadata_(key)).map(([key,value])=>[key,clean(value)])):input;
   const publicItem=clean(item);
   if(Array.isArray(headers))headers.forEach((header,index)=>{if(privateDebriefMetadata_(header)){delete publicItem['_col'+index];if(Array.isArray(publicItem.values))publicItem.values[index]='';}});
+  if(safeStr(item.competitionCode||item['대회코드']).toUpperCase()==='KCAC'&&roundName_(item.round||item['라운드'],'')==='결선'){
+    // Expose the same gross component used by ranking, without changing the
+    // submitted total or subtracting the event-wide time penalty per judge.
+    delete publicItem.kcacGrossScore;
+    const direct=firstNumberFromKeys_(item,['소계','Subtotal']);
+    const gross=direct!==null?direct:kcacSubtotalFromRaw_(item);
+    if(gross!==null&&Number.isFinite(Number(gross))&&Number(gross)>=0)publicItem.kcacGrossScore=Number(gross);
+  }
   return publicItem;
 }
 async function buildPublicDebriefBundle_(env, code, targets) {

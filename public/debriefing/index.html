@@ -255,9 +255,11 @@ h2,.subtitle,.section-label,.result-name,.result-affil,.result-comp,.round-title
 .score-grid{gap:10px}.score-item{border-radius:12px;padding:13px 14px;background:#101010;border:1px solid rgba(255,255,255,.11)}.score-item-label{color:#a0a0a0;font-size:11px;font-weight:850}.score-item-val{font-size:20px;font-weight:950;letter-spacing:-.03em}.score-item-sub{color:#969696;font-weight:700}
 .smart-tag-box{margin-top:12px;border-radius:12px;background:#111;border:1px solid rgba(255,255,255,.12);padding:12px}.smart-tag-title{color:#aaa;font-size:10px;letter-spacing:.08em}.smart-tag-row{border-top-color:rgba(255,255,255,.08)}.smart-tag-label{color:#e6e6e6}.smart-tag-chip{border-color:rgba(255,255,255,.18);background:#1a1a1a;color:#e8e8e8;font-weight:800}
 .comment-box{margin-top:14px;border:1px solid rgba(255,255,255,.12);border-left:4px solid #fff;border-radius:12px;background:#111;padding:15px 16px}.comment-label{color:#aaa}.comment-text{font-size:14.5px;line-height:1.78;color:#e7e7e7;word-break:keep-all;overflow-wrap:anywhere}.no-score{border:1px solid rgba(255,255,255,.12);border-radius:16px;background:#101010;color:#aaa;line-height:1.6}
-.ikrc-combined-comment{margin:0 0 16px;border-left-width:5px;background:linear-gradient(180deg,#171717,#101010)}
-.ikrc-combined-comment .comment-label{color:#fff;font-size:12px;letter-spacing:.03em;text-transform:none}
-.ikrc-combined-meta{margin-top:8px;color:#888;font-size:11px;line-height:1.5}
+.ikrc-combined-comment,.competition-combined-comment{margin:0 0 16px;border-left-width:5px;background:linear-gradient(180deg,#171717,#101010)}
+.ikrc-combined-comment .comment-label,.competition-combined-comment .comment-label{color:#fff;font-size:12px;letter-spacing:.03em;text-transform:none}
+.ikrc-combined-meta,.competition-combined-meta{margin-top:8px;color:#999;font-size:11px;line-height:1.6}
+.competition-combined-comment p{margin:10px 0 0}.competition-combined-comment .summary-scope{display:block;margin-bottom:4px;color:#fff;font-size:13px}
+.kcac-final-penalty{margin:0 0 16px;padding:14px 16px;border:1px solid #69615a;border-radius:12px;background:#211d18;color:#f1d1a2;line-height:1.7;overflow-wrap:anywhere}.kcac-final-penalty strong{display:block;font-size:15px}.kcac-final-penalty p{margin:5px 0 0;font-size:13px}
 .ktcc-debrief-match{min-width:0;grid-column:1/-1;break-inside:avoid;page-break-inside:avoid}
 .ktcc-debrief-match[hidden]{display:none!important}
 .ktcc-debrief-picker{display:grid;gap:6px;margin:16px 0;padding:5px;border:1px solid #555;border-radius:14px;background:#161616}
@@ -645,6 +647,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
 }
 </style>
 <script src="/assets/kcr-sensory-tags.js?v=stage264"></script>
+<script src="/assets/debrief-summary.js?v=314"></script>
 <script src="/assets/kcl-api-shim.js?v=stage303"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
@@ -1369,7 +1372,7 @@ function renderResult(res) {
     scoreUnitHeading.style.cssText = 'margin:0 0 12px;font-size:14px;line-height:1.6;color:inherit';
     scoreUnitNote.appendChild(scoreUnitHeading);
     ['대회 당일 공지된 로스팅 평가 점수와 웹 심사 시스템상에 표기된 점수가 일부 다를 수 있습니다.',
-      '이는 시스템 입력 방식에 따른 차이로\n실제 심사는 0.5점 단위로 진행되었으나, 웹 심사 시스템이 0.2점 단위(짝수 표기)만 지원하여 0.5점이 0.4점으로 대체 환산되어 표기되었습니다.'
+      '이는 시스템 입력 방식에 따른 차이로\n실제 대회장에서 0.5점 단위로 수기 시트지 심사가 진행되었으나,\n디브리핑용 웹 심사 시스템이 0.2점 단위(짝수 표기)만 지원하여\n0.5점이 0.4점으로 대체 환산되어 표기되었습니다.'
     ].forEach(function(text, index) {
       var paragraph = document.createElement('p');
       paragraph.textContent = text;
@@ -1446,11 +1449,19 @@ function renderResult(res) {
     var badgeClass = round.indexOf('결선') > -1 ? 'badge-결선' : 'badge-예선';
     rtitle.innerHTML = '<span class="round-badge ' + badgeClass + '">' + round + '</span>';
     section.appendChild(rtitle);
+    if (isKcacDebrief && round === '결선') {
+      var kcacRank=(res.rankInfos||(res.rankInfo?[res.rankInfo]:[])).find(function(item){return item.round===round;});
+      var kcacPenaltyBox=buildKcacFinalPenaltyBox_(list,kcacRank);
+      if(kcacPenaltyBox)section.appendChild(kcacPenaltyBox);
+    }
     if (isIkrcDebrief) {
       var avgBox = buildIkrcRoundAverageBox_(round, list, ikrcRankByRound[round]);
       if (avgBox) section.appendChild(avgBox);
       var combinedCommentBox = buildIkrcCombinedCommentBox_(round, list);
       if (combinedCommentBox) section.appendChild(combinedCommentBox);
+    } else if (!(isKtcc && round === '결선')) {
+      var competitionCommentBox = buildCompetitionCombinedCommentBox_(res.competition, round, list);
+      if (competitionCommentBox) section.appendChild(competitionCommentBox);
     }
 
     var kcacJudgeNumbers = {};
@@ -1481,7 +1492,10 @@ function renderResult(res) {
           var match=document.createElement('div');match.className='ktcc-debrief-match';match.dataset.ktccStage=stage;match.dataset.ktccUnit=unit;
           match.id='ktcc-debrief-match-'+Object.keys(ktccMatches).length;match.setAttribute('role','region');match.setAttribute('aria-label',ktccDebriefStageLabel_(stage)+' 평가 결과');
           var result=(res.ktccStageResults||[]).find(function(item){return item.ktccStage===stage&&String(item.unit)===unit;});
-          match.appendChild(buildKtccDebriefStage_(stage,result));section.appendChild(match);ktccMatches[key]=match;
+          match.appendChild(buildKtccDebriefStage_(stage,result));
+          var matchCommentBox=buildCompetitionCombinedCommentBox_('KTCC',round,list.filter(function(item){return ktccDebriefStage_(item)===stage&&String(item.unit||item['팀번호']||'')===unit;}),ktccDebriefStageLabel_(stage));
+          if(matchCommentBox)match.appendChild(matchCommentBox);
+          section.appendChild(match);ktccMatches[key]=match;
         }
         ktccMatches[key].appendChild(card);
       }else section.appendChild(card);
@@ -1929,6 +1943,42 @@ function buildIkrcCombinedCommentBox_(round, list) {
     '<div class="ikrc-combined-meta">' + escHtml(round || '-') + ' · ' + escHtml(ikrcPanelDisplaySummary_(list).text) + '<br>제출된 스마트태그·수기 코멘트와 항목별 평가 의견을 정리했습니다. 비교용 헤드 의견이 포함되어도 헤드 점수는 평균·순위에 반영되지 않습니다.</div>';
   return box;
 }
+function buildCompetitionCombinedCommentBox_(code, round, list, matchLabel) {
+  if (typeof KclDebriefSummary === 'undefined') return null;
+  var summary = KclDebriefSummary.build(code, round, list, {
+    allows:publicHeaderAppliesToEvaluation_, derived:publicIsDerivedSummaryHeader_, max:scoreMaxForLabel,
+    label:function(header){ return publicLabel(header); },
+    tags:function(raw){
+      var values=splitPublicTokens_(raw).map(function(tag){return normalizePublicTag_(tag.replace(/^.*(?:>|›)\s*/,''));});
+      return String(code).toUpperCase()==='KCR'?kcrPublicTagLabels_(values):values;
+    },
+    comment:function(header,raw,row){return cleanupPublicCommentText_(header,raw,row,code);}
+  });
+  if (!summary) return null;
+  var box=document.createElement('section');
+  box.className='comment-box competition-combined-comment';
+  box.setAttribute('aria-label',(matchLabel||round)+' 심사위원 종합 코멘트');
+  box.innerHTML='<div class="comment-label">심사위원 종합 코멘트</div><div class="comment-text">'+escHtml(summary.intro)+
+    summary.sections.map(function(item){return '<p>'+(item.scope?'<b class="summary-scope">'+escHtml(item.scope)+'</b>':'')+escHtml(item.text)+'</p>';}).join('')+
+    '</div><div class="competition-combined-meta">'+escHtml([round,matchLabel].filter(Boolean).join(' · '))+' · 공개된 평가 의견을 정리한 참고 요약입니다. 공식 점수·순위는 해당 대회의 집계 기준을 따르며, 개별 평가와 원문 코멘트는 아래에서 확인할 수 있습니다.</div>';
+  return box;
+}
+function buildKcacFinalPenaltyBox_(list, rank) {
+  var penalty=rank&&rank.tie&&rank.tie.timePenalty;
+  if(penalty==null||penalty===''||!isFinite(Number(penalty))) {
+    penalty=(list||[]).reduce(function(max,row){
+      for(var i=0,keys=['시간감점','Time Penalty','감점','Penalty'];i<keys.length;i++){
+        var value=row[keys[i]];
+        if(value!=null&&String(value).trim()!==''&&isFinite(Number(value)))return Math.max(max,Math.max(0,Number(value)));
+      }
+      return max;
+    },0);
+  }
+  penalty=Math.max(0,Number(penalty));
+  var box=document.createElement('aside');box.className='kcac-final-penalty';box.setAttribute('role','note');
+  box.innerHTML='<strong>시간 감점 · 최종 합산에서 1회 반영</strong><p>'+(penalty>=999?'시간 초과에 따른 실격 기준이 기록되어 있습니다.':penalty>0?'−'+escHtml(fmtScore(penalty,2))+'점':'시간 감점 없음')+'</p><p>심사위원별로 반복 차감하지 않습니다. 감점은 전체 평가를 집계한 뒤 한 번만 반영하며, 공식 최종점수는 상단에서 확인할 수 있습니다.</p>';
+  return box;
+}
 function publicRoundName_(s) {
   s = s || {};
   return String(s['라운드'] || s.round || s['Round'] || '').trim();
@@ -1973,6 +2023,7 @@ function publicHeaderAppliesToEvaluation_(h, s, compCode) {
   var comp = String(compCode || '').toUpperCase();
   // Also protect cached responses from before the server-side field filter.
   if (isInternalCommentMetadata_(h)) return false;
+  if (comp === 'KCAC' && publicRoundIsFinal_(s) && /^(?:시간\s*감점|Time\s*Penalty|감점|Penalty)$/i.test(String(h || '').trim())) return false;
   if (!publicHeaderAppliesToRound_(h, s, comp)) return false;
   if (comp === 'MOB' && !mobPublicHeaderAppliesToRole_(h, s)) return false;
   return true;
@@ -2156,10 +2207,14 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
   var statusBadge = (statusRaw === '검수완료' || statusRaw === '수정완료') ? '<span class="reviewed-pill">' + escHtml(statusRaw) + '</span>' : '';
   var isMob = String(compCode || '').toUpperCase() === 'MOB';
   var totalValue = isMob && s['총평가 반영점수'] != null && String(s['총평가 반영점수']) !== '' ? s['총평가 반영점수'] : (s['총점'] != null && String(s['총점']) !== '' ? s['총점'] : (s['최종점수'] || 0));
+  var kcacFinal=isKcac&&publicRoundIsFinal_(s);
+  var kcacGross=kcacFinal?firstKcacVal_(s,['kcacGrossScore','소계','Subtotal']):'';
+  var hasKcacGross=kcacGross!==''&&isFinite(Number(kcacGross))&&Number(kcacGross)>=0;
+  if(hasKcacGross)totalValue=kcacGross;
   var total = fmtScore(totalValue, 2);
   var totalHtml = isIkrc
     ? '<span style="display:block;font-size:10px;color:#888;line-height:1;margin-bottom:4px;letter-spacing:.06em">'+(ikrcFinalHead?'비교용 평가 점수':'개별 평가 점수')+'</span>' + escHtml(total)
-    : (isMob ? '<span style="display:block;font-size:10px;color:#888;line-height:1;margin-bottom:4px;letter-spacing:.06em">평가 반영 점수</span>' + escHtml(total) : escHtml(total));
+    : (isMob || kcacFinal ? '<span style="display:block;font-size:10px;color:#999;line-height:1.4;margin-bottom:4px;letter-spacing:.03em">'+(kcacFinal?(hasKcacGross?'평가항목 합계 · 시간 감점 전':'개별 제출 기록'):'평가 반영 점수')+'</span>' + escHtml(total) : escHtml(total));
   card.innerHTML =
     '<div class="score-card-header">' +
       '<div class="judge-name">' + escHtml(publicTitle) + statusBadge + '</div>' +
@@ -2364,7 +2419,7 @@ function buildKcacScoreGrid(s, compCode) {
   var penalty = Number(s['감점'] || 0);
   if (!penalty && (timePenalty || leafPenalty)) penalty = timePenalty >= 999 ? 999 : timePenalty + leafPenalty;
   if (!grid.children.length) return buildGenericScoreGrid(s, compCode);
-  if (penalty > 0) {
+  if (penalty > 0 && !isFinale) {
     var penDiv = document.createElement('div');
     penDiv.style.cssText = 'margin-top:8px;font-size:13px;color:#ff9800;text-align:right';
     if (penalty >= 999) penDiv.textContent = '실격 처리';

@@ -150,7 +150,9 @@
     "tests/stage308-debrief-comment-metadata.test.mjs",
     "tests/stage309-debrief-exact-rounds.test.mjs",
     "tests/stage311-ktcc-tournament-debrief.test.mjs",
-    "tests/stage313-ikrc-panel-display.test.mjs"
+    "tests/stage313-ikrc-panel-display.test.mjs",
+    "tests/stage314-all-debrief-summary.test.mjs",
+    "tests/stage315-kcac-single-time-penalty.test.mjs"
   ],
   "browser": [
     "tests/stage201-finals-browser.test.mjs",
@@ -229,7 +231,9 @@
     "tests/stage310-kbc-debrief-hide-order-browser.test.mjs",
     "tests/stage311-ktcc-tournament-debrief-browser.test.mjs",
     "tests/stage312-ktcc-debrief-picker-browser.test.mjs",
-    "tests/stage313-ikrc-panel-display-browser.test.mjs"
+    "tests/stage313-ikrc-panel-display-browser.test.mjs",
+    "tests/stage314-all-debrief-summary-browser.test.mjs",
+    "tests/stage315-kcac-single-time-penalty-browser.test.mjs"
   ],
   "critical": [
     "tests/stage113-full-flow.test.mjs",
@@ -272,6 +276,8 @@
     "tests/stage308-debrief-comment-metadata.test.mjs",
     "tests/stage309-debrief-exact-rounds.test.mjs",
     "tests/stage311-ktcc-tournament-debrief.test.mjs",
-    "tests/stage313-ikrc-panel-display.test.mjs"
+    "tests/stage313-ikrc-panel-display.test.mjs",
+    "tests/stage314-all-debrief-summary.test.mjs",
+    "tests/stage315-kcac-single-time-penalty.test.mjs"
   ]
 }
