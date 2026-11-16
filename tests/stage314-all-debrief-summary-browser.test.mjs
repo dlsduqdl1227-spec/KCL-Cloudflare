@@ -27,6 +27,11 @@ test('all seven competition reports show round-local summaries with exact public
           for(const other of c.rounds.filter(value=>value!==round))assert.ok(!summary.includes(c.code+' '+other+' '),c.code+' cannot mix '+other);
           if(c.code!=='KTCC'&&c.code!=='KCAC')assert.match(summary,/오렌지/);
           if(c.code==='KBC'&&round==='결선')assert.match(summary,/시그니처 레몬/);
+          if(c.code==='MOB'&&round==='결선'){
+            const brewing=summaries.locator('p').filter({hasText:'브루잉 센서리'}),creative=summaries.locator('p').filter({hasText:'창작음료 센서리'});
+            assert.match(await brewing.innerText(),/오렌지/);assert.doesNotMatch(await brewing.innerText(),/창작 레몬/);
+            assert.match(await creative.innerText(),/창작 레몬/);assert.doesNotMatch(await creative.innerText(),/오렌지/);
+          }
           if(c.code==='KCAC')assert.match(summary,/라인 명확/);
         }
         await page.evaluate(res=>renderResult(res),player);

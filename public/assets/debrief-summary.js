@@ -24,8 +24,8 @@
     }
     if(code==='MOB'){
       if(/Technical|Pre[-\s]*Service|Post[-\s]*Service|Service\s*Station|Ingredient|작업대|부재료/i.test(header)||(/테크|기술|technical/i.test(role(row))&&!/센서|sensory/i.test(role(row))))return '테크니컬';
-      if(/Creative|창작/i.test(header)||/창작|signature|creative/i.test(text(row['메뉴']||row.Menu)))return '창작음료 센서리';
-      return '브루잉 센서리';
+      if(/Creative|창작/i.test(header))return '창작음료 센서리';
+      return attributeHeader.test(header)?'브루잉 센서리':'종합 의견';
     }
     return '';
   }

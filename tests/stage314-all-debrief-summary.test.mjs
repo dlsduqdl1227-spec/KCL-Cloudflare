@@ -53,9 +53,11 @@ test('KBC espresso and signature, and MOB technical and creative feedback stay a
   assert.match(kbc.sections.find(s=>s.scope==='에스프레소').text,/ESPRESSO_ONLY/);
   assert.match(kbc.sections.find(s=>s.scope==='시그니처').text,/SIGNATURE_ONLY/,'Signature criteria are not digital-signature metadata');
   assert.doesNotMatch(kbc.sections.find(s=>s.scope==='에스프레소').text,/SIGNATURE_ONLY|MACHINE_ONLY/);
-  const mob=build('MOB',[{메뉴:'창작','Creative Flavor 스마트태그':'CREATIVE_ONLY','Pre-Service Station 코멘트':'TECHNICAL_ONLY'}]);
+  const mob=build('MOB',[{메뉴:'창작','Flavor 스마트태그':'BREWING_ONLY','Creative Flavor 스마트태그':'CREATIVE_ONLY','Pre-Service Station 코멘트':'TECHNICAL_ONLY'}]);
   assert.match(mob.sections.find(s=>s.scope==='창작음료 센서리').text,/CREATIVE_ONLY/);
-  assert.doesNotMatch(mob.sections.find(s=>s.scope==='창작음료 센서리').text,/TECHNICAL_ONLY/);
+  assert.doesNotMatch(mob.sections.find(s=>s.scope==='창작음료 센서리').text,/TECHNICAL_ONLY|BREWING_ONLY/);
+  assert.match(mob.sections.find(s=>s.scope==='브루잉 센서리').text,/BREWING_ONLY/,'a final includes brewing and creative criteria in the same submitted sheet');
+  assert.doesNotMatch(mob.sections.find(s=>s.scope==='브루잉 센서리').text,/CREATIVE_ONLY/);
 });
 
 test('KTCC summarizes only recorded match facts and comments, never imaginary sensory quality',()=>{

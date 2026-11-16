@@ -26,6 +26,7 @@ export async function createAllSummaryFixture(){
           extra['Flavor 스마트태그']=judge?'오렌지, 곡물':'오렌지, 당밀';extra['Flavor(플레이버)']=3+judge*.2;
           extra['Acidity 스마트태그']='선명한';extra['Acidity(산미)']=2;
           extra['Mouthfeel 스마트태그']='크리미한';
+          if(c.code==='MOB'&&round==='결선'){extra.메뉴='창작';extra['Creative Flavor 스마트태그']='창작 레몬';extra['Creative Flavor(창작 향미)']=4;}
         }
         if(judge)insert.run(c.code,round,c.units[i],role,'QA 두번째 심사','검수완료','',row.total_score,'2026-09-14T00:01:00Z',JSON.stringify(payload));
         else api.db.prepare('UPDATE scores SET role=?,payload_json=? WHERE id=?').run(role,JSON.stringify(payload),row.id);
