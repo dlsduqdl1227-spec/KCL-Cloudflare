@@ -2,7 +2,7 @@
   "targetCommit": "a07adc43c86411581d3a969e7694b9ac7cf1f927",
   "sourceId": "ecdeed9cc425a6a45265d7681e78b725423391578b061ddb5b6ac3530c07deaa",
   "state": "deployed",
-  "checkedAt": "2026-11-16T03:21:38.601Z",
+  "checkedAt": "2026-11-16T03:22:06.413Z",
   "pages": {
     "status": "completed",
     "conclusion": "success",
@@ -11,15 +11,15 @@
   "healthMatches": true,
   "staticBuildMatches": true,
   "liveAudit": {
-    "status": "in_progress",
-    "conclusion": null
+    "status": "completed",
+    "conclusion": "success"
   },
   "browserAudit": {
     "status": "in_progress",
     "conclusion": null
   },
   "apiAudit": {
-    "status": "in_progress",
-    "conclusion": null
+    "status": "completed",
+    "conclusion": "success"
   }
 }
