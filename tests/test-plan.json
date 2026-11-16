@@ -223,7 +223,8 @@
     "tests/stage306-debrief-comment-tags-browser.test.mjs",
     "tests/stage307-comment-display-browser.test.mjs",
     "tests/stage308-debrief-comment-metadata-browser.test.mjs",
-    "tests/stage309-debrief-exact-rounds-browser.test.mjs"
+    "tests/stage309-debrief-exact-rounds-browser.test.mjs",
+    "tests/stage310-kbc-debrief-hide-order-browser.test.mjs"
   ],
   "critical": [
     "tests/stage113-full-flow.test.mjs",

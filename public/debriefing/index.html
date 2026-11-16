@@ -786,6 +786,7 @@ function onDebriefPhaseChange_() {
   if (_adminPreviewActor) renderAdminDebriefPreviewOptions_();
 }
 function renderAdminDebriefPreviewOptions_() {
+  var code = String(document.getElementById('sel-comp').value || '').toUpperCase();
   var phase = document.getElementById('sel-phase').value;
   var select = document.getElementById('admin-preview-unit');
   select.innerHTML = '<option value="">-- 미리볼 선수·팀을 선택하세요 --</option>';
@@ -795,7 +796,9 @@ function renderAdminDebriefPreviewOptions_() {
     var option = document.createElement('option');
     option.value = String(index);
     var label = item.round;
-    option.textContent = [label, adminPreviewRankLabel_(item.rank), item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
+    // KBC's unit identifies the performance order, not the finishing rank.
+    // Keep the original option index/unit for lookup, but omit it from the label.
+    option.textContent = [label, adminPreviewRankLabel_(item.rank), code === 'KBC' ? '' : (item.unitDisplay || item.unit), item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
     select.appendChild(option);count++;
   });
   select.disabled = !count;

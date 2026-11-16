@@ -25,7 +25,7 @@ try {
       for(const phase of c.rounds){
         await page.locator('#sel-phase').selectOption(phase);
         const labels = await page.locator('#admin-preview-unit option').allTextContents();
-        assert.deepEqual(labels.slice(1), options.filter(item=>item.round===phase).map(item => [item.round, item.rank + '위', item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ')), c.code + ' rank in every phase-scoped option');
+        assert.deepEqual(labels.slice(1), options.filter(item=>item.round===phase).map(item => [item.round, item.rank + '위', c.code === 'KBC' ? '' : (item.unitDisplay || item.unit), item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ')), c.code + ' rank in every phase-scoped option; KBC omits performance order');
       }
       const edgeLabels = await page.evaluate(() => [1, '12', '실격', null, 0, '', '공동 2위'].map(adminPreviewRankLabel_));
       assert.deepEqual(edgeLabels, ['1위', '12위', '실격', '순위 미집계', '순위 미집계', '순위 미집계', '공동 2위']);
