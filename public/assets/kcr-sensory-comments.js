@@ -53,13 +53,13 @@
     var ids = records(selectedIds, "mouthfeel").map(function(tag) { return tag.id; });
     var labels = labelList(ids, "mouthfeel");
     if (!labels.length) return "";
-    if (["mouthfeel_silky", "mouthfeel_juicy", "mouthfeel_round"].every(function(id) { return ids.indexOf(id) > -1; })) {
+    if (ids.length === 3 && ["mouthfeel_silky", "mouthfeel_juicy", "mouthfeel_round"].every(function(id) { return ids.indexOf(id) > -1; })) {
       return "실키하고 과즙감 있는 마우스필이 둥글게 표현됩니다.";
     }
-    if (["mouthfeel_creamy", "mouthfeel_dense", "mouthfeel_coating"].every(function(id) { return ids.indexOf(id) > -1; })) {
+    if (ids.length === 3 && ["mouthfeel_creamy", "mouthfeel_dense", "mouthfeel_coating"].every(function(id) { return ids.indexOf(id) > -1; })) {
       return "크리미하고 밀도감 있는 마우스필과 코팅감이 느껴집니다.";
     }
-    if (["mouthfeel_rough", "mouthfeel_dry", "mouthfeel_astringent"].every(function(id) { return ids.indexOf(id) > -1; })) {
+    if (ids.length === 3 && ["mouthfeel_rough", "mouthfeel_dry", "mouthfeel_astringent"].every(function(id) { return ids.indexOf(id) > -1; })) {
       return "거친 질감과 드라이한 감각이 느껴지며 수렴감이 남습니다.";
     }
     if (labels.length === 1) return labels[0] + " 마우스필이 느껴집니다.";
@@ -111,7 +111,7 @@
       });
     }
     var improvementText = improvement.map(function(tag) { return improvementNoun[tag.id] || tag.labelKo; });
-    if (["aftertaste_bitter", "aftertaste_dry", "aftertaste_astringent"].every(function(id) { return selected.some(function(tag) { return tag.id === id; }); }) && !flavorLabels.length && !primary.length) {
+    if (selected.length === 3 && ["aftertaste_bitter", "aftertaste_dry", "aftertaste_astringent"].every(function(id) { return selected.some(function(tag) { return tag.id === id; }); }) && !flavorLabels.length && !primary.length) {
       return "쓴맛과 드라이한 감각이 남으며 수렴감이 느껴집니다.";
     }
 

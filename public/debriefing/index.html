@@ -1405,7 +1405,25 @@ function renderResult(res) {
 
   var body = document.getElementById('res-body');
   body.innerHTML = '';
-  if(isIkrcDebrief){var scoreUnitNote=document.createElement('p');scoreUnitNote.className='ikrc-score-unit-note';scoreUnitNote.textContent='0.5점 단위 점수는 0.4점으로 표기하였습니다.';scoreUnitNote.style.cssText='margin:0 0 16px;padding:12px 14px;border:1px solid #48484a;border-radius:12px;color:#d1d1d6;font-size:13px;line-height:1.6';body.appendChild(scoreUnitNote);}
+  if (isIkrcDebrief) {
+    var scoreUnitNote = document.createElement('aside');
+    scoreUnitNote.className = 'ikrc-score-unit-note';
+    scoreUnitNote.setAttribute('role', 'note');
+    scoreUnitNote.style.cssText = 'margin:0 0 16px;padding:16px;border:1px solid #48484a;border-radius:12px;color:#d1d1d6;font-size:13px;line-height:1.7;overflow-wrap:anywhere';
+    var scoreUnitHeading = document.createElement('h3');
+    scoreUnitHeading.textContent = '[안내] 로스팅 평가 점수 표기 차이 안내';
+    scoreUnitHeading.style.cssText = 'margin:0 0 12px;font-size:14px;line-height:1.6;color:inherit';
+    scoreUnitNote.appendChild(scoreUnitHeading);
+    ['대회 당일 공지된 로스팅 평가 점수와 웹 심사 시스템상에 표기된 점수가 일부 다를 수 있습니다.',
+      '이는 시스템 입력 방식에 따른 차이로\n실제 심사는 0.5점 단위로 진행되었으나, 웹 심사 시스템이 0.2점 단위(짝수 표기)만 지원하여 0.5점이 0.4점으로 대체 환산되어 표기되었습니다.'
+    ].forEach(function(text, index) {
+      var paragraph = document.createElement('p');
+      paragraph.textContent = text;
+      paragraph.style.cssText = 'margin:' + (index ? '12px 0 0' : '0') + ';white-space:pre-line';
+      scoreUnitNote.appendChild(paragraph);
+    });
+    body.appendChild(scoreUnitNote);
+  }
 
   var scores = res.scores || [];
   var resultPanel = document.getElementById('pResult');
@@ -1686,19 +1704,10 @@ function cleanupPublicCommentText_(label, raw, scoreObj, compCode) {
   var text = String(raw == null ? '' : raw).replace(/\r\n?/g, '\n').trim();
   if (!text) return '';
   if (isNumericOnlyText_(text)) return '';
-  text = text.replace(/[^\S\n]+/g, ' ')
-    .replace(/채소같은/g, '채소 같은')
-    .replace(/과일같은/g, '과일 같은')
-    .replace(/시럽같은/g, '시럽 같은')
-    .replace(/발효된/g, '발효 계열')
-    .replace(/질감로/g, '질감으로')
-    .replace(/보완 지점로/g, '보완 지점으로')
-    .replace(/가 첫인상을/g, '이 첫인상을')
-    .replace(/\.\.+/g, '.')
-    .replace(/,\s*,/g, ',')
-    .trim();
-  // Existing comments remain authoritative. Generate a summary only when the
-  // report has no overall comment, rather than inferring authorship from text.
+  // Authored observations are authoritative, including particles, repeated
+  // spaces, punctuation and paragraphs. Wording cleanup can corrupt Korean
+  // (for example, "오렌지가" -> "오렌지이") or change the judge's observation.
+  // Escape at rendering; never rewrite the comment to make it look generated.
   return text;
 }
 
@@ -1716,7 +1725,7 @@ function tagValsFor_(s, names) {
   Object.keys(s || {}).forEach(function(k){
     if (!isSmartTagLabel(k)) return;
     var key = String(k || '').toLowerCase();
-    var ok = names.some(function(n){ return key.indexOf(n.toLowerCase()) > -1; });
+    var ok = names.some(function(n){ return key.indexOf(n.toLowerCase()) === 0; });
     if (!ok) return;
     out = out.concat(splitPublicTokens_(s[k]));
   });
@@ -1738,41 +1747,32 @@ function koreanAndParticle_(text) {
 function buildProfessionalOverallComment_(s, compCode) {
   compCode = String(compCode || '').toUpperCase();
   if (compCode !== 'KCR' && compCode !== 'IKRC') return '';
-  var flavorTags = tagValsFor_(s, ['Flavor','플레이버']);
-  var afterTags = tagValsFor_(s, ['Aftertaste','애프터','에프터']);
-  var acidityTags = tagValsFor_(s, ['Acidity','산미']);
-  var bodyTags = tagValsFor_(s, ['Body','Mouthfeel','바디','마우스필']);
-  var sweetTags = tagValsFor_(s, ['Sweetness','스윗니스','단맛']);
-  if (compCode === 'KCR') {
-    flavorTags = kcrPublicTagLabels_(flavorTags);
-    afterTags = kcrPublicTagLabels_(afterTags);
-    acidityTags = kcrPublicTagLabels_(acidityTags);
-    bodyTags = kcrPublicTagLabels_(bodyTags);
-    sweetTags = kcrPublicTagLabels_(sweetTags);
+  // Display-only fallback for an absent overall comment. Use recorded tags,
+  // not sensory characteristics inferred from a high quality score.
+  var attributes = [
+    ['플레이버', ['Flavor','플레이버'], ['Flavor(플레이버)','Flavor(플레이버) ×3','Flavor']],
+    ['에프터테이스트', ['Aftertaste','애프터','에프터'], ['Aftertaste(애프터테이스트)','Aftertaste(에프터테이스트)','Aftertaste']],
+    ['클린컵', ['Clean Cup','클린컵'], ['Clean Cup(클린컵) ×2','Clean Cup(클린컵)','Clean Cup']],
+    ['산미', ['Acidity','산미'], ['Acidity(산미)','Acidity']],
+    ['단맛', ['Sweetness','스윗니스','단맛'], ['Sweetness(단맛) ×2','Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness']],
+    ['마우스필', ['Body','Mouthfeel','바디','마우스필'], ['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','Mouthfeel']],
+    ['오버롤', ['Overall','오버롤'], ['Overall(오버롤)','Overall(주관적 종합평가)','Overall']]
+  ];
+  var lines = [], values = [];
+  attributes.forEach(function(attribute) {
+    var tags = tagValsFor_(s, attribute[1]);
+    if (compCode === 'KCR') tags = kcrPublicTagLabels_(tags);
+    if (tags.length) lines.push(attribute[0] + '에서는 ' + joinNatural_(tags) + ' 특성이 기록되었습니다.');
+    var value = scoreVal_(s, attribute[2]);
+    if (value != null && isFinite(value)) values.push({label:attribute[0], value:value});
+  });
+  if (!lines.length && values.length) {
+    var max = compCode === 'IKRC' ? 10 : 5;
+    var ratio = values.reduce(function(sum,item){ return sum + item.value; },0) / values.length / max;
+    var quality = ratio >= .88 ? '매우 높은' : ratio >= .76 ? '높은' : ratio >= .64 ? '양호한' : ratio >= .52 ? '기준을 충족하는' : ratio >= .38 ? '다소 제한적인' : '제한적인';
+    lines.push('기록된 항목의 점수는 평가 기준에서 ' + quality + ' 수준이었습니다.');
   }
-  var flavor = scoreVal_(s, ['Flavor(플레이버)','Flavor(플레이버) ×3','Flavor']);
-  var after = scoreVal_(s, ['Aftertaste(애프터테이스트)','Aftertaste(에프터테이스트)','Aftertaste']);
-  var acidity = scoreVal_(s, ['Acidity(산미)','Acidity']);
-  var sweet = scoreVal_(s, ['Sweetness(단맛) ×2','Sweetness(스윗니스) ×2','Sweetness(스윗니스)','Sweetness']);
-  var mouthfeel = scoreVal_(s, ['Mouthfeel(마우스필) ×2','Mouthfeel(마우스필)','Mouthfeel']);
-  var overall = scoreVal_(s, ['Overall(오버롤)','Overall(주관적 종합평가)','Overall']);
-  var values = [flavor, after, acidity, sweet, mouthfeel, overall].filter(function(n){ return n != null; });
-  if (!values.length && !flavorTags.length && !afterTags.length && !bodyTags.length) return '';
-  var avg = values.length ? values.reduce(function(a,b){ return a+b; }, 0) / values.length : 3;
-  var tone = avg >= 4 ? '향미 표현이 선명하게 드러난 컵' : (avg >= 3 ? '기본 향미 구조가 확인되는 컵' : '향미 구조의 불안정성이 함께 확인된 컵');
-  var high = [['플레이버', flavor], ['에프터테이스트', after], ['산미', acidity], ['단맛', sweet], ['마우스필', mouthfeel], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return b[1]-a[1]; })[0];
-  var low = [['플레이버', flavor], ['에프터테이스트', after], ['산미', acidity], ['단맛', sweet], ['마우스필', mouthfeel], ['오버롤', overall]].filter(function(x){ return x[1] != null; }).sort(function(a,b){ return a[1]-b[1]; })[0];
-  var first = '첫 향미에서는 ' + joinNatural_(flavorTags, '주요 향미') + ' 인상이 중심을 이룹니다.';
-  var second = '';
-  if (afterTags.length || acidityTags.length || bodyTags.length || sweetTags.length) {
-    second = ' 세부 인상은 여운: ' + joinNatural_(afterTags, '기록 없음') + ' · 산미: ' + joinNatural_(acidityTags, '기록 없음') + ' · 단맛: ' + joinNatural_(sweetTags, '기록 없음') + ' · 마우스필: ' + joinNatural_(bodyTags, '기록 없음') + ' 등의 표현으로 정리됩니다.';
-  } else {
-    second = ' 플레이버, 에프터테이스트, 산미, 단맛, 마우스필의 연결성이 전체 평가의 주요 판단 기준으로 작용했습니다.';
-  }
-  var third = ' 전체적으로 ' + tone + '으로 평가됩니다';
-  if (high && low && high[0] !== low[0]) third += '. 항목별 인상에서는 ' + high[0] + ' 점수가 상대적으로 높았고, ' + low[0] + ' 점수가 비교적 낮았습니다.';
-  else third += '. 항목 간 편차는 크지 않고, 전체 인상은 각 세부 항목의 균형 속에서 형성되었습니다.';
-  return first + second + third;
+  return lines.join(' ');
 }
 
 function ikrcAggregateJudgeCount_(list) {
