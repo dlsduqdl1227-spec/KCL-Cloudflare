@@ -14,10 +14,10 @@ try{
       debrief.db.prepare('INSERT INTO otps(competition_code,name,phone,otp,expires_at) VALUES(?,?,?,?,?)').run(c.code,name,phone,'229229','2099-01-01T00:00:00Z');
       return (await debrief.handle({action:'verifyOTP',args:[name,phone,c.code,'229229',phase]})).json();
     }
-    for(const phase of ['예선','결선']){
+    for(const phase of c.rounds){
       const result=await view(phase);assert.equal(result.success,true,c.code+': '+result.message);
       assert.equal(result.requestedPhase,phase);assert.ok(result.scores.length>0);
-      const matches=r=>phase==='예선'?r==='예선':['본선','결선'].includes(r);
+      const matches=r=>r===phase;
       assert.ok(result.scores.every(s=>matches(s['라운드']||s.round)),c.code+' score phase isolation');
       assert.ok(result.rankInfos.every(r=>matches(r.round)),c.code+' rank phase isolation');
       assert.doesNotMatch(JSON.stringify(result),/OTHER_PRIVATE_BATCH_COMMENT/);
