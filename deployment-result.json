@@ -1,10 +1,25 @@
 {
   "targetCommit": "a07adc43c86411581d3a969e7694b9ac7cf1f927",
   "sourceId": "ecdeed9cc425a6a45265d7681e78b725423391578b061ddb5b6ac3530c07deaa",
-  "state": "started",
-  "checkedAt": "2026-11-16T03:21:36.188Z",
-  "pages": null,
-  "healthMatches": false,
-  "staticBuildMatches": false,
-  "liveAudit": null
+  "state": "deployed",
+  "checkedAt": "2026-11-16T03:21:38.601Z",
+  "pages": {
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://dash.cloudflare.com/?to=/8a36d483451bf789cbd72a724f6a842a/pages/view/kcl-cloudflare/23e98216-8834-443a-a786-bd85d2fc5de6"
+  },
+  "healthMatches": true,
+  "staticBuildMatches": true,
+  "liveAudit": {
+    "status": "in_progress",
+    "conclusion": null
+  },
+  "browserAudit": {
+    "status": "in_progress",
+    "conclusion": null
+  },
+  "apiAudit": {
+    "status": "in_progress",
+    "conclusion": null
+  }
 }
