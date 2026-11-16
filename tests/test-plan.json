@@ -216,7 +216,8 @@
     "tests/stage302-ktcc-stage-browser.test.mjs",
     "tests/stage303-paper-entry-browser.test.mjs",
     "tests/stage303-paper-entry-forms-browser.test.mjs",
-    "tests/stage304-participant-first-paper-browser.test.mjs"
+    "tests/stage304-participant-first-paper-browser.test.mjs",
+    "tests/stage306-debrief-comment-tags-browser.test.mjs"
   ],
   "critical": [
     "tests/stage113-full-flow.test.mjs",

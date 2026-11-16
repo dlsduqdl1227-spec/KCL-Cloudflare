@@ -1,0 +1,71 @@
+/* Public reports and admin previews share this screen layout. */
+@media screen {
+  #pResult.panel { max-width:920px; width:100%; }
+  #pResult .result-header,
+  #pResult .report-intro,
+  #pResult .rank-box,
+  #pResult .round-section { max-width:none; min-width:0; }
+  #pResult .score-card { padding:clamp(16px,2.8vw,24px); }
+  #pResult .score-grid:empty { display:none!important; margin:0; }
+  #pResult .smart-tag-box,
+  #pResult .comment-box { min-width:0; max-width:100%; overflow:visible; }
+  #pResult .smart-tag-row {
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    gap:8px;
+    min-width:0;
+    padding-top:12px;
+    margin-top:12px;
+  }
+  #pResult .smart-tag-row:first-of-type { padding-top:0; margin-top:0; }
+  #pResult .smart-tag-label {
+    min-width:0;
+    max-width:100%;
+    font-size:12px;
+    line-height:1.5;
+    overflow-wrap:anywhere;
+  }
+  #pResult .smart-tag-chips { min-width:0; max-width:100%; gap:6px; align-items:flex-start; }
+  #pResult .smart-tag-chip {
+    display:block;
+    min-width:0;
+    max-width:100%;
+    padding:5px 9px;
+    line-height:1.5;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  #pResult .comment-entry { min-width:0; }
+  #pResult .comment-entry + .comment-entry {
+    border-top:1px solid var(--border);
+    margin-top:16px;
+    padding-top:16px;
+  }
+  #pResult .comment-label {
+    font-size:12px;
+    line-height:1.5;
+    letter-spacing:normal;
+    text-transform:none;
+    overflow-wrap:anywhere;
+  }
+  #pResult .comment-text {
+    min-width:0;
+    max-width:100%;
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+    line-height:1.8;
+  }
+}
+@media screen and (min-width:600px) {
+  #pResult .score-grid { grid-template-columns:repeat(2,minmax(0,1fr))!important; }
+}
+@media screen and (min-width:720px) {
+  #pResult .smart-tag-row { grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:16px; }
+}
+@media screen and (min-width:960px) {
+  #pResult .score-grid { grid-template-columns:repeat(3,minmax(0,1fr))!important; }
+}
+@media screen and (max-width:599px) {
+  #pResult .score-grid { grid-template-columns:minmax(0,1fr)!important; }
+  #pResult .comment-box { padding:14px; }
+}

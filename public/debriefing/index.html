@@ -651,6 +651,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
 <link rel="stylesheet" href="/assets/kcl-appearance.css?v=278">
 <link rel="stylesheet" href="/assets/kcl-refinement.css?v=280">
+<link rel="stylesheet" href="/assets/debrief-layout.css?v=306">
 </head>
 <body>
 
@@ -1194,6 +1195,7 @@ function normalizeKclLabelText(label) {
 }
 function commentPublicLabel(label) {
   var s = String(label || '');
+  if (/^(Espresso|Signature|Creative)\s/i.test(s)) return normalizeKclLabelText(s);
   if (isSmartTagLabel(s)) {
     if (/Service.*Professionalism|서비스의\s*전문성|Presentation.*Service/i.test(s)) return 'Service Professionalism Smart Tags(스마트태그)';
     if (/Espresso.*Taste.*Design/i.test(s)) return 'Espresso Taste & Design Smart Tags(스마트태그)';
@@ -1633,6 +1635,7 @@ function buildKcrAvgBox(list, avg) {
 
 function smartTagPublicLabel_(k) {
   var s = String(k || '');
+  if (/^(Espresso|Signature|Creative)\s/i.test(s)) return normalizeKclLabelText(s.replace(/스마트\s*태그|Smart\s*Tags?|Tag\s*List|태그/ig, '').trim());
   if (/Aftertaste.*(?:Flavor|플레이버).*(?:Reference|참조)/i.test(s)) return 'Aftertaste Flavor Reference';
   if (/Aftertaste/i.test(s)) return 'Aftertaste';
   if (/Acidity/i.test(s)) return 'Acidity';
@@ -1680,10 +1683,10 @@ function isNumericOnlyText_(text) {
   return parts.every(function(x){ return /^-?\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?$/.test(x); });
 }
 function cleanupPublicCommentText_(label, raw, scoreObj, compCode) {
-  var text = String(raw == null ? '' : raw).replace(/\r/g, '\n').trim();
+  var text = String(raw == null ? '' : raw).replace(/\r\n?/g, '\n').trim();
   if (!text) return '';
   if (isNumericOnlyText_(text)) return '';
-  text = text.replace(/\s+/g, ' ')
+  text = text.replace(/[^\S\n]+/g, ' ')
     .replace(/채소같은/g, '채소 같은')
     .replace(/과일같은/g, '과일 같은')
     .replace(/시럽같은/g, '시럽 같은')
@@ -1698,7 +1701,7 @@ function cleanupPublicCommentText_(label, raw, scoreObj, compCode) {
   var comp = String(compCode || '').toUpperCase();
   var looksOldAuto = /점수 흐름은|검수 관점에서 이 컵은|항목은 강점으로|보완 지점|1번 컵은/.test(text);
   if ((comp === 'KCR' || comp === 'IKRC') && /Overall|종합|총평|General/i.test(labelText)) {
-    if (looksOldAuto || (comp === 'IKRC' && ikrcLooksGeneratedComment_(text)) || text.length > 220 || (text.match(/검수 관점/g) || []).length > 1) {
+    if (looksOldAuto || (comp === 'IKRC' && ikrcLooksGeneratedComment_(text)) || (text.match(/검수 관점/g) || []).length > 1) {
       var generated = buildProfessionalOverallComment_(scoreObj, compCode);
       if (generated) return generated;
     }
@@ -1997,7 +2000,7 @@ function buildCommentBox(s, compCode) {
     var text = cleanupPublicCommentText_(label, raw, s, compCode);
     if (!text || /^(0|0\.0+|0\s*\/\s*\d+)$/i.test(text)) return;
     var key = label.replace(/\s/g,'').toLowerCase();
-    if (rows.some(function(r){ return r.key === key && (!(comp==='KBC' && kbcPresentationPublicLabel_(k)) || r.text===text); })) return;
+    if (rows.some(function(r){ return r.key === key && r.text === text; })) return;
     rows.push({ key:key, label: label, text: text });
   });
   var hasSmartTags = Object.keys(s || {}).some(function(k){ return isSmartTagLabel(k) && splitPublicTokens_(s[k]).length > 0; });
@@ -2009,7 +2012,7 @@ function buildCommentBox(s, compCode) {
   var box = document.createElement('div');
   box.className = 'comment-box';
   box.innerHTML = rows.map(function(r){
-    return '<div class="comment-label">' + escHtml(r.label) + '</div><div class="comment-text">' + escHtml(r.text) + '</div>';
+    return '<div class="comment-entry"><div class="comment-label">' + escHtml(r.label) + '</div><div class="comment-text">' + escHtml(r.text) + '</div></div>';
   }).join('');
   return box;
 }
