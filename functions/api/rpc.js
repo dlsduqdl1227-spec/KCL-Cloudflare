@@ -8381,10 +8381,6 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     const list = byRound[round];
     list.sort((a,b) => {
       if (a.dq !== b.dq) return a.dq ? 1 : -1;
-      if(code==='KTCC'&&round==='결선'&&!ktccStage){
-        const progress=ktccStageLevel_(b.ktccStage)-ktccStageLevel_(a.ktccStage);
-        if(progress)return progress;
-      }
       const officialRankA = Number(a.officialRankOverride);
       const officialRankB = Number(b.officialRankOverride);
       const hasOfficialRankA = Number.isInteger(officialRankA) && officialRankA > 0;
@@ -8392,6 +8388,10 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       if (hasOfficialRankA || hasOfficialRankB) {
         if (hasOfficialRankA && hasOfficialRankB && officialRankA !== officialRankB) return officialRankA - officialRankB;
         if (hasOfficialRankA !== hasOfficialRankB) return hasOfficialRankA ? -1 : 1;
+      }
+      if(code==='KTCC'&&round==='결선'&&!ktccStage){
+        const progress=ktccStageLevel_(b.ktccStage)-ktccStageLevel_(a.ktccStage);
+        if(progress)return progress;
       }
       const scoreA = a.rankingScore, scoreB = b.rankingScore;
       if (scoreA !== scoreB) return scoreB - scoreA;

@@ -59,3 +59,17 @@ test('KTCC explicit manager decisions win; incomplete later rounds never falsely
     assert.equal(final.rank,'실격');assert.equal(final.advancement,'실격');assert.equal(final.totalScore,0);assert.equal(final.finalResult,'');
   }finally{api.close();}
 });
+
+test('explicit official KTCC ranking settings retain priority without overriding individual match rankings',async()=>{
+  const api=await createKtccTournamentFixture();
+  try{
+    const entries=[{unit:'3',officialRank:1},{unit:'1',officialRank:2},{unit:'2',officialRank:3}];
+    api.db.prepare('INSERT INTO sessions(token,kind,payload_json,expires_at,created_at) VALUES(?,?,?,?,?)')
+      .run('local-ktcc-official-order','OFFICIAL_RANKING_OVERRIDE',JSON.stringify({competitionCode:'KTCC',round:'결선',entries}),'2099-01-01T00:00:00Z','2026-11-16T00:00:00Z');
+    const before=api.snapshot(),overall=await api.rpc('getRanking','KTCC',api.actor,'결선');
+    assert.deepEqual(overall.ranking.slice(0,3).map(r=>r.unit),['3','1','2']);
+    const semi=await api.rpc('getRanking','KTCC',api.actor,'결선','4강');
+    assert.deepEqual(semi.ranking.slice(0,3).map(r=>r.unit),['1','2','3']);
+    assert.equal(api.snapshot(),before);
+  }finally{api.close();}
+});
