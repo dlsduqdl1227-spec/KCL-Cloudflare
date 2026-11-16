@@ -64,3 +64,10 @@ test('KTCC summarizes only recorded match facts and comments, never imaginary se
   assert.match(text,/마지막 세트를 정확히 구분/);assert.doesNotMatch(text,/향미|플레이버|상대적으로 높/);
   assert.equal(build('KTCC',[{심사위원명:'QA 심사'}]),null);
 });
+
+test('quoted observations retain decimal scores and original meaning instead of treating a decimal point as a sentence ending',()=>{
+  const source='단맛 3.4점과 산미 3.2점의 균형이 좋았습니다. 여운은 길었습니다.';
+  const row={종합코멘트:source},before=JSON.stringify(row),report=flatten(build('KCR',[row]));
+  assert.match(report,/“단맛 3\.4점과 산미 3\.2점의 균형이 좋았습니다\.”/);
+  assert.equal(JSON.stringify(row),before);
+});

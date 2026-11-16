@@ -36,7 +36,7 @@
   function excerpt(raw){
     var value=text(raw).replace(/\s+/g,' ');
     if(!value||/^(?:AI\s*)?자동\s*생성\s*(?:사용|미사용|완료|해제)?$|^(?:true|false|enabled|disabled)$/i.test(value))return '';
-    var first=(value.match(/^[^.!?\n]+[.!?]?/)||[value])[0].trim();
+    var first=(value.match(/^[\s\S]*?[.!?](?=\s|$)/)||[value])[0].trim();
     return first.length>110?first.slice(0,107).replace(/[\s,.·]+$/,'')+'…':first;
   }
   function recordedFacts(rows){
