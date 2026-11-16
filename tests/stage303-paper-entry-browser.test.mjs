@@ -18,16 +18,17 @@ try{
  await page.locator('#paper-round').selectOption('본선');assert.equal(await page.locator('#paper-day-wrap').isVisible(),true);await page.locator('#paper-round').selectOption('결선');
  for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:900});assert.equal((await inspectPage(page)).pageOverflow,false);assert.deepEqual(await auditTextContrast(page,'#pPaperEntry'),[]);await page.screenshot({path:'tmp/stage303-qa/setup-'+width+'.png'});}
  await page.setViewportSize({width:390,height:900});
+ await page.locator('#paper-participant').selectOption({index:1});
  for(const target of api.targets.KBC)await page.locator('#paper-roster input[value="'+target.id+'"]').check();
  await page.locator('#paper-confirm').check();await page.locator('#paper-start').click();
  await page.waitForFunction(()=>_paperWorkspace.frames[0]?.contentWindow._paperEntryFrameContext);
  const frame0=page.frames().find(frame=>frame!==page.mainFrame()&&frame.url().includes('paperEntry=1'));assert.ok(frame0);
  await frame0.waitForFunction(()=>document.getElementById('evalKbc').classList.contains('active')&&participantListForCode_('KBC').length>0);
- await frame0.locator('#kbc-participant-select').selectOption({index:1});await frame0.locator('#kbc-comment').fill('심사위원 1 독립 기록');
+ await frame0.waitForFunction(()=>document.getElementById('kbc-num').value==='1');assert.equal(await frame0.locator('#kbc-participant-select').isDisabled(),true);await frame0.locator('#kbc-comment').fill('심사위원 1 독립 기록');
  await frame0.evaluate(()=>{localStorage.setItem('isolation','judge-one');kclSaveActiveEvalDraftNow_(true);});
  await page.locator('#paper-judge-tabs button').nth(1).click();await page.waitForFunction(()=>_paperWorkspace.frames[1]?.contentWindow._paperEntryFrameContext);
  const frame1=page.frames().filter(frame=>frame!==page.mainFrame()&&frame.url().includes('paperEntry=1')).find(frame=>frame!==frame0);assert.ok(frame1);
- await frame1.waitForFunction(()=>participantListForCode_('KBC').length>0);await frame1.locator('#kbc-participant-select').selectOption({index:1});
+ await frame1.waitForFunction(()=>document.getElementById('kbc-num').value==='1');assert.equal(await frame1.locator('#kbc-participant-select').isDisabled(),true);
  assert.equal(await frame1.locator('#kbc-comment').inputValue(),'');assert.equal(await frame1.evaluate(()=>localStorage.getItem('isolation')),null);
  await frame1.locator('#kbc-comment').fill('심사위원 2 보존 기록');await page.locator('#paper-judge-tabs button').first().click();
  assert.equal(await frame0.locator('#kbc-comment').inputValue(),'심사위원 1 독립 기록');assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('kclAssessmentSession')).judgeToken),api.leads.KBC.judgeToken);
@@ -42,7 +43,7 @@ try{
  await page.locator('#paper-reselect').click();await page.locator('#paper-roster input[value="'+api.targets.KBC[1].id+'"]').uncheck();await page.locator('#paper-start').click();
  await page.waitForFunction(previous=>_paperWorkspace.entries[0]?.token!==previous&&_paperWorkspace.frames[0]?.contentWindow._paperEntryFrameContext,previousToken);
  const replacement=page.frames().find(frame=>frame!==page.mainFrame()&&frame.url().includes('paperEntry=1'));
- await replacement.waitForFunction(()=>participantListForCode_('KBC').length>0);await replacement.locator('#kbc-participant-select').selectOption({index:1});
+ await replacement.waitForFunction(()=>document.getElementById('kbc-num').value==='1');
  assert.equal(await replacement.evaluate(()=>participantListForCode_('KBC')[0].evaluationCompleted),false,'manager can re-enter completed evaluations');
  await replacement.locator('#kbc-comment').fill('팀장 대체 최종 기록');const replaced=page.waitForResponse(r=>r.request().postDataJSON()?.action==='submitScores');
  await replacement.evaluate(()=>{document.getElementById('kbc-end-time').value='09분00초';updateKbcTimeStatus_();kbcSubmit();});assert.equal((await(await replaced).json()).success,true);

@@ -2045,8 +2045,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <link rel="stylesheet" href="/assets/kcl-appearance.css?v=278">
 <link rel="stylesheet" href="/assets/ktcc-finals.css?v=302">
 <script defer src="/assets/ktcc-finals.js?v=302"></script>
-<link rel="stylesheet" href="/assets/paper-entry.css?v=303">
-<script defer src="/assets/paper-entry.js?v=303"></script>
+<link rel="stylesheet" href="/assets/paper-entry.css?v=304">
+<script defer src="/assets/paper-entry.js?v=304"></script>
 <link rel="stylesheet" href="/assets/kcl-refinement.css?v=280">
 <link rel="stylesheet" href="/assets/ikrc-final-timetable.css?v=282">
 <script defer src="/assets/ikrc-final-timetable.js?v=282"></script>
@@ -3936,6 +3936,7 @@ function renderParticipantControl_(code, cfg) {
 function renderParticipantControls_(code) {
   participantControlsForCode_(code).forEach(function(cfg){ renderParticipantControl_(code, cfg); });
   if(code==='KTCC'&&typeof ktccSyncSetup_==='function')ktccSyncSetup_();
+  if(typeof paperEntryApplyParticipant_==='function')paperEntryApplyParticipant_();
 }
 function setParticipantRefreshState_(code, loading) {
   code = String(code || '').toUpperCase();
@@ -4218,6 +4219,7 @@ function refreshStationEvaluationList_(code, silent) {
       } else if (code === 'IKRC') {
         renderIkrcStationChoices_();
       }
+      if(typeof paperEntryApplyParticipant_==='function')paperEntryApplyParticipant_();
       if (!silent) toast('평가 스테이션 목록을 새로고침했습니다.');
     })
     .withFailureHandler(function(err){
@@ -17721,6 +17723,7 @@ function showIkrcSetup() {
   _ikrcStation = null;
   renderIkrcStationChoices_();
   showPanel('pIkrcSetup');
+  if(typeof paperEntryApplyParticipant_==='function')paperEntryApplyParticipant_();
 }
 
 function renderIkrcStationChoices_() {

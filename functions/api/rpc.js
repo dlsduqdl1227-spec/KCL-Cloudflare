@@ -612,6 +612,7 @@ async function dispatch(action, args, env, request) {
     ping: async () => ({ success: true, message: 'KCL Cloudflare API 연결 성공', now: nowIso() }),
     getConfig: () => getConfig(env,args[0]),
     getPaperEntryRoster: () => getPaperEntryRoster_(env,args[0],args[1]),
+    getPaperEntryParticipants: () => getPaperEntryParticipants_(env,args[0],args[1]),
     createPaperEntrySessions: () => createPaperEntrySessions_(env,args[0],args[1]),
     getPaperEntryBootstrap: () => getPaperEntryBootstrap_(env,args[0]),
     getDebriefPreviewAccess: () => getDebriefPreviewAccess_(env,args[0]),
@@ -748,6 +749,45 @@ async function paperEntryManager_(env,actorArg,code){
   return {actor:auth.actor,token,authorities};
 }
 function paperEntryTargetAllowed_(row,code){return row&&!/관리자|총괄|팀장|admin|teamlead/i.test(safeStr(row.role))&&['JUDGE','STAFF'].includes(normalizeAccountType_(row.account_type,row.role))&&(accessCodes_(row.access).includes(code)||accessCodes_(row.access).includes('ALL'));}
+const PAPER_PARTICIPANT_COLUMNS=['id','competition_code','name','team_name','affiliation','phone','prelim_cup_no','main_cup_no','final_cup_no','extra_json','updated_at'];
+function paperUnitKey_(value){const unit=safeStr(value).toUpperCase().replace(/\s+/g,'');return /^\d+$/.test(unit)?String(Number(unit)):unit;}
+function paperParticipantFingerprint_(row){return JSON.stringify(PAPER_PARTICIPANT_COLUMNS.map(key=>row[key]??null));}
+function paperParticipantUnit_(row,code,round){return code==='IKRC'?ikrcBlindUnitFromRow_(row,round):safeStr(participantRoundNumber_(row,code,round));}
+function paperParticipantStation_(cfg,code,round,unit){
+  if(!['KCR','IKRC'].includes(code))return null;
+  const stations=code==='KCR'?kcrStationsForPurposeServer_(cfg,round,'competition'):ikrcStationsForPurposeServer_(cfg,round,'competition');
+  const matches=stations.filter(station=>(code==='KCR'?kcrStationUnitsServer_(station):ikrcUnitsForStationsServer_([station]).map(item=>item.unit)).some(value=>paperUnitKey_(value)===paperUnitKey_(unit)));
+  return matches.length===1?matches[0]:null;
+}
+async function paperParticipantOptions_(env,request,actor){
+  const code=safeStr(request.competitionCode),round=safeStr(request.round),day=code==='KBC'&&round==='본선'?kbcMainDay_(request.day):'';
+  if(!COMPETITION_ROUNDS[code]?.includes(round)||(code==='KBC'&&round==='본선'&&!day))return {error:{success:false,message:'평가 라운드와 본선 일차를 확인해주세요.'}};
+  const cfg=await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
+  let rows=(await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind(code).all()).results||[];
+  if(code==='KCAC')rows=dedupeKcacParticipantRows_(rows,round);
+  rows=sortRoundParticipants_(sortParticipantRowsForCompetition_(rows,code),code,round).filter(row=>paperParticipantUnit_(row,code,round)&&!(code==='KCR'&&round==='예선'&&kcrPrelimPending_(row)));
+  const counts=new Map();rows.forEach(row=>{const key=paperUnitKey_(paperParticipantUnit_(row,code,round));counts.set(key,(counts.get(key)||0)+1);});
+  const policy=participantRoundPolicy_(code,round),hideIdentity=policy.identityHidden&&!actorCanSeeParticipantIdentity_(actor,code),targets=[];
+  let excluded=0;
+  for(const row of rows){
+    if(day&&participantScheduleForRound_(row,round).day!==day)continue;
+    const unit=paperParticipantUnit_(row,code,round),station=paperParticipantStation_(cfg,code,round,unit);
+    if(counts.get(paperUnitKey_(unit))!==1||(['KCR','IKRC'].includes(code)&&!station)){excluded++;continue;}
+    const name=hideIdentity?'':safeStr(code==='KTCC'?row.team_name||row.name:row.name);
+    const affiliation=hideIdentity?'':safeStr(code==='KTCC'?ktccMemberSummaryFromRow_(row,parseJson(row.extra_json,{})):row.affiliation);
+    const display=code==='KTCC'&&round!=='예선'?[name,affiliation?'팀원 '+affiliation:''].filter(Boolean).join(' · '):[(policy.numberLabel||'참가자번호')+' '+unit,name,affiliation,station?.label].filter(Boolean).join(' · ')+(hideIdentity?' · 블라인드':'');
+    const key=await sha256Hex_(JSON.stringify([code,round,day,paperParticipantFingerprint_(row),unit,station]));
+    targets.push({key,unit,name,affiliation,display,identityHidden:!!hideIdentity,stationId:station?.id||'',station,row});
+  }
+  return {targets,cfg,day,excluded};
+}
+function paperParticipantPublic_(target){if(!target)return null;const {row,station,...publicTarget}=target;return publicTarget;}
+async function getPaperEntryParticipants_(env,request,actorArg){
+  const checked=strictCompetitionCode_(request?.competitionCode,'수기 입력');if(checked.error)return checked.error;
+  const manager=await paperEntryManager_(env,actorArg,checked.code);if(manager.error)return manager.error;
+  const result=await paperParticipantOptions_(env,{...request,competitionCode:checked.code},manager.actor);if(result.error)return result.error;
+  return {success:true,competitionCode:checked.code,round:request.round,day:result.day,participants:result.targets.map(paperParticipantPublic_),message:result.excluded?'번호 중복 또는 스테이션 연결이 확인되지 않은 선수는 제외했습니다. 등록·배정을 확인해주세요.':''};
+}
 function paperEntryConfig_(cfg,actor){
   if(!cfg||!actor?._paperEntry)return cfg;
   const context=actor._paperEntry,options=parseJson(cfg.option_settings,{});
@@ -756,6 +796,13 @@ function paperEntryConfig_(cfg,actor){
   // Only the manager's scoped form may amend closed preliminary stations.
   // The live settings and ordinary judges' day locks remain untouched.
   if(context.code==='KCR'&&context.round==='예선'&&options.kcrStations)options.kcrStations={...options.kcrStations,closedPrelimDays:[]};
+  if(context.participant?.station){
+    const field=context.code==='KCR'?'kcrStations':'ikrcStations',original=options[field]||{},station={...context.participant.station};
+    const number=Number(context.code==='IKRC'?context.participant.unit.split('-').at(-1):context.participant.unit);
+    station.start=number;station.end=number;if(context.code==='KCR')station.cupNumbers=[context.participant.unit];
+    options[field]={...original,stations:[station],byRound:{...(original.byRound||{}),[context.round]:[station]}};
+    if(context.code==='KCR')options.kcrProcesses={...(options.kcrProcesses||{}),[safeStr(station.process).toLowerCase()]:true};
+  }
   return {...cfg,current_round:context.round,is_active:1,option_settings:JSON.stringify(options)};
 }
 async function getPaperEntryRoster_(env,request,actorArg){
@@ -769,38 +816,59 @@ async function createPaperEntrySessions_(env,request,actorArg){
   const code=checked.code,manager=await paperEntryManager_(env,actorArg,code);if(manager.error)return manager.error;
   const round=safeStr(request.round),ids=request.operatorIds;
   if(!COMPETITION_ROUNDS[code].includes(round)||!Array.isArray(ids)||!ids.length||ids.length>12||new Set(ids.map(Number)).size!==ids.length||request.paperConfirmed!==true)return {success:false,message:'평가 라운드와 심사위원(최대 12명)을 선택하고 종이 평가표 확인에 체크해주세요.'};
+  let participant=null;
+  if(request.workflow==='participant-first'||request.participantKey){
+    const choices=await paperParticipantOptions_(env,{...request,competitionCode:code},manager.actor);if(choices.error)return choices.error;
+    participant=choices.targets.find(item=>item.key===request.participantKey);
+    if(!participant)return {success:false,stale:true,message:'선수를 먼저 선택해주세요. 선수 등록·배정이 변경되었다면 목록을 새로 확인해주세요.'};
+    if(code==='KTCC'&&round==='결선'&&!KTCC_MATCH_STAGES.includes(request.ktccStage))return {success:false,message:'KTCC 경기 단계를 선택해주세요.'};
+  }
   const targets=[];
   for(const id of ids){const row=await env.DB.prepare('SELECT * FROM operators WHERE id=?').bind(Number(id)).first();if(!paperEntryTargetAllowed_(row,code))return {success:false,message:'선택한 심사위원 명단이 변경되었습니다. 다시 선택해주세요.'};targets.push(row);}
   if(new Set(targets.map(row=>operatorIdentityKey_(row.name,row.phone))).size!==targets.length)return {success:false,message:'같은 심사위원의 날짜별 등록이 중복 선택되었습니다. 사용할 등록 한 건만 선택해주세요.'};
   const created=nowIso(),expires=new Date(Date.now()+6*60*60*1000).toISOString(),entries=[],statements=[];
   for(const target of targets){
     const token='paper-entry-'+uuid(),context={code,round,day:code==='KBC'&&round==='본선'?kbcMainDay_(request.day):'',replaceExisting:true,managerToken:manager.token,targetId:Number(target.id),targetFingerprint:paperEntryOperatorFingerprint_(target),managerName:safeStr(manager.actor.name),managerIdentity:operatorIdentityKey_(manager.actor.name,manager.actor.phone),createdAt:created};
-    context.draftScope=await sha256Hex_(JSON.stringify([code,round,context.day,context.targetId,context.managerIdentity]));
+    if(participant){context.participant=participant;context.ktccStage=code==='KTCC'&&round==='결선'?request.ktccStage:'';}
+    const draftParts=[code,round,context.day,context.targetId,context.managerIdentity];if(participant)draftParts.push([participant.row.id,participant.unit,context.ktccStage]);
+    context.draftScope=await sha256Hex_(JSON.stringify(draftParts));
     statements.push(env.DB.prepare('INSERT INTO sessions(token,kind,payload_json,expires_at,created_at) VALUES(?,?,?,?,?)').bind(token,PAPER_ENTRY_KIND,JSON.stringify(context),expires,created));
     entries.push({token,operatorId:Number(target.id),name:safeStr(target.name),role:safeStr(target.role)});
   }
-  await env.DB.batch(statements);return {success:true,entries};
+  await env.DB.batch(statements);return {success:true,entries,participant:paperParticipantPublic_(participant)};
 }
 async function paperEntryActor_(env,context,token){
   const manager=await paperEntryManager_(env,{judgeToken:context.managerToken},context.code);if(manager.error)return null;
   const target=await env.DB.prepare('SELECT * FROM operators WHERE id=?').bind(context.targetId).first();
   if(!paperEntryTargetAllowed_(target,context.code)||paperEntryOperatorFingerprint_(target)!==context.targetFingerprint)return null;
+  let participantConfigSnapshot='';
+  if(context.participant){
+    const row=await env.DB.prepare('SELECT * FROM participants WHERE id=? AND competition_code=?').bind(context.participant.row.id,context.code).first();
+    if(!row||paperParticipantFingerprint_(row)!==paperParticipantFingerprint_(context.participant.row))return null;
+    const cfg=await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(context.code).first();
+    const station=paperParticipantStation_(cfg,context.code,context.round,context.participant.unit);
+    if(JSON.stringify(station)!==JSON.stringify(context.participant.station))return null;
+    participantConfigSnapshot=cfg.option_settings;
+  }
   const type=normalizeAccountType_(target.account_type,target.role),code=context.code;
   return {name:target.name,judgeName:target.name,phone:normalizePhone(target.phone),role:target.role,type,accountType:type,access:code,teamGroup:target.team_group||'',teamMap:{[code]:target.team_group||''},roleMap:{[code]:target.role},accountTypeMap:{[code]:type},affiliation:target.affiliation||'',judgeToken:token,paperEntry:true,
     operatorRows:[{rowIndex:target.id,accountType:type,access:code,role:target.role,teamGroup:target.team_group||'',effectiveDate:''}],
-    _paperEntry:{...context,ticketToken:token,target,authorities:manager.authorities}};
+    _paperEntry:{...context,participantConfigSnapshot,ticketToken:token,target,authorities:manager.authorities}};
 }
 async function getPaperEntryBootstrap_(env,token){
   const actor=await getActor(env,{judgeToken:token});if(!actor?._paperEntry)return {success:false,message:'수기 입력 권한이 만료되었거나 변경되었습니다. 팀장 화면에서 다시 열어주세요. 작성 내용은 이 기기에 유지됩니다.'};
   const context=actor._paperEntry,cfg=await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(context.code).first();
   const { _paperEntry,...profile}=actor;
-  return {success:true,actor:profile,config:rowToConfig(paperEntryConfig_(cfg,actor)),draftScope:context.draftScope};
+  return {success:true,actor:profile,config:rowToConfig(paperEntryConfig_(cfg,actor)),draftScope:context.draftScope,participant:paperParticipantPublic_(context.participant),ktccStage:context.ktccStage||''};
 }
 function paperEntryScoreGuard_(context){
   const columns=['id','account_type','name','phone','access','team_group','role','effective_date'];
   const condition=row=>({sql:'EXISTS(SELECT 1 FROM operators WHERE '+columns.map(key=>key+' IS ?').join(' AND ')+')',params:columns.map(key=>row[key]??null)});
   const target=condition(context.target),managers=context.authorities.map(condition);
-  return {sql:target.sql+' AND ('+managers.map(item=>item.sql).join(' OR ')+') AND EXISTS(SELECT 1 FROM sessions WHERE token=? AND expires_at>?) AND EXISTS(SELECT 1 FROM sessions WHERE token=? AND kind=? AND expires_at>?)',params:[...target.params,...managers.flatMap(item=>item.params),context.managerToken,nowIso(),context.ticketToken,PAPER_ENTRY_KIND,nowIso()]};
+  const guard={sql:target.sql+' AND ('+managers.map(item=>item.sql).join(' OR ')+') AND EXISTS(SELECT 1 FROM sessions WHERE token=? AND expires_at>?) AND EXISTS(SELECT 1 FROM sessions WHERE token=? AND kind=? AND expires_at>?)',params:[...target.params,...managers.flatMap(item=>item.params),context.managerToken,nowIso(),context.ticketToken,PAPER_ENTRY_KIND,nowIso()]};
+  if(context.participant){guard.sql+=' AND EXISTS(SELECT 1 FROM participants WHERE '+PAPER_PARTICIPANT_COLUMNS.map(key=>key+' IS ?').join(' AND ')+')';guard.params.push(...PAPER_PARTICIPANT_COLUMNS.map(key=>context.participant.row[key]??null));
+    if(context.participant.station){guard.sql+=' AND EXISTS(SELECT 1 FROM competitions WHERE code=? AND option_settings IS ?)';guard.params.push(context.code,context.participantConfigSnapshot);}}
+  return guard;
 }
 async function getKtccFinalTeams_(env, actorArg) {
   const auth=await requireActorForCode_(env,actorArg,'KTCC','KTCC 팀 목록 조회 권한이 없습니다.');
@@ -3760,7 +3828,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
       }
     });
   }
-  const mobManager = code === 'MOB' && hasManageAccess(actor, code);
+  const mobManager = code === 'MOB' && (hasManageAccess(actor, code)||!!actor?._paperEntry?.participant);
   const mobPermissionRows = code === 'MOB' && Array.isArray(actor && actor.operatorRows)
     ? actor.operatorRows.filter(row => accessCodes_(row && row.access).some(value => value === 'ALL' || value === 'MOB'))
     : [];
@@ -3770,7 +3838,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const mobActiveParticipantDate = code === 'MOB' ? mobActiveParticipantDateFromConfig_(cfg) : '';
   const mobParticipantScopeDate = mobActiveParticipantDate || (mobDatedPermission ? mobPermissionDate : '');
   const mobActorTeam = actorTeamForCompetition_(actor,'MOB');
-  const scopedRows = code !== 'MOB' || mobManager ? sourceRows : sourceRows.filter(r => {
+  let scopedRows = code !== 'MOB' || mobManager ? sourceRows : sourceRows.filter(r => {
     const schedule = participantScheduleForRound_(r, currentRound);
     const participantDate = schedule.date;
     const participantTeam = schedule.team;
@@ -3778,6 +3846,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     if (mobActorTeam && participantTeam && !mobTeamMatchesServer_(mobActorTeam, participantTeam)) return false;
     return true;
   });
+  if(actor?._paperEntry?.participant)scopedRows=scopedRows.filter(row=>Number(row.id)===Number(actor._paperEntry.participant.row.id));
   const assignments = scopedRows.map(r => {
     const extra = parseJson(r.extra_json, {});
     const schedule = participantScheduleForRound_(r, currentRound);
@@ -3787,7 +3856,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     const scheduleLabel = code==='KBC' && currentRound==='본선'
       ? ['본선 '+(operatingDay?operatingDay+'일차':'일차 미지정'),competitionDate].filter(Boolean).join(' · ')
       : code==='KBC' && currentRound==='결선' ? ['결선 1일차',competitionDate].filter(Boolean).join(' · ') : competitionDate || operatingDay;
-    const number = participantRoundNumber_(r, code, currentRound);
+    const number = actor?._paperEntry?.participant?.unit || participantRoundNumber_(r, code, currentRound);
     const rawName = code === 'KTCC' ? (r.team_name || r.name || '') : (r.name || '');
     const displayName = hideIdentity ? '' : rawName;
     const displayAff = hideIdentity ? '' : (code === 'KTCC' ? ktccMemberSummaryFromRow_(r, extra) : (r.affiliation || ''));
@@ -5516,6 +5585,13 @@ async function submitScores(env, payload, signature, request = null) {
   const paperContext=auth.actor._paperEntry;
   const paperReplacing=!!paperContext?.replaceExisting;
   if(paperContext&&(initial.code!==paperContext.code||initial.round!==paperContext.round))return {success:false,message:'선택한 평가 라운드에서만 수기 평가를 저장할 수 있습니다.'};
+  if(paperContext?.participant){
+    const selected=paperContext.participant,rows=Array.isArray(basePayload.rows)?basePayload.rows:[];
+    const wrong=rows.some(row=>{const one={...basePayload,rows:[row]};['unit','cupNo','cupNumber','participantNo','participantNumber','teamNo','targetNo','number'].forEach(key=>delete one[key]);return paperUnitKey_(inferScorePayload(one).unit)!==paperUnitKey_(selected.unit);});
+    if(!rows.length||wrong||paperUnitKey_(initial.unit)!==paperUnitKey_(selected.unit)||(initial.code!=='KCAC'&&rows.length!==1)||(basePayload.participantId&&Number(basePayload.participantId)!==Number(selected.row.id)))return {success:false,message:'처음 선택한 선수의 평가만 저장할 수 있습니다. 입력 내용은 유지됩니다. 다른 선수는 팀장 화면에서 선택해주세요.'};
+    if(paperContext.ktccStage&&rows.some((row,i)=>safeStr(extractExtraSingleRow_(basePayload,'KTCC',i)['토너먼트 단계'])!==paperContext.ktccStage))return {success:false,message:'처음 선택한 KTCC 경기 단계의 평가만 저장할 수 있습니다.'};
+    basePayload.participantId=Number(selected.row.id);
+  }
   if(paperContext&&isCalibrationMode_(initial.mode)&&!(initial.code==='MOB'&&isHeadRole_(auth.actor.role)))return {success:false,message:'수기 입력은 공식 대회평가에만 사용할 수 있습니다.'};
   if(paperContext)signature='';
   const actorName = safeStr(auth.actor && (auth.actor.name || auth.actor.judgeName || auth.actor.operatorName));

@@ -2,6 +2,9 @@ import {createRpcFixture} from './rpc-fixture.mjs';
 import {seedRoundRankings,competitionCodes} from './round-ranking-fixture.mjs';
 export async function createPaperEntryFixture(options={}){
  const api=await createRpcFixture(options);await seedRoundRankings(api);const leads={},targets={};
+ const ikrc=api.db.prepare("SELECT * FROM participants WHERE competition_code='IKRC'").get();
+ const extra=JSON.parse(ikrc.extra_json||'{}');extra.ikrcBlindAssignments={예선:'A-1',결선:'A-1'};
+ api.db.prepare('UPDATE participants SET extra_json=? WHERE id=?').run(JSON.stringify(extra),ikrc.id);
  for(const [n,code]of competitionCodes.entries()){
   const name='수기 팀장 '+code,phone='0103300'+String(n).padStart(4,'0');
   await api.rpc('upsertOperatorAccount',{accountType:'TEAMLEAD',name,phone,access:code,role:'대회팀장'},api.actor);leads[code]=await api.rpc('judgeLogin',name,phone);
