@@ -144,7 +144,8 @@
     "tests/stage302-ktcc-stage-views.test.mjs",
     "tests/stage303-paper-entry-priority.test.mjs",
     "tests/stage303-paper-entry-privacy.test.mjs",
-    "tests/stage304-participant-first-paper.test.mjs"
+    "tests/stage304-participant-first-paper.test.mjs",
+    "tests/stage305-ikrc-paper-ranking.test.mjs"
   ],
   "browser": [
     "tests/stage201-finals-browser.test.mjs",
@@ -252,6 +253,7 @@
     "tests/stage302-ktcc-stage-views.test.mjs",
     "tests/stage303-paper-entry-priority.test.mjs",
     "tests/stage303-paper-entry-privacy.test.mjs",
-    "tests/stage304-participant-first-paper.test.mjs"
+    "tests/stage304-participant-first-paper.test.mjs",
+    "tests/stage305-ikrc-paper-ranking.test.mjs"
   ]
 }

@@ -1518,11 +1518,24 @@ function ikrcApplyOfficialSelections_(items, selections) {
   });
   groups.forEach((rows, bucket) => {
     const selection = selections && selections.get(bucket);
-    let chosen = null;
+    let chosen = null, source = selection ? 'manual' : 'latest';
     if (selection) chosen = rows.find(row => ikrcScoreRefKey_(row.rowIndex) === ikrcScoreRefKey_(selection.rowIndex)) || null;
     else rows.forEach(row => { if (scoreItemIsNewer_(row, chosen)) chosen = row; });
+    // Older paper saves cleared the operator bucket, but finals use the assigned
+    // panel seat. Recover only a later manager-authorized replacement when that
+    // stale selection points to a removed row. Valid selections remain binding.
+    if (selection && !chosen) {
+      const selectedAt = Date.parse(selection.selectedAt);
+      let enteredAt = -Infinity;
+      rows.forEach(row => {
+        const audit = row.payload?.paperEntryAudit, time = Date.parse(audit?.enteredAt);
+        if (audit?.source !== 'paper-transcription' || !Number.isFinite(selectedAt) || !Number.isFinite(time) || time < selectedAt) return;
+        if (time > enteredAt || (time === enteredAt && scoreItemIsNewer_(row, chosen))) { chosen = row; enteredAt = time; }
+      });
+      if (chosen) source = 'paper';
+    }
     rows.forEach(row => metadata.set(row, {ikrcOfficialSelected:row === chosen, ikrcRankingSuppressed:row !== chosen,
-      ikrcHistoryCount:rows.length, ikrcSelectionSource:selection ? 'manual' : 'latest', ikrcSelectionMissing:!chosen}));
+      ikrcHistoryCount:rows.length, ikrcSelectionSource:source, ikrcSelectionMissing:!chosen}));
   });
   return (items || []).map(item => metadata.has(item) ? {...item, ...metadata.get(item)} : item);
 }
@@ -5881,9 +5894,16 @@ async function submitScores(env, payload, signature, request = null) {
     const paperReplaceId=onePayload._paperReplaceId,paperReplaceTime=onePayload._paperReplaceTime;delete onePayload._paperReplaceId;delete onePayload._paperReplaceTime;
     const payloadJson = JSON.stringify(onePayload || {});
     if(paperReplacing&&x.code==='IKRC'){
-      const item=rowToReviewItem({id:paperReplaceId||0,competition_code:x.code,round:x.round,judge_name:x.judgeName,role:x.role,team:x.team,unit:x.unit,payload_json:payloadJson,total_score:x.total},x.code,[],x.round);
-      const token=await ikrcSelectionToken_(ikrcSelectionBucket_(item)),prior=await env.DB.prepare('SELECT payload_json FROM sessions WHERE token=?').bind(token).first();
-      paperSelectionGuards.push({token,payload:prior?prior.payload_json:null});paperSelectionDeletes.push(env.DB.prepare('DELETE FROM sessions WHERE token=? AND kind=?').bind(token,IKRC_OFFICIAL_SELECTION_KIND_));
+      const raw={id:paperReplaceId||0,competition_code:x.code,round:x.round,judge_name:x.judgeName,role:x.role,team:x.team,unit:x.unit,payload_json:payloadJson,total_score:x.total};
+      const item=rowToReviewItem(raw,x.code,[],x.round);
+      const [panelRow]=ikrcApplyFinalPanel_([raw],await loadIkrcFinalPanel_(env),x.round);
+      const panelItem=rowToReviewItem(panelRow,x.code,[],x.round);
+      // Match the final-panel identity used by ranking/history and also retire any legacy
+      // operator selection. Both checks and deletions share the score transaction.
+      for(const bucket of new Set([ikrcSelectionBucket_(item),ikrcSelectionBucket_(panelItem)])){
+        const token=await ikrcSelectionToken_(bucket),prior=await env.DB.prepare('SELECT payload_json FROM sessions WHERE token=?').bind(token).first();
+        paperSelectionGuards.push({token,payload:prior?prior.payload_json:null});paperSelectionDeletes.push(env.DB.prepare('DELETE FROM sessions WHERE token=? AND kind=?').bind(token,IKRC_OFFICIAL_SELECTION_KIND_));
+      }
     }
     const payloadBytes = utf8ByteLength_(payloadJson);
     if (payloadBytes > 1750000) {
