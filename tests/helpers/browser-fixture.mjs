@@ -8,6 +8,30 @@ export async function createBrowserFixture(options = {}) {
   const modulePath = process.env.KCL_PLAYWRIGHT_MODULE;
   const {chromium} = await import(modulePath ? pathToFileURL(modulePath).href : 'playwright');
   const root = path.resolve(fileURLToPath(new URL('../../public/', import.meta.url)));
+  // Optional production static headers, including Cloudflare's ordered detach
+  // semantics. Use this for features involving frames, CSP or cache boundaries.
+  const rules=[];
+  if(options.pagesHeaders){
+    let rule;
+    for(const line of fs.readFileSync(path.join(root,'_headers'),'utf8').split(/\r?\n/)){
+      if(!line.trim()||line.trimStart().startsWith('#'))continue;
+      if(!/^\s/.test(line)){rule={pattern:line.trim(),headers:[]};rules.push(rule);}
+      else if(rule)rule.headers.push(line.trim());
+    }
+  }
+  function staticHeaders(pathname){
+    const headers={};
+    for(const rule of rules){
+      const pattern=rule.pattern.split('*').map(part=>part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*');
+      if(!new RegExp('^'+pattern+'$').test(pathname))continue;
+      for(const entry of rule.headers){
+        if(entry.startsWith('! ')){delete headers[entry.slice(2).toLowerCase()];continue;}
+        const colon=entry.indexOf(':'),name=entry.slice(0,colon).toLowerCase(),value=entry.slice(colon+1).trim();
+        if(colon>0)headers[name]=headers[name]?headers[name]+', '+value:value;
+      }
+    }
+    return headers;
+  }
   const server = http.createServer(async (req, res) => {
     const pathname = decodeURIComponent(new URL(req.url, 'http://local.test').pathname);
     if (pathname.startsWith('/api/')) {
@@ -28,7 +52,7 @@ export async function createBrowserFixture(options = {}) {
       res.writeHead(404); res.end(); return;
     }
     const mime = {'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
-    res.writeHead(200, {'Content-Type':mime[path.extname(file)] || 'application/octet-stream'});
+    res.writeHead(200, {'Content-Type':mime[path.extname(file)] || 'application/octet-stream',...staticHeaders(pathname)});
     res.end(fs.readFileSync(file));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

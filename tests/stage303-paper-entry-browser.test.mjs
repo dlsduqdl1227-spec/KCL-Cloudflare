@@ -3,9 +3,12 @@ import fs from 'node:fs';
 import {createPaperEntryFixture} from './helpers/paper-entry-fixture.mjs';
 import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
 import {auditTextContrast} from './helpers/contrast-audit.mjs';
-const api=await createPaperEntryFixture(),qa=await createBrowserFixture({apiHandler:api.handle});
+const api=await createPaperEntryFixture(),qa=await createBrowserFixture({apiHandler:api.handle,pagesHeaders:true});
 fs.mkdirSync('tmp/stage303-qa',{recursive:true});
 try{
+ const headers=(await fetch(qa.origin+'/assessment/')).headers;
+ assert.equal(headers.get('x-frame-options'),'SAMEORIGIN');assert.match(headers.get('content-security-policy'),/frame-ancestors 'self'/);assert.doesNotMatch(headers.get('content-security-policy'),/frame-ancestors 'none'/);
+ const protectedHeaders=(await fetch(qa.origin+'/debriefing/')).headers;assert.equal(protectedHeaders.get('x-frame-options'),'DENY');assert.match(protectedHeaders.get('content-security-policy'),/frame-ancestors 'none'/);
  const page=await qa.page(390,900),configs=(await api.rpc('getConfig')).configs;
  await page.goto(qa.origin+'/assessment/');
  await page.evaluate(({actor,configs})=>{_judge=actor;_configs=configs;saveAssessmentSession_();loadTeamPanel();},{actor:api.leads.KBC,configs});

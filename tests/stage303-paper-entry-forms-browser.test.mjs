@@ -4,7 +4,7 @@ import {createPaperEntryFixture} from './helpers/paper-entry-fixture.mjs';
 import {roundsFor} from './helpers/round-ranking-fixture.mjs';
 import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
 
-const api=await createPaperEntryFixture(),qa=await createBrowserFixture({apiHandler:api.handle});
+const api=await createPaperEntryFixture(),qa=await createBrowserFixture({apiHandler:api.handle,pagesHeaders:true});
 fs.mkdirSync('tmp/stage303-qa',{recursive:true});
 try{
  const kbc=api.db.prepare("SELECT * FROM participants WHERE competition_code='KBC'").get(),extra=JSON.parse(kbc.extra_json||'{}');
