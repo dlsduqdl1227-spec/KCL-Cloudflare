@@ -159,9 +159,11 @@
               args[0] = Object.assign({}, args[0], {round:context.round});
             }
           }
+          if(prop==='getConfig'&&window._paperEntryFrameContext&&window._judge)args=[{judgeToken:window._judge.judgeToken}];
           callRpc(prop, args)
             .then(function (data) {
               try {
+                if((prop==='submitScores'||prop==='submitWithSignature')&&data&&data.success&&window._paperEntryFrameContext&&window.parent!==window)window.parent.postMessage({type:'kcl-paper-submitted',inserted:data.idempotent?0:Number(data.inserted||0)},window.location.origin);
                 if ((prop === 'submitScores' || prop === 'submitWithSignature') && data && data.success && typeof window.kclClearActiveEvalDraftAfterSubmit === 'function') {
                   window.kclClearActiveEvalDraftAfterSubmit(args && args[0]);
                 }

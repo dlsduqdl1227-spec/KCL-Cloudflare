@@ -141,7 +141,9 @@
     "tests/stage299-kbc-ranking-presentation.test.mjs",
     "tests/stage300-moc-manual-final.test.mjs",
     "tests/stage301-ktcc-hidden-mission.test.mjs",
-    "tests/stage302-ktcc-stage-views.test.mjs"
+    "tests/stage302-ktcc-stage-views.test.mjs",
+    "tests/stage303-paper-entry-priority.test.mjs",
+    "tests/stage303-paper-entry-privacy.test.mjs"
   ],
   "browser": [
     "tests/stage201-finals-browser.test.mjs",
@@ -209,7 +211,9 @@
     "tests/stage299-kbc-ranking-presentation-browser.test.mjs",
     "tests/stage300-moc-manual-final-browser.test.mjs",
     "tests/stage301-ktcc-hidden-mission-browser.test.mjs",
-    "tests/stage302-ktcc-stage-browser.test.mjs"
+    "tests/stage302-ktcc-stage-browser.test.mjs",
+    "tests/stage303-paper-entry-browser.test.mjs",
+    "tests/stage303-paper-entry-forms-browser.test.mjs"
   ],
   "critical": [
     "tests/stage113-full-flow.test.mjs",
@@ -243,6 +247,8 @@
     "tests/stage299-kbc-ranking-presentation.test.mjs",
     "tests/stage300-moc-manual-final.test.mjs",
     "tests/stage301-ktcc-hidden-mission.test.mjs",
-    "tests/stage302-ktcc-stage-views.test.mjs"
+    "tests/stage302-ktcc-stage-views.test.mjs",
+    "tests/stage303-paper-entry-priority.test.mjs",
+    "tests/stage303-paper-entry-privacy.test.mjs"
   ]
 }

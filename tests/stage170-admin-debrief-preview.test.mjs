@@ -34,11 +34,12 @@ function functionSource(source, name) {
 
 assert.match(rpc, /getAdminDebriefPreviewOptions:\s*\(\)\s*=>\s*getAdminDebriefPreviewOptions/);
 assert.match(rpc, /getAdminDebriefPreview:\s*\(\)\s*=>\s*getAdminDebriefPreview/);
-assert.match(functionSource(rpc, "requireAdminPreviewActor_"), /!actor\s*\|\|\s*!hasAdmin\(actor\)/, "preview APIs must reject team leads and judges");
-assert.match(functionSource(rpc, "getAdminDebriefPreviewOptions"), /requireAdminPreviewActor_/, "preview option listing must be admin-only");
+assert.match(functionSource(rpc, "requireAdminPreviewActor_"), /hasAdmin\(actor\).*hasManageAccess\(actor,code\).*teamLeadPreviewEnabled_/, "preview APIs require admin or an authorized assigned team lead");
+assert.match(functionSource(rpc, "requireAdminPreviewActor_"), /actor\._paperEntry/, "paper-entry tokens cannot access player previews");
+assert.match(functionSource(rpc, "getAdminDebriefPreviewOptions"), /requireAdminPreviewActor_/, "preview option listing must be server authorized");
 assert.match(functionSource(rpc, "getAdminDebriefPreviewOptions"), /officialReviewCompleted_/, "preview choices must use each competition's official public-evaluation rule");
 const previewServer = functionSource(rpc, "getAdminDebriefPreview");
-assert.match(previewServer, /requireAdminPreviewActor_/, "preview result must be admin-only");
+assert.match(previewServer, /requireAdminPreviewActor_/, "preview result must be server authorized");
 assert.match(previewServer, /buildPublicDebriefBundle_/, "preview must call the shared public-score selection");
 assert.match(functionSource(rpc, "buildPublicDebriefBundle_"), /officialReviewCompleted_/, "shared bundle must preserve official review policy");
 assert.match(functionSource(rpc, "buildPublicDebriefBundle_"), /officialScoreItemsForOutput_/, "shared bundle must select the official scorecards");
@@ -46,7 +47,7 @@ assert.doesNotMatch(previewServer, /UPDATE|INSERT|DELETE/, "preview must remain 
 
 assert.match(admin, /\/debriefing\/\?from=admin&amp;preview=1|\/debriefing\/\?from=admin&preview=1/, "admin center must link directly to preview mode");
 assert.match(debriefing, /id="admin-preview-box"/, "debriefing page must expose an admin-only preview chooser");
-assert.match(functionSource(debriefing, "initializeDebriefPage_"), /refreshAdminActor/, "saved admin sessions must be revalidated by the server");
+assert.match(functionSource(debriefing, "initializeDebriefPage_"), /getDebriefPreviewAccess/, "saved sessions and assigned competitions must be revalidated by the server");
 assert.match(functionSource(debriefing, "initializeDebriefPage_"), /loadDebriefConfig_\(true\)/, "admins must be able to preview open and closed competitions");
 assert.match(functionSource(debriefing, "loadAdminDebriefPreviewOptions_"), /getAdminDebriefPreviewOptions/, "competition selection must load previewable participants");
 assert.match(functionSource(debriefing, "openAdminDebriefPreview_"), /getAdminDebriefPreview/, "participant selection must load the server-authorized preview");
@@ -54,8 +55,8 @@ assert.match(functionSource(debriefing, "renderResult"), /admin-preview-notice/,
 assert.match(debriefing, /원본 데이터는 변경되지 않습니다/, "preview UI must state that it does not edit evaluation data");
 assert.match(functionSource(assessment, "adminRenderRunCards_"), /data-act="debrief-preview"/, "the integrated admin console must expose preview on every competition card");
 const consolePreview = functionSource(assessment, "openAdminDebriefPreviewFromConsole_");
-assert.match(consolePreview, /isAdminRole\(\)/, "the integrated console shortcut must remain admin-only");
-assert.match(consolePreview, /kclAdminActor/, "the integrated console must hand its refreshed admin session to the preview page");
+assert.match(consolePreview, /isAdminRole\(\).*isTeamLeaderForCode_/, "the console shortcut must require admin or an assigned team lead");
+assert.match(consolePreview, /kclDebriefPreviewActor/, "the console must hand its session to the preview page");
 assert.match(consolePreview, /\/debriefing\/\?from=admin&preview=1/, "the integrated console must open admin preview mode");
 
 process.stdout.write("Stage170 administrator debrief preview tests passed.\n");

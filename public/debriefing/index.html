@@ -645,7 +645,7 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
 }
 </style>
 <script src="/assets/kcr-sensory-tags.js?v=stage264"></script>
-<script src="/assets/kcl-api-shim.js?v=stage255"></script>
+<script src="/assets/kcl-api-shim.js?v=stage303"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=213">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
 <link rel="stylesheet" href="/assets/touch-controls.css?v=252">
@@ -905,8 +905,9 @@ function adminPreviewRequested_() {
   return params.get('from') === 'admin' || params.get('preview') === 'admin' || params.get('preview') === '1';
 }
 function readSavedAdminActor_() {
-  try { return JSON.parse(localStorage.getItem('kclAdminActor') || 'null'); } catch(e) { return null; }
+  try { return JSON.parse(localStorage.getItem('kclAssessmentSession') || localStorage.getItem('kclDebriefPreviewActor') || localStorage.getItem('kclAdminActor') || 'null'); } catch(e) { return null; }
 }
+var _adminPreviewAllowedCodes=null;
 function isFullAdminActor_(actor) {
   if (!actor) return false;
   var type = String(actor.accountType || actor.type || '').toUpperCase();
@@ -924,10 +925,10 @@ function setAdminPreviewMode_(active) {
   var subtitle = document.querySelector('#pStep1 .subtitle');
   if (publicFields) publicFields.style.display = active ? 'none' : '';
   if (previewBox) previewBox.classList.toggle('active', !!active);
-  if (subtitle) subtitle.textContent = active ? '관리자 전체 대회 디브리핑 미리보기' : '본인 확인 후 점수를 조회할 수 있습니다';
+  if (subtitle) subtitle.textContent = active ? (isFullAdminActor_(_adminPreviewActor) ? '전체 대회 디브리핑 미리보기' : '담당 대회 디브리핑 미리보기') : '본인 확인 후 점수를 조회할 수 있습니다';
 }
 function populateDebriefCompetitions_(configs, includeClosed) {
-  _configs = configs || [];
+  _configs = (configs || []).filter(function(config){return !includeClosed||!_adminPreviewAllowedCodes||_adminPreviewAllowedCodes.indexOf(config.code)>=0;});
   var sel = document.getElementById('sel-comp');
   sel.innerHTML = '<option value="">-- 대회를 선택하세요 --</option>';
   sel.onchange = updateDebriefLogo;
@@ -965,23 +966,24 @@ function initializeDebriefPage_() {
     return;
   }
   var saved = readSavedAdminActor_();
-  if (!saved || !isFullAdminActor_(saved)) {
+  if (!saved || !saved.judgeToken) {
     setAdminPreviewMode_(false);
     loadDebriefConfig_(false);
-    toast('관리자 로그인 후 디브리핑 미리보기를 이용해주세요.', true);
+    toast('팀장 또는 관리자 로그인 후 디브리핑 미리보기를 이용해주세요.', true);
     return;
   }
   showOverlay();
-  gasRun_('refreshAdminActor', [{judgeToken:saved.judgeToken || ''}], function(res){
+  gasRun_('getDebriefPreviewAccess', [{judgeToken:saved.judgeToken || ''}], function(res){
     hideOverlay();
-    if (!res || !res.success || !isFullAdminActor_(res.actor)) {
+    if (!res || !res.success || !res.actor || !res.codes || !res.codes.length) {
       setAdminPreviewMode_(false);
       loadDebriefConfig_(false);
       toast((res && res.message) || '관리자 권한을 확인할 수 없습니다.', true);
       return;
     }
     _adminPreviewActor = res.actor;
-    try { localStorage.setItem('kclAdminActor', JSON.stringify(res.actor)); } catch(e) {}
+    _adminPreviewAllowedCodes=res.codes;
+    try { localStorage.setItem('kclDebriefPreviewActor', JSON.stringify({judgeToken:res.actor.judgeToken})); } catch(e) {}
     setAdminPreviewMode_(true);
     loadDebriefConfig_(true);
   }, function(){
@@ -1401,6 +1403,7 @@ function renderResult(res) {
 
   var body = document.getElementById('res-body');
   body.innerHTML = '';
+  if(isIkrcDebrief){var scoreUnitNote=document.createElement('p');scoreUnitNote.className='ikrc-score-unit-note';scoreUnitNote.textContent='0.5점 단위 점수는 0.4점으로 표기하였습니다.';scoreUnitNote.style.cssText='margin:0 0 16px;padding:12px 14px;border:1px solid #48484a;border-radius:12px;color:#d1d1d6;font-size:13px;line-height:1.6';body.appendChild(scoreUnitNote);}
 
   var scores = res.scores || [];
   var resultPanel = document.getElementById('pResult');
@@ -1415,7 +1418,7 @@ function renderResult(res) {
   var screenOnlyNote = document.getElementById('screen-only-note'); if (screenOnlyNote) screenOnlyNote.style.display = scores.length ? 'block' : 'none';
   if (scores.length === 0 && String(res.competition||'').toUpperCase()==='MOC' && (res.rankInfos||[]).some(function(r){return r.manualFinalResult;})) {
     var manualRankBox=buildRankBox(res);if(manualRankBox)body.appendChild(manualRankBox);
-    var notice=document.createElement('div');notice.className='no-score';notice.textContent='주최측 수기 결선 최종 결과입니다.';body.appendChild(notice);return;
+    var notice=document.createElement('div');notice.className='no-score';notice.textContent='공식 결선 최종 결과입니다.';body.appendChild(notice);return;
   }
   if (scores.length === 0) {
     body.innerHTML = res.requestedPhase ? '<div class="no-score">' + escHtml(res.requestedPhase) + '에 공개된 평가 기록이 없습니다.</div>' : isIkrcDebrief
@@ -1581,8 +1584,8 @@ function buildRankBox(res) {
       var rankText = r.rank ? (r.totalInRound ? (r.rank + ' / ' + r.totalInRound) : String(r.rank)) : '-';
       var score = r.totalScore != null ? r.totalScore : (r.rankingScore != null ? r.rankingScore : (r.avgScore || 0));
       if (isIkrc && r.avgScore != null) score = r.round==='결선' && r.rankingScore!=null ? r.rankingScore : r.avgScore;
-      html += '<div class="cell"><small>' + escHtml(round + ' 순위' + (r.manualFinalResult ? ' · 수기 확정' : '')) + '</small><b>' + escHtml(rankText) + '</b></div>';
-      html += r.manualRankingOnly ? '<div class="cell"><small>결선 결과</small><b>수기 확정</b></div>' : '<div class="cell"><small>' + escHtml(round + (isIkrc && round!=='결선' ? ' 평균점수' : ' 총점')) + '</small><b>' + escHtml(r.manualFinalResult ? String(score) : fmtScore(score, 2)) + '</b></div>';
+      html += '<div class="cell"><small>' + escHtml(round + ' 순위' + (r.manualFinalResult ? ' · 공식 결과' : '')) + '</small><b>' + escHtml(rankText) + '</b></div>';
+      html += r.manualRankingOnly ? '<div class="cell"><small>결선 결과</small><b>공식 결과</b></div>' : '<div class="cell"><small>' + escHtml(round + (isIkrc && round!=='결선' ? ' 평균점수' : ' 총점')) + '</small><b>' + escHtml(r.manualFinalResult ? String(score) : fmtScore(score, 2)) + '</b></div>';
       if(r.manualFinalResult&&r.endTimeDisplay)html+='<div class="cell"><small>결선 경기시간</small><b>'+escHtml(r.endTimeDisplay)+'</b></div>';
     });
     box.innerHTML = html + '<div class="tie-rule">동점 기준: ' + escHtml(main.tieBreakRule || (isMob ? '총점 → 센서리 → 테크니컬 → 경기시간' : (isMoc ? '총점 → 종료시간 짧은 순' : '총점 → Sweetness → Overall → 재심사'))) + '</div>';

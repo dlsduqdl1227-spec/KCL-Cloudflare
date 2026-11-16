@@ -2023,8 +2023,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/kcr-sensory-comments.js?v=228"></script>
 <script src="/assets/shared-sensory-tags.js?v=228"></script>
 <script src="/assets/vendor/qrcode.min.js?v=stage112"></script>
-<script src="/assets/kcl-api-shim.js?v=stage255"></script>
-<script src="/assets/final-evaluation-workflow.js?v=302"></script>
+<script src="/assets/kcl-api-shim.js?v=stage303"></script>
+<script src="/assets/final-evaluation-workflow.js?v=303"></script>
 <script defer src="/assets/ikrc-score-history.js?v=293"></script>
 <link rel="stylesheet" href="/assets/kcl-ui.css?v=258">
 <script defer src="/assets/kcl-ui.js?v=213"></script>
@@ -2045,6 +2045,8 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <link rel="stylesheet" href="/assets/kcl-appearance.css?v=278">
 <link rel="stylesheet" href="/assets/ktcc-finals.css?v=302">
 <script defer src="/assets/ktcc-finals.js?v=302"></script>
+<link rel="stylesheet" href="/assets/paper-entry.css?v=303">
+<script defer src="/assets/paper-entry.js?v=303"></script>
 <link rel="stylesheet" href="/assets/kcl-refinement.css?v=280">
 <link rel="stylesheet" href="/assets/ikrc-final-timetable.css?v=282">
 <script defer src="/assets/ikrc-final-timetable.js?v=282"></script>
@@ -3595,6 +3597,7 @@ var _cuppingFinalsCups = [];
 var _loginTimeout = null;
 var _sessionRestoreGeneration = 0;
 function saveAssessmentSession_() {
+  if(isPaperEntryFrame_())return;
   try {
     if (!_judge.judgeToken) return;
     var value = JSON.stringify({judgeToken:_judge.judgeToken});
@@ -4128,6 +4131,7 @@ function routeAfterLiveAuthorityChange_(oldActor, newActor, code) {
   }
 }
 function refreshRegistryLiveState_(force) {
+  if(isPaperEntryFrame_())return;
   if (_registryLiveSyncInFlight || !(_judge && _judge.judgeToken)) return;
   if (!force && typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
   var code = String((_selComp && _selComp.code) || '').toUpperCase();
@@ -4157,6 +4161,7 @@ function refreshRegistryLiveState_(force) {
     .getRegistryLiveState(code, {judgeToken:_judge.judgeToken || ''}, knownRevision);
 }
 function startRegistryLiveSync_() {
+  if(isPaperEntryFrame_())return;
   stopRegistryLiveSync_();
   _registryLiveRevisionByCode = {};
   _registryLiveSyncTimer = setInterval(function(){ refreshRegistryLiveState_(false); }, 8000);
@@ -5431,6 +5436,7 @@ function canReviewCode_(code) {
   return access.indexOf('ALL') > -1 || access.indexOf('*') > -1 || access.indexOf(c) > -1;
 }
 function canReviewEditDetails() {
+  if (_reviewState.current && _reviewState.current.managerPaperFinal && !reviewManageScopeForCode_(_reviewState.code) && _reviewState.current.status !== '반려') return false;
   if (_reviewState.current && _reviewState.current.stationClosed) return false;
   if (_reviewState.current && _reviewState.current.finalWorkflow) return canCorrectFinalItem_(_reviewState.current) && canReviewCode_(_reviewState.code);
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
@@ -5452,8 +5458,9 @@ function canReviewEditAny_() {
 function isIkrcHeadMonitor_() {
   return ['IKRC','KCR'].indexOf(String((_reviewState && _reviewState.code) || '').toUpperCase()) > -1 && !!(_reviewState && _reviewState.readOnlyHeadMonitor);
 }
-function canOpenReviewDetails_() { return !!_reviewState.finalRound || canReviewEditAny_() || isIkrcHeadMonitor_() || (!!(_reviewState.current && _reviewState.current.stationClosed) && reviewManageScopeForCode_(_reviewState.code)); }
+function canOpenReviewDetails_() { return !!_reviewState.finalRound || !!(_reviewState.current && _reviewState.current.managerPaperFinal) || canReviewEditAny_() || isIkrcHeadMonitor_() || (!!(_reviewState.current && _reviewState.current.stationClosed) && reviewManageScopeForCode_(_reviewState.code)); }
 function canReviewEditDisqualification_() {
+  if (_reviewState.current && _reviewState.current.managerPaperFinal && !reviewManageScopeForCode_(_reviewState.code) && _reviewState.current.status !== '반려') return false;
   if (_reviewState.current && _reviewState.current.stationClosed) return false;
   if (_reviewState.current && _reviewState.current.finalWorkflow && !canCorrectFinalItem_(_reviewState.current)) return false;
   var c = String((_reviewState && _reviewState.code) || (_selComp && _selComp.code) || '').toUpperCase();
@@ -5651,6 +5658,7 @@ function filterConfigsByAccessAll_(configs) {
 }
 function assertCanEvaluate(code) {
   if (isAdminRole()) return true;
+  if (isPaperEntryFrame_() && _paperEntryFrameContext && _judge.paperEntry && (code === 'MOC' || code === 'KTCC')) return true;
   if (code === 'KCAC' && !(isAdminRole() || isTeamLeaderForCode_(code) || isHeadRoleForCode_(code))) {
     toast('KCAC 예선·결선 공식 평가는 헤드 심사위원이 진행합니다.', true);
     return false;
@@ -6235,6 +6243,7 @@ function adminRenderRunCards_() {
     }
     var div = document.createElement('div');
     div.className = 'admin-comp-card';
+    div.dataset.paperCode=c.code;
     div.dataset.workspaceCompetition=code;
     div.innerHTML =
       '<div class="admin-card-top">' + compLogoHtml(c.code, 'admin-card-logo') + '<div class="comp-card-text">' +
@@ -6279,8 +6288,8 @@ function adminRenderRunCards_() {
   });
 }
 function openAdminDebriefPreviewFromConsole_(cfg) {
-  if (!isAdminRole()) { toast('전체 관리자 권한이 필요합니다.', true); return; }
-  try { localStorage.setItem('kclAdminActor', JSON.stringify(_judge || {})); } catch(e) {}
+  if (!isAdminRole()&&!isTeamLeaderForCode_(cfg.code)) { toast('담당 대회 팀장 또는 관리자 권한이 필요합니다.', true); return; }
+  try { localStorage.setItem('kclDebriefPreviewActor', JSON.stringify({judgeToken:_judge.judgeToken})); } catch(e) {}
   var code = encodeURIComponent(String((cfg && cfg.code) || '').toUpperCase());
   window.location.href = '/debriefing/?from=admin&preview=1' + (code ? ('&comp=' + code) : '');
 }
@@ -6478,6 +6487,7 @@ function loadTeamPanel() {
           var hasPrimaryEvaluationEntry = cardCode === 'MOC' || kcacFinalEntry;
           var div = document.createElement('div');
           div.className = 'admin-comp-card';
+          div.dataset.paperCode=c.code;
           div.innerHTML =
             '<div class="admin-card-top">' + compLogoHtml(c.code, 'admin-card-logo') + '<div class="comp-card-text">' +
               '<div class="admin-comp-name">' + escHtml(c.name) + '</div>' +
@@ -19974,6 +19984,7 @@ function submitKtccFinal(sigBase64) {
 // 디지털 서명
 // ══════════════════════════════════════════
 function openSignature(onConfirmCallback) {
+  if(isPaperEntryFrame_()&&window._paperEntryFrameContext){onConfirmCallback('');return;}
   _sigState.onConfirm = onConfirmCallback;
   _sigState.hasInk = false;
   _sigState.isDrawing = false;
@@ -20542,6 +20553,7 @@ function kclClearActiveEvalDraftAfterSubmit(payload) {
 
 // 모든 평가 계정은 저장된 토큰을 서버에서 검증한 뒤 역할에 맞는 첫 화면으로 복원합니다.
 function bootAdminCenterEntry_() {
+  if(isPaperEntryFrame_())return;
   try {
     if (_judge.judgeToken) return;
     var raw = (isAdminCenterEntry_() && localStorage.getItem('kclAdminActor')) || localStorage.getItem('kclAssessmentSession') || localStorage.getItem('kclAdminActor');
@@ -20586,6 +20598,7 @@ function bootAdminCenterEntry_() {
   } catch(e) { hideOverlay(); }
 }
 
+function isPaperEntryFrame_(){return window.parent!==window&&new URLSearchParams(window.location.search).get('paperEntry')==='1';}
 renderLogoSlots();
 installBrowserBackGuard_();
 window.addEventListener('focus', function(){ refreshRegistryLiveState_(true); });

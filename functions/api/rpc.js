@@ -597,6 +597,9 @@ async function ensureDefaultData(env) {
 }
 
 async function dispatch(action, args, env, request) {
+  const hasPaperToken=value=>typeof value==='string'?value.startsWith('paper-entry-'):Array.isArray(value)?value.some(hasPaperToken):value&&typeof value==='object'?Object.values(value).some(hasPaperToken):false;
+  const paperActions=['getPaperEntryBootstrap','getConfig','getParticipantAssignments','getKcrStationEvaluationState','checkIkrcFinalJudgeAccess','getKtccFinalTeams','submitScores','submitWithSignature','getKcacSharedPhotos'];
+  if(hasPaperToken(args)&&!paperActions.includes(action)&&!/^generate(?:Cupping|Kbc|Kcac|Mob|Ikrc)Comment$/.test(action))return {success:false,message:'이 권한은 선택한 심사위원의 수기 평가 입력에만 사용할 수 있습니다.'};
   if (['getReviewList','getRanking','getRankingDetail'].includes(action)) {
     const code = safeStr(args[0]).toUpperCase();
     const diagnostics = action === 'getReviewList'
@@ -607,7 +610,13 @@ async function dispatch(action, args, env, request) {
   }
   const handlers = {
     ping: async () => ({ success: true, message: 'KCL Cloudflare API 연결 성공', now: nowIso() }),
-    getConfig: () => getConfig(env),
+    getConfig: () => getConfig(env,args[0]),
+    getPaperEntryRoster: () => getPaperEntryRoster_(env,args[0],args[1]),
+    createPaperEntrySessions: () => createPaperEntrySessions_(env,args[0],args[1]),
+    getPaperEntryBootstrap: () => getPaperEntryBootstrap_(env,args[0]),
+    getDebriefPreviewAccess: () => getDebriefPreviewAccess_(env,args[0]),
+    getTeamLeadPreviewPolicy: () => getTeamLeadPreviewPolicy_(env,args[0]),
+    setTeamLeadPreviewPolicy: () => setTeamLeadPreviewPolicy_(env,args[0],args[1]),
     getKtccFinalTeams: () => getKtccFinalTeams_(env, args[0]),
     getKtccFinalDecision: () => getKtccFinalDecision_(env, args[0], args[1]),
     setKtccFinalDecision: () => setKtccFinalDecision_(env, args[0], args[1]),
@@ -719,11 +728,79 @@ async function dispatch(action, args, env, request) {
   return handlers[action]();
 }
 
-async function getConfig(env) {
+async function getConfig(env, actorArg) {
+  if(safeStr(actorArg?.judgeToken).startsWith('paper-entry-')){const actor=await getActor(env,{judgeToken:actorArg.judgeToken});if(!actor?._paperEntry)return {success:false,message:'수기 입력 권한을 다시 확인해주세요.'};const cfg=await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(actor._paperEntry.code).first();return {success:true,configs:[rowToConfig(paperEntryConfig_(cfg,actor))]};}
   const rows = await env.DB.prepare(`SELECT competitions.*,
     CASE WHEN code='IKRC' THEN EXISTS(SELECT 1 FROM system_settings WHERE setting_key=?) ELSE 0 END AS ikrc_final_roster_restricted
     FROM competitions ORDER BY id`).bind(IKRC_FINAL_JUDGE_ROSTER_KEY).all();
   return { success: true, configs: (rows.results || []).map(rowToConfig) };
+}
+const PAPER_ENTRY_KIND='FINAL_PAPER_ENTRY'; // Keep existing tickets valid across the all-round expansion.
+function paperEntryOperatorFingerprint_(row){return JSON.stringify(['id','account_type','name','phone','access','team_group','role','effective_date'].map(key=>row[key]??null));}
+async function paperEntryManager_(env,actorArg,code){
+  const token=safeStr(actorArg&&actorArg.judgeToken);
+  const session=token&&!token.startsWith('paper-entry-')?await env.DB.prepare('SELECT kind FROM sessions WHERE token=? AND expires_at>?').bind(token,nowIso()).first():null;
+  if(!session||!['judge','admin'].includes(session.kind))return {error:{success:false,message:'팀장 계정으로 다시 로그인해주세요.'}};
+  const auth=await requireManageActorForCode_(env,{judgeToken:token},code,'해당 대회 팀장 전용 기능입니다.');if(!auth.ok)return {error:auth.res};
+  const rows=(await env.DB.prepare('SELECT * FROM operators WHERE phone=? ORDER BY id').bind(normalizePhone(auth.actor.phone)).all()).results||[];
+  const authorities=operatorRowsForLogin_(rows,auth.actor.name,auth.actor.phone).filter(row=>operatorIsAdminRow_(row)||(normalizeAccountType_(row.account_type,row.role)==='TEAMLEAD'&&(accessCodes_(row.access).includes(code)||accessCodes_(row.access).includes('ALL'))));
+  if(!authorities.length)return {error:{success:false,message:'해당 대회 팀장 권한을 확인해주세요.'}};
+  return {actor:auth.actor,token,authorities};
+}
+function paperEntryTargetAllowed_(row,code){return row&&!/관리자|총괄|팀장|admin|teamlead/i.test(safeStr(row.role))&&['JUDGE','STAFF'].includes(normalizeAccountType_(row.account_type,row.role))&&(accessCodes_(row.access).includes(code)||accessCodes_(row.access).includes('ALL'));}
+function paperEntryConfig_(cfg,actor){
+  if(!cfg||!actor?._paperEntry)return cfg;
+  const context=actor._paperEntry,options=parseJson(cfg.option_settings,{});
+  if(context.code==='KBC'&&context.round==='본선'&&context.day)options.kbcMainDay=context.day;
+  if(context.code==='MOB'){options.mobActiveParticipantDate='';options.mobParticipantDate='';}
+  // Only the manager's scoped form may amend closed preliminary stations.
+  // The live settings and ordinary judges' day locks remain untouched.
+  if(context.code==='KCR'&&context.round==='예선'&&options.kcrStations)options.kcrStations={...options.kcrStations,closedPrelimDays:[]};
+  return {...cfg,current_round:context.round,is_active:1,option_settings:JSON.stringify(options)};
+}
+async function getPaperEntryRoster_(env,request,actorArg){
+  const checked=strictCompetitionCode_(request&&request.competitionCode,'수기 입력');if(checked.error)return checked.error;
+  const code=checked.code,manager=await paperEntryManager_(env,actorArg,code);if(manager.error)return manager.error;
+  const rows=(await env.DB.prepare('SELECT * FROM operators ORDER BY name,id').all()).results||[];
+  return {success:true,competitionCode:code,rounds:COMPETITION_ROUNDS[code],judges:rows.filter(row=>paperEntryTargetAllowed_(row,code)).map(row=>({id:Number(row.id),name:safeStr(row.name),role:safeStr(row.role),team:safeStr(row.team_group),date:safeStr(row.effective_date)}))};
+}
+async function createPaperEntrySessions_(env,request,actorArg){
+  const checked=strictCompetitionCode_(request&&request.competitionCode,'수기 입력');if(checked.error)return checked.error;
+  const code=checked.code,manager=await paperEntryManager_(env,actorArg,code);if(manager.error)return manager.error;
+  const round=safeStr(request.round),ids=request.operatorIds;
+  if(!COMPETITION_ROUNDS[code].includes(round)||!Array.isArray(ids)||!ids.length||ids.length>12||new Set(ids.map(Number)).size!==ids.length||request.paperConfirmed!==true)return {success:false,message:'평가 라운드와 심사위원(최대 12명)을 선택하고 종이 평가표 확인에 체크해주세요.'};
+  const targets=[];
+  for(const id of ids){const row=await env.DB.prepare('SELECT * FROM operators WHERE id=?').bind(Number(id)).first();if(!paperEntryTargetAllowed_(row,code))return {success:false,message:'선택한 심사위원 명단이 변경되었습니다. 다시 선택해주세요.'};targets.push(row);}
+  if(new Set(targets.map(row=>operatorIdentityKey_(row.name,row.phone))).size!==targets.length)return {success:false,message:'같은 심사위원의 날짜별 등록이 중복 선택되었습니다. 사용할 등록 한 건만 선택해주세요.'};
+  const created=nowIso(),expires=new Date(Date.now()+6*60*60*1000).toISOString(),entries=[],statements=[];
+  for(const target of targets){
+    const token='paper-entry-'+uuid(),context={code,round,day:code==='KBC'&&round==='본선'?kbcMainDay_(request.day):'',replaceExisting:true,managerToken:manager.token,targetId:Number(target.id),targetFingerprint:paperEntryOperatorFingerprint_(target),managerName:safeStr(manager.actor.name),managerIdentity:operatorIdentityKey_(manager.actor.name,manager.actor.phone),createdAt:created};
+    context.draftScope=await sha256Hex_(JSON.stringify([code,round,context.day,context.targetId,context.managerIdentity]));
+    statements.push(env.DB.prepare('INSERT INTO sessions(token,kind,payload_json,expires_at,created_at) VALUES(?,?,?,?,?)').bind(token,PAPER_ENTRY_KIND,JSON.stringify(context),expires,created));
+    entries.push({token,operatorId:Number(target.id),name:safeStr(target.name),role:safeStr(target.role)});
+  }
+  await env.DB.batch(statements);return {success:true,entries};
+}
+async function paperEntryActor_(env,context,token){
+  const manager=await paperEntryManager_(env,{judgeToken:context.managerToken},context.code);if(manager.error)return null;
+  const target=await env.DB.prepare('SELECT * FROM operators WHERE id=?').bind(context.targetId).first();
+  if(!paperEntryTargetAllowed_(target,context.code)||paperEntryOperatorFingerprint_(target)!==context.targetFingerprint)return null;
+  const type=normalizeAccountType_(target.account_type,target.role),code=context.code;
+  return {name:target.name,judgeName:target.name,phone:normalizePhone(target.phone),role:target.role,type,accountType:type,access:code,teamGroup:target.team_group||'',teamMap:{[code]:target.team_group||''},roleMap:{[code]:target.role},accountTypeMap:{[code]:type},affiliation:target.affiliation||'',judgeToken:token,paperEntry:true,
+    operatorRows:[{rowIndex:target.id,accountType:type,access:code,role:target.role,teamGroup:target.team_group||'',effectiveDate:''}],
+    _paperEntry:{...context,ticketToken:token,target,authorities:manager.authorities}};
+}
+async function getPaperEntryBootstrap_(env,token){
+  const actor=await getActor(env,{judgeToken:token});if(!actor?._paperEntry)return {success:false,message:'수기 입력 권한이 만료되었거나 변경되었습니다. 팀장 화면에서 다시 열어주세요. 작성 내용은 이 기기에 유지됩니다.'};
+  const context=actor._paperEntry,cfg=await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(context.code).first();
+  const { _paperEntry,...profile}=actor;
+  return {success:true,actor:profile,config:rowToConfig(paperEntryConfig_(cfg,actor)),draftScope:context.draftScope};
+}
+function paperEntryScoreGuard_(context){
+  const columns=['id','account_type','name','phone','access','team_group','role','effective_date'];
+  const condition=row=>({sql:'EXISTS(SELECT 1 FROM operators WHERE '+columns.map(key=>key+' IS ?').join(' AND ')+')',params:columns.map(key=>row[key]??null)});
+  const target=condition(context.target),managers=context.authorities.map(condition);
+  return {sql:target.sql+' AND ('+managers.map(item=>item.sql).join(' OR ')+') AND EXISTS(SELECT 1 FROM sessions WHERE token=? AND expires_at>?) AND EXISTS(SELECT 1 FROM sessions WHERE token=? AND kind=? AND expires_at>?)',params:[...target.params,...managers.flatMap(item=>item.params),context.managerToken,nowIso(),context.ticketToken,PAPER_ENTRY_KIND,nowIso()]};
 }
 async function getKtccFinalTeams_(env, actorArg) {
   const auth=await requireActorForCode_(env,actorArg,'KTCC','KTCC 팀 목록 조회 권한이 없습니다.');
@@ -890,8 +967,9 @@ function kcrCompletedUnits_(rows, calibration, station) {
 async function getKcrStationEvaluationState(env, actorArg) {
   const auth = await requireActorForCode_(env, actorArg, 'KCR', 'KCR 평가 목록 조회 로그인이 필요합니다.');
   if (!auth.ok) return auth.res;
-  const config = await getConfig(env);
+  const config = await getConfig(env,{judgeToken:auth.actor.judgeToken});
   const cfg = config.configs.find(item => item.code === 'KCR');
+  if(cfg&&auth.actor._paperEntry)cfg.currentRound=auth.actor._paperEntry.round;
   if (!cfg) return {success:false, message:'KCR 대회 설정을 찾지 못했습니다.'};
   const round = normalizeRoundForCompetition_('KCR', cfg.currentRound);
   const closed = kcrClosedPrelimStations_(cfg);
@@ -905,7 +983,7 @@ async function getKcrStationEvaluationState(env, actorArg) {
     ? (await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('KCR').all()).results
       .map(row => ({number:safeStr(participantRoundNumber_(row, 'KCR', round)), name:row.name || '', affiliation:row.affiliation || ''})).filter(row => row.number)
     : [];
-  return {...config, completion:{round, officialUnits:[...kcrCompletedUnits_(own, false)], stations, participants}};
+  return {...config, completion:{round, officialUnits:auth.actor._paperEntry?.replaceExisting?[]:[...kcrCompletedUnits_(own, false)], stations, participants}};
 }
 function rowToConfig(r) {
   return {
@@ -1283,9 +1361,10 @@ async function getActor(env, actor) {
   // 최신 권한을 재발급합니다. 단, D1에 실제 등록된 계정만 통과합니다.
   const token = safeStr(actor.judgeToken || actor.actorToken || '');
   if (token) {
-    const row = await env.DB.prepare('SELECT payload_json FROM sessions WHERE token=? AND expires_at > ?').bind(token, nowIso()).first();
+    const row = await env.DB.prepare('SELECT kind,payload_json FROM sessions WHERE token=? AND expires_at > ?').bind(token, nowIso()).first();
     const payload = row ? parseJson(row.payload_json, null) : null;
     if (payload) {
+      if(row.kind===PAPER_ENTRY_KIND)return paperEntryActor_(env,payload,token);
       const hydrated = await hydrateActorFromOperators_(env, payload);
       if (hydrated) {
         // Keep the still-valid token attached. Older session payloads were saved
@@ -1484,7 +1563,7 @@ async function ikrcFinalJudgeAccessError_(env, actor, round, category) {
 async function checkIkrcFinalJudgeAccess(env, actorArg) {
   const auth = await requireActorForCode_(env, {judgeToken:safeStr(actorArg?.judgeToken)}, 'IKRC', 'IKRC 평가 로그인이 만료되었습니다. 다시 로그인해주세요.');
   if (!auth.ok) return auth.res;
-  const cfg = await env.DB.prepare("SELECT current_round FROM competitions WHERE code='IKRC'").first();
+  const cfg = paperEntryConfig_(await env.DB.prepare("SELECT current_round FROM competitions WHERE code='IKRC'").first(),auth.actor);
   if (!cfg || normalizeRoundForCompetition_('IKRC', cfg.current_round) !== '결선') {
     return {success:false, message:'IKRC 운영 라운드가 변경되었습니다. 평가 화면을 다시 열어주세요.'};
   }
@@ -3651,7 +3730,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
   const actor = await getActor(env, actorArg);
   if (!hasAccess(actor, code)) return { success: false, message: '이 대회 참가자 목록 조회 권한이 없습니다.' };
-  const cfg = await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first();
+  const cfg = paperEntryConfig_(await env.DB.prepare('SELECT current_round, option_settings FROM competitions WHERE code=?').bind(code).first(),actor);
   const currentRound = normalizeRoundForCompetition_(code, cfg && cfg.current_round || '예선');
   const rows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind(code).all();
   const policy = participantRoundPolicy_(code, currentRound);
@@ -3762,6 +3841,7 @@ async function getParticipantAssignments(env, competitionCode, actorArg) {
     }
     return assignment;
   });
+  if(actor?._paperEntry?.replaceExisting)assignments.forEach(item=>{if(item.evaluationCompleted)item.display=String(item.display||'').replace(/\s*·\s*✓?\s*평가완료/g,'')+' · 기존 평가 있음 · 저장 시 교체';item.evaluationCompleted=false;item.completedEvaluationScopes=[];delete item.evaluationCompletedAt;});
   return {
     success: true,
     competitionCode: code,
@@ -4505,6 +4585,7 @@ function rowToReviewItem(r, code, headers, fallbackRound, payloadRowIndex=0, pre
     item['종합코멘트'] = safeStr(payload.overallComment);
   }
   item.rowIndex = isVirtualMulti ? (String(r.id) + ':' + String(payloadRowIndex)) : r.id;
+  if(payload.paperEntryAudit)item.managerPaperFinal=true;
   item.scoreRowId = r.id;
   if (normalizedCode === 'IKRC') {
     if (r.ikrcPanelOperatorId) item.ikrcPanelOperatorId = r.ikrcPanelOperatorId;
@@ -5432,6 +5513,11 @@ async function submitScores(env, payload, signature, request = null) {
   if (!initial.code) return { success: false, message: '대회코드를 찾지 못했습니다.' };
   const auth = await requireActorForCode_(env, { judgeToken: basePayload.judgeToken || basePayload.actorToken || '' }, initial.code, '평가 제출 로그인이 만료되었습니다. 다시 로그인 후 제출해주세요.');
   if (!auth.ok) return auth.res;
+  const paperContext=auth.actor._paperEntry;
+  const paperReplacing=!!paperContext?.replaceExisting;
+  if(paperContext&&(initial.code!==paperContext.code||initial.round!==paperContext.round))return {success:false,message:'선택한 평가 라운드에서만 수기 평가를 저장할 수 있습니다.'};
+  if(paperContext&&isCalibrationMode_(initial.mode)&&!(initial.code==='MOB'&&isHeadRole_(auth.actor.role)))return {success:false,message:'수기 입력은 공식 대회평가에만 사용할 수 있습니다.'};
+  if(paperContext)signature='';
   const actorName = safeStr(auth.actor && (auth.actor.name || auth.actor.judgeName || auth.actor.operatorName));
   const actorPhone = normalizePhone(auth.actor && auth.actor.phone);
   const actorIdentityKey = operatorIdentityKey_(actorName, actorPhone);
@@ -5439,6 +5525,9 @@ async function submitScores(env, payload, signature, request = null) {
   const actorTeamMap = auth.actor && auth.actor.teamMap && typeof auth.actor.teamMap === 'object' ? auth.actor.teamMap : {};
   const actorRole = safeStr(actorRoleMap[initial.code] || (auth.actor && (auth.actor.role || auth.actor.judgeRole || auth.actor.operatorRole)));
   const actorTeam = Object.prototype.hasOwnProperty.call(actorRoleMap,initial.code) ? safeStr(actorTeamMap[initial.code]) : actorTeamForCompetition_(auth.actor,initial.code);
+  if(paperContext&&initial.code==='MOB'&&isHeadRole_(actorRole)){
+    basePayload.mode='MOB 헤드 켈리브레이션';basePayload.evalMode=basePayload.mode;
+  }
   if(initial.code==='KTCC'&&!hasManageAccess(auth.actor,'KTCC')&&(Array.isArray(basePayload.rows)?basePayload.rows:[]).some((row,i)=>safeStr(extractExtraSingleRow_(basePayload,'KTCC',i)['진출판정']))) {
     return {success:false,message:'진출 판정은 KTCC 팀장·관리자만 변경할 수 있습니다. 평가 내용은 유지됩니다.'};
   }
@@ -5470,7 +5559,7 @@ async function submitScores(env, payload, signature, request = null) {
   if (initial.code === 'KCR' && rows.length > 20) {
     return { success:false, message:'KCR은 기록 안전을 위해 한 번에 최대 20개 컵까지 제출할 수 있습니다. 범위를 나누어 진행해주세요.' };
   }
-  const cfg = await env.DB.prepare('SELECT current_round, option_settings, is_active FROM competitions WHERE code=?').bind(initial.code).first();
+  const cfg = paperEntryConfig_(await env.DB.prepare('SELECT current_round, option_settings, is_active FROM competitions WHERE code=?').bind(initial.code).first(),auth.actor);
   if (cfg && Number(cfg.is_active) === 0 && requestedEvaluationCategory === 'competition' && !hasManageAccess(auth.actor, initial.code)) {
     return { success:false, message:'현재 대회가 닫혀 있어 새 평가를 제출할 수 없습니다. 입력 내용은 유지됩니다. 운영팀장에게 대회 오픈 상태를 확인해주세요.' };
   }
@@ -5551,7 +5640,7 @@ async function submitScores(env, payload, signature, request = null) {
   }
   if (initial.code === 'KCR') {
     const own = await kcrOwnCompletionRows_(env, auth.actor, submitRound);
-    const completedUnits = kcrCompletedUnits_(own, isCalibrationMode_(basePayload.mode || basePayload.evalMode), basePayload);
+    const completedUnits = paperReplacing?new Set():kcrCompletedUnits_(own, isCalibrationMode_(basePayload.mode || basePayload.evalMode), basePayload);
     const participantRows = await env.DB.prepare('SELECT * FROM participants WHERE competition_code=? ORDER BY id').bind('KCR').all();
     const registeredNumbers = new Set((participantRows.results || [])
       .map(row => safeStr(participantRoundNumber_(row, 'KCR', submitRound)))
@@ -5605,9 +5694,16 @@ async function submitScores(env, payload, signature, request = null) {
     : [basePayload];
   let inserted = 0, skipped = 0;
   const atomicInsertStatements = [];
+  const paperSnapshots=new Map(),paperUnitSnapshots=new Map(),paperParticipantGuards=new Map(),paperDeletes=[],paperSelectionDeletes=[],paperSelectionGuards=[],paperSeen=new Set();
   const duplicateCutoff = new Date(Date.now() - 20 * 1000).toISOString();
   for (const rawPayload of payloads) {
     const onePayload = Object.assign({}, rawPayload || {});
+    delete onePayload.paperEntryAudit;
+    if(paperContext){
+      onePayload.paperEntryAudit={source:'paper-transcription',enteredBy:paperContext.managerName,enteredByIdentity:paperContext.managerIdentity,enteredAt:nowIso(),judgeOperatorId:paperContext.targetId};
+      for(const field of ['signature','signatureBase64','signatureData'])delete onePayload[field];
+      for(const row of onePayload.rows||[]){for(const field of ['서명','signature','signatureBase64','signatureData'])if(row.extraFields)delete row.extraFields[field];const index=dataHeadersForCompetition_(initial.code).indexOf('서명');if(index>=0&&row.data?.length>index)row.data[index]='';}
+    }
     // 제출자 식별값과 역할은 로그인 세션의 최신 운영계정 정보를 기준으로 고정합니다.
     // 오래 열린 화면이나 변조된 요청이 다른 심사위원 이름/역할로 저장되는 것을 방지합니다.
     if (actorName) {
@@ -5667,7 +5763,7 @@ async function submitScores(env, payload, signature, request = null) {
     if (!x.unit) return { success: false, message: '참가자번호/컵번호/샘플번호/팀번호를 찾지 못했습니다. 번호 입력을 확인해주세요.' };
     delete onePayload.finalReview;
     delete onePayload.finalEvaluationKey;
-    if (finalOfficialEvaluation_(x)) {
+    if (finalOfficialEvaluation_(x)||paperReplacing||!isCalibrationMode_(x.mode)) {
       if (x.code === 'KBC' && x.round === '결선') {
         const finalists=(await env.DB.prepare("SELECT id,final_cup_no FROM participants WHERE competition_code='KBC' AND COALESCE(final_cup_no,'')<>''").all()).results||[];
         const manualSelection=parseJson(cfg&&cfg.option_settings,{}).kbcFinalSelectionMode==='manual';
@@ -5679,15 +5775,23 @@ async function submitScores(env, payload, signature, request = null) {
       }
       const existing=(await env.DB.prepare('SELECT * FROM scores WHERE competition_code=? AND round=? AND unit=?').bind(x.code,x.round,x.unit).all()).results || [];
       const finalScope=finalSubmissionScope_(x.code,onePayload,x.role);
-      if (existing.some(row=>scoreOwnedByActor_(row,auth.actor) && scoreEvaluationCategoryKey_(row.mode)===scoreEvaluationCategoryKey_(x.mode) && (kcacSplitFinal || finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope))) {
+      const owned=existing.filter(row=>scoreOwnedByActor_(row,auth.actor)&&scoreEvaluationCategoryKey_(row.mode)===scoreEvaluationCategoryKey_(x.mode)&&(['IKRC','KCR'].includes(x.code)||kcacSplitFinal||finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope));
+      if(!paperContext&&owned.some(row=>!!parseJson(row.payload_json,{}).paperEntryAudit))return {success:false,message:'팀장·관리자가 최종 반영한 평가입니다. 변경이 필요하면 팀장에게 요청해주세요.'};
+      if(paperReplacing){
+        const scopeKey=x.unit+'::'+finalScope;if(paperSeen.has(scopeKey))return {success:false,message:'동일한 평가가 중복 입력되었습니다. 참가자와 경기 단계를 확인해주세요.'};paperSeen.add(scopeKey);
+        paperUnitSnapshots.set(x.unit,{unit:x.unit,ids:existing.map(row=>Number(row.id))});
+        owned.forEach(row=>paperSnapshots.set(Number(row.id),row));
+        if(owned.length){const keep=owned.slice().sort((a,b)=>Number(b.id)-Number(a.id))[0];onePayload._paperReplaceId=Number(keep.id);onePayload._paperReplaceTime=keep.submitted_at;owned.filter(row=>Number(row.id)!==Number(keep.id)).forEach(row=>paperDeletes.push(env.DB.prepare('DELETE FROM scores WHERE id=? AND competition_code=?').bind(row.id,x.code)));}
+      }
+      if (!paperReplacing&&finalOfficialEvaluation_(x)&&owned.length) {
         return {success:false,duplicate:true,message:'이미 평가완료된 기록입니다. 수정이 필요하면 팀장·관리자에게 반려를 요청한 뒤 반려된 평가 수정에서 재제출해주세요.'};
       }
       if (kcacSplitFinal) {
         const panelLimit=finalScope==='pattern'?2:1;
         const samePanel=existing.filter(row=>!isCalibrationMode_(row.mode) && finalSubmissionScope_(x.code,parseJson(row.payload_json,{}),row.role)===finalScope);
-        if (samePanel.length>=panelLimit) return {success:false,message:'해당 KCAC 결선 평가 영역은 모두 제출되었습니다. 기존 평가를 확인·반려하여 수정해주세요.'};
+        if (samePanel.length>=panelLimit&&!(paperReplacing&&owned.length)) return {success:false,message:'해당 KCAC 결선 평가 영역은 모두 제출되었습니다. 기존 평가를 확인·반려하여 수정해주세요.'};
       }
-      onePayload.finalEvaluationKey=await sha256Hex_(JSON.stringify([x.code,x.round,x.unit,actorIdentityKey,scoreEvaluationCategoryKey_(x.mode),kcacSplitFinal?'four-head':finalScope]));
+      if(finalOfficialEvaluation_(x))onePayload.finalEvaluationKey=await sha256Hex_(JSON.stringify([x.code,x.round,x.unit,actorIdentityKey,scoreEvaluationCategoryKey_(x.mode),kcacSplitFinal?'four-head':finalScope]));
     }
     if (x.code === 'KCR') {
       // A judge has one official evaluation per entrant/round. Role, day, process
@@ -5697,7 +5801,13 @@ async function submitScores(env, payload, signature, request = null) {
         isCalibrationMode_(x.mode) ? ['calibration', safeStr(basePayload.stationId)] : ['competition']
       ]));
     }
+    const paperReplaceId=onePayload._paperReplaceId,paperReplaceTime=onePayload._paperReplaceTime;delete onePayload._paperReplaceId;delete onePayload._paperReplaceTime;
     const payloadJson = JSON.stringify(onePayload || {});
+    if(paperReplacing&&x.code==='IKRC'){
+      const item=rowToReviewItem({id:paperReplaceId||0,competition_code:x.code,round:x.round,judge_name:x.judgeName,role:x.role,team:x.team,unit:x.unit,payload_json:payloadJson,total_score:x.total},x.code,[],x.round);
+      const token=await ikrcSelectionToken_(ikrcSelectionBucket_(item)),prior=await env.DB.prepare('SELECT payload_json FROM sessions WHERE token=?').bind(token).first();
+      paperSelectionGuards.push({token,payload:prior?prior.payload_json:null});paperSelectionDeletes.push(env.DB.prepare('DELETE FROM sessions WHERE token=? AND kind=?').bind(token,IKRC_OFFICIAL_SELECTION_KIND_));
+    }
     const payloadBytes = utf8ByteLength_(payloadJson);
     if (payloadBytes > 1750000) {
       return {
@@ -5707,7 +5817,7 @@ async function submitScores(env, payload, signature, request = null) {
         payloadBytes
       };
     }
-    if (x.code === 'IKRC') {
+    if (x.code === 'IKRC'&&!paperReplacing) {
       // 운영 중 역할 표기가 수정되더라도 동일 인물의 동일 샘플 공식평가가 두 표로 저장되면 안 됩니다.
       // 로그인 계정 식별값으로 소유자를 확인하므로 역할 문자열은 중복 조회 조건에서 제외합니다.
       const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND unit=? ORDER BY id DESC`)
@@ -5725,7 +5835,7 @@ async function submitScores(env, payload, signature, request = null) {
         };
       }
     }
-    if (x.code === 'KCR') {
+    if (x.code === 'KCR'&&!paperReplacing) {
       const existingRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND unit=? ORDER BY id DESC`)
         .bind(x.code, x.round, x.unit).all();
       const existingSameCategory = (existingRows.results || []).find(existing => {
@@ -5743,7 +5853,7 @@ async function submitScores(env, payload, signature, request = null) {
         };
       }
     }
-    if (x.code === 'MOB' && !isCalibrationMode_(x.mode)) {
+    if (x.code === 'MOB' && !isCalibrationMode_(x.mode)&&!paperReplacing) {
       const existingMobRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=? ORDER BY id DESC`)
         .bind(x.code, x.round, x.role, x.unit).all();
       const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
@@ -5759,7 +5869,7 @@ async function submitScores(env, payload, signature, request = null) {
         };
       }
     }
-    if (x.code === 'KBC') {
+    if (x.code === 'KBC'&&!paperReplacing) {
       const existingKbcRows = await env.DB.prepare(`SELECT id, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? AND role=? AND unit=?`)
         .bind(x.code, x.round, x.role, x.unit).all();
       const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
@@ -5768,7 +5878,7 @@ async function submitScores(env, payload, signature, request = null) {
         return { success: false, message: '이미 제출된 KBC 평가입니다. 같은 심사위원의 같은 참가자 평가는 검수 화면에서 수정해주세요.', duplicateId: existingKbc.id };
       }
     }
-    if (x.code === 'KCAC') {
+    if (x.code === 'KCAC'&&!paperReplacing) {
       const existingKcacRows = await env.DB.prepare('SELECT id, unit, mode, role, judge_name, payload_json FROM scores WHERE competition_code=? AND round=? ORDER BY id DESC')
         .bind(x.code, x.round).all();
       const submittedCategory = scoreEvaluationCategoryKey_(x.mode);
@@ -5794,16 +5904,22 @@ async function submitScores(env, payload, signature, request = null) {
     // IKRC 헤드 점수는 비교용으로 보관하고, 순위는 센서리 제출만 반영합니다.
     // 제출 인원은 현장 구성에 따라 달라질 수 있으므로 스테이션 확정과 집계에서 고정 인원수를 강제하지 않습니다.
     const ikrcOfficialHead = x.code === 'IKRC' && !isCalibrationMode_(x.mode) && isHeadRole_(x.role);
-    const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (finalOfficialEvaluation_(x) || ikrcOfficialHead ? '검수완료' : '미검수');
+    const initialReviewStatus = isCalibrationMode_(x.mode) ? '켈리브레이션' : (paperContext || finalOfficialEvaluation_(x) || ikrcOfficialHead ? '검수완료' : '미검수');
     const insertVerb = !finalOfficialEvaluation_(x) && x.code !== 'KCR' && safeStr(onePayload.clientSubmissionId) ? 'INSERT OR IGNORE' : 'INSERT';
     // Validate the selected entrant again inside the atomic insert. A roster
     // change while this request is in flight must never reuse another player's number.
     const guardKbcFinal = x.code === 'KBC' && x.round === '결선' && finalOfficialEvaluation_(x) && Number(basePayload.participantId)>0;
-    const codeValue = guardKbcFinal ? "CASE WHEN EXISTS(SELECT 1 FROM participants WHERE competition_code='KBC' AND id=? AND final_cup_no=?) THEN ? ELSE NULL END" : '?';
-    const insertStatement = env.DB.prepare(`${insertVerb} INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
+    if(paperReplacing&&guardKbcFinal)paperParticipantGuards.set(Number(basePayload.participantId),{id:Number(basePayload.participantId),number:safeStr(x.unit)});
+    const paperGuard=paperContext?paperEntryScoreGuard_(paperContext):null;
+    const guardParts=[],guardParams=[];
+    if(guardKbcFinal){guardParts.push("EXISTS(SELECT 1 FROM participants WHERE competition_code='KBC' AND id=? AND final_cup_no=?)");guardParams.push(Number(basePayload.participantId),safeStr(x.unit));}
+    if(paperGuard){guardParts.push('('+paperGuard.sql+')');guardParams.push(...paperGuard.params);}
+    const codeValue=guardParts.length?'CASE WHEN '+guardParts.join(' AND ')+' THEN ? ELSE NULL END':'?';
+    const insertStatement = paperReplaceId?env.DB.prepare('UPDATE scores SET submitted_at=?,judge_name=?,team=?,role=?,mode=?,unit=?,participant_name=?,total_score=?,disqualified=?,disqualification_reason=?,review_status=?,payload_json=?,signature_data=? WHERE id=? AND competition_code=?')
+      .bind(paperReplaceTime,x.judgeName,x.team,x.role,x.mode,x.unit,x.participantName,x.total,boolInt(x.disqualified),x.dqReason,initialReviewStatus,payloadJson,'',paperReplaceId,x.code):env.DB.prepare(`${insertVerb} INTO scores (submitted_at, competition_code, round, judge_name, team, role, mode, unit, participant_name, total_score, disqualified, disqualification_reason, review_status, payload_json, signature_data)
       VALUES (?, ${codeValue}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(nowIso(), ...(guardKbcFinal ? [Number(basePayload.participantId),safeStr(x.unit),x.code] : [x.code]), x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
-    if (finalOfficialEvaluation_(x) || x.code === 'IKRC' || x.code === 'KCR' || receiptInfo.token) atomicInsertStatements.push(insertStatement);
+      .bind(nowIso(),...guardParams,x.code, x.round, x.judgeName, x.team, x.role, x.mode, x.unit, x.participantName, x.total, boolInt(x.disqualified), x.dqReason, initialReviewStatus, payloadJson, signature || '');
+    if (paperContext || finalOfficialEvaluation_(x) || x.code === 'IKRC' || x.code === 'KCR' || receiptInfo.token) atomicInsertStatements.push(insertStatement);
     else {
       await insertStatement.run();
       inserted++;
@@ -5812,6 +5928,20 @@ async function submitScores(env, payload, signature, request = null) {
   if (atomicInsertStatements.length) {
     const scoreInsertCount = atomicInsertStatements.length;
     const batchStatements = atomicInsertStatements.slice();
+    let paperGuardToken='';
+    if(paperReplacing){
+      paperGuardToken='PAPER_GUARD:'+uuid();const authority=paperEntryScoreGuard_(paperContext),snapshot=[...paperSnapshots.values()].map(row=>({id:row.id,payload:row.payload_json,status:row.review_status,total:row.total_score}));
+      const units=[...paperUnitSnapshots.values()];
+      const guard=env.DB.prepare(`INSERT INTO sessions(token,kind,payload_json,expires_at,created_at)
+        SELECT ?,CASE WHEN (${authority.sql}) AND NOT EXISTS(SELECT 1 FROM json_each(?) p WHERE NOT EXISTS(SELECT 1 FROM scores s WHERE s.id=json_extract(p.value,'$.id') AND s.payload_json IS json_extract(p.value,'$.payload') AND s.review_status IS json_extract(p.value,'$.status') AND s.total_score IS json_extract(p.value,'$.total')))
+        AND NOT EXISTS(SELECT 1 FROM json_each(?) u WHERE (SELECT COUNT(*) FROM scores s WHERE s.competition_code=? AND s.round=? AND s.unit=json_extract(u.value,'$.unit'))<>json_array_length(json_extract(u.value,'$.ids')) OR EXISTS(SELECT 1 FROM json_each(u.value,'$.ids') i WHERE NOT EXISTS(SELECT 1 FROM scores s WHERE s.id=i.value AND s.competition_code=? AND s.round=?)))
+        AND NOT EXISTS(SELECT 1 FROM json_each(?) g WHERE (SELECT payload_json FROM sessions WHERE token=json_extract(g.value,'$.token')) IS NOT json_extract(g.value,'$.payload'))
+        AND NOT EXISTS(SELECT 1 FROM json_each(?) p WHERE NOT EXISTS(SELECT 1 FROM participants WHERE competition_code='KBC' AND id=json_extract(p.value,'$.id') AND final_cup_no=json_extract(p.value,'$.number'))) THEN 'PAPER_ENTRY_GUARD' ELSE NULL END,'{}',?,?`)
+        .bind(paperGuardToken,...authority.params,JSON.stringify(snapshot),JSON.stringify(units),initial.code,submitRound,initial.code,submitRound,JSON.stringify(paperSelectionGuards),JSON.stringify([...paperParticipantGuards.values()]),'2035-12-31T23:59:59.000Z',nowIso());
+      const before=[guard];
+      if(paperSnapshots.size||paperSelectionGuards.some(g=>g.payload))before.push(env.DB.prepare('INSERT INTO sessions(token,kind,payload_json,expires_at,created_at) VALUES(?,?,?,?,?)').bind('PAPER_ARCHIVE:'+uuid(),'PAPER_ENTRY_ARCHIVE',JSON.stringify({competitionCode:initial.code,round:submitRound,enteredBy:paperContext.managerName,enteredAt:nowIso(),previousRows:[...paperSnapshots.values()],previousSelections:paperSelectionGuards}),'2035-12-31T23:59:59.000Z',nowIso()));
+      batchStatements.unshift(...before,...paperDeletes,...paperSelectionDeletes);
+    }
     if (receiptInfo.token) {
       const receiptPayload = {
         competitionCode:initial.code,
@@ -5823,9 +5953,11 @@ async function submitScores(env, payload, signature, request = null) {
       batchStatements.push(env.DB.prepare('INSERT OR REPLACE INTO sessions (token, kind, payload_json, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
         .bind(receiptInfo.token, 'SCORE_SUBMISSION_RECEIPT', JSON.stringify(receiptPayload), '2035-12-31T23:59:59.000Z', receiptPayload.completedAt));
     }
+    if(paperGuardToken)batchStatements.push(env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(paperGuardToken));
     try {
       await env.DB.batch(batchStatements);
     } catch (error) {
+      if(paperContext&&/NOT NULL constraint failed: (?:scores.competition_code|sessions.kind)/i.test(String(error&&error.message||error)))return {success:false,stale:true,message:'입력 중 권한·선수 배정 또는 기존 평가가 변경되어 저장하지 않았습니다. 작성 내용은 유지됩니다. 팀장 화면에서 다시 확인해주세요.'};
       if (initial.code === 'KBC' && /NOT NULL constraint failed: scores.competition_code/i.test(String(error && error.message || error))) {
         return {success:false,stale:true,message:'결선 선수 배정이 변경되어 저장하지 않았습니다. 작성 내용은 유지됩니다. 선수 목록을 새로고침해 확인해주세요.'};
       }
@@ -5858,7 +5990,7 @@ function kcrReviewSummaryItem_(item, comparisonAvailable) {
   const keys = ['rowIndex','scoreRowId','payloadRowIndex','_scoreId','_payloadRowIndex',
     'status','submittedAt','timestamp','competitionCode','round','judgeName','team','role','mode','unit',
     'participantName','participantAffiliation','participantTeamName','totalScore','disqualified','disqualificationReason',
-    'evaluationCategory','evaluationCategoryReason','stationClosed','finalWorkflow','finalRevision','returnReason',
+    'evaluationCategory','evaluationCategoryReason','stationClosed','finalWorkflow','finalRevision','returnReason','managerPaperFinal',
     '제출시간','대회코드','라운드','심사위원명','팀','역할','모드','스테이션ID','스테이션','스테이션코드','프로세스',
     '참가자번호','참가자 번호','컵번호','샘플번호','팀번호','선수명','참가자명','소속','팀명',
     '총점','최종점수','실격여부','실격사유','검수상태','검수구분'];
@@ -6059,6 +6191,7 @@ async function finalCorrectionContext_(env, request, actorArg, returning) {
     const row=originals.get(id)||await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id,code).first();
     if(!row||!finalOfficialEvaluation_(row)||row.round!==request.round)return {success:false,message:'같은 대회·경기 회차의 본·결선 평가만 처리할 수 있습니다.'};
     const payloadRows=parseJson(row.payload_json,{}).rows;
+    if(parseJson(row.payload_json,{}).paperEntryAudit&&!manager&&!auth.actor._paperEntry&&!returnedEvaluation_(row))return {success:false,message:'팀장·관리자가 최종 반영한 평가입니다. 변경이 필요하면 팀장에게 요청해주세요.'};
     if(ref.payloadRowIndex >= Math.max(1,Array.isArray(payloadRows)?payloadRows.length:0))return {success:false,message:'해당 컵 평가를 찾지 못했습니다. 목록을 새로고침해주세요.'};
     if(!manager && !canReviewScoreRow_(row,auth.actor,code,false))return {success:false,message:'본인이 제출한 평가만 수정할 수 있습니다.'};
     if(station&&!ikrcScoreBelongsToStationServer_(row,station))return {success:false,message:'담당 스테이션 평가만 처리할 수 있습니다.'};
@@ -6164,6 +6297,7 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
     return { success:false, message:`${managerStation.label}에 배정된 팀장은 다른 스테이션 평가를 검수할 수 없습니다.` };
   }
   if (!canReviewScoreRow_(current, actor, code, manager)) return { success: false, message: '본인이 제출한 평가만 직접 검수할 수 있습니다. 전체 검수는 관리자 또는 대회팀장 권한이 필요합니다.' };
+  if(parseJson(current.payload_json,{}).paperEntryAudit&&!manager&&!finalPreparation)return {success:false,message:'팀장·관리자가 최종 반영한 평가입니다. 변경이 필요하면 팀장에게 요청해주세요.'};
   const statusRequested = code === 'KCR' && !isCalibrationMode_(current.mode)
     ? '수정완료' : (safeStr(newStatus) || current.review_status || '미검수');
   if (safeStr(current.review_status) === '검수완료' && statusRequested === '미검수' && !manager) {
@@ -6272,8 +6406,9 @@ async function updateReviewRow(env, competitionCode, rowIndex, updates, newStatu
     if(finalSubmissionScope_(code,payload,current.role)!==finalSubmissionScope_(code,parseJson(current.payload_json,{}),current.role))return {success:false,message:'반려 수정에서는 평가 영역이나 경기 매치를 바꿀 수 없습니다. 운영자에게 확인해주세요.'};
     return {success:true,row:{...current,total_score:total,disqualified:boolInt(dq),disqualification_reason:dqReason,payload_json:JSON.stringify(payload)}};
   }
-  await env.DB.prepare(`UPDATE scores SET unit=?, participant_name=?, total_score=?, disqualified=?, disqualification_reason=?, review_status=?, payload_json=? WHERE id=? AND competition_code=?`)
-    .bind(unit, participantName, total === null || total === undefined || Number.isNaN(Number(total)) ? null : Number(total), boolInt(dq), dqReason, status, JSON.stringify(payload), id, code).run();
+  const saved = await env.DB.prepare(`UPDATE scores SET unit=?, participant_name=?, total_score=?, disqualified=?, disqualification_reason=?, review_status=?, payload_json=? WHERE id=? AND competition_code=? AND payload_json IS ? AND review_status IS ? AND total_score IS ?`)
+    .bind(unit, participantName, total === null || total === undefined || Number.isNaN(Number(total)) ? null : Number(total), boolInt(dq), dqReason, status, JSON.stringify(payload), id, code,current.payload_json,current.review_status,current.total_score).run();
+  if(saved.meta&&Number(saved.meta.changes)===0)return {success:false,stale:true,message:'팀장·관리자 또는 다른 화면에서 변경된 평가입니다. 작성 내용은 유지되며 최신 기록을 다시 확인해주세요.'};
   if (code === 'IKRC') await invalidateIkrcStationFinalizationForScore_(env, current, cfg);
   return { success: true, message: '검수 수정 저장 완료', rowIndex: id, status };
 }
@@ -6306,6 +6441,7 @@ async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus, r
     seenIds.add(id);
     const cur = await env.DB.prepare('SELECT * FROM scores WHERE id=? AND competition_code=?').bind(id, code).first();
     if (!cur) continue;
+    if(parseJson(cur.payload_json,{}).paperEntryAudit&&!manager)return {success:false,message:'팀장·관리자가 최종 반영한 평가입니다. 변경이 필요하면 팀장에게 요청해주세요.'};
     if (finalOfficialEvaluation_(cur)) {
       if (returnedEvaluation_(cur) || !reviewCompletedStatus_(status)) return {success:false,message:'본·결선은 제출 즉시 반영됩니다. 상태 변경 대신 반려 기능을 사용해주세요.'};
       continue;
@@ -6326,7 +6462,8 @@ async function updateReviewStatus(env, competitionCode, rowIndexes, newStatus, r
     if (safeStr(cur.review_status) === '검수완료' && status !== '검수완료' && !manager) {
       return { success: false, message: '검수완료 항목을 되돌리는 권한은 관리자 또는 대회팀장에게만 있습니다.' };
     }
-    await env.DB.prepare('UPDATE scores SET review_status=? WHERE id=? AND competition_code=?').bind(status, id, code).run();
+    const saved=await env.DB.prepare('UPDATE scores SET review_status=? WHERE id=? AND competition_code=? AND payload_json IS ? AND review_status IS ?').bind(status,id,code,cur.payload_json,cur.review_status).run();
+    if(saved.meta&&Number(saved.meta.changes)===0)return {success:false,stale:true,message:'동시에 변경된 평가가 있어 상태를 바꾸지 않았습니다. 최신 기록을 다시 확인해주세요.'};
     if (code === 'IKRC') await invalidateIkrcStationFinalizationForScore_(env, cur, cfg);
   }
   return { success: true, message: '상태 변경 완료' };
@@ -8466,16 +8603,30 @@ async function getRankingDetail(env, competitionCode, unit, round, actorArg, req
   return { success: true, compCode: code, compName: data.cfg ? data.cfg.name : (COMPETITION_NAMES[code] || code), ...(code==='KTCC'?{selectedKtccStage:scope.stage}:{}), unitLabel: code === 'KTCC' ? '팀번호' : '참가자번호', unit: targetUnit, unitDisplay: targetUnit, round: targetRound, headers: data.headers, rows, scores: rows, comparisonRows, totalScore: rankInfo && rankInfo.manualRankingOnly ? null : displayTotal, avgScore: rankInfo && rankInfo.manualRankingOnly ? null : displayAvg, rankInfo, rankInfos: rankInfo ? [rankInfo] : [], disqualified: disqualified || (rankInfo && rankInfo.disqualified) || false, disqualificationReason: reasons.join(' / ') || (rankInfo && rankInfo.disqualificationReason) || '', reviewedCount, totalCount: rows.length, playerNameSummary: (rankInfo && (rankInfo.playerNameSummary || rankInfo.nameSummary)) || (rows[0] && rows[0].participantName) || '', playerAffiliationSummary: (rankInfo && rankInfo.playerAffiliationSummary) || (rows[0] && rows[0].participantAffiliation) || '' };
 }
 
-async function requireAdminPreviewActor_(env, actorArg) {
-  const actor = await getActor(env, actorArg);
-  if (!actor || !hasAdmin(actor)) {
-    return { ok:false, res:{ success:false, message:'전체 관리자 로그인 후 디브리핑 미리보기를 이용해주세요.' } };
+async function teamLeadPreviewEnabled_(env){const row=await env.DB.prepare('SELECT setting_value FROM system_settings WHERE setting_key=?').bind('teamlead_debrief_preview_enabled').first();return row?row.setting_value==='true':true;}
+async function getTeamLeadPreviewPolicy_(env,actorArg){const actor=await getActor(env,{judgeToken:safeStr(actorArg?.judgeToken)});if(!actor||(!hasAdmin(actor)&&!hasTeamLead(actor)))return {success:false,message:'팀장 또는 관리자 로그인이 필요합니다.'};return {success:true,enabled:await teamLeadPreviewEnabled_(env),canChange:hasAdmin(actor)};}
+async function setTeamLeadPreviewPolicy_(env,request,actorArg){
+  const actor=await getActor(env,{judgeToken:safeStr(actorArg?.judgeToken)});if(!hasAdmin(actor)||actor?._paperEntry)return {success:false,message:'총관리자만 미리보기 권한을 변경할 수 있습니다.'};
+  if(typeof request?.enabled!=='boolean')return {success:false,message:'허용 상태를 다시 선택해주세요.'};
+  await env.DB.prepare('INSERT INTO system_settings(setting_key,setting_value,updated_at,updated_by) VALUES(?,?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_at=excluded.updated_at,updated_by=excluded.updated_by').bind('teamlead_debrief_preview_enabled',String(request.enabled),nowIso(),safeStr(actor.name)).run();
+  return {success:true,enabled:request.enabled};
+}
+async function getDebriefPreviewAccess_(env,actorArg){
+  const token=safeStr(actorArg&&actorArg.judgeToken);if(!token)return {success:false,message:'팀장 또는 관리자 계정으로 로그인해주세요.'};
+  const actor=await getActor(env,{judgeToken:token});
+  const codes=actor&&!actor._paperEntry?(hasAdmin(actor)?COMPETITION_CODES:await teamLeadPreviewEnabled_(env)?COMPETITION_CODES.filter(code=>hasManageAccess(actor,code)):[]):[];
+  return codes.length?{success:true,actor,codes}:{success:false,message:'미리보기 권한이 닫혀 있거나 담당 대회가 없습니다.'};
+}
+async function requireAdminPreviewActor_(env, actorArg, code) {
+  const actor = await getActor(env, {judgeToken:safeStr(actorArg?.judgeToken)});
+  if (!actor || actor._paperEntry || !(hasAdmin(actor)||(code&&hasManageAccess(actor,code)&&await teamLeadPreviewEnabled_(env)))) {
+    return { ok:false, res:{ success:false, message:'해당 대회의 디브리핑 미리보기 권한을 확인해주세요.' } };
   }
   return { ok:true, actor };
 }
 async function getAdminDebriefPreviewOptions(env, competitionCode, actorArg) {
   const code = safeStr(competitionCode).toUpperCase();
-  const auth = await requireAdminPreviewActor_(env, actorArg);
+  const auth = await requireAdminPreviewActor_(env, actorArg, code);
   if (!auth.ok) return auth.res;
   if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
   const data = await buildRankingData_(env, code);
@@ -8511,7 +8662,7 @@ async function getAdminDebriefPreviewOptions(env, competitionCode, actorArg) {
 }
 async function getAdminDebriefPreview(env, competitionCode, unit, round, actorArg, phase='') {
   const code = safeStr(competitionCode).toUpperCase();
-  const auth = await requireAdminPreviewActor_(env, actorArg);
+  const auth = await requireAdminPreviewActor_(env, actorArg, code);
   if (!auth.ok) return auth.res;
   if (!code || !COMPETITION_CODES.includes(code)) return { success:false, message:'대회를 선택해주세요.' };
   const selectedRound = rankingRoundScope_(round);
@@ -8564,7 +8715,7 @@ async function findDebriefPreviewOwner_(env, code, round, unit) {
   return rows.filter(p => identities.has(safeStr(p.name) + '::' + normalizePhone(p.phone)));
 }
 async function getAdminDebriefPhase(env, competitionCode, unit, round, phase, actorArg) {
-  const auth = await requireAdminPreviewActor_(env, actorArg);
+  const auth = await requireAdminPreviewActor_(env, actorArg, safeStr(competitionCode).toUpperCase());
   if (!auth.ok) return auth.res;
   const code = safeStr(competitionCode).toUpperCase();
   if (!COMPETITION_CODES.includes(code)) return {success:false, message:'대회를 선택해주세요.'};
@@ -8856,10 +9007,13 @@ function debriefTargetKey_(code, round, unit) {
 function debriefAssignmentConflict_() {
   return {success:false, code:'DEBRIEF_ASSIGNMENT_CONFLICT', message:'동일 라운드의 참가번호가 여러 선수에게 연결되어 있습니다. 운영팀에 번호 배정 확인을 요청해주세요.'};
 }
-function publicDebriefScore_(item) {
+function privateDebriefMetadata_(key){return /^(?:payload|paperEntryAudit|managerPaperFinal|_paperEntry|submittedAt|submitted_at|timestamp|created_?at|updated_?at|enteredBy|enteredByIdentity|enteredAt|operatorIdentityKey|judgeIdentityKey|judgePhone|operatorPhone|officialResultEffectiveAt|officialResultSource|officialResultReason)$/i.test(key)||/제출(?:시간|일시|일자|일)|평가(?:날짜|일자|일시|일$)|입력(?:자|일시|일자)|대리입력|대신입력/.test(key);}
+function publicDebriefScore_(item, headers=[]) {
   // The rendered row already contains its scores, tags, comments and media.
   // Raw batch payloads may also contain other entrants and are not public data.
-  const {payload, ...publicItem} = item;
+  const clean=input=>Array.isArray(input)?input.map(clean):input&&typeof input==='object'?Object.fromEntries(Object.entries(input).filter(([key])=>!privateDebriefMetadata_(key)).map(([key,value])=>[key,clean(value)])):input;
+  const publicItem=clean(item);
+  if(Array.isArray(headers))headers.forEach((header,index)=>{if(privateDebriefMetadata_(header)){delete publicItem['_col'+index];if(Array.isArray(publicItem.values))publicItem.values[index]='';}});
   return publicItem;
 }
 async function buildPublicDebriefBundle_(env, code, targets) {
@@ -8878,7 +9032,8 @@ async function buildPublicDebriefBundle_(env, code, targets) {
   // Keep the IKRC panel/seed/average rules with the same exact target guard.
   if (code === 'IKRC') {
     const bundle = await buildIkrcPublicDebriefBundle_(env, targets, data);
-    return {...bundle, scores:bundle.scores.map(publicDebriefScore_)};
+    const rankInfos=bundle.rankInfos.map(item=>publicDebriefScore_(item));
+    return {...bundle,headers:bundle.headers.map(h=>privateDebriefMetadata_(h)?'':h),scores:bundle.scores.map(item=>publicDebriefScore_(item,bundle.headers)),rankInfos,rankInfo:rankInfos[0]||null};
   }
   const matches = item => targetKeys.has(debriefTargetKey_(code, item.round || item['라운드'], itemNumber_(item)));
   const scores = officialScoreItemsForOutput_(code, data.rows.filter(item =>
@@ -8886,8 +9041,8 @@ async function buildPublicDebriefBundle_(env, code, targets) {
   ));
   const publicKeys = new Set(scores.map(item => debriefTargetKey_(code, item.round || item['라운드'], itemNumber_(item))));
   if(code==='MOC')for(const rank of data.ranking)if(rank.manualFinalResult&&targetKeys.has(debriefTargetKey_(code,rank.round,rank.unit)))publicKeys.add(debriefTargetKey_(code,rank.round,rank.unit));
-  const rankInfos = data.ranking.filter(rank => publicKeys.has(debriefTargetKey_(code, rank.round, rank.unit)));
-  return { ...empty, scores:scores.map(publicDebriefScore_), headers:data.headers, rankInfos, rankInfo:rankInfos[0] || null };
+  const rankInfos = data.ranking.filter(rank => publicKeys.has(debriefTargetKey_(code, rank.round, rank.unit))).map(item=>publicDebriefScore_(item));
+  return { ...empty, scores:scores.map(item=>publicDebriefScore_(item,data.headers)), headers:data.headers.map(h=>privateDebriefMetadata_(h)?'':h), rankInfos, rankInfo:rankInfos[0] || null };
 }
 function ikrcParticipantBlindTargets_(participant) {
   const p = participant || {};

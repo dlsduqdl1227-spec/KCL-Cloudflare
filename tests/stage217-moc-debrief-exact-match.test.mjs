@@ -11,7 +11,8 @@ try{
     const res=await api.rpc('getAdminDebriefPreview','MOC',unit,round,api.actor);
     assert.equal(res.scores.length,1);assert.equal(res.rankInfo.totalScore,score);previews.push(res);
     const rank=(await api.rpc('getRanking','MOC',api.actor,round)).ranking.find(x=>x.unit===unit);
-    assert.deepEqual(res.rankInfo,rank,'debriefing must preserve the official rank and score');
+    const {officialResultSource,officialResultReason,officialResultEffectiveAt,...publicRank}=rank;
+    assert.deepEqual(res.rankInfo,publicRank,'debriefing preserves official rank and score but omits private entry metadata');
   }
   assert.equal(api.db.prepare("SELECT debriefing FROM competitions WHERE code='MOC'").get().debriefing,0,'preview does not publish');
   api.db.prepare("UPDATE competitions SET debriefing=1 WHERE code='MOC'").run();

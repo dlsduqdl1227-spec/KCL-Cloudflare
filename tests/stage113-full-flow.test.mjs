@@ -1061,7 +1061,7 @@ assert.ok(adminPreview.scores.every((item) => ["검수완료", "수정완료"].i
 const unauthorizedPreview = await rpc("getAdminDebriefPreviewOptions", "KBC", { judgeToken:judge.judgeToken });
 assert.equal(unauthorizedPreview.success, false, "일반 심사위원은 관리자 디브리핑 미리보기를 열 수 없어야 합니다");
 const teamLeadPreview = await rpc("getAdminDebriefPreviewOptions", "IKRC", stationLeadActor);
-assert.equal(teamLeadPreview.success, false, "대회팀장도 전체 관리자 전용 디브리핑 미리보기를 열 수 없어야 합니다");
+assert.equal(teamLeadPreview.success, true, "관리자가 허용한 담당 대회의 미리보기는 팀장도 열 수 있어야 합니다");
 assert.equal(testDb.raw.prepare("SELECT COUNT(*) AS n FROM scores").get().n, previewScoreCountBefore, "디브리핑 미리보기는 평가 데이터를 변경하면 안 됩니다");
 
 const ikrcRankingBeforeStationFinal = await rpc("getRanking", "IKRC", adminActor);

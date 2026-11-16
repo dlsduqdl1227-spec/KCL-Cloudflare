@@ -29,7 +29,7 @@ test('MOC opens the manual final results by default, keeps main results and show
       assert.equal((await inspectPage(page)).pageOverflow,false);assert.deepEqual(page.qaErrors,[]);await page.close();
       const debrief=await qa.page(width);await debrief.goto(qa.origin+'/debriefing/');await debrief.waitForFunction(()=>_configs.length>0);
       const response=await api.rpc('getAdminDebriefPreview','MOC','110','결선',api.actor);await debrief.evaluate(res=>{renderResult(res);showPanel('pResult');},response);
-      const body=await debrief.locator('#res-body').innerText();assert.match(body,/1 \/ 10/);assert.match(body,/수기 확정/);assert.match(body,/23\.5/);assert.match(body,/04:30\.25/);assert.doesNotMatch(body,/0\.00/);assert.equal((await inspectPage(debrief)).pageOverflow,false);assert.deepEqual(debrief.qaErrors,[]);await debrief.close();
+      const body=await debrief.locator('#res-body').innerText();assert.match(body,/1 \/ 10/);assert.match(body,/공식 결과/);assert.doesNotMatch(body,/수기 확정|팀장.*입력/);assert.match(body,/23\.5/);assert.match(body,/04:30\.25/);assert.doesNotMatch(body,/0\.00/);assert.equal((await inspectPage(debrief)).pageOverflow,false);assert.deepEqual(debrief.qaErrors,[]);await debrief.close();
     }assert.equal(api.snapshot(),before);
   }finally{await qa.close();api.close();}
 });

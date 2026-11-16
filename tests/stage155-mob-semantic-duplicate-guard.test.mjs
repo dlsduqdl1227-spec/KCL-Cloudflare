@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rpc = fs.readFileSync(path.join(root, 'functions', 'api', 'rpc.js'), 'utf8');
 
-const start = rpc.indexOf("if (x.code === 'MOB' && !isCalibrationMode_(x.mode))");
-const end = rpc.indexOf("if (x.code === 'KBC')", start);
+const start = rpc.indexOf("if (x.code === 'MOB' && !isCalibrationMode_(x.mode)&&!paperReplacing)");
+const end = rpc.indexOf("if (x.code === 'KBC'&&!paperReplacing)", start);
 assert.ok(start > 0 && end > start, 'MOB official duplicate guard must exist before KBC handling');
 const guard = rpc.slice(start, end);
 
