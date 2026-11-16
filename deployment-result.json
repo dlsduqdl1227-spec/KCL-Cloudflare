@@ -1,0 +1,10 @@
+{
+  "targetCommit": "a07adc43c86411581d3a969e7694b9ac7cf1f927",
+  "sourceId": "ecdeed9cc425a6a45265d7681e78b725423391578b061ddb5b6ac3530c07deaa",
+  "state": "started",
+  "checkedAt": "2026-11-16T03:21:36.188Z",
+  "pages": null,
+  "healthMatches": false,
+  "staticBuildMatches": false,
+  "liveAudit": null
+}
