@@ -25,11 +25,11 @@ try{
       const res=await api.rpc('getDebriefPhase',auth.debriefToken,'예선');
       await page.evaluate(r=>{renderResult(r);showPanel('pResult');},res);
       const nav=page.locator('#debrief-phases');
-      assert.equal(await nav.locator('button').count(),2);
+      assert.equal(await nav.locator('button').count(),c.rounds.length);
       const prelimHtml=await page.locator('#res-body').innerHTML();
       await nav.getByRole('button',{name:'결선 디브리핑',exact:true}).click();
       await page.waitForFunction(()=>_lastResult.requestedPhase==='결선'&&!_debriefPhaseLoading);
-      assert.ok((await page.evaluate(()=>_lastResult.scores.map(s=>s.round))).every(r=>r!=='예선'));
+      assert.ok((await page.evaluate(()=>_lastResult.scores.map(s=>s.round))).every(r=>r==='결선'));
       const finalHtml=await page.locator('#res-body').innerHTML();
       const preview=await api.rpc('getAdminDebriefPreview',c.code,c.units[0],'예선',api.actor);
       preview.requestedPhase='예선';

@@ -7,14 +7,14 @@ try{
   const before=JSON.stringify(api.db.prepare('SELECT * FROM scores ORDER BY id').all());
   for(const c of api.cases){
     const auth=await api.publicView(c);
-    assert.equal(auth.success,true);assert.deepEqual(auth.availablePhases,['예선','결선']);
+    assert.equal(auth.success,true);assert.deepEqual(auth.availablePhases,c.rounds);
     const token=auth.debriefToken;
     const otpCount=api.db.prepare('SELECT COUNT(*) AS n FROM otps').get().n;
     const preview=await api.rpc('getAdminDebriefPreview',c.code,c.units[0],'예선',api.actor);
-    assert.deepEqual(preview.availablePhases,['예선','결선']);
-    for(const phase of ['예선','결선','예선']){
+    assert.deepEqual(preview.availablePhases,c.rounds);
+    for(const phase of [...c.rounds,'예선']){
       const result=await api.rpc('getDebriefPhase',token,phase);
-      const matches=r=>phase==='예선'?r==='예선':['본선','결선'].includes(r);
+      const matches=r=>r===phase;
       const expected=auth.scores.filter(s=>matches(s.round));
       assert.deepEqual(result.scores,expected,c.code+' independent phase scores');
       assert.deepEqual(result.rankInfos,auth.rankInfos.filter(r=>matches(r.round)));

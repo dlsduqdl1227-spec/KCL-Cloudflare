@@ -8765,12 +8765,13 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
   const selectedRound = rankingRoundScope_(round);
   if (!debriefTargetKey_(code, selectedRound, unit)) return { success:false, message:'참가자번호와 해당 대회의 라운드를 선택해주세요.' };
   const participants = await findDebriefPreviewOwner_(env, code, selectedRound, unit);
-  // The new phase picker previews the same group as the public view. Existing
-  // exact-round callers remain exact, including diagnostic unassigned records.
-  const targets = phase && participants.length
-    ? debriefPhaseTargets_(participants.flatMap(p => participantDebriefTargets_(p, code)), phase)
+  // Preview and player tabs use exact stored rounds. Main-round evaluations
+  // must never be combined with the final just because both are post-prelim.
+  const targets = phase
+    ? (participants.length ? debriefPhaseTargets_(participants.flatMap(p => participantDebriefTargets_(p, code)), phase)
+      : selectedRound === phase ? [{round:selectedRound, unit:safeStr(unit)}] : [])
     : [{round:selectedRound, unit:safeStr(unit)}];
-  if (phase && (!['예선','결선'].includes(phase) || !targets.length)) return {success:false, message:'선택한 평가 구분의 선수 배정을 확인해주세요.'};
+  if (phase && (!COMPETITION_ROUNDS[code].includes(phase) || !targets.length)) return {success:false, message:'선택한 평가 구분의 선수 배정을 확인해주세요.'};
   const bundle = await buildPublicDebriefBundle_(env, code, targets);
   if (bundle.assignmentConflict) return debriefAssignmentConflict_();
   const rankInfo = bundle.rankInfo;
@@ -9053,16 +9054,16 @@ function participantDebriefTargets_(p, code) {
   })).filter(target => target.unit);
 }
 function debriefAvailablePhases_(targets) {
-  return ['예선','결선'].filter(phase => debriefPhaseTargets_(targets, phase).length > 0);
+  return ['예선','본선','결선'].filter(phase => debriefPhaseTargets_(targets, phase).length > 0);
 }
 function debriefPhaseTargets_(targets, phase) {
-  return targets.filter(t => phase === '예선' ? t.round === '예선' : phase === '결선' && ['본선','결선'].includes(t.round));
+  return targets.filter(t => ['예선','본선','결선'].includes(phase) && t.round === phase);
 }
 async function buildDebriefPhaseResult_(env, code, participants, phase) {
   phase = safeStr(phase);
   const targets = participants.flatMap(p => participantDebriefTargets_(p, code));
   const availablePhases = debriefAvailablePhases_(targets);
-  if (!['예선','결선'].includes(phase) || !availablePhases.includes(phase)) {
+  if (!COMPETITION_ROUNDS[code].includes(phase) || !availablePhases.includes(phase)) {
     return {success:false, code:'DEBRIEF_PHASE_UNAVAILABLE', message:'이 선수에게 배정된 평가 구분이 아닙니다.'};
   }
   const selectedTargets = debriefPhaseTargets_(targets, phase);
@@ -9216,7 +9217,7 @@ async function buildIkrcPublicDebriefBundle_(env, blindTargets, rankingData=null
 async function verifyOTP(env, name, phone, competitionCode, otp, request = null, requestedPhase = '') {
   name = safeStr(name); phone = normalizePhone(phone); const code = safeStr(competitionCode).toUpperCase();
   requestedPhase = safeStr(requestedPhase);
-  if (requestedPhase && !['예선','결선'].includes(requestedPhase)) return {success:false, message:'예선 또는 결선을 선택해주세요.'};
+  if (requestedPhase && !(COMPETITION_ROUNDS[code] || []).includes(requestedPhase)) return {success:false, message:'해당 대회의 평가 구분을 선택해주세요.'};
   const verifyLimit = await rateLimit_(env, 'otp-verify:' + code + ':' + await sha256Hex_(phone), 10, 10 * 60);
   if (!verifyLimit.ok) return { success: false, message: '인증번호 확인 시도가 많습니다. 10분 후 다시 시도해주세요.' };
   const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
@@ -9231,13 +9232,11 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null,
   await env.DB.prepare('UPDATE otps SET used_at=? WHERE id=?').bind(nowIso(), row.id).run();
   const participants = await findDebriefParticipants_(env, code, name, phone);
   if (!participants.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다.' };
-  // A phase is a presentation group, never a storage-round rewrite. Exact
-  // (round, participant number) targets are retained inside the final phase.
+  // Keep each original round and participant number together. Selecting final
+  // must not fetch main-round cards, even for the same registered participant.
   const allTargets = participants.flatMap(p => participantDebriefTargets_(p, code));
   const availablePhases = debriefAvailablePhases_(allTargets);
-  const targets = allTargets.filter(target =>
-    !requestedPhase || (requestedPhase === '예선' ? target.round === '예선' : ['본선','결선'].includes(target.round))
-  );
+  const targets = requestedPhase ? debriefPhaseTargets_(allTargets, requestedPhase) : allTargets;
   const ids = [...new Set(targets.map(target => target.unit))];
   const publicBundle = await buildPublicDebriefBundle_(env, code, targets);
   if (publicBundle.assignmentConflict) return debriefAssignmentConflict_();

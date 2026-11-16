@@ -629,9 +629,9 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   body.ikrc-debrief-print-mode #pResult img{display:block!important;position:static!important;max-width:100%!important;height:auto!important;object-fit:contain!important}
 }
 
-#debrief-phases{display:flex;gap:10px;margin:20px 0 8px;flex-wrap:wrap}
+#debrief-phases{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:8px;margin:20px 0 8px}
 #debrief-phases[hidden]{display:none}
-#debrief-phases .debrief-phase-button{flex:1 1 120px;min-height:48px;padding:12px 16px;border:1px solid #555;border-radius:12px;background:#171717;color:#eee;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
+#debrief-phases .debrief-phase-button{min-width:0;min-height:48px;padding:12px 8px;border:1px solid #555;border-radius:12px;background:#171717;color:#eee;font:inherit;font-size:16px;font-weight:700;cursor:pointer;white-space:normal;overflow-wrap:anywhere}
 #debrief-phases .debrief-phase-button[aria-pressed="true"]{background:#fff;color:#111;border-color:#fff}
 #debrief-phases .debrief-phase-button:focus-visible{outline:3px solid #71c9ff;outline-offset:3px}
 #debrief-phases .debrief-phase-button:disabled{cursor:wait;opacity:.65}
@@ -739,7 +739,7 @@ var _debriefPhaseLoading = false;
 
 function renderDebriefPhases_(res) {
   var nav = document.getElementById('debrief-phases');
-  var phases = (res.availablePhases || []).filter(function(p){return p==='예선' || p==='결선';});
+  var phases = debriefRoundChoices_(res.competition).filter(function(p){return (res.availablePhases || []).includes(p);});
   nav.replaceChildren();
   nav.hidden = !phases.length || !(res.debriefToken || (res.isAdminPreview && res.previewContext));
   document.getElementById('debrief-phase-status').textContent = '';
@@ -831,12 +831,22 @@ function logoImg_(code, className) {
 function updateDebriefLogo() {
   var code = document.getElementById('sel-comp').value;
   var cfg = (_configs || []).find(function(c){return c.code === code;});
-  document.getElementById('sel-phase').value = debriefPhase_(cfg && cfg.currentRound);
+  var phaseSelect = document.getElementById('sel-phase');
+  var choices = debriefRoundChoices_(code);
+  phaseSelect.replaceChildren();
+  choices.forEach(function(round){var option=document.createElement('option');option.value=round;option.textContent=round;phaseSelect.appendChild(option);});
+  var current = debriefPhase_(cfg && cfg.currentRound);
+  phaseSelect.value = choices.includes(current) ? current : '예선';
   document.getElementById('debrief-logo').innerHTML = logoImg_(code, 'hero-logo');
   updateIdentityLabels_();
   if (_adminPreviewActor) loadAdminDebriefPreviewOptions_();
 }
-function debriefPhase_(round) { return /본선|결선|main|final/i.test(String(round || '')) ? '결선' : '예선'; }
+function debriefRoundChoices_(code) { return ['KBC','MOC'].includes(String(code || '').toUpperCase()) ? ['예선','본선','결선'] : ['예선','결선']; }
+function debriefPhase_(round) {
+  var value = String(round || '');
+  if (/본선|main/i.test(value)) return '본선';
+  return /결선|final/i.test(value) ? '결선' : '예선';
+}
 function onDebriefPhaseChange_() {
   ++_adminPreviewResultRequest;
   hideOverlay();
@@ -851,7 +861,7 @@ function renderAdminDebriefPreviewOptions_() {
     if (debriefPhase_(item.round) !== phase) return;
     var option = document.createElement('option');
     option.value = String(index);
-    var label = item.round === '본선' ? '결선 · 본선 경기' : item.round;
+    var label = item.round;
     option.textContent = [label, adminPreviewRankLabel_(item.rank), item.unitDisplay || item.unit, item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
     select.appendChild(option);count++;
   });

@@ -147,7 +147,8 @@
     "tests/stage304-participant-first-paper.test.mjs",
     "tests/stage305-ikrc-paper-ranking.test.mjs",
     "tests/stage307-comment-display.test.mjs",
-    "tests/stage308-debrief-comment-metadata.test.mjs"
+    "tests/stage308-debrief-comment-metadata.test.mjs",
+    "tests/stage309-debrief-exact-rounds.test.mjs"
   ],
   "browser": [
     "tests/stage201-finals-browser.test.mjs",
@@ -221,7 +222,8 @@
     "tests/stage304-participant-first-paper-browser.test.mjs",
     "tests/stage306-debrief-comment-tags-browser.test.mjs",
     "tests/stage307-comment-display-browser.test.mjs",
-    "tests/stage308-debrief-comment-metadata-browser.test.mjs"
+    "tests/stage308-debrief-comment-metadata-browser.test.mjs",
+    "tests/stage309-debrief-exact-rounds-browser.test.mjs"
   ],
   "critical": [
     "tests/stage113-full-flow.test.mjs",
@@ -261,6 +263,7 @@
     "tests/stage304-participant-first-paper.test.mjs",
     "tests/stage305-ikrc-paper-ranking.test.mjs",
     "tests/stage307-comment-display.test.mjs",
-    "tests/stage308-debrief-comment-metadata.test.mjs"
+    "tests/stage308-debrief-comment-metadata.test.mjs",
+    "tests/stage309-debrief-exact-rounds.test.mjs"
   ]
 }
