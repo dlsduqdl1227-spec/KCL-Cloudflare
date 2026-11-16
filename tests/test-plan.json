@@ -226,7 +226,8 @@
     "tests/stage308-debrief-comment-metadata-browser.test.mjs",
     "tests/stage309-debrief-exact-rounds-browser.test.mjs",
     "tests/stage310-kbc-debrief-hide-order-browser.test.mjs",
-    "tests/stage311-ktcc-tournament-debrief-browser.test.mjs"
+    "tests/stage311-ktcc-tournament-debrief-browser.test.mjs",
+    "tests/stage312-ktcc-debrief-picker-browser.test.mjs"
   ],
   "critical": [
     "tests/stage113-full-flow.test.mjs",

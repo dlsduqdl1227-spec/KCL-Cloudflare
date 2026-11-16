@@ -12,7 +12,8 @@ try{
   const reviewNav=page.locator('#ktcc-review-stages');await reviewNav.waitFor();await page.evaluate(()=>stopRegistryLiveSync_());
   assert.equal(await page.locator('#review-list .review-item').count(),6);
   assert.deepEqual(await page.locator('.ktcc-stage-review-section>h3').allTextContents(),['8강 · 2건','4강 · 1건','결승 · 1건','경기 단계 미지정 · 1건','기타 경기 · 1건']);
-  for(const [stage,count]of [['8강',2],['4강',1],['결승',1],['순위결정',0],['미지정',1],['기타',1]]){
+  assert.equal(await reviewNav.locator('[data-stage="순위결정"]').count(),0,'unused placement navigation is hidden, not a new match');
+  for(const [stage,count]of [['8강',2],['4강',1],['결승',1],['미지정',1],['기타',1]]){
     await reviewNav.locator('button[data-stage="'+stage+'"]').click();assert.equal(await page.locator('#review-list .review-item').count(),count);assert.match(await page.locator('#review-stat').innerText(),new RegExp(stage));
   }
   await reviewNav.locator('[data-stage="8강"]').click();
@@ -23,7 +24,9 @@ try{
   await page.evaluate(()=>goRankingByCode('KTCC','KTCC','결선'));
   await page.waitForFunction(()=>_ranking?.compCode==='KTCC'&&_ranking.selectedRound==='결선'&&_ranking.ranking.length===3);
   const rankNav=page.locator('#ktcc-ranking-stages');
-  for(const [key,count,score]of [['8강',2,11],['4강',1,6],['결승',1,8],['순위결정',0,0]]){
+  assert.equal(await rankNav.locator('[data-stage="순위결정"]').count(),0);
+  assert.equal(await page.evaluate(()=>!!ktccStageNavigation_('legacy-stage-check','',{'순위결정':1},function(){}).querySelector('[data-stage="순위결정"]')),true,'existing placement records stay accessible without deletion');
+  for(const [key,count,score]of [['8강',2,11],['4강',1,6],['결승',1,8]]){
     await rankNav.locator('button[data-stage="'+key+'"]').click();
     await page.waitForFunction(stage=>_ranking?.selectedKtccStage===stage,key);
     assert.equal(await page.locator('#ranking-list .rank-row').count(),count);

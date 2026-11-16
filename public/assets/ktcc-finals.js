@@ -7,7 +7,7 @@ function ktccStageKey_(item){var stage=String(item&&item['토너먼트 단계']|
 function ktccStageNavigation_(id,selected,counts,onSelect){
  var nav=document.createElement('div');nav.id=id;nav.className='ktcc-stage-navigation no-print';nav.setAttribute('role','group');nav.setAttribute('aria-label','KTCC 결선 경기 단계');
  [''].concat(_ktccStageNames).forEach(function(stage){
-  if((stage==='미지정'||stage==='기타')&&!counts[stage]&&stage!==selected)return;
+  if((stage==='순위결정'||stage==='미지정'||stage==='기타')&&!counts[stage])return;
   var button=document.createElement('button');button.type='button';button.className='ktcc-stage-choice';button.textContent=stage||'전체';button.dataset.stage=stage;button.setAttribute('aria-pressed',String(stage===selected));
   button.onclick=function(){onSelect(stage);};nav.appendChild(button);
  });return nav;

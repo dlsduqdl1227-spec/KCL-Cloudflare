@@ -29,7 +29,7 @@ test('KTCC staff preview and player reports show chronological quarter/semi/fina
         assert.deepEqual(await auditTextContrast(page,'.ktcc-debrief-stage'),[]);
         if(actor===api.actor)await page.screenshot({path:'tmp/stage311-qa/debrief-'+width+'.png',fullPage:true});
       }
-      await page.emulateMedia({media:'print'});assert.equal(await page.locator('.ktcc-debrief-stage h3').first().isVisible(),true);
+      await page.emulateMedia({media:'print'});assert.equal(await page.locator('.ktcc-debrief-match:not([hidden]) .ktcc-debrief-stage h3').first().isVisible(),true);
       await page.emulateMedia({media:'screen'});
       const eliminated=await api.player(3);await page.evaluate(res=>renderResult(res),eliminated);
       assert.deepEqual(await page.locator('.ktcc-debrief-stage h3').allTextContents(),['8강','4강']);assert.ok((await page.locator('.ktcc-debrief-stage-result').last().innerText()).includes('탈락'));
