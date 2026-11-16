@@ -56,6 +56,7 @@ const context = {
 };
 vm.createContext(context);
 [
+  "isInternalCommentMetadata_",
   "ikrcAggregateJudgeCount_",
   "ikrcAggregateTags_",
   "ikrcAggregateScore_",

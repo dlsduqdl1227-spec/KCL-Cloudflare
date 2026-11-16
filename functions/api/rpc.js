@@ -9104,7 +9104,14 @@ function debriefTargetKey_(code, round, unit) {
 function debriefAssignmentConflict_() {
   return {success:false, code:'DEBRIEF_ASSIGNMENT_CONFLICT', message:'동일 라운드의 참가번호가 여러 선수에게 연결되어 있습니다. 운영팀에 번호 배정 확인을 요청해주세요.'};
 }
-function privateDebriefMetadata_(key){return /^(?:payload|paperEntryAudit|managerPaperFinal|_paperEntry|submittedAt|submitted_at|timestamp|created_?at|updated_?at|enteredBy|enteredByIdentity|enteredAt|operatorIdentityKey|judgeIdentityKey|judgePhone|operatorPhone|officialResultEffectiveAt|officialResultSource|officialResultReason)$/i.test(key)||/제출(?:시간|일시|일자|일)|평가(?:날짜|일자|일시|일$)|입력(?:자|일시|일자)|대리입력|대신입력/.test(key);}
+function privateDebriefMetadata_(key){
+  const compact=String(key||'').replace(/[\s_-]/g,'');
+  // Comment controls are stored for judging/review, not as entrant feedback.
+  // Remove by field name, never by words in an authored evaluation comment.
+  return /^(?:payload|paperEntryAudit|managerPaperFinal|_paperEntry|submittedAt|submitted_at|timestamp|created_?at|updated_?at|enteredBy|enteredByIdentity|enteredAt|operatorIdentityKey|judgeIdentityKey|judgePhone|operatorPhone|officialResultEffectiveAt|officialResultSource|officialResultReason)$/i.test(key)
+    || /제출(?:시간|일시|일자|일)|평가(?:날짜|일자|일시|일$)|입력(?:자|일시|일자)|대리입력|대신입력/.test(key)
+    || /자동생성상태|(?:코멘트|comment)(?:자동생성|자동|AI)?(?:사용여부|사용상태|생성여부|생성방식|작성방식|생성상태|설정|state|enabled|edited|touched|mode|source|method|meta(?:data)?)$/i.test(compact);
+}
 function publicDebriefScore_(item, headers=[]) {
   // The rendered row already contains its scores, tags, comments and media.
   // Raw batch payloads may also contain other entrants and are not public data.

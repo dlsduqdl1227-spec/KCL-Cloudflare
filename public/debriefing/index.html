@@ -1180,6 +1180,10 @@ function isSmartTagLabel(label) {
 function isCommentLabel(label) {
   return /Comment|Comments|Memo|Feedback|Note|코멘트|메모|심사평|평가\s*코멘트|평가\s*의견|총평|종합\s*코멘트|종합\s*의견/i.test(String(label || ''));
 }
+function isInternalCommentMetadata_(label) {
+  var compact = String(label || '').replace(/[\s_-]/g, '');
+  return /자동생성상태|(?:코멘트|comment)(?:자동생성|자동|AI)?(?:사용여부|사용상태|생성여부|생성방식|작성방식|생성상태|설정|state|enabled|edited|touched|mode|source|method|meta(?:data)?)$/i.test(compact);
+}
 
 function isOverallReportCommentLabel_(label) {
   return /Overall|General|종합|총평|전체\s*코멘트|전체\s*의견|평가\s*메모|평가\s*의견|심사평|메모/i.test(String(label || ''));
@@ -1833,6 +1837,7 @@ function ikrcManualCommentExcerpts_(list, limit) {
   (list || []).forEach(function(s){
     Object.keys(s || {}).forEach(function(k){
       if (!isCommentLabel(k) || isSmartTagLabel(k)) return;
+      if (isInternalCommentMetadata_(k)) return;
       if (ikrcLooksGeneratedComment_(s[k])) return;
       var text = cleanupPublicCommentText_(k, s[k], s, 'IKRC');
       if (!text || ikrcLooksGeneratedComment_(text)) return;
@@ -1935,6 +1940,8 @@ function publicHeaderAppliesToRound_(h, s, compCode) {
 }
 function publicHeaderAppliesToEvaluation_(h, s, compCode) {
   var comp = String(compCode || '').toUpperCase();
+  // Also protect cached responses from before the server-side field filter.
+  if (isInternalCommentMetadata_(h)) return false;
   if (!publicHeaderAppliesToRound_(h, s, comp)) return false;
   if (comp === 'MOB' && !mobPublicHeaderAppliesToRole_(h, s)) return false;
   return true;

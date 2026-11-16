@@ -51,6 +51,7 @@ vm.createContext(context);
   'mobPublicCreativeApplies_',
   'mobPublicIsDerivedSummaryHeader_',
   'mobPublicHeaderAppliesToRole_',
+  'isInternalCommentMetadata_',
   'publicHeaderAppliesToEvaluation_',
   'publicIsDerivedSummaryHeader_',
   'publicIsZeroPenalty_'
