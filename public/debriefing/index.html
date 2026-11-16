@@ -258,6 +258,9 @@ h2,.subtitle,.section-label,.result-name,.result-affil,.result-comp,.round-title
 .ikrc-combined-comment{margin:0 0 16px;border-left-width:5px;background:linear-gradient(180deg,#171717,#101010)}
 .ikrc-combined-comment .comment-label{color:#fff;font-size:12px;letter-spacing:.03em;text-transform:none}
 .ikrc-combined-meta{margin-top:8px;color:#888;font-size:11px;line-height:1.5}
+.ktcc-debrief-match{min-width:0;grid-column:1/-1;break-inside:avoid;page-break-inside:avoid}
+.ktcc-debrief-stage{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:20px 0 10px;padding:14px 16px;border:1px solid #555;border-radius:12px;line-height:1.5}
+.ktcc-debrief-stage h3{margin:0;font-size:17px}.ktcc-debrief-stage-result{display:grid;gap:3px;text-align:right;font-size:13px}.ktcc-debrief-stage-result small{font-size:12px}
 .admin-preview-box{display:none;margin-top:14px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(255,255,255,.065);padding:15px}
 .admin-preview-box.active{display:block}.admin-preview-title{font-size:14px;font-weight:950;margin-bottom:6px}.admin-preview-help{font-size:12px;line-height:1.55;color:#aaa;margin-bottom:12px}.admin-preview-status{min-height:18px;margin-top:9px;color:#aaa;font-size:11px;line-height:1.5}.admin-preview-notice{display:none;margin:0 0 12px;border:1px solid rgba(255,255,255,.18);border-radius:12px;background:rgba(255,255,255,.08);padding:10px 12px;color:#ddd;font-size:11px;line-height:1.55}.admin-preview-notice.active{display:block}
 
@@ -798,7 +801,7 @@ function renderAdminDebriefPreviewOptions_() {
     var label = item.round;
     // KBC's unit identifies the performance order, not the finishing rank.
     // Keep the original option index/unit for lookup, but omit it from the label.
-    option.textContent = [label, adminPreviewRankLabel_(item.rank), code === 'KBC' ? '' : (item.unitDisplay || item.unit), item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
+    option.textContent = [label, code === 'KTCC' ? '' : adminPreviewRankLabel_(item.rank), ['KBC','KTCC'].includes(code) ? '' : (item.unitDisplay || item.unit), item.name || '이름 미등록', item.affiliation || ''].filter(Boolean).join(' · ');
     select.appendChild(option);count++;
   });
   select.disabled = !count;
@@ -1324,7 +1327,7 @@ function renderResult(res) {
   if (res.requestedPhase) {
     var matchesPhase = function(item){return debriefPhase_(item.round || item['라운드']) === res.requestedPhase;};
     var scopedRanks = (res.rankInfos || (res.rankInfo ? [res.rankInfo] : [])).filter(matchesPhase);
-    res = Object.assign({},res,{scores:(res.scores || []).filter(matchesPhase),rankInfos:scopedRanks,rankInfo:scopedRanks[0] || null});
+    res = Object.assign({},res,{scores:(res.scores || []).filter(matchesPhase),rankInfos:scopedRanks,rankInfo:scopedRanks[0] || null,ktccStageResults:(res.ktccStageResults || []).filter(matchesPhase)});
   }
   _lastResult = res;
   var previewNotice = document.getElementById('admin-preview-notice');
@@ -1430,6 +1433,7 @@ function renderResult(res) {
   order.forEach(function(round) {
     if (!rounds[round]) return;
     var list = rounds[round];
+    if(isKtcc&&round==='결선')list=list.slice().sort(function(a,b){return ktccDebriefStageOrder_(ktccDebriefStage_(a))-ktccDebriefStageOrder_(ktccDebriefStage_(b));});
     var section = document.createElement('div');
     section.className = 'round-section';
     var rtitle = document.createElement('div');
@@ -1448,6 +1452,7 @@ function renderResult(res) {
     var nextKcacJudgeNumber = 1;
     var sensoryJudgeNumbers = {};
     var nextSensoryJudgeNumber = 1;
+    var ktccMatches = {};
     list.forEach(function(s, scoreIndex) {
       var kcacJudgeNumber = 0;
       if (isKcacDebrief) {
@@ -1464,10 +1469,38 @@ function renderResult(res) {
         kcacJudgeNumber = sensoryJudgeNumbers[sensoryKey];
       }
       var card = buildScoreCard(s, res.competition, kcacJudgeNumber);
-      section.appendChild(card);
+      if(isKtcc&&round==='결선'){
+        var stage=ktccDebriefStage_(s),unit=String(s.unit||s['팀번호']||'');
+        var key=stage+'::'+unit;
+        if(!ktccMatches[key]){
+          var match=document.createElement('div');match.className='ktcc-debrief-match';match.dataset.ktccStage=stage;
+          var result=(res.ktccStageResults||[]).find(function(item){return item.ktccStage===stage&&String(item.unit)===unit;});
+          match.appendChild(buildKtccDebriefStage_(stage,result));section.appendChild(match);ktccMatches[key]=match;
+        }
+        ktccMatches[key].appendChild(card);
+      }else section.appendChild(card);
     });
     body.appendChild(section);
   });
+}
+
+function ktccDebriefStage_(score){
+  var stage=String(score.ktccStage||score['토너먼트 단계']||'').trim();
+  if(/^(최종|최종결선|결선|final)$/i.test(stage.replace(/\s/g,'')))return '결승';
+  if(!stage)return score.ktccHiddenMission&&score.ktccHiddenMission.recorded?'결승':'미지정';
+  return ['8강','4강','결승','순위결정','미지정','기타'].includes(stage)?stage:'기타';
+}
+function ktccDebriefStageOrder_(stage){return ['8강','4강','결승','순위결정','미지정','기타'].indexOf(stage);}
+function ktccDebriefStageLabel_(stage){return stage==='결승'?'최종':stage==='미지정'?'경기 단계 미지정':stage==='기타'?'기타 경기':stage;}
+function buildKtccDebriefStage_(stage,result){
+  var header=document.createElement('div');header.className='ktcc-debrief-stage';
+  var status=result&&(result.finalResult||result.advancement)||'';
+  if(status==='진출'&&result.nextStage)status=ktccDebriefStageLabel_(result.nextStage)+' 진출';
+  if(!status&&['8강','4강'].includes(stage))status='진출 여부 미기록';
+  header.innerHTML='<h3>'+escHtml(ktccDebriefStageLabel_(stage))+'</h3><div class="ktcc-debrief-stage-result">'+
+    (result?'<b>'+escHtml(adminPreviewRankLabel_(result.rank))+' <small>/ '+escHtml(result.totalInRound)+'팀</small></b>':'')+
+    (status?'<span>'+escHtml(status)+'</span>':'')+'</div>';
+  return header;
 }
 
 function ikrcRoundAverageRows_(list,round) {
@@ -1522,6 +1555,7 @@ function buildReportIntro(res, scores) {
   var introText = code === 'IKRC'
     ? '켈리브레이션을 제외하고, 이 선수의 블라인드코드에 정확히 제출된 헤드·센서리 심사만 표시합니다.'
     : (code === 'KCAC' ? (rounds.indexOf('결선') >= 0 ? '선택한 라운드의 라떼아트 평가와 심사 코멘트입니다. 결선 창작 주제: 동물.' : 'FAST·SLOW 로제타의 라떼아트 평가 항목과 심사 코멘트를 기준으로 표시됩니다.') : '이 리포트는 운영팀 검수를 완료한 공식 평가 항목만 기준으로 표시됩니다.');
+  if(code==='KTCC'&&rounds.indexOf('결선')>=0)introText='경기 단계별 평가 점수·순위와 진출 결과입니다. 각 경기의 점수는 합산하지 않습니다.';
   box.innerHTML = '<div class="intro-title">' + escHtml(introTitle) + '</div>' +
     '<div class="intro-text">' + escHtml(introText) +
     (count ? countText : '') + (rounds.length ? ' · 라운드 ' + rounds.join(', ') : '') + '</div>';
@@ -1539,6 +1573,15 @@ function buildRankBox(res) {
   var isMoc = String(res.competition || '').toUpperCase() === 'MOC';
   var box = document.createElement('div');
   box.className = 'rank-box';
+  if(String(res.competition||'').toUpperCase()==='KTCC'){
+    var ktccHtml='';
+    ranks.forEach(function(r){
+      ktccHtml+='<div class="cell"><small>'+escHtml(r.round==='결선'?'최종 순위':(r.round||'예선')+' 순위')+'</small><b>'+escHtml(adminPreviewRankLabel_(r.rank))+'</b>'+(r.totalInRound?'<small>전체 '+escHtml(r.totalInRound)+'팀 기준</small>':'')+'</div>';
+      if(r.round!=='결선')ktccHtml+='<div class="cell"><small>공식 점수</small><b>'+escHtml(fmtScore(r.totalScore||0,2))+'</b></div>';
+    });
+    if(ranks.length===1&&main.round==='결선')box.classList.add('rank-only');
+    box.innerHTML=ktccHtml;return box;
+  }
   if (isKcr || isMob || isMoc || ranks.length > 1) {
     var order = {'예선':1, '본선':2, '결선':3};
     ranks = ranks.slice().sort(function(a,b){
@@ -2060,7 +2103,7 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
   if (isKcac) publicTitle = (Number(anonymousJudgeNo) > 0 ? (Number(anonymousJudgeNo) + '번 심사위원 ') : '') + '라떼아트 평가';
   else if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
   else if (isSensoryDebriefCard_(s, compCode)) publicTitle = (Number(anonymousJudgeNo) > 0 ? Number(anonymousJudgeNo) : 1) + '번 센서리심사위원 평가';
-  if (isKtcc) publicTitle = (teamTitle || '팀 평가 결과')+(s['토너먼트 단계']?' · '+s['토너먼트 단계']:'');
+  if (isKtcc) publicTitle = s.round==='결선'?(s['팀명']||'팀 평가 결과'):(teamTitle||'팀 평가 결과');
   var ikrcFinalHead=isIkrc&&/헤드|head/i.test(roleRaw);
   if(ikrcFinalHead)publicTitle='헤드심사위원 평가 · 비교용';
   var statusRaw = String(s['검수상태'] || s.status || '').replace(/\s/g, '');

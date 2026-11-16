@@ -2044,7 +2044,7 @@ body,.panel,.eval-wrap,.admin-wrap,.review-wrap,.ranking-wrap,.debrief-wrap,.mod
 <script src="/assets/operational-health.js?v=259"></script>
 <link rel="stylesheet" href="/assets/kcl-appearance.css?v=278">
 <link rel="stylesheet" href="/assets/ktcc-finals.css?v=302">
-<script defer src="/assets/ktcc-finals.js?v=302"></script>
+<script defer src="/assets/ktcc-finals.js?v=311"></script>
 <link rel="stylesheet" href="/assets/paper-entry.css?v=304">
 <script defer src="/assets/paper-entry.js?v=304"></script>
 <link rel="stylesheet" href="/assets/kcl-refinement.css?v=280">
@@ -11353,7 +11353,7 @@ function renderRanking(res) {
   var rankingCode = String(res.compCode || '').toUpperCase();
   if(typeof ktccRenderRankingStages_==='function')ktccRenderRankingStages_(rankingCode,res.selectedRound,res.selectedKtccStage,res.ktccStageCounts);
   document.getElementById('rank-summary-sub').textContent =
-    (res.selectedRound ? res.selectedRound + ' · ' : '')+(res.selectedKtccStage?res.selectedKtccStage+' · ':rankingCode==='KTCC'&&res.selectedRound==='결선'?'팀별 최근 경기 · ':'') + '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 전체 순위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
+    (res.selectedRound ? res.selectedRound + ' · ' : '')+(res.selectedKtccStage?res.selectedKtccStage+' · ':rankingCode==='KTCC'&&res.selectedRound==='결선'?'진출 단계별 최종 순위 · ':'') + '총 ' + list.length + '개 항목' + (rankingCode === 'KCR' ? ' · 전체 순위 표시' : '') + ' · 단위: ' + (res.unitLabel || '-') + (res.tieBreakRule ? ' · 동점 기준: ' + res.tieBreakRule : '');
 
   var wrap = document.getElementById('ranking-list');
   wrap.innerHTML = '';

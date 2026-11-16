@@ -924,7 +924,41 @@ const KTCC_HIDDEN_MISSION_KIND = 'KTCC_HIDDEN_MISSION';
 const KTCC_MATCH_STAGES = ['8강','4강','결승','순위결정'];
 function ktccMatchStage_(item) {
   const stage=safeStr(item&&item['토너먼트 단계']);
-  return !stage?'미지정':KTCC_MATCH_STAGES.includes(stage)?stage:'기타';
+  if(/^(최종|최종결선|결선|final)$/i.test(stage.replace(/\s/g,'')))return '결승';
+  // Legacy final sheets omitted the stage. Only a validated manager-owned
+  // hidden-mission result identifies those sheets as the final; never infer
+  // a stage from team names, scores, timestamps or an untrusted payload flag.
+  if(!stage)return item?.ktccHiddenMission?.recorded?'결승':'미지정';
+  return KTCC_MATCH_STAGES.includes(stage)?stage:'기타';
+}
+function ktccStageLevel_(stage){return ({'8강':1,'4강':2,'순위결정':2.5,'결승':3})[stage]||0;}
+function ktccLatestOfficialItem_(rows){
+  const finalRows=(rows||[]).filter(item=>roundName_(item.round||item['라운드'],'')==='결선');
+  if(!finalRows.length)return latestOfficialItem_(rows);
+  const level=Math.max(...finalRows.map(item=>ktccStageLevel_(ktccMatchStage_(item))));
+  return latestOfficialItem_(finalRows.filter(item=>ktccStageLevel_(ktccMatchStage_(item))===level));
+}
+function ktccTournamentStageResults_(items){
+  const rows=officialScoreItemsForOutput_('KTCC',(items||[]).filter(item=>roundName_(item.round||item['라운드'],'')==='결선'&&shouldCountItemInRanking_('KTCC',item)));
+  const stages=new Map();
+  for(const row of rows){const stage=ktccMatchStage_(row);if(!stages.has(stage))stages.set(stage,[]);stages.get(stage).push(row);}
+  const nextStage={'8강':'4강','4강':'결승'},expected={'4강':4,'결승':2};
+  const result=[];
+  for(const stage of [...KTCC_MATCH_STAGES,'미지정','기타']){
+    const list=(stages.get(stage)||[]).slice().sort((a,b)=>Number(itemOfficialDq_(a))-Number(itemOfficialDq_(b))
+      ||(rankingScoreFromItem_(b)??0)-(rankingScoreFromItem_(a)??0)||itemEndTimeSeconds_(a)-itemEndTimeSeconds_(b)||itemNumber_(a).localeCompare(itemNumber_(b),'ko'));
+    list.forEach((item,index)=>{
+      const unit=itemNumber_(item),next=nextStage[stage],nextRows=stages.get(next)||[];
+      const enteredNext=nextRows.some(row=>itemNumber_(row)===unit);
+      const decision=safeStr(item['진출판정']),recorded=['진출','탈락','순위결정'].includes(decision)?decision:'';
+      const disqualified=itemOfficialDq_(item);
+      const advancement=disqualified?'실격':recorded|| (enteredNext?'진출':next&&nextRows.length===expected[next]?'탈락':'');
+      result.push({round:'결선',unit,ktccStage:stage,rank:disqualified?'실격':index+1,totalInRound:list.length,
+        totalScore:disqualified?0:rankingScoreFromItem_(item)??0,advancement,nextStage:advancement==='진출'?next||'':'',
+        finalResult:stage==='결승'&&!disqualified?(index===0?'우승':index===1?'준우승':'경기 종료'):'',disqualified});
+    });
+  }
+  return result;
 }
 function ktccStageScope_(code, round, value) {
   const stage=safeStr(value);
@@ -7715,7 +7749,7 @@ function officialScoreItemsForOutput_(code, items) {
   source.forEach(item => {
     const round = roundName_(item && (item.round || item['라운드']), '예선');
     const unit = itemNumber_(item) || safeStr(item && item.rowIndex);
-    const key = round + '::' + unit;
+    const key = round + '::' + unit + (code==='KTCC'&&round==='결선'?'::'+ktccMatchStage_(item):'');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   });
@@ -8044,7 +8078,7 @@ function aggregateRankingGroup_(code, g, round, options) {
   }
 
   if (code === 'MOC' || code === 'KTCC') {
-    const latest = latestOfficialItem_(rows);
+    const latest = code==='KTCC'?ktccLatestOfficialItem_(rows):latestOfficialItem_(rows);
     const dq = latest ? itemOfficialDq_(latest) : !!g.dq;
     const score = dq ? 0 : (latest ? (rankingScoreFromItem_(latest) ?? 0) : 0);
     return {
@@ -8232,14 +8266,17 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     return item;
   })).filter(item => !selectedRound || roundName_(item.round || item['라운드'], '') === selectedRound);
   const ktccStageCounts={};
+  let ktccStageResults=[];
   if(code==='KTCC'){
+    await applyKtccHiddenMissions_(env,converted,true);
+    for(const item of converted)if(roundName_(item.round||item['라운드'],'')==='결선')item.ktccStage=ktccMatchStage_(item);
+    ktccStageResults=ktccTournamentStageResults_(converted);
     // Stage filtering is read-only and happens before the legacy "latest per
     // team" aggregation. An 8강 lookup must never select a record from 4강.
-    for(const item of converted.filter(item=>finalOfficialEvaluation_(item))) {
-      const stage=ktccMatchStage_(item);ktccStageCounts[stage]=(ktccStageCounts[stage]||0)+1;
+    for(const item of ktccStageResults) {
+      const stage=item.ktccStage;ktccStageCounts[stage]=(ktccStageCounts[stage]||0)+1;
     }
     if(ktccStage)converted=converted.filter(item=>item.round==='결선'&&ktccMatchStage_(item)===ktccStage);
-    await applyKtccHiddenMissions_(env,converted,true);
     if(converted.some(item=>item.ktccHiddenMission)){
       for(const name of ['기존 평가점수','히든미션 결과','히든미션 점수'])if(!headers.includes(name))headers.push(name);
       // Reports and details use the same derived totals; edit-column indices in
@@ -8280,13 +8317,13 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
       g.endTimeDisplay = latest['종료시간'] || latest['경기시간'] || '';
     }
     if (code === 'KTCC') {
-      const latest = latestOfficialItem_(g.rows || []) || {};
+      const latest = ktccLatestOfficialItem_(g.rows || []) || {};
       g.ktccHiddenMission=latest.ktccHiddenMission;
       g.ktccStage=ktccMatchStage_(latest);
       g.checkerSummary = latest['심사위원명'] || latest.judgeName || '';
       g.endTimeDisplay = latest['종료시간'] || latest['경기시간'] || '';
       g.tournamentSummary = [
-        latest['토너먼트 단계'] || '',
+        g.round==='결선'?g.ktccStage:'',
         latest['상대팀'] ? ('상대 ' + latest['상대팀']) : '',
         latest['진출판정'] || ''
       ].filter(Boolean).join(' · ');
@@ -8301,7 +8338,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     const savedOverride = officialRankingOverrides.get(roundName_(g.round, '예선') + '::' + safeStr(g.unit).toUpperCase()) || null;
     // Live IKRC finals must follow current sensory scores, never an old frozen total/rank.
     // The saved override remains untouched for audit and other rounds/competitions.
-    const override = code === 'IKRC' && g.round === '결선' ? null : savedOverride;
+    const override = (code === 'IKRC' && g.round === '결선') || (code==='KTCC'&&ktccStage) ? null : savedOverride;
     g.ignoredOfficialResultOverride = !!savedOverride && !override;
     g.calculatedRankingScore = calculatedRankingScore;
     g.rankingScore = override && override.officialScore !== null ? override.officialScore : calculatedRankingScore;
@@ -8344,6 +8381,10 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     const list = byRound[round];
     list.sort((a,b) => {
       if (a.dq !== b.dq) return a.dq ? 1 : -1;
+      if(code==='KTCC'&&round==='결선'&&!ktccStage){
+        const progress=ktccStageLevel_(b.ktccStage)-ktccStageLevel_(a.ktccStage);
+        if(progress)return progress;
+      }
       const officialRankA = Number(a.officialRankOverride);
       const officialRankB = Number(b.officialRankOverride);
       const hasOfficialRankA = Number.isInteger(officialRankA) && officialRankA > 0;
@@ -8396,7 +8437,7 @@ async function buildRankingData_(env, competitionCode, selectedRound='', summary
     }));
   });
   if(code==='MOC')await applyMocManualFinalRanking_(env,ranking,participantRows,selectedRound);
-  return { cfg, headers, rows: converted, ranking, participantRows, ktccStageCounts };
+  return { cfg, headers, rows: converted, ranking, participantRows, ktccStageCounts,ktccStageResults };
 }
 
 async function getRanking(env, competitionCode, actorArg, requestedRound, requestedKtccStage='') {
@@ -8793,6 +8834,7 @@ async function getAdminDebriefPreview(env, competitionCode, unit, round, actorAr
     headers:bundle.headers,
     rankInfos:bundle.rankInfos,
     rankInfo,
+    ...(code==='KTCC'?{ktccStageResults:bundle.ktccStageResults||[]}:{}),
     previewUnit:safeStr(unit),
     previewRound:selectedRound,
     availablePhases:debriefAvailablePhases_(participants.flatMap(p => participantDebriefTargets_(p, code))),
@@ -9147,7 +9189,8 @@ async function buildPublicDebriefBundle_(env, code, targets) {
   const publicKeys = new Set(scores.map(item => debriefTargetKey_(code, item.round || item['라운드'], itemNumber_(item))));
   if(code==='MOC')for(const rank of data.ranking)if(rank.manualFinalResult&&targetKeys.has(debriefTargetKey_(code,rank.round,rank.unit)))publicKeys.add(debriefTargetKey_(code,rank.round,rank.unit));
   const rankInfos = data.ranking.filter(rank => publicKeys.has(debriefTargetKey_(code, rank.round, rank.unit))).map(item=>publicDebriefScore_(item));
-  return { ...empty, scores:scores.map(item=>publicDebriefScore_(item,data.headers)), headers:data.headers.map(h=>privateDebriefMetadata_(h)?'':h), rankInfos, rankInfo:rankInfos[0] || null };
+  return { ...empty, scores:scores.map(item=>publicDebriefScore_(item,data.headers)), headers:data.headers.map(h=>privateDebriefMetadata_(h)?'':h), rankInfos, rankInfo:rankInfos[0] || null,
+    ...(code==='KTCC'?{ktccStageResults:data.ktccStageResults.filter(item=>publicKeys.has(debriefTargetKey_(code,item.round,item.unit))).map(item=>publicDebriefScore_(item))}:{}) };
 }
 function ikrcParticipantBlindTargets_(participant) {
   const p = participant || {};
@@ -9251,7 +9294,7 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null,
     identifiers: ids
   };
   const token = await issueSession(env, 'debrief', { competition: code, name, phone, identifiers: ids }, 3600);
-  return { success: true, requestedPhase, availablePhases, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : (code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가') };
+  return { success: true, requestedPhase, availablePhases, competition: code, competitionCode: code, playerInfo: info, name, phone, maskedPhone: maskPhone_(phone), scores: scoreItems, headers, rankInfos, rankInfo: rankInfos[0] || null, ...(code==='KTCC'?{ktccStageResults:publicBundle.ktccStageResults||[]}:{}), debriefToken: token, dataBasis:code === 'IKRC' ? 'IKRC 라운드별 블라인드코드 공식 제출 · 화면 표시 평가표 기준 평균' : (code === 'KCR' ? '제출된 공식평가' : '검수완료·수정완료 공식평가') };
 }
 
 function _num(v) {

@@ -17,7 +17,7 @@ try{
       await page.evaluate(r=>renderResult(r),firstRound);
       assert.equal(await page.locator('#res-body').innerHTML(),html,c.code+' exact public/preview markup');
       await page.evaluate(r=>renderResult(r),res);
-      for(const round of c.rounds)assert.ok((await page.locator('.rank-box').innerText()).includes(round+' 순위'),c.code+' round '+round);
+      for(const round of c.rounds)assert.ok((await page.locator('.rank-box').innerText()).includes(c.code==='KTCC'&&round==='결선'?'최종 순위':round+' 순위'),c.code+' round '+round);
       const inspected=await inspectPage(page);assert.equal(inspected.pageOverflow,false,c.code+' width '+width);assert.deepEqual(inspected.brokenImages,[]);assert.deepEqual(page.qaErrors,[]);
       if(width===390)await page.screenshot({path:`tmp/stage220-qa/${c.code}.png`,fullPage:true});
       await page.close();

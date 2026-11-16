@@ -3,7 +3,7 @@ var _ktccFinalTeams={token:'',list:[],loaded:false,loading:false,request:0};
 function ktccCanDecide_(){return isAdminRole()||isTeamLeaderForCode_('KTCC');}
 var _ktccStageNames=['8강','4강','결승','순위결정','미지정','기타'];
 var _ktccReviewStage='',_ktccReviewStageScope='';
-function ktccStageKey_(item){var stage=String(item&&item['토너먼트 단계']||'').trim();return !stage?'미지정':_ktccStageNames.slice(0,4).indexOf(stage)>=0?stage:'기타';}
+function ktccStageKey_(item){var stage=String(item&&item['토너먼트 단계']||'').trim();if(/^(최종|최종결선|결선|final)$/i.test(stage.replace(/\s/g,'')))return '결승';return !stage?item&&item.ktccHiddenMission&&item.ktccHiddenMission.recorded?'결승':'미지정':_ktccStageNames.slice(0,4).indexOf(stage)>=0?stage:'기타';}
 function ktccStageNavigation_(id,selected,counts,onSelect){
  var nav=document.createElement('div');nav.id=id;nav.className='ktcc-stage-navigation no-print';nav.setAttribute('role','group');nav.setAttribute('aria-label','KTCC 결선 경기 단계');
  [''].concat(_ktccStageNames).forEach(function(stage){
