@@ -23,9 +23,7 @@ test('admin and lead preview selectors distinguish preliminary/main/final; each 
     if(c.code==='KBC')assert.equal(await page.locator('.score-card').count(),4,'four independent KBC judges, not eight combined cards');
     for(const width of [320,390,768,1440]){
      await page.setViewportSize({width,height:900});const info=await inspectPage(page);assert.equal(info.pageOverflow,false,c.code+' '+width);assert.deepEqual(info.overflow,[]);
-     const buttons=await page.locator('#debrief-phases button').evaluateAll(nodes=>nodes.map(node=>{const r=node.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,height:r.height};}));
-     assert.equal(buttons.length,c.rounds.length);
-     buttons.forEach((button,i)=>{assert.ok(button.height>=44,c.code+' '+round+' '+width+' '+JSON.stringify(button));assert.ok(Math.abs(button.top-buttons[0].top)<1,'round tabs stay in one row');if(i)assert.ok(button.left>buttons[i-1].right,'round tabs cannot overlap');});
+     assert.equal(await page.locator('#debrief-phases,.debrief-phase-button').count(),0,'results do not offer a different round');
     }
     if(c.code==='KBC'&&round==='본선'){await page.setViewportSize({width:390,height:900});await page.screenshot({path:'tmp/stage309-qa/KBC-main-390.png'});}
     if(['KBC','MOC'].includes(c.code)){
@@ -34,13 +32,14 @@ test('admin and lead preview selectors distinguish preliminary/main/final; each 
     await page.evaluate(()=>backToStep1());
    }
   }
-  // Staff and public phase navigation use the same isolated content, and a
+  // Staff and public entry choices use the same isolated content, and a
   // mixed stale response is filtered rather than rendered as eight cards.
   const c=api.cases.find(c=>c.code==='KBC'),auth=await api.publicView(c);
   const main=await api.rpc('getDebriefPhase',auth.debriefToken,'본선'),final=await api.rpc('getDebriefPhase',auth.debriefToken,'결선');
   await page.evaluate(res=>{_adminPreviewActor=null;renderResult(res);showPanel('pResult');},{...final,scores:[...main.scores,...final.scores],rankInfos:[...main.rankInfos,...final.rankInfos]});
   assert.equal(await page.locator('.score-card').count(),4);assert.ok(!(await page.locator('#res-body').innerText()).includes(roundMarkers.본선));
-  await page.getByRole('button',{name:'본선 디브리핑',exact:true}).click();await page.waitForFunction(()=>_lastResult.requestedPhase==='본선'&&!_debriefPhaseLoading);assert.equal(await page.locator('.score-card').count(),4);
+  assert.equal(await page.getByRole('button',{name:'본선 디브리핑',exact:true}).count(),0);
+  await page.evaluate(res=>renderResult(res),main);assert.equal(await page.locator('.score-card').count(),4);
   const lead=await qa.page();await lead.addInitScript(actor=>localStorage.setItem('kclAdminActor',JSON.stringify(actor)),api.previewLead);await lead.goto(qa.origin+'/debriefing/?from=admin&preview=1&comp=KBC');await lead.waitForFunction(()=>_adminPreviewOptionsCode==='KBC');
   assert.deepEqual(await lead.locator('#sel-phase option').evaluateAll(nodes=>nodes.map(n=>n.value)),['예선','본선','결선']);
   assert.deepEqual(page.qaErrors,[]);assert.deepEqual(lead.qaErrors,[]);assert.deepEqual(page.qaMissing,[]);
