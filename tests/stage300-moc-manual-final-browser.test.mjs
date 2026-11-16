@@ -14,14 +14,15 @@ test('MOC opens the manual final results by default, keeps main results and show
       await rows.first().click();await page.waitForFunction(()=>_rankingDetail?.rankInfo?.manualFinalResult);assert.match(await page.locator('#ranking-detail-body').innerText(),/1위 · 수기 확정/);assert.equal(await page.locator('#moc-final-save').isVisible(),true);
       await page.locator('#moc-final-score').fill('23.5');await page.locator('#moc-final-time').fill('04:30.25');await page.locator('#moc-final-save').click();await page.getByRole('status').filter({hasText:'저장 완료 · 확정 순위 1위 유지'}).waitFor();entered=true;assert.match(await page.locator('#ranking-detail-body .detail-sub').first().innerText(),/점수: 23\.5/);
       if(width===390){
-        await page.route('**/api/rpc',async route=>{
-          if(route.request().postDataJSON()?.action==='updateMocFinalResult'){const response=await route.fetch();await new Promise(resolve=>setTimeout(resolve,350));await route.fulfill({response});}
+        let releaseSave;const heldSave=new Promise(resolve=>{releaseSave=resolve;});
+        await page.route('**/api/rpc*',async route=>{
+          if(route.request().postDataJSON()?.action==='updateMocFinalResult'){const response=await route.fetch();await heldSave;await route.fulfill({response});}
           else await route.continue();
         });
         const saving=page.waitForResponse(r=>r.request().postDataJSON()?.action==='updateMocFinalResult');
         await page.locator('#moc-final-save').click();assert.equal(await page.locator('#moc-final-score').isDisabled(),true);
         await page.locator('#pRankingDetail').getByRole('button',{name:'순위로 돌아가기'}).click();await page.locator('.rank-row').nth(1).click();await page.waitForFunction(()=>_rankingDetail?.rankInfo?.rank===2);
-        await saving;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        releaseSave();await saving;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
         assert.equal(await page.locator('#moc-final-score').inputValue(),'');assert.equal(await page.locator('#moc-final-save-status').innerText(),'');assert.match(await page.locator('#ranking-detail-body').innerText(),/2위 · 수기 확정/);
       }
       await page.locator('#pRankingDetail').getByRole('button',{name:'순위로 돌아가기'}).click();assert.match(await page.locator('.rank-row').first().locator('.rank-score').innerText(),/23\.5/);
