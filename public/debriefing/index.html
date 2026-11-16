@@ -1697,15 +1697,8 @@ function cleanupPublicCommentText_(label, raw, scoreObj, compCode) {
     .replace(/\.\.+/g, '.')
     .replace(/,\s*,/g, ',')
     .trim();
-  var labelText = String(label || '');
-  var comp = String(compCode || '').toUpperCase();
-  var looksOldAuto = /점수 흐름은|검수 관점에서 이 컵은|항목은 강점으로|보완 지점|1번 컵은/.test(text);
-  if ((comp === 'KCR' || comp === 'IKRC') && /Overall|종합|총평|General/i.test(labelText)) {
-    if (looksOldAuto || (comp === 'IKRC' && ikrcLooksGeneratedComment_(text)) || (text.match(/검수 관점/g) || []).length > 1) {
-      var generated = buildProfessionalOverallComment_(scoreObj, compCode);
-      if (generated) return generated;
-    }
-  }
+  // Existing comments remain authoritative. Generate a summary only when the
+  // report has no overall comment, rather than inferring authorship from text.
   return text;
 }
 

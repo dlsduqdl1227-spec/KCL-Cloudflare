@@ -7,12 +7,13 @@ import {createBrowserFixture,inspectPage} from './helpers/browser-fixture.mjs';
 const longTag='단맛과질감의균형이길고일관되게유지되는특성을설명하는긴스마트태그';
 const englishTag='BalancedSweetnessAndConsistentMouthfeelWithNoWhitespace'.repeat(2);
 const authored='첫 문단: 향미 설명과 서비스의 흐름이 명확합니다.\n\n둘째 문단: 준비 순서를 정리하면 더 좋겠습니다.\n추가 참고: '+'LongReferenceWithoutWhitespace'.repeat(8);
+const overall='종합 원문: 보완 지점은 피니시의 일관성입니다.\n\n플레이버에서 오렌지가 느껴졌습니다.\n'+authored+' OverallTailMarker';
 function feedback(code,round){
  const tags=['의도 전달 명확',longTag,englishTag].join(', ');
  if(code==='KBC')return {'Service Professionalism(서비스의 전문성)':4.2,'Service Professionalism 스마트태그':tags,'Service Professionalism 코멘트':authored,'Espresso Flavor 코멘트':'에스프레소 향미 원문 유지','Signature Flavor 코멘트':'창작음료 향미 원문 유지','Espresso Flavor 스마트태그':tags,'Signature Flavor 스마트태그':tags,'Machine & Equipment Professionalism(머신 및 기물 운용 전문성)':4.4,'Machine & Equipment Professionalism 스마트태그':tags,'Machine & Equipment Professionalism 코멘트':'머신과 기물 운용 원문을 확인했습니다.\n다음 평가 항목도 보존합니다.'};
  if(code==='KCAC'){const prefix=round==='예선'?'예선 Pattern Completion(패턴 완성도)':'결선 Theme Expression(주제 표현력)';return {[prefix]:4,[prefix+' 스마트태그']:tags,[prefix+' 코멘트']:authored};}
  if(code==='MOB')return {'Sweetness(스윗니스)':4,'Sweetness 스마트태그':tags,'Sweetness 코멘트':authored,'Flavor 코멘트':'브루잉 향미 원문 유지',...(round==='결선'?{'메뉴':'창작','Creative Flavor 코멘트':'창작음료 향미 원문 유지','Creative Flavor 스마트태그':tags}:{})};
- if(['KCR','IKRC'].includes(code))return {'종합코멘트':authored,'Flavor(플레이버)':4,'Flavor 스마트태그':tags,'Flavor 코멘트':authored,...(code==='KCR'?{'Aftertaste Flavor Reference 스마트태그':tags}:{})};
+ if(['KCR','IKRC'].includes(code))return {'Flavor(플레이버)':4,'Flavor 스마트태그':tags,'Flavor 코멘트':authored,'종합코멘트':overall,...(code==='KCR'?{'Aftertaste Flavor Reference 스마트태그':tags}:{})};
  return {'종합코멘트':authored,'평가 스마트태그':tags};
 }
 
@@ -56,7 +57,7 @@ test('all seven debriefs keep long tags and authored paragraphs readable in publ
     const visibleText=await page.locator('#res-body').innerText();
     if(view.code==='KBC'){assert.ok(visibleText.includes('에스프레소 향미 원문 유지'),context);if(view.response.scores.some(s=>(s.round||s['라운드'])!=='예선'))assert.ok(visibleText.includes('창작음료 향미 원문 유지'),context);}
     if(view.code==='MOB'&&view.response.scores.some(s=>s.round==='결선'||s['라운드']==='결선'))assert.ok(visibleText.includes('창작음료 향미 원문 유지'),context);
-    if(['KCR','IKRC'].includes(view.code))assert.ok(await page.locator('.comment-entry .comment-text').filter({hasText:'LongReferenceWithoutWhitespace'.repeat(8)}).count()>0,context+' full authored comment preserved');
+    if(['KCR','IKRC'].includes(view.code)){const originals=await page.locator('.comment-entry').filter({has:page.locator('.comment-label',{hasText:'Overall Comment'})}).locator('.comment-text').allTextContents();assert.ok(originals.some(text=>text===overall.replaceAll('\n','')),context+' exact overall comment preserved');}
     if(view.code==='KBC'&&view.mode==='preview-결선'&&[320,390,768,1440].includes(width))await page.locator('.score-card').first().screenshot({path:'tmp/stage306-qa/KBC-'+width+'.png'});
     assert.deepEqual(result.problems,[],context);assert.ok(result.tags>0,context+' tags');assert.ok(result.paragraphs>0,context+' paragraphs');
     assert.equal((await inspectPage(page)).pageOverflow,false,context);
