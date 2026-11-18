@@ -18,7 +18,7 @@ try {
       const titles=await page.locator('.score-card .judge-name').evaluateAll(els=>els.map(el=>el.firstChild.textContent));
       if(c.code==='IKRC')assert.deepEqual(titles,['1번 센서리심사위원 평가','테크니컬 평가 결과','헤드심사위원 평가 · 비교용','2번 센서리심사위원 평가','1번 센서리심사위원 평가','1번 센서리심사위원 평가']);
       else if(!['KCAC','KTCC'].includes(c.code))assert.deepEqual(titles,['1번 센서리심사위원 평가','테크니컬 평가 결과','2번 센서리심사위원 평가','3번 센서리심사위원 평가','1번 센서리심사위원 평가','1번 센서리심사위원 평가'],c.code+' independent round numbering, no technical offset, same judge keeps number');
-      if(c.code==='KCAC')assert.ok(titles.every(t=>/번 심사위원 라떼아트 평가/.test(t)));
+      if(c.code==='KCAC')assert.deepEqual(titles,['1번 심사위원 라떼아트 평가','2번 심사위원 라떼아트 평가','3번 심사위원 라떼아트 평가','4번 심사위원 라떼아트 평가','5번 심사위원 라떼아트 평가','1번 심사위원 센서리 평가']);
       if(c.code==='KTCC')assert.ok(titles.every(t=>!t.includes('센서리심사위원')));
       assert.doesNotMatch(await page.locator('#res-body').innerText(),/비공개 이름/,'judge names stay out of rendered report');
       const totals=Array(6).fill(c.code==='IKRC'?'개별 평가 점수23.4':c.code==='MOB'?'평가 반영 점수23.4':'23.4');

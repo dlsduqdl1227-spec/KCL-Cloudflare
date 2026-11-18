@@ -153,7 +153,8 @@
     "tests/stage313-ikrc-panel-display.test.mjs",
     "tests/stage314-all-debrief-summary.test.mjs",
     "tests/stage315-kcac-single-time-penalty.test.mjs",
-    "tests/stage316-debrief-publication.test.mjs"
+    "tests/stage316-debrief-publication.test.mjs",
+    "tests/stage317-kcac-debrief-role-labels.test.mjs"
   ],
   "browser": [
     "tests/stage201-finals-browser.test.mjs",
@@ -235,7 +236,8 @@
     "tests/stage313-ikrc-panel-display-browser.test.mjs",
     "tests/stage314-all-debrief-summary-browser.test.mjs",
     "tests/stage315-kcac-single-time-penalty-browser.test.mjs",
-    "tests/stage316-debrief-publication-browser.test.mjs"
+    "tests/stage316-debrief-publication-browser.test.mjs",
+    "tests/stage317-kcac-debrief-role-labels-browser.test.mjs"
   ],
   "critical": [
     "tests/stage113-full-flow.test.mjs",
@@ -281,6 +283,7 @@
     "tests/stage313-ikrc-panel-display.test.mjs",
     "tests/stage314-all-debrief-summary.test.mjs",
     "tests/stage315-kcac-single-time-penalty.test.mjs",
-    "tests/stage316-debrief-publication.test.mjs"
+    "tests/stage316-debrief-publication.test.mjs",
+    "tests/stage317-kcac-debrief-role-labels.test.mjs"
   ]
 }

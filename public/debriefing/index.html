@@ -1454,6 +1454,7 @@ function renderResult(res) {
   order.forEach(function(round) {
     if (!rounds[round]) return;
     var list = rounds[round];
+    if (isKcacDebrief && round === '결선') list = list.slice().sort(function(a,b){return kcacFinalEvaluationOrder_(a)-kcacFinalEvaluationOrder_(b);});
     if(isKtcc&&round==='결선')list=list.slice().sort(function(a,b){return ktccDebriefStageOrder_(ktccDebriefStage_(a))-ktccDebriefStageOrder_(ktccDebriefStage_(b));});
     var section = document.createElement('div');
     section.className = 'round-section';
@@ -2012,6 +2013,31 @@ function kcacPublicPurposeGroup_(s) {
   if (/창작패턴|패턴평가/i.test(purpose)) return 'pattern';
   return '';
 }
+function kcacFinalEvaluationScope_(s) {
+  s = s || {};
+  // The submitted cup type takes priority over role text. Never infer a milk
+  // category from a judge's name, submission order, score or authored comment.
+  var sources = [
+    s['패턴종류'] || s['Pattern Type'] || s.patternType || '',
+    s['잔용도'] || s['컵용도'] || s['평가용도'] || s.purpose || '',
+    s['역할'] || s.Role || s.JudgeRole || s.role || s.judgeRole || ''
+  ].map(function(value){return String(value).replace(/\s+/g,'');});
+  for (var i=0;i<sources.length;i++) {
+    if (/^pattern$|final[-_]*pattern|창작패턴|패턴평가|패턴디자인|patterndesign/i.test(sources[i]) && !(i===2 && /sensory|센서리/i.test(sources[0]+' '+sources[1]))) return 'pattern';
+    if (/sensory[-_]*oat|oat|plant[-_]*based|식물성|대체우유|오트/i.test(sources[i])) return 'sensory-oat';
+    if (/sensory[-_]*regular|regular|일반우유/i.test(sources[i])) return 'sensory-regular';
+  }
+  return /sensory|센서리/i.test(sources.join(' ')) ? 'sensory' : '';
+}
+function kcacFinalEvaluationLabel_(s) {
+  var labels = {pattern:'패턴디자인 평가','sensory-regular':'일반우유 센서리 평가','sensory-oat':'식물성우유 센서리 평가',sensory:'센서리 평가'};
+  return labels[kcacFinalEvaluationScope_(s)] || '라떼아트 평가';
+}
+function kcacFinalEvaluationOrder_(s) {
+  var order = ['pattern','sensory-regular','sensory-oat','sensory'];
+  var index = order.indexOf(kcacFinalEvaluationScope_(s));
+  return index < 0 ? order.length : index;
+}
 function kcacPublicHeaderAppliesToPurpose_(h, s) {
   if (!publicRoundIsFinal_(s)) return true;
   var purpose = kcacPublicPurposeGroup_(s);
@@ -2210,7 +2236,7 @@ function buildScoreCard(s, compCode, anonymousJudgeNo) {
   var teamTitle = (s['팀번호'] ? ('Team ' + s['팀번호']) : '') + (s['팀명'] ? ((s['팀번호'] ? ' · ' : '') + s['팀명']) : '');
   var roleRaw = String(s['역할'] || s['Role'] || s['JudgeRole'] || '').toLowerCase();
   var publicTitle = '공식 평가 결과';
-  if (isKcac) publicTitle = (Number(anonymousJudgeNo) > 0 ? (Number(anonymousJudgeNo) + '번 심사위원 ') : '') + '라떼아트 평가';
+  if (isKcac) publicTitle = (Number(anonymousJudgeNo) > 0 ? (Number(anonymousJudgeNo) + '번 심사위원 ') : '') + (publicRoundIsFinal_(s) ? kcacFinalEvaluationLabel_(s) : '라떼아트 평가');
   else if (/technical|테크|기술/.test(roleRaw)) publicTitle = '테크니컬 평가 결과';
   else if (isSensoryDebriefCard_(s, compCode)) publicTitle = (Number(anonymousJudgeNo) > 0 ? Number(anonymousJudgeNo) : 1) + '번 센서리심사위원 평가';
   if (isKtcc) publicTitle = s.round==='결선'?(s['팀명']||'팀 평가 결과'):(teamTitle||'팀 평가 결과');
