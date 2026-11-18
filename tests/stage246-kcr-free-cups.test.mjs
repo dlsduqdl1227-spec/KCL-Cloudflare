@@ -39,7 +39,7 @@ try{
  // Stale managers cannot overwrite a newer selection.
  assert.equal((await request('saveKcrStationSettings',{round:'결선',stations:[{...current[0],cupNumbers:['3']}],previousStations:config.optionSettings.kcrStations.byRound.결선},api.actor)).success,false);
  assert.equal((await request('saveKcrStationSettings',{round:'결선',stations:current,previousStations:config.optionSettings.kcrStations.byRound.결선},api.actor)).success,true,'retry after lost response is idempotent');
- await api.rpc('updateCompetitionAdminSettings',{code:'KCR',currentRound:'결선',isActive:true,debriefing:true},api.actor);
+ await api.rpc('updateCompetitionAdminSettings',{code:'KCR',currentRound:'결선',isActive:true,debriefing:true,optionSettings:{debriefingPhases:['예선','결선']}},api.actor);
  assert.deepEqual((await api.rpc('getKcrStationEvaluationState',judges[0])).completion.officialUnits,[]);
  const payload=freeCupSubmission(judges[0],current[0]);
  const missing={...payload,rows:payload.rows.slice(0,4)};

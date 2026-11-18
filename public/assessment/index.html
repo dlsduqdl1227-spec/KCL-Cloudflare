@@ -5912,6 +5912,25 @@ function competitionRounds_(code) {
   code = String(code || '').toUpperCase();
   return (COMP_ROUND_OPTIONS[code] || ['예선','결선']).slice();
 }
+function debriefPublicationPhasesForConfig_(cfg) {
+  var rounds=competitionRounds_(cfg.code),options=cfg.optionSettings||{};
+  var phases=Array.isArray(cfg.debriefingPhases)?cfg.debriefingPhases:options.debriefingPhases;
+  return Array.isArray(phases)?rounds.filter(function(round){return phases.includes(round);}):rounds.filter(function(round){return round!=='예선';});
+}
+function debriefPublicationLabel_(cfg) {
+  var phases=debriefPublicationPhasesForConfig_(cfg);
+  return phases.includes('예선')?(phases.some(function(round){return round!=='예선';})?'예선·본·결선':'예선'):'본·결선';
+}
+function debriefPublicationControlHtml_(cfg,prefix) {
+  var code=String(cfg.code||'').toUpperCase(),phases=debriefPublicationPhasesForConfig_(cfg);
+  var prelim=phases.length===1&&phases[0]==='예선';
+  return '<label class="round-mode-control"><span>공개할 디브리핑 단계</span><select id="'+prefix+'-debrief-phase-'+code+'" aria-label="'+code+' 공개할 디브리핑 단계"><option value="본결선"'+(!prelim?' selected':'')+'>본·결선만 공개</option><option value="예선"'+(prelim?' selected':'')+'>예선만 공개</option></select><small>선수에게는 선택한 단계만 표시됩니다. 다른 단계의 기록은 삭제되지 않습니다.</small></label>';
+}
+function readDebriefPublicationPhases_(cfg,prefix) {
+  var select=document.getElementById(prefix+'-debrief-phase-'+String(cfg.code||'').toUpperCase());
+  if(!select)return debriefPublicationPhasesForConfig_(cfg);
+  return select.value==='예선'?['예선']:competitionRounds_(cfg.code).filter(function(round){return round!=='예선';});
+}
 function normalizeRoundForCompetition_(code, round) {
   code = String(code || '').toUpperCase();
   var r = String(round || '').trim();
@@ -6251,7 +6270,7 @@ function adminRenderRunCards_() {
       '<div class="admin-card-top">' + compLogoHtml(c.code, 'admin-card-logo') + '<div class="comp-card-text">' +
         '<div class="admin-comp-name">' + escHtml(c.name || c.code) + '</div>' +
         '<div class="admin-comp-round">현재 라운드: ' + escHtml(competitionRoundLabel_(c.code, c.currentRound, c.optionSettings)) + '</div>' +
-        '<div style="margin-top:6px"><span class="role-mode-badge">' + (c.isActive ? '대회 오픈' : '대회 닫힘') + '</span><span class="role-mode-badge">' + (c.debriefing ? '디브리핑 오픈' : '디브리핑 닫힘') + '</span></div>' +
+        '<div style="margin-top:6px"><span class="role-mode-badge">' + (c.isActive ? '대회 오픈' : '대회 닫힘') + '</span><span class="role-mode-badge">' + (c.debriefing ? debriefPublicationLabel_(c)+' 공개' : '디브리핑 비공개') + '</span></div>' +
       '</div></div>' +
       '<div class="admin-comp-actions">' +
         workflowBefore +
@@ -6308,14 +6327,15 @@ function adminRenderConfigList_() {
     div.id = 'admin-config-card-' + code;
     div.dataset.workspaceCompetition=code;
     div.innerHTML = '<div class="admin-mini-title">' + escHtml(c.name || code) + ' <span class="role-mode-badge">' + escHtml(code) + '</span></div>' +
-      '<div class="admin-mini-sub">데이터 키: ' + escHtml(c.code || '-') + ' · 디브리핑: ' + (c.debriefing ? '오픈' : '닫힘') + '</div>' +
+      '<div class="admin-mini-sub">데이터 키: ' + escHtml(c.code || '-') + ' · 디브리핑: ' + (c.debriefing ? debriefPublicationLabel_(c)+' 공개' : '비공개') + '</div>' +
       '<div class="admin-form-grid">' +
         competitionRoundControlHtml_('admin-cfg', code, c.currentRound || '', c.optionSettings) +
         '<label class="round-mode-control"><span>대회명</span><input type="text" id="admin-cfg-name-' + code + '" value="' + escHtml(c.name || '') + '" placeholder="대회명"></label>' +
+        debriefPublicationControlHtml_(c,'admin-cfg') +
       '</div>' +
       '<div class="admin-check-row">' +
         '<label><input type="checkbox" id="admin-cfg-active-' + code + '" ' + (c.isActive ? 'checked' : '') + '> 대회 오픈</label>' +
-        '<label><input type="checkbox" id="admin-cfg-debrief-' + code + '" ' + (c.debriefing ? 'checked' : '') + '> 디브리핑 오픈</label>' +
+        '<label><input type="checkbox" id="admin-cfg-debrief-' + code + '" ' + (c.debriefing ? 'checked' : '') + '> 선택한 단계의 디브리핑 오픈</label>' +
       '</div>' +
       configSelectableOptionsHtml_(c, 'admin-cfg') +
       '<div class="admin-comp-actions"><button class="primary" data-save="' + code + '">설정 저장</button></div>';
@@ -6340,6 +6360,7 @@ function adminSaveCompetitionConfig(cfg) {
   var optionSettings = configSelectableOptionsPayload_(code, 'admin-cfg', cfg);
   if (optionSettings === false) return;
   if (optionSettings) payload.optionSettings = Object.assign({}, cfg.optionSettings || {}, optionSettings);
+  payload.optionSettings=Object.assign({},payload.optionSettings||cfg.optionSettings||{},{debriefingPhases:readDebriefPublicationPhases_(cfg,'admin-cfg')});
   if(code==='KBC'&&cfg.currentRound==='본선'&&payload.currentRound==='결선'&&!confirm('선수등록에서 선택한 결선 명단으로 전환할까요? 본선 기록은 그대로 보존됩니다.'))return;
   showOverlay();
   google.script.run.withSuccessHandler(function(res){
@@ -6407,6 +6428,7 @@ function teamSaveCompetitionConfig(cfg) {
   var optionSettings = configSelectableOptionsPayload_(code, 'team-cfg', cfg);
   if (optionSettings === false) return;
   if (optionSettings) payload.optionSettings = Object.assign({}, cfg.optionSettings || {}, optionSettings);
+  payload.optionSettings=Object.assign({},payload.optionSettings||cfg.optionSettings||{},{debriefingPhases:readDebriefPublicationPhases_(cfg,'team-cfg')});
   if(code==='KBC'&&cfg.currentRound==='본선'&&payload.currentRound==='결선'&&!confirm('선수등록에서 선택한 결선 명단으로 전환할까요? 본선 기록은 그대로 보존됩니다.'))return;
   showOverlay();
   google.script.run.withSuccessHandler(function(res){
@@ -6494,14 +6516,15 @@ function loadTeamPanel() {
             '<div class="admin-card-top">' + compLogoHtml(c.code, 'admin-card-logo') + '<div class="comp-card-text">' +
               '<div class="admin-comp-name">' + escHtml(c.name) + '</div>' +
               '<div class="admin-comp-round">현재 라운드: ' + escHtml(competitionRoundLabel_(c.code, c.currentRound, c.optionSettings)) + '</div>' +
-              '<div style="margin-top:6px">' + compTeamBadgeHtml(c.code) + '<span class="role-mode-badge">' + (c.isActive ? '대회 오픈' : '대회 닫힘') + '</span><span class="role-mode-badge">' + (c.debriefing ? '디브리핑 오픈' : '디브리핑 닫힘') + '</span></div>' +
+              '<div style="margin-top:6px">' + compTeamBadgeHtml(c.code) + '<span class="role-mode-badge">' + (c.isActive ? '대회 오픈' : '대회 닫힘') + '</span><span class="role-mode-badge">' + (c.debriefing ? debriefPublicationLabel_(c)+' 공개' : '디브리핑 비공개') + '</span></div>' +
             '</div></div>' +
             '<div class="review-edit-help" style="margin:10px 0">담당 팀장은 이 대회의 진행 라운드와 공개 상태를 직접 저장할 수 있습니다.</div>' +
             '<div class="admin-form-grid" style="margin-bottom:10px">' +
               competitionRoundControlHtml_('team-cfg', c.code, c.currentRound || '', c.optionSettings) +
+              debriefPublicationControlHtml_(c,'team-cfg') +
               '<div class="admin-check-row wide">' +
                 '<label><input type="checkbox" id="team-cfg-active-' + String(c.code).toUpperCase() + '" ' + (c.isActive ? 'checked' : '') + '> 대회 오픈</label>' +
-                '<label><input type="checkbox" id="team-cfg-debrief-' + String(c.code).toUpperCase() + '" ' + (c.debriefing ? 'checked' : '') + '> 디브리핑 오픈</label>' +
+                '<label><input type="checkbox" id="team-cfg-debrief-' + String(c.code).toUpperCase() + '" ' + (c.debriefing ? 'checked' : '') + '> 선택한 단계의 디브리핑 오픈</label>' +
               '</div>' +
             '</div>' +
             configSelectableOptionsHtml_(c, 'team-cfg') +

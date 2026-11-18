@@ -3,7 +3,7 @@ export async function seedKcrComparison(api){
   const seeded=await seedKcrStations(api),{stations,judges}=seeded;
   const extra={...stations[0],id:'other-cal',prefix:'D',label:'스테이션 4'};
   stations.push(extra);
-  await api.rpc('updateCompetitionAdminSettings',{code:'KCR',currentRound:'예선',isActive:true,optionSettings:{kcrProcesses:{blending:true},kcrStations:{stations,byRound:{예선:stations,결선:stations}}}},api.actor);
+  await api.rpc('updateCompetitionAdminSettings',{code:'KCR',currentRound:'예선',isActive:true,optionSettings:{debriefingPhases:['예선','결선'],kcrProcesses:{blending:true},kcrStations:{stations,byRound:{예선:stations,결선:stations}}}},api.actor);
   const addHead=async(name,phone)=>{
     await api.rpc('upsertOperatorAccount',{accountType:'JUDGE',name,phone,access:'KCR',role:'센서리 헤드 심사위원'},api.actor);
     return api.rpc('judgeLogin',name,phone);

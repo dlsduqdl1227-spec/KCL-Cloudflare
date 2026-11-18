@@ -4,6 +4,10 @@ export async function createAllDebriefFixture(options={}){
   const api=await createRpcFixture(options),cases=[];
   for(const [index,code] of debriefCodes.entries()){
     const rounds=['KBC','MOC'].includes(code)?['예선','본선','결선']:['예선','결선'];
+    // These cross-round regression fixtures deliberately publish all their
+    // rounds; production's missing-setting default is now post-prelim only.
+    const cfg=api.db.prepare('SELECT option_settings FROM competitions WHERE code=?').get(code);
+    api.db.prepare('UPDATE competitions SET option_settings=? WHERE code=?').run(JSON.stringify({...JSON.parse(cfg.option_settings||'{}'),debriefingPhases:rounds}),code);
     const units=code==='IKRC'?['A-1','C-3']:rounds.map((_,i)=>String(177-i));
     const id=1000+index*100,phone='0108888'+String(index).padStart(4,'0');
     const extra=code==='IKRC'?{ikrcBlindAssignments:Object.fromEntries(rounds.map((r,i)=>[r,units[i]]))}:{'팀원 이름':'QA 팀원, QA 동료',비고:'QA 일부 이름 132'};

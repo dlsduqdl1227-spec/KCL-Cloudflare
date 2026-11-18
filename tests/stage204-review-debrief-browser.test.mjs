@@ -90,6 +90,9 @@ try{
   await debrief.waitForFunction(()=>_configs.length>0);
   await debrief.evaluate(actor=>{
     _adminPreviewActor=actor;window.qaCalls=[];
+    // This race test previews private preliminary history explicitly; the public
+    // picker has no preliminary option until a manager releases that phase.
+    document.getElementById('sel-phase').innerHTML='<option value="예선">예선</option>';
     gasRun_=(action,args,ok,fail)=>qaCalls.push({action,args,ok,fail});
     document.getElementById('sel-comp').innerHTML='<option>KCAC</option><option>IKRC</option>';
     loadAdminDebriefPreviewOptions_();document.getElementById('sel-comp').value='IKRC';loadAdminDebriefPreviewOptions_();

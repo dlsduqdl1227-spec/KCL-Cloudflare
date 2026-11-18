@@ -2,6 +2,7 @@ import {createRpcFixture} from './rpc-fixture.mjs';
 
 export async function createMocDebriefFixture() {
   const api=await createRpcFixture();
+  await api.rpc('updateCompetitionAdminSettings',{code:'MOC',optionSettings:{debriefingPhases:['예선','본선','결선']}},api.actor);
   const players=[
     {id:168,name:'QA 정확한 선수',phone:'01088880001',prelim:'177',main:'2',final:'1'},
     {id:177,name:'QA 다른 선수',phone:'01088880002',prelim:'168'},

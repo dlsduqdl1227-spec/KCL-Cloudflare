@@ -675,8 +675,11 @@ html,body{min-height:100%!important;overflow-y:auto!important;overscroll-behavio
   <select id="sel-comp">
     <option value="">-- 대회를 선택하세요 --</option>
   </select>
-  <label class="section-label" for="sel-phase">평가 구분</label>
-  <select id="sel-phase" onchange="onDebriefPhaseChange_()"><option value="예선">예선</option><option value="결선">결선</option></select>
+  <div id="debrief-phase-field" hidden>
+    <label class="section-label" for="sel-phase">평가 구분</label>
+    <select id="sel-phase" onchange="onDebriefPhaseChange_()"></select>
+    <p class="subtitle" id="debrief-phase-help" style="margin:8px 0 16px;font-size:12px">현재 공개된 평가 구분만 표시됩니다.</p>
+  </div>
   <div id="public-identity-fields">
     <div class="section-label" id="identity-label">본인 확인</div>
     <input type="text" id="inp-name" placeholder="이름" autocomplete="name" autocapitalize="off">
@@ -776,16 +779,26 @@ function updateDebriefLogo() {
   var code = document.getElementById('sel-comp').value;
   var cfg = (_configs || []).find(function(c){return c.code === code;});
   var phaseSelect = document.getElementById('sel-phase');
-  var choices = debriefRoundChoices_(code);
+  var choices = _adminPreviewActor ? debriefRoundChoices_(code) : publicDebriefChoices_(cfg);
   phaseSelect.replaceChildren();
   choices.forEach(function(round){var option=document.createElement('option');option.value=round;option.textContent=round;phaseSelect.appendChild(option);});
   var current = debriefPhase_(cfg && cfg.currentRound);
-  phaseSelect.value = choices.includes(current) ? current : '예선';
+  phaseSelect.value = choices.includes(current) ? current : (choices[0] || '');
+  phaseSelect.disabled = !choices.length;
+  document.getElementById('debrief-phase-field').hidden=!code||!choices.length;
+  document.getElementById('debrief-phase-help').textContent=_adminPreviewActor?'관리자 미리보기에서는 비공개 단계를 포함한 기존 기록도 조회할 수 있습니다.':'현재 공개된 평가 구분만 표시됩니다.';
   document.getElementById('debrief-logo').innerHTML = logoImg_(code, 'hero-logo');
   updateIdentityLabels_();
   if (_adminPreviewActor) loadAdminDebriefPreviewOptions_();
 }
 function debriefRoundChoices_(code) { return ['KBC','MOC'].includes(String(code || '').toUpperCase()) ? ['예선','본선','결선'] : ['예선','결선']; }
+function publicDebriefChoices_(cfg) {
+  if(!cfg)return [];
+  var rounds=debriefRoundChoices_(cfg.code),options=cfg.optionSettings||{};
+  var configured=Array.isArray(cfg.debriefingPhases)?cfg.debriefingPhases:options.debriefingPhases;
+  if(configured!==undefined)return Array.isArray(configured)?rounds.filter(function(round){return configured.includes(round);}):[];
+  return rounds.filter(function(round){return round!=='예선';});
+}
 function debriefPhase_(round) {
   var value = String(round || '');
   if (/본선|main/i.test(value)) return '본선';
@@ -891,7 +904,7 @@ function populateDebriefCompetitions_(configs, includeClosed) {
   sel.innerHTML = '<option value="">-- 대회를 선택하세요 --</option>';
   sel.onchange = updateDebriefLogo;
   _configs.forEach(function(c) {
-    if (!includeClosed && !c.debriefing) return;
+    if (!includeClosed && (!c.debriefing || !publicDebriefChoices_(c).length)) return;
     var opt = document.createElement('option');
     opt.value = c.code;
     opt.textContent = c.name + (includeClosed && !c.debriefing ? ' · 선수 비공개 중' : '');
@@ -1054,7 +1067,7 @@ function doSendOTP() {
   btn.textContent = '발송 중...';
   showOverlay();
 
-  gasRun_('sendOTP', [_name, _phone, _compCode], function(res) {
+  gasRun_('sendOTP', [_name, _phone, _compCode, _requestedDebriefPhase], function(res) {
     hideOverlay();
     btn.disabled = false;
     btn.textContent = '인증번호 받기';
@@ -1102,7 +1115,7 @@ function startTimer(seconds) {
   _timerInterval = setInterval(tick, 1000);
 }
 
-var _requestedDebriefPhase = '예선';
+var _requestedDebriefPhase = '';
 function doVerifyOTP() {
   var otp = document.getElementById('inp-otp').value.trim();
   if (!otp || otp.length < 6) { toast('인증번호 6자리를 입력해주세요', true); return; }

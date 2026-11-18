@@ -2,6 +2,7 @@ import {createRpcFixture} from './rpc-fixture.mjs';
 
 export async function createKtccHiddenFixture(){
   const api=await createRpcFixture();
+  await api.rpc('updateCompetitionAdminSettings',{code:'KTCC',optionSettings:{debriefingPhases:['예선','결선']}},api.actor);
   const actors={admin:api.actor};
   const accounts=[['lead','TEAMLEAD','KTCC','대회팀장'],['staff','STAFF','KTCC','운영진'],['head','JUDGE','KTCC','헤드 심사위원'],['foreign','TEAMLEAD','MOC','대회팀장']];
   for(const [i,[name,accountType,access,role]]of accounts.entries()){

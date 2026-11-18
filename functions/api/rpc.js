@@ -696,7 +696,7 @@ async function dispatch(action, args, env, request) {
     getDebriefPhase: () => getDebriefPhase(env, args[0], args[1]),
     getFinalReport: () => getFinalReport(env, args[0], args[1], args[2], args[3]),
     getScoreBackupReport: () => getScoreBackupReport(env, args[0], args[1]),
-    sendOTP: () => sendOTP(env, args[0], args[1], args[2], request),
+    sendOTP: () => sendOTP(env, args[0], args[1], args[2], request, args[3]),
     verifyOTP: () => verifyOTP(env, args[0], args[1], args[2], args[3], request, args[4]),
     sendTestSMS: () => sendTestSMS(env, args[0], args[1], request),
     refreshAdminActor: () => refreshAdminActor(env, args[0]),
@@ -1096,10 +1096,24 @@ function rowToConfig(r) {
     currentRound: r.current_round || '',
     sheetName: r.sheet_name || r.code,
     debriefing: !!r.debriefing,
+    debriefingPhases: debriefPublicationPhases_(r),
     smsPrefix: r.sms_prefix || r.code,
     optionSettings: parseJson(r.option_settings, {}),
     ...(r.ikrc_final_roster_restricted ? {ikrcFinalRosterRestricted:true} : {})
   };
+}
+function debriefPublicationPhases_(cfg) {
+  cfg=cfg||{};
+  const rounds=COMPETITION_ROUNDS[safeStr(cfg.code).toUpperCase()]||[];
+  const rawOptions=cfg.optionSettings||parseJson(cfg.option_settings,{});
+  const options=rawOptions&&typeof rawOptions==='object'&&!Array.isArray(rawOptions)?rawOptions:{};
+  // Existing event-wide switches now open post-preliminary reports only.
+  // Preliminary records are retained and require an explicit manager release.
+  if(!Object.prototype.hasOwnProperty.call(options,'debriefingPhases'))return rounds.filter(round=>round!=='예선');
+  return Array.isArray(options.debriefingPhases)?rounds.filter(round=>options.debriefingPhases.includes(round)):[];
+}
+function debriefPhaseClosed_(phase) {
+  return {success:false,code:'DEBRIEF_PHASE_CLOSED',message:phase?`${phase} 디브리핑은 현재 공개되지 않았습니다. 공개된 평가 구분을 선택해주세요.`:'현재 공개된 평가 구분이 없습니다. 운영팀의 공개 이후 다시 확인해주세요.'};
 }
 
 
@@ -2161,6 +2175,13 @@ async function updateCompetitionAdminSettings(env, payload, actorArg) {
   }
   const currentOptions = parseJson(current.option_settings, {});
   const nextOptions = Object.assign({}, currentOptions, payload.optionSettings && typeof payload.optionSettings === 'object' ? payload.optionSettings : {});
+  if(payload.optionSettings&&Object.prototype.hasOwnProperty.call(payload.optionSettings,'debriefingPhases')){
+    const phases=payload.optionSettings.debriefingPhases;
+    if(!Array.isArray(phases)||phases.some(phase=>!(COMPETITION_ROUNDS[code]||[]).includes(phase)))return {success:false,message:'공개할 디브리핑 단계를 올바르게 선택해주세요.'};
+    nextOptions.debriefingPhases=COMPETITION_ROUNDS[code].filter(phase=>phases.includes(phase));
+    const open=Object.prototype.hasOwnProperty.call(payload,'debriefing')?!!payload.debriefing:!!current.debriefing;
+    if(open&&!nextOptions.debriefingPhases.length)return {success:false,message:'공개할 디브리핑 단계를 한 개 이상 선택해주세요.'};
+  }
   if (code === 'KBC') {
     if(currentOptions.kbcFinalSelectionMode==='manual')nextOptions.kbcFinalSelectionMode='manual';
     const rawDay = safeStr(nextOptions.kbcMainDay);
@@ -8867,20 +8888,24 @@ async function getAdminDebriefPhase(env, competitionCode, unit, round, phase, ac
   return {...result, isAdminPreview:true, previewContext:{competition:code, round:rankingRoundScope_(round), unit:safeStr(unit)}};
 }
 
-async function sendOTP(env, name, phone, competitionCode, request = null) {
+async function sendOTP(env, name, phone, competitionCode, request = null, requestedPhase = '') {
   name = safeStr(name); phone = normalizePhone(phone); const code = safeStr(competitionCode).toUpperCase();
   if (!name || !phone || !code) return { success: false, message: '대회, 이름, 연락처를 입력해주세요.' };
-  const cfg = await env.DB.prepare('SELECT debriefing FROM competitions WHERE code=?').bind(code).first();
+  const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
   if (!cfg) return { success: false, message: '선택한 대회를 찾을 수 없습니다.' };
   if (!cfg.debriefing && safeStr(env.KCL_BYPASS_DEBRIEF_LOCK).toLowerCase() !== 'true') {
     return { success: false, message: '아직 디브리핑 공개 전입니다. 운영팀의 공개 이후 다시 확인해주세요.' };
   }
+  requestedPhase=safeStr(requestedPhase);
+  const publishedPhases=debriefPublicationPhases_(cfg);
+  if(!publishedPhases.length||(requestedPhase&&!publishedPhases.includes(requestedPhase)))return debriefPhaseClosed_(requestedPhase);
   const phoneLimit = await rateLimit_(env, 'otp-send:' + code + ':' + await sha256Hex_(phone), 5, 10 * 60);
   if (!phoneLimit.ok) return { success: false, message: '인증 요청이 많습니다. 10분 후 다시 시도해주세요.' };
   const ipLimit = await rateLimit_(env, 'otp-send-ip:' + await sha256Hex_(clientIp_(request) || 'unknown'), 30, 10 * 60);
   if (!ipLimit.ok) return { success: false, message: '인증 요청이 많습니다. 잠시 후 다시 시도해주세요.' };
   const pRows = await findDebriefParticipants_(env, code, name, phone);
   if (!pRows.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다. 이름과 연락처, 선택한 대회를 확인해주세요.' };
+  if(!pRows.some(p=>participantDebriefTargets_(p,code).some(target=>publishedPhases.includes(target.round)&&(!requestedPhase||target.round===requestedPhase))))return {success:false,code:'DEBRIEF_PHASE_UNAVAILABLE',message:'현재 공개된 평가 구분에 배정된 기록이 없습니다. 공개 단계와 참가 정보를 확인해주세요.'};
 
   // 최근 60초 내 과도한 재요청 방지
   const latest = await env.DB.prepare(`SELECT created_at FROM otps WHERE competition_code=? AND name=? AND phone=? ORDER BY id DESC LIMIT 1`)
@@ -9101,9 +9126,11 @@ function debriefAvailablePhases_(targets) {
 function debriefPhaseTargets_(targets, phase) {
   return targets.filter(t => ['예선','본선','결선'].includes(phase) && t.round === phase);
 }
-async function buildDebriefPhaseResult_(env, code, participants, phase) {
+async function buildDebriefPhaseResult_(env, code, participants, phase, publicationConfig=null) {
   phase = safeStr(phase);
-  const targets = participants.flatMap(p => participantDebriefTargets_(p, code));
+  const published=publicationConfig?debriefPublicationPhases_(publicationConfig):null;
+  if(published&&!published.includes(phase))return debriefPhaseClosed_(phase);
+  const targets = participants.flatMap(p => participantDebriefTargets_(p, code)).filter(target=>!published||published.includes(target.round));
   const availablePhases = debriefAvailablePhases_(targets);
   if (!COMPETITION_ROUNDS[code].includes(phase) || !availablePhases.includes(phase)) {
     return {success:false, code:'DEBRIEF_PHASE_UNAVAILABLE', message:'이 선수에게 배정된 평가 구분이 아닙니다.'};
@@ -9128,7 +9155,7 @@ async function getDebriefPhase(env, token, phase) {
   const identity = parseJson(session.payload_json, {});
   const code = safeStr(identity.competition).toUpperCase();
   if (!COMPETITION_CODES.includes(code) || !safeStr(identity.name) || !normalizePhone(identity.phone)) return {success:false, message:'선수 인증을 다시 진행해주세요.'};
-  const cfg = await env.DB.prepare('SELECT debriefing FROM competitions WHERE code=?').bind(code).first();
+  const cfg = await env.DB.prepare('SELECT * FROM competitions WHERE code=?').bind(code).first();
   if (!cfg || (!cfg.debriefing && safeStr(env.KCL_BYPASS_DEBRIEF_LOCK).toLowerCase() !== 'true')) {
     return {success:false, message:'아직 디브리핑 공개 전입니다. 운영팀의 공개 이후 다시 확인해주세요.'};
   }
@@ -9136,7 +9163,7 @@ async function getDebriefPhase(env, token, phase) {
   // permission to read a number that has since been assigned to another person.
   const participants = await findDebriefParticipants_(env, code, safeStr(identity.name), normalizePhone(identity.phone));
   if (!participants.length) return {success:false, message:'등록된 선수 정보를 찾지 못했습니다.'};
-  const result = await buildDebriefPhaseResult_(env, code, participants, phase);
+  const result = await buildDebriefPhaseResult_(env, code, participants, phase, cfg);
   return result.success ? {...result, debriefToken:token} : result;
 }
 function debriefTargetKey_(code, round, unit) {
@@ -9276,16 +9303,18 @@ async function verifyOTP(env, name, phone, competitionCode, otp, request = null,
   if (!cfg.debriefing && safeStr(env.KCL_BYPASS_DEBRIEF_LOCK).toLowerCase() !== 'true') {
     return { success: false, message: '아직 디브리핑 공개 전입니다. 운영팀의 공개 이후 다시 확인해주세요.' };
   }
+  const publishedPhases=debriefPublicationPhases_(cfg);
+  if(!publishedPhases.length||(requestedPhase&&!publishedPhases.includes(requestedPhase)))return debriefPhaseClosed_(requestedPhase);
   const row = await env.DB.prepare(`SELECT * FROM otps WHERE competition_code=? AND name=? AND phone=? AND used_at IS NULL AND expires_at > ? ORDER BY id DESC LIMIT 1`)
     .bind(code, name, phone, nowIso()).first();
   if (!row) return { success: false, message: '유효한 인증번호가 없습니다.' };
   if (safeStr(row.otp) !== safeStr(otp)) return { success: false, message: '인증번호가 일치하지 않습니다.' };
-  await env.DB.prepare('UPDATE otps SET used_at=? WHERE id=?').bind(nowIso(), row.id).run();
   const participants = await findDebriefParticipants_(env, code, name, phone);
   if (!participants.length) return { success: false, message: '등록된 선수 정보를 찾지 못했습니다.' };
   // Keep each original round and participant number together. Selecting final
   // must not fetch main-round cards, even for the same registered participant.
-  const allTargets = participants.flatMap(p => participantDebriefTargets_(p, code));
+  const allTargets = participants.flatMap(p => participantDebriefTargets_(p, code)).filter(target=>publishedPhases.includes(target.round));
+  await env.DB.prepare('UPDATE otps SET used_at=? WHERE id=?').bind(nowIso(), row.id).run();
   const availablePhases = debriefAvailablePhases_(allTargets);
   const targets = requestedPhase ? debriefPhaseTargets_(allTargets, requestedPhase) : allTargets;
   const ids = [...new Set(targets.map(target => target.unit))];
